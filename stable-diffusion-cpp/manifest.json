@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+  "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -203,11 +203,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437721,
+          "builtAtUnix": 1790465638,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -223,7 +236,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -283,7 +296,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -395,11 +408,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437681,
+          "builtAtUnix": 1790465665,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -419,7 +445,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -479,7 +505,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -591,11 +617,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437637,
+          "builtAtUnix": 1790465563,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -611,7 +650,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -671,7 +710,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -783,11 +822,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437641,
+          "builtAtUnix": 1790465556,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -807,7 +859,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -867,7 +919,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -979,11 +1031,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437637,
+          "builtAtUnix": 1790465582,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -999,7 +1064,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "0db3140c4a009f6d39a9fbc5e510449d1072ca1c",
+          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1059,7 +1124,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "b51ef07f9d4cd2f9a120832d69a5b2c8260f7449f935de0ee6ebdc84845a1936",
+            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1171,11 +1236,24 @@
                   }
                 ],
                 "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790437649,
+          "builtAtUnix": 1790465585,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -1644,8 +1722,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43541718,
-      "sha256": "a9cca5ddf4e19ceb26832a2f66979a5d0f62bd5c91e1d1771ae41df8b8668dc8"
+      "bytes": 43545027,
+      "sha256": "81fc11fd4950f0fd9ef3091fdbb694d2a0f9ef00ca5677ac329703adf7436842"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -1655,12 +1733,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
       "bytes": 327002,
-      "sha256": "a0d611ac09af547daad40ad4b122d04fa9463f11bbba04cd007a1354e1efe48a"
+      "sha256": "43e67b11b6d4332afd395b169812eafc3d562d17bdaeda621651bdf7ca8baa45"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43800547,
-      "sha256": "6a98a24b152ec51534630cb6fa4a22eb80d1df0676aa496761eb47a5a0ec3530"
+      "bytes": 43799279,
+      "sha256": "f7fc11af43463738e56c6ee94fc204550916ba4409b7d90db7360471d99d321f"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -1674,8 +1752,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37746619,
-      "sha256": "3ea8d4dc9c83efb4e2b3d05ce46f91fda237966410b38af18fe979ffc54d8934"
+      "bytes": 37748236,
+      "sha256": "f3a0372883b03683103d849b8a6aaeb66f8aee345e2988718a7627e045cdc525"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -1689,8 +1767,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37934528,
-      "sha256": "992ec96f610b159dd69d6e492e58e5e6dce7d14b0ba6ad50537f6d3c9fa5f800"
+      "bytes": 37936194,
+      "sha256": "d427b8c7e7021e35496078239412e4aefa52f4e951936fe747a0d123d6125941"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -1704,8 +1782,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38060550,
-      "sha256": "03f69a9af5e651cda6538140028a602ca152a3fe9743e9f78c65e7878b2e9ac0"
+      "bytes": 38062238,
+      "sha256": "c28d026ad9bfdd2752e3c3676d3dab223045b2a73ed012a83058b4c11ac0a66d"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -1719,8 +1797,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38258456,
-      "sha256": "02b86ebcec4967661a2bdcab6df644dd2690c0ca54088f727f14343ba38c4908"
+      "bytes": 38260069,
+      "sha256": "8b7cb916db1e537b7371d98a8ef4f4fd0c2b1dc20ecb546ce5aa013ed554f2b6"
     }
   ]
 }
