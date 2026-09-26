@@ -1,0 +1,116 @@
+diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
+--- a/src/core/compute_workspace.cpp
++++ b/src/core/compute_workspace.cpp
+@@ -1,6 +1,7 @@
+ #include "core/compute_workspace.h"
+ 
+ #include <algorithm>
++#include <array>
+ #include <cstring>
+ #include <exception>
+ #include <map>
+@@ -14,6 +15,84 @@
+ #include "ggml-impl.h"
+ 
+ namespace sd {
++#ifdef SD_BROWSER_WEBGPU
++    namespace {
++        bool browser_device_is_webgpu(ggml_backend_dev_t device) {
++            auto registry = device != nullptr ? ggml_backend_dev_backend_reg(device) : nullptr;
++            return registry != nullptr && std::strcmp(ggml_backend_reg_name(registry), "WebGPU") == 0;
++        }
++
++        // Allocation rewrites graph sources to scheduler copies. Retain only
++        // bounded metadata from the original weight operands, never names/data.
++        // This is an allocation-time CPU scan, even if the caller ignores logs.
++        struct BrowserPlacement {
++            struct Bf16Matmul {
++                ggml_tensor* node;
++                size_t bytes;
++                bool webgpu_weight;
++                bool host_weight;
++                bool webgpu_unsupported;
++            };
++            std::array<Bf16Matmul, 256> matmuls;
++            size_t seen = 0;
++            size_t inspected = 0;
++
++            BrowserPlacement(ggml_cgraph* graph, ggml_backend_t preferred) {
++                const bool webgpu = browser_device_is_webgpu(ggml_backend_get_device(preferred));
++                for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
++                    auto node = ggml_graph_node(graph, i);
++                    auto weight = node->src[0];
++                    if (node->op != GGML_OP_MUL_MAT || weight == nullptr || weight->type != GGML_TYPE_BF16) continue;
++                    auto storage = weight;
++                    while (storage->buffer == nullptr && storage->view_src != nullptr) storage = storage->view_src;
++                    if (storage->buffer == nullptr || ggml_backend_buffer_get_usage(storage->buffer) != GGML_BACKEND_BUFFER_USAGE_WEIGHTS) continue;
++                    ++seen;
++                    if (inspected == matmuls.size()) continue;
++                    auto device = ggml_backend_buft_get_device(ggml_backend_buffer_get_type(storage->buffer));
++                    const bool host = ggml_backend_buffer_is_host(storage->buffer);
++                    matmuls[inspected++] = {node, ggml_nbytes(weight), !host && browser_device_is_webgpu(device), host,
++                                           webgpu && !ggml_backend_supports_op(preferred, node)};
++                }
++            }
++
++            void report(ggml_cgraph* graph, ggml_backend_t preferred, ggml_backend_sched_t scheduler) const {
++                auto assigned = [&](ggml_tensor* node) {
++                    return scheduler != nullptr ? ggml_backend_sched_get_tensor_backend(scheduler, node) : preferred;
++                };
++                size_t cpu = 0, webgpu = 0, other = 0;
++                for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
++                    auto backend = assigned(ggml_graph_node(graph, i));
++                    if (sd_backend_is_cpu(backend)) ++cpu;
++                    else if (backend != nullptr && browser_device_is_webgpu(ggml_backend_get_device(backend))) ++webgpu;
++                    else ++other;
++                }
++                size_t cpu_bf16 = 0, webgpu_bf16 = 0, other_bf16 = 0, unsupported = 0;
++                size_t gpu_weights = 0, host_weights = 0, other_weights = 0, gpu_cpu = 0;
++                uint64_t gpu_cpu_bytes = 0;
++                for (size_t i = 0; i < inspected; ++i) {
++                    const auto& item = matmuls[i];
++                    auto backend = assigned(item.node);
++                    if (item.webgpu_weight) ++gpu_weights;
++                    else if (item.host_weight) ++host_weights;
++                    else ++other_weights;
++                    if (sd_backend_is_cpu(backend)) {
++                        ++cpu_bf16;
++                        if (item.webgpu_unsupported) ++unsupported;
++                        if (item.webgpu_weight) { ++gpu_cpu; gpu_cpu_bytes += item.bytes; }
++                    } else if (backend != nullptr && browser_device_is_webgpu(ggml_backend_get_device(backend))) ++webgpu_bf16;
++                    else ++other_bf16;
++                }
++                // Scheduled placement, not completed work or observed transfers.
++                // Bytes count operand uses (possibly repeated), not unique weights
++                // or actual GPU readback. No evaluation callback/synchronization.
++                LOG_DEBUG("browser-placement-v1 nodes=%d cpu=%zu webgpu=%zu other=%zu bf16=%zu inspected=%zu cpu_bf16=%zu webgpu_bf16=%zu other_bf16=%zu cpu_unsupported_bf16=%zu webgpu_weights=%zu host_weights=%zu other_weights=%zu webgpu_cpu_bf16=%zu webgpu_cpu_bf16_use_bytes=%llu",
++                          ggml_graph_n_nodes(graph), cpu, webgpu, other, seen, inspected, cpu_bf16, webgpu_bf16, other_bf16,
++                          unsupported, gpu_weights, host_weights, other_weights, gpu_cpu, static_cast<unsigned long long>(gpu_cpu_bytes));
++            }
++        };
++    }
++#endif
++
+     ComputeWorkspace::~ComputeWorkspace() {
+         segment_end();
+         release();
+@@ -88,6 +167,9 @@
+ 
+     bool ComputeWorkspace::allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes) {
+         GGML_ASSERT(!active_);
++#ifdef SD_BROWSER_WEBGPU
++        const BrowserPlacement placement(graph, backend_);
++#endif
+         const bool use_scheduler = needs_scheduler(graph);
+         if (use_scheduler) {
+             if (allocator_ != nullptr) {
+@@ -130,6 +212,9 @@
+                 return false;
+             }
+         }
++#ifdef SD_BROWSER_WEBGPU
++        placement.report(graph, backend_, scheduler_);
++#endif
+         active_ = true;
+         return true;
+     }

@@ -104,6 +104,18 @@
           "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
         }
       ]
+    },
+    {
+      "file": "0008-browser-graph-placement-diagnostics.patch",
+      "target": "stable-diffusion",
+      "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+      "files": [
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+          "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+        }
+      ]
     }
   ]
 }

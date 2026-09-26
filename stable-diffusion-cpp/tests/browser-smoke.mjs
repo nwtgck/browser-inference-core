@@ -116,14 +116,29 @@ try {
             if (variant === 'test') {
               for (const name of testWebGpu ? ['CPU', 'WebGPU'] : ['CPU']) {
                 const pointer = core.utf8(name);
+                const placement = [];
+                const placementLog = module.addFunction((_level, text) => {
+                  const message = core.readUtf8(BigInt(text));
+                  if (message.includes('browser-placement-v1 ')) placement.push(message);
+                }, 'vipp');
                 try {
+                  await core.api.sd_set_log_callback(BigInt(placementLog), 0n);
                   // Unlike the file probes, a WebGPU compute/readback can suspend.
                   const code = await module.ccall('sdc_test_qwen_timestep', 'number',
                     [core.pointerBytes === 8 ? 'bigint' : 'number'],
                     [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
                   if (code !== 1) throw Error(`Synthetic Qwen timestep ${name} failed: ${code}`);
+                  if (placement.length !== 1 || !placement[0].includes('bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0') || placement[0].includes('probe')) throw Error('Missing or unsafe native BF16 placement summary');
+                  const expectedWeights = name === 'WebGPU'
+                    ? 'cpu_unsupported_bf16=1 webgpu_weights=1 host_weights=0 other_weights=0 webgpu_cpu_bf16=1 webgpu_cpu_bf16_use_bytes=2048'
+                    : 'cpu_unsupported_bf16=0 webgpu_weights=0 host_weights=1 other_weights=0 webgpu_cpu_bf16=0 webgpu_cpu_bf16_use_bytes=0';
+                  if (!placement[0].includes(expectedWeights)) throw Error('Original BF16 weight placement was lost across scheduler allocation');
                   timestep.push({ backend: name, passed: true });
-                } finally { core.free(pointer); }
+                } finally {
+                  await core.api.sd_set_log_callback(0n, 0n);
+                  module.removeFunction(placementLog);
+                  core.free(pointer);
+                }
               }
             }
             return { passed: true, reads, modelIoReads, timestep,

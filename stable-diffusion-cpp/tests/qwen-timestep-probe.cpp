@@ -1,6 +1,7 @@
 // Synthetic arithmetic/placement regression, NOT trained-model image inference.
 // This translation unit is linked only into test variants/native checks.
 #include "model/diffusion/qwen_image.hpp"
+#include "core/compute_workspace.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include <cmath>
@@ -12,13 +13,9 @@ extern "C" int sdc_test_qwen_timestep(const char* backend_name) {
     using Backend = std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)>;
     using Context = std::unique_ptr<ggml_context, decltype(&ggml_free)>;
     using Buffer = std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)>;
-    using Scheduler = std::unique_ptr<ggml_backend_sched, decltype(&ggml_backend_sched_free)>;
     Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
     if (!backend) return -1;
     if (ggml_backend_is_cpu(backend.get())) ggml_backend_cpu_set_n_threads(backend.get(), 1);
-    Backend cpu(ggml_backend_cpu_init(), ggml_backend_free);
-    if (!cpu) return -2;
-    ggml_backend_cpu_set_n_threads(cpu.get(), 1);
     Context params(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     Context graph_ctx(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     if (!params || !graph_ctx) return -3;
@@ -63,29 +60,31 @@ extern "C" int sdc_test_qwen_timestep(const char* backend_name) {
     if (!activation || activation->view_src != nullptr) return -5;
     auto first_linear = activation->src[0];
 
-    std::vector<ggml_backend_t> backends{backend.get()};
-    if (!ggml_backend_is_cpu(backend.get())) backends.push_back(cpu.get());
-    Scheduler scheduler(ggml_backend_sched_new(backends.data(), nullptr, static_cast<int>(backends.size()), 64, false, false), ggml_backend_sched_free);
-    if (!scheduler) return -6;
+    sd::ComputeWorkspace workspace(backend.get());
     // Mirror the runner's preferred-backend assignments, including the CPU
     // fallback caused by the original BF16 first-linear weights.
+    if (!workspace.allocate(graph, [&](ggml_backend_sched_t scheduler, ggml_cgraph* current) {
+            for (int i = 0; i < ggml_graph_n_nodes(current); ++i) {
+                auto node = ggml_graph_node(current, i);
+                if (ggml_backend_supports_op(backend.get(), node)) ggml_backend_sched_set_tensor_backend(scheduler, node, backend.get());
+            }
+        })) return -7;
+    auto scheduler = workspace.scheduler();
+    if (workspace.cpu_backend() != nullptr) ggml_backend_cpu_set_n_threads(workspace.cpu_backend(), 1);
+    if (!ggml_backend_is_cpu(backend.get()) &&
+        (scheduler == nullptr || ggml_backend_sched_get_tensor_backend(scheduler, first_linear) != workspace.cpu_backend() ||
+         ggml_backend_sched_get_tensor_backend(scheduler, activation) != backend.get())) return -8;
     for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
         auto node = ggml_graph_node(graph, i);
-        if (ggml_backend_supports_op(backend.get(), node)) ggml_backend_sched_set_tensor_backend(scheduler.get(), node, backend.get());
-    }
-    if (!ggml_backend_sched_alloc_graph(scheduler.get(), graph)) return -7;
-    if (backends.size() == 2 &&
-        (ggml_backend_sched_get_tensor_backend(scheduler.get(), first_linear) != cpu.get() ||
-         ggml_backend_sched_get_tensor_backend(scheduler.get(), activation) != backend.get())) return -8;
-    for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
-        auto node = ggml_graph_node(graph, i);
-        auto assigned = ggml_backend_sched_get_tensor_backend(scheduler.get(), node);
+        auto assigned = scheduler != nullptr ? ggml_backend_sched_get_tensor_backend(scheduler, node) : backend.get();
         if (!assigned || !node->buffer || !ggml_backend_supports_buft(assigned, ggml_backend_buffer_get_type(node->buffer))) return -9;
     }
     std::vector<float> values(width * 2), actual(values.size());
     for (size_t i = 0; i < values.size(); ++i) values[i] = (int(i) - width) / 16.f;
     ggml_backend_tensor_set(input, values.data(), 0, values.size() * sizeof(float));
-    if (ggml_backend_sched_graph_compute(scheduler.get(), graph) != GGML_STATUS_SUCCESS) return -10;
+    auto status = scheduler != nullptr ? ggml_backend_sched_graph_compute(scheduler, graph) : ggml_backend_graph_compute(backend.get(), graph);
+    workspace.synchronize();
+    if (status != GGML_STATUS_SUCCESS) return -10;
     ggml_backend_tensor_get(output, actual.data(), 0, actual.size() * sizeof(float));
     for (size_t i = 0; i < values.size(); ++i) {
         float expected = values[i] / (1.f + std::exp(-values[i]));

@@ -43,6 +43,20 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
    numerical regression pass. If the upstream scheduler safely relocates views,
    adapt the probe's pre-allocation no-view assertion as part of that review.
 
+8. Allocation placement diagnostics: snapshot at most 256 BF16 weight-matmul
+   operands before scheduler allocation replaces their sources, then report
+   assigned CPU/WebGPU/other node counts through the existing log callback.
+   Seen versus inspected counts expose the cap. Bytes count operand uses, which
+   may repeat a weight; WebGPU buffer/CPU assignment is a scheduled boundary,
+   not actual readback, completed execution or physical memory residency.
+   The hook performs two metadata-only node scans per successful allocation,
+   at most 256 support checks and bounded stack storage, even when the caller
+   discards debug logs. It adds no synchronization, evaluation callback, tensor
+   readback, graph rewrite or public API. The synthetic timestep probe now uses
+   the production workspace and its CPU/optional WebGPU smoke checks validate
+   original weight placement as well as arithmetic. Remove when an upstream
+   passive allocation summary provides equivalent coverage without names/data.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime

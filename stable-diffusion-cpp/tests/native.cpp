@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 extern "C" uint32_t sdc_abi_version();
 extern "C" int sdc_test_qwen_timestep(const char*);
@@ -21,8 +22,10 @@ extern "C" void sdc_test_callbacks();
 extern "C" void sdc_sd_set_log_callback(uint64_t, uint64_t);
 extern "C" void sdc_sd_set_progress_callback(uint64_t, uint64_t);
 static int logs_seen=0, progress_seen=0;
+static std::string placement_message;
 static void log_callback(sd_log_level_t, const char* message, void* data) {
     if (std::string(message).find("native callback probe") != std::string::npos && uintptr_t(data)==17) ++logs_seen;
+    if (std::string(message).find("browser-placement-v1 ") != std::string::npos) placement_message = message;
 }
 static void progress_callback(int step, int steps, float seconds, void* data) {
     if (step==1 && steps==4 && seconds==0.125f && uintptr_t(data)==19) ++progress_seen;
@@ -111,7 +114,14 @@ static void model_io_checks() {
 int main() {
     try {
         check(sdc_abi_version()==2,"ABI version");
+        sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)),17);
         check(sdc_test_qwen_timestep("CPU")==1,"Qwen BF16 timestep activation placement and numerical parity");
+        sdc_sd_set_log_callback(0,0);
+        check(placement_message.find("bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0") != std::string::npos,
+              "CPU workspace reports the original BF16 weight matmul");
+        check(placement_message.find("webgpu_weights=0 host_weights=1 other_weights=0 webgpu_cpu_bf16=0 webgpu_cpu_bf16_use_bytes=0") != std::string::npos,
+              "CPU placement is not reported as GPU weight transfer");
+        check(placement_message.find("probe") == std::string::npos, "Placement diagnostics omit tensor names");
         model_io_checks();
         sd_ctx_params_t context{};sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
         sd_ctx_params_t reference{};sd_ctx_params_init(&reference);
