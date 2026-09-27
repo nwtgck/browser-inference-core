@@ -107,7 +107,7 @@ try {
               if (variant === 'test') {
                 module._sdc_test_callbacks();
                 if (!logs.at(-1)[1].includes('native callback probe') || logs.at(-1)[2] !== 17 || JSON.stringify(progress) !== '[[1,4,0.125,19]]') throw Error('Native callback ABI mismatch');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -120,6 +120,8 @@ try {
             }
             const timestep = [];
             const bf16Weights = [];
+            const graphWalk = variant === 'test' ? module._sdc_test_graph_walk() === 1 : undefined;
+            if (graphWalk === false) throw Error('Deep graph construction/compute propagation failed');
             if (variant === 'test') {
               for (const name of testWebGpu ? ['CPU', 'WebGPU'] : ['CPU']) {
                 const pointer = core.utf8(name);
@@ -162,9 +164,9 @@ try {
                 }
               }
             }
-            return { passed: true, reads, modelIoReads, timestep, bf16Weights,
+            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk,
               scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on ' +
-                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + '; no trained-model image generation' };
+                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + ', plus deep graph construction/selection; no trained-model image generation' };
           };
           const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));

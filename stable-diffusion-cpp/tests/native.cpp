@@ -11,6 +11,7 @@
 extern "C" uint32_t sdc_abi_version();
 extern "C" int sdc_test_qwen_timestep(const char*);
 extern "C" int sdc_test_bf16_weights(const char*);
+extern "C" int sdc_test_graph_walk();
 extern "C" uint32_t sdc_model_io_capabilities();
 extern "C" uint64_t sdc_test_safetensors_offset(const char*);
 extern "C" uint32_t sdc_test_safetensors_value(const char*);
@@ -115,6 +116,7 @@ static void model_io_checks() {
 int main() {
     try {
         check(sdc_abi_version()==2,"ABI version");
+        check(sdc_test_graph_walk()==1,"deep graph traversal, selection, ordering and shared operand counts");
         sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)),17);
         check(sdc_test_qwen_timestep("CPU")==1,"Qwen BF16 timestep activation placement and numerical parity");
         sdc_sd_set_log_callback(0,0);

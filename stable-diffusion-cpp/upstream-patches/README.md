@@ -75,6 +75,21 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
    quality, speed or bitwise parity with CPU arithmetic. Remove when upstream
    provides equivalent backend-aware BF16 loading with caller-selected precision.
 
+10. Graph traversal: replace the external GGML parent's recursive postorder walk
+    with an explicit heap-backed stack. Deep dependency chains no longer consume
+    the browser's native/Wasm call stack. Preserve source ordering, leaf/parameter
+    classification, automatic names, shared operand use counts and compute-flag
+    propagation through already-visited nodes. Allocation growth is checked and
+    the temporary stack is freed on completion or growth failure. Traversal depth
+    is bounded by the existing visited capacity; malformed cycles cannot grow
+    the heap indefinitely. Invalid graphs retain fatal errors. No stack-size
+    increase, model-specific branch or public ABI change. The test-only graph
+    probe covers both traversal orders,
+    a shared DAG, repeated expansion, and a 32,768-node unselected chain followed
+    by compute propagation. Native CI and browser smoke run the same probe; it
+    does not evaluate weights or certify image quality. Remove when the pinned
+    external GGML has an equivalent non-recursive traversal passing these cases.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime

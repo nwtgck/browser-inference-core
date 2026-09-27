@@ -125,7 +125,9 @@ parameter round trips (including >2^53 seeds), caller-owned file reads, native
 GGUF indexing/reading across 4/8 GiB in test builds, and log/progress registration,
 notification and unregistration. Additional test-variant probes exercise
 safetensors beyond 20 GiB, complete/missing GGUF shard groups, and a tiny
-synthetic CPU Qwen timestep graph. Test-only probes are absent from browser
+synthetic CPU Qwen timestep graph. A metadata-only graph probe also exercises
+32,768-node dependency chains, selected-branch compute propagation, both source
+orders and shared operand counts. Test-only probes are absent from browser
 artifacts. The fixture never allocates a multi-gigabyte JavaScript array.
 
 Default smoke does not request a GPU device. The optional WebGPU timestep

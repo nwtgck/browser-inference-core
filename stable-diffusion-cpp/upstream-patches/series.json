@@ -158,6 +158,18 @@
           "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
         }
       ]
+    },
+    {
+      "file": "0010-iterative-graph-traversal.patch",
+      "target": "ggml",
+      "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+      "files": [
+        {
+          "path": "ggml/src/ggml.c",
+          "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+          "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+        }
+      ]
     }
   ]
 }

@@ -16,7 +16,7 @@ class BrowserLinkContract(unittest.TestCase):
         root = Path(temp.name)
         (root/'bridge').mkdir(); (root/'config').mkdir()
         (root/'scripts').mkdir(); (root/'tests').mkdir()
-        for path in ('config/variants.json','bridge/core.d.ts','scripts/generate_bindings.py','tests/wasm-probes.cpp','tests/qwen-timestep-probe.cpp','tests/bf16-weights-probe.cpp'):
+        for path in ('config/variants.json','bridge/core.d.ts','scripts/generate_bindings.py','tests/wasm-probes.cpp','tests/qwen-timestep-probe.cpp','tests/bf16-weights-probe.cpp','tests/graph-walk-probe.cpp'):
             shutil.copy2(ROOT/path,root/path)
         (root/'bridge/browser.cpp').write_text('// Fixture, never compiled\n')
         (root/'CMakeLists.txt').write_text((ROOT/'CMakeLists.txt').read_text()+'''
@@ -54,13 +54,13 @@ set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")
         # Both source files and generated exports must obey the variant boundary.
         count = 1 if variant == 'test' else 0
         sources = data['sources'].split(';')
-        for probe in ('tests/wasm-probes.cpp', 'tests/qwen-timestep-probe.cpp', 'tests/bf16-weights-probe.cpp'):
+        for probe in ('tests/wasm-probes.cpp', 'tests/qwen-timestep-probe.cpp', 'tests/bf16-weights-probe.cpp', 'tests/graph-walk-probe.cpp'):
             self.assertEqual(sources.count(probe), count, probe)
         entries = json.loads((root/'out/generated/exports.json').read_text())
         for probe in ('_sdc_test_gguf_offset', '_sdc_test_gguf_value',
                       '_sdc_test_callbacks', '_sdc_test_safetensors_offset',
                       '_sdc_test_safetensors_value', '_sdc_test_model_tensor_count',
-                      '_sdc_test_qwen_timestep', '_sdc_test_bf16_weights'):
+                      '_sdc_test_qwen_timestep', '_sdc_test_bf16_weights', '_sdc_test_graph_walk'):
             self.assertEqual(entries.count(probe), count, probe)
         suspending = json.loads((root/'out/generated/jspi-exports.json').read_text())
         self.assertEqual(suspending.count('sdc_test_qwen_timestep'), count)
