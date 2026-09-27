@@ -49,6 +49,12 @@ try {
             core.setField('sd_img_gen_params_t', params, 'width', 1024);
             if (core.getField('sd_img_gen_params_t', params, 'seed') !== 9007199254741009n || core.getField('sd_img_gen_params_t', params, 'width') !== 1024) throw Error('Caller parameter roundtrip failed');
             core.free(params);
+            const contextParams = core.allocRecord('sd_ctx_params_t');
+            await core.api.sd_ctx_params_init(contextParams);
+            if (core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type') !== core.constant('SD_TYPE_F32')) throw Error('BF16 default must be F32');
+            core.setField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type', core.constant('SD_TYPE_F16'));
+            if (core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type') !== core.constant('SD_TYPE_F16')) throw Error('BF16 policy roundtrip failed');
+            core.free(contextParams);
             module.FS.mkdir('/models');
             const reads = [];
             for (const gib of [0, 2, 4, 8]) {
@@ -101,7 +107,7 @@ try {
               if (variant === 'test') {
                 module._sdc_test_callbacks();
                 if (!logs.at(-1)[1].includes('native callback probe') || logs.at(-1)[2] !== 17 || JSON.stringify(progress) !== '[[1,4,0.125,19]]') throw Error('Native callback ABI mismatch');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -113,20 +119,50 @@ try {
               module.removeFunction(log); module.removeFunction(update);
             }
             const timestep = [];
+            const bf16Weights = [];
             if (variant === 'test') {
               for (const name of testWebGpu ? ['CPU', 'WebGPU'] : ['CPU']) {
                 const pointer = core.utf8(name);
+                const placement = [];
+                const conversions = [];
+                const placementLog = module.addFunction((_level, text) => {
+                  const message = core.readUtf8(BigInt(text));
+                  if (message.includes('browser-placement-v1 ')) placement.push(message);
+                  if (message.includes('browser-weight-conversion-v1 ')) conversions.push(message);
+                }, 'vipp');
                 try {
+                  await core.api.sd_set_log_callback(BigInt(placementLog), 0n);
                   // Unlike the file probes, a WebGPU compute/readback can suspend.
                   const code = await module.ccall('sdc_test_qwen_timestep', 'number',
                     [core.pointerBytes === 8 ? 'bigint' : 'number'],
                     [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
                   if (code !== 1) throw Error(`Synthetic Qwen timestep ${name} failed: ${code}`);
+                  if (placement.length !== 1 || !placement[0].includes('bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0') || placement[0].includes('probe')) throw Error('Missing or unsafe native BF16 placement summary');
+                  const expectedWeights = name === 'WebGPU'
+                    ? 'cpu_unsupported_bf16=1 webgpu_weights=1 host_weights=0 other_weights=0 webgpu_cpu_bf16=1 webgpu_cpu_bf16_use_bytes=2048'
+                    : 'cpu_unsupported_bf16=0 webgpu_weights=0 host_weights=1 other_weights=0 webgpu_cpu_bf16=0 webgpu_cpu_bf16_use_bytes=0';
+                  if (!placement[0].includes(expectedWeights)) throw Error('Original BF16 weight placement was lost across scheduler allocation');
                   timestep.push({ backend: name, passed: true });
-                } finally { core.free(pointer); }
+                  placement.length = 0;
+                  const converted = await module.ccall('sdc_test_bf16_weights', 'number',
+                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
+                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
+                  if (converted !== 1) throw Error(`Synthetic BF16 weight loading ${name} failed: ${converted}`);
+                  if (placement.length !== 4 || placement.some(line => !line.includes(name === 'WebGPU'
+                    ? 'bf16=0 inspected=0 cpu_bf16=0 webgpu_bf16=0 other_bf16=0'
+                    : 'bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0'))) throw Error('Unexpected converted-weight placement');
+                  const expectedConversions = name === 'WebGPU' ? ['f32', 'f16', 'f32', 'f16'] : [];
+                  if (conversions.length !== expectedConversions.length || expectedConversions.some((target, index) =>
+                    !conversions[index].includes(`target=${target} tensors=2 source_bytes=2064 destination_bytes=${target === 'f32' ? 4128 : 2064} extra_bytes=${target === 'f32' ? 2064 : 0}`))) throw Error('BF16 unique-byte accounting failed');
+                  bf16Weights.push({ backend: name, passed: true });
+                } finally {
+                  await core.api.sd_set_log_callback(0n, 0n);
+                  module.removeFunction(placementLog);
+                  core.free(pointer);
+                }
               }
             }
-            return { passed: true, reads, modelIoReads, timestep,
+            return { passed: true, reads, modelIoReads, timestep, bf16Weights,
               scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on ' +
                 (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + '; no trained-model image generation' };
           };

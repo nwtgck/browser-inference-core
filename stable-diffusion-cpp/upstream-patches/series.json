@@ -104,6 +104,60 @@
           "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
         }
       ]
+    },
+    {
+      "file": "0008-browser-graph-placement-diagnostics.patch",
+      "target": "stable-diffusion",
+      "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+      "files": [
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+          "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+        }
+      ]
+    },
+    {
+      "file": "0009-webgpu-bf16-parameter-type.patch",
+      "target": "stable-diffusion",
+      "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+      "files": [
+        {
+          "path": "include/stable-diffusion.h",
+          "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+          "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+        },
+        {
+          "path": "src/stable-diffusion.cpp",
+          "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+          "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+        },
+        {
+          "path": "src/pipeline/diffusion_engine.cpp",
+          "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+          "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+        },
+        {
+          "path": "src/model_manager.h",
+          "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+          "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+        },
+        {
+          "path": "src/model_manager.cpp",
+          "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+          "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+        },
+        {
+          "path": "src/core/backend_fit.h",
+          "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+          "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+        },
+        {
+          "path": "src/core/backend_fit.cpp",
+          "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+          "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+        }
+      ]
     }
   ]
 }
