@@ -1,13 +1,13 @@
 {
   "formatVersion": 3,
-  "sourceCommit": "752300964c155c56bf31e9829f137d76fb9b913b",
+  "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
   "runtimes": {
     "llama-cpp": {
-      "manifest": "llama-cpp/manifest.json",
+      "manifest": "llama-cpp-browser-core/manifest.json",
       "manifestFormatVersion": 2
     },
     "stable-diffusion-cpp": {
-      "manifest": "stable-diffusion-cpp/manifest.json",
+      "manifest": "stable-diffusion-cpp-browser-core/manifest.json",
       "manifestFormatVersion": 2
     }
   },
@@ -19,1163 +19,1163 @@
     },
     {
       "path": "README.md",
-      "bytes": 5116,
-      "sha256": "1fa878e9c6af5c52dee21b4ed431fca617a8f95f9e4ab5e4bc499d4179910518"
+      "bytes": 4253,
+      "sha256": "b68eb7bd44c7caee273b5b34ab977c0702fa4788a8c4e72ab8784532f932bd33"
     },
     {
-      "path": "llama-cpp/LICENSE",
+      "path": "llama-cpp-browser-core/LICENSE",
       "bytes": 1064,
       "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4"
     },
     {
-      "path": "llama-cpp/README.md",
+      "path": "llama-cpp-browser-core/README.md",
       "bytes": 4058,
-      "sha256": "11e7a186deac09340b01f925119a978357f7b256f50321150e1f537f2a0b0625"
+      "sha256": "22302a0d687f5c3f3aa285da7b9d9288a14c728ab7a4a16aa048b6ce4a57a1a5"
     },
     {
-      "path": "llama-cpp/api/exports.json",
+      "path": "llama-cpp-browser-core/api/exports.json",
       "bytes": 30599,
       "sha256": "96bd4965d735abbe68db172dcc585332b9d80e00eaa14cb2d60c52d0b1124b27"
     },
     {
-      "path": "llama-cpp/api/functions.d.ts",
+      "path": "llama-cpp-browser-core/api/functions.d.ts",
       "bytes": 34268,
       "sha256": "4b7291540d1fd5970c6008a9ec0d700a3b09aac396286b275f418e0071783900"
     },
     {
-      "path": "llama-cpp/api/schema.json",
+      "path": "llama-cpp-browser-core/api/schema.json",
       "bytes": 259463,
       "sha256": "2e0ae512aa6b1b01d13d02c358051c1f0239ecb5a293066edffcbcdf4540395b"
     },
     {
-      "path": "llama-cpp/api/schema.mjs",
+      "path": "llama-cpp-browser-core/api/schema.mjs",
       "bytes": 160088,
       "sha256": "75a14b7e776b34bcf417ad87c0cc39260f30d14be210dfd104d26332ad5278b7"
     },
     {
-      "path": "llama-cpp/chat-and-multimodal.md",
+      "path": "llama-cpp-browser-core/chat-and-multimodal.md",
       "bytes": 11222,
       "sha256": "374360e9c02b3aea0cc059346d317fad26a0b0f3e637b1968bc4f5f99825f58d"
     },
     {
-      "path": "llama-cpp/examples/runtime/README.md",
+      "path": "llama-cpp-browser-core/examples/runtime/README.md",
       "bytes": 2562,
       "sha256": "a59baa058c4007459d4f399c9df876d09fc212f26c6c7b72838fab872d8e1022"
     },
     {
-      "path": "llama-cpp/examples/runtime/bindings.mjs",
+      "path": "llama-cpp-browser-core/examples/runtime/bindings.mjs",
       "bytes": 8801,
       "sha256": "c7f5b709b56a6ed01a62fbb0d95825f96c4bc08034a9dfe9e101cb755c8df8a7"
     },
     {
-      "path": "llama-cpp/examples/runtime/index.d.ts",
+      "path": "llama-cpp-browser-core/examples/runtime/index.d.ts",
       "bytes": 1743,
       "sha256": "53ba371622ed31805b771ede486a7f198af56d09f81b3b3e9c833ed9790ac0e9"
     },
     {
-      "path": "llama-cpp/examples/runtime/index.mjs",
+      "path": "llama-cpp-browser-core/examples/runtime/index.mjs",
       "bytes": 1136,
       "sha256": "c7856cc886de494d2afb6fa7e722dd83f2fa1d7548f389c2b5ffb83dd178795d"
     },
     {
-      "path": "llama-cpp/examples/runtime/read-only-file.mjs",
+      "path": "llama-cpp-browser-core/examples/runtime/read-only-file.mjs",
       "bytes": 3627,
       "sha256": "c3d583c770bbdcc2d7e33601c1d6089747781f68b649a1cb4ec34b72fc351f6b"
     },
     {
-      "path": "llama-cpp/licenses/0/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/LICENSE",
       "bytes": 1078,
       "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
     },
     {
-      "path": "llama-cpp/licenses/0/cmake/license.cmake",
+      "path": "llama-cpp-browser-core/licenses/0/cmake/license.cmake",
       "bytes": 1445,
       "sha256": "083515dff8a9b8696e348c7c616934e53941a7db30e1b3f092576632e9a2d1d4"
     },
     {
-      "path": "llama-cpp/licenses/0/gguf-py/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/gguf-py/LICENSE",
       "bytes": 1072,
       "sha256": "ef78c7e6659e34c798194f0d344e807c722de70cbca1359ef54772661e11ca38"
     },
     {
-      "path": "llama-cpp/licenses/0/licenses/LICENSE-jsonhpp",
+      "path": "llama-cpp-browser-core/licenses/0/licenses/LICENSE-jsonhpp",
       "bytes": 1075,
       "sha256": "c0d068392ea65358b798b8c165103560f06e9e3b38c4ab4e2d8810a7b931af86"
     },
     {
-      "path": "llama-cpp/licenses/0/tools/ui/src/lib/vendors/big-integer/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/tools/ui/src/lib/vendors/big-integer/LICENSE",
       "bytes": 1234,
       "sha256": "e9b0e94f628e00b5ed98046cfa041696ff89eebbbdd54108ee350625bc6d0363"
     },
     {
-      "path": "llama-cpp/licenses/0/tools/ui/src/lib/vendors/nerdamer-prime/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/tools/ui/src/lib/vendors/nerdamer-prime/LICENSE",
       "bytes": 1073,
       "sha256": "c9f52548869a0a2e63a7100055c54cebf36b9327c8fc2da7cf9ca8dddc2f1cca"
     },
     {
-      "path": "llama-cpp/licenses/0/vendor/cpp-httplib/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/vendor/cpp-httplib/LICENSE",
       "bytes": 1075,
       "sha256": "4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b"
     },
     {
-      "path": "llama-cpp/licenses/0/vendor/hash/rotate-bits/LICENSE.md",
+      "path": "llama-cpp-browser-core/licenses/0/vendor/hash/rotate-bits/LICENSE.md",
       "bytes": 1088,
       "sha256": "ca0b44aec101afb6b46f4c39b23369fa06a64fb9c0add37c2689d702156fee55"
     },
     {
-      "path": "llama-cpp/licenses/0/vendor/hash/sha256/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/vendor/hash/sha256/LICENSE",
       "bytes": 41,
       "sha256": "b81d0022ca6367918c67b57e9647d3513ee58809fd4b0ef0b3492f1356bced25"
     },
     {
-      "path": "llama-cpp/licenses/0/vendor/hash/xxhash/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/0/vendor/hash/xxhash/LICENSE",
       "bytes": 1389,
       "sha256": "6ffedbc0f7878612d2b23589f1ff2ab15633e1df7963a5d9fc750ec5500c7e7a"
     },
     {
-      "path": "llama-cpp/licenses/1/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/LICENSE",
       "bytes": 5093,
       "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
     },
     {
-      "path": "llama-cpp/licenses/1/cache/sysroot/include/SDL/COPYING",
+      "path": "llama-cpp-browser-core/licenses/1/cache/sysroot/include/SDL/COPYING",
       "bytes": 1031,
       "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/@jridgewell/gen-mapping/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/@jridgewell/gen-mapping/LICENSE",
       "bytes": 1080,
       "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/@jridgewell/resolve-uri/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/@jridgewell/resolve-uri/LICENSE",
       "bytes": 1079,
       "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/@jridgewell/source-map/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/@jridgewell/source-map/LICENSE",
       "bytes": 1079,
       "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/@jridgewell/sourcemap-codec/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/@jridgewell/sourcemap-codec/LICENSE",
       "bytes": 1072,
       "sha256": "1c632a84f7ba5a7b32d9c15e707f419b2393e7ad7de362bd9c837b5e435a197b"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/@jridgewell/trace-mapping/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/@jridgewell/trace-mapping/LICENSE",
       "bytes": 1080,
       "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/acorn/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/acorn/LICENSE",
       "bytes": 1099,
       "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/acorn-import-phases/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/acorn-import-phases/LICENSE",
       "bytes": 1072,
       "sha256": "3e4463779450389b73c530449c4e7ee29f83cb47343c1f2584c6f49de76584da"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/ansi-styles/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/ansi-styles/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/b4a/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/b4a/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/bare-events/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/bare-events/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/buffer-from/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/buffer-from/LICENSE",
       "bytes": 1078,
       "sha256": "14275f5c8139d02054c5259d52a88ccbba662a86af18c30f071c8d082dc6004c"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/camel-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/camel-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/chalk/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/chalk/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/chalk/node_modules/supports-color/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/chalk/node_modules/supports-color/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/clean-css/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/clean-css/LICENSE",
       "bytes": 1062,
       "sha256": "7b43b9a9057033055cf8a6b4e032f932727e0576db2426303c800d73c2ac733f"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/clean-css/node_modules/source-map/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/clean-css/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/clone/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/clone/LICENSE",
       "bytes": 1070,
       "sha256": "3fb0857ef0133928cf72c88dfc464e931486e88778961eedec25585e2321507f"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/color-convert/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/color-convert/LICENSE",
       "bytes": 1087,
       "sha256": "693866fc419c6f61c8570438ec00659d156ec2b4d4a4d04091711f5f11a365d4"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/color-name/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/color-name/LICENSE",
       "bytes": 1085,
       "sha256": "c064f7a3e353bc1bc977f3c897941c75ef763f44f41677e0a15370ca0853d6e2"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/dot-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/dot-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/entities/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/entities/LICENSE",
       "bytes": 1260,
       "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/events-universal/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/events-universal/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/fast-fifo/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/fast-fifo/LICENSE",
       "bytes": 1079,
       "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/has-flag/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/has-flag/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/html-minifier-terser/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/html-minifier-terser/LICENSE",
       "bytes": 1071,
       "sha256": "20cc01510a65e1d0dfdf4e2b8c81528b84bbc5b8103796a4d9ad5c1e19cb2e5a"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
       "bytes": 1098,
       "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/lower-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/lower-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/minimist/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/minimist/LICENSE",
       "bytes": 1073,
       "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/no-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/no-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/param-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/param-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/pascal-case/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/pascal-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/relateurl/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/relateurl/license",
       "bytes": 1111,
       "sha256": "4c97d11c3d10ddede28b756f4d834e660bc49d67d9a8aae16bda5e59efcd479f"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/remove-trailing-separator/license",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/remove-trailing-separator/license",
       "bytes": 696,
       "sha256": "aff6a0eab5763020fd4b179927f918152be1f9b6bfec360cffda972e6adf73e7"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/replace-ext/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/replace-ext/LICENSE",
       "bytes": 1169,
       "sha256": "287229fb1c78f51e413ab4c7625bf447356c7c1208417b92e03a1ad6ec9585d6"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/source-map-support/LICENSE.md",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/source-map-support/LICENSE.md",
       "bytes": 1079,
       "sha256": "3a7d3bb198e909ed642bd68bd29a7d7c09a636d27a51ec663d35f00c4760ec42"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/source-map-support/node_modules/source-map/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/source-map-support/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/streamx/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/streamx/LICENSE",
       "bytes": 1079,
       "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/teex/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/teex/LICENSE",
       "bytes": 1079,
       "sha256": "69b1ce578ad0aa97ce5302c7cb8d507c2fbe5a670712b02f0b4a2b95cae3184a"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/terser/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/terser/LICENSE",
       "bytes": 1303,
       "sha256": "901d0a7fcaccaae9917d165039c0473c354e5da2e0e94140dde67aad9ffb19da"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/terser/node_modules/commander/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/terser/node_modules/commander/LICENSE",
       "bytes": 1098,
       "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/text-decoder/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/text-decoder/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/tslib/CopyrightNotice.txt",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/tslib/CopyrightNotice.txt",
       "bytes": 822,
       "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/tslib/LICENSE.txt",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/tslib/LICENSE.txt",
       "bytes": 655,
       "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/vinyl/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/vinyl/LICENSE",
       "bytes": 1155,
       "sha256": "d21ca3ba63e7c2b9452d3d455fcfac84ab89e3333fa7eb600e33e5e63a439887"
     },
     {
-      "path": "llama-cpp/licenses/1/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "llama-cpp/licenses/1/system/include/SDL/COPYING",
+      "path": "llama-cpp-browser-core/licenses/1/system/include/SDL/COPYING",
       "bytes": 1031,
       "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/compiler-rt/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/compiler-rt/LICENSE.TXT",
       "bytes": 16708,
       "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/libc/musl/COPYRIGHT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/libc/musl/COPYRIGHT",
       "bytes": 6196,
       "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/libcxx/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/libcxx/LICENSE.TXT",
       "bytes": 16703,
       "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/libcxxabi/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/libcxxabi/LICENSE.TXT",
       "bytes": 16706,
       "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/libunwind/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/libunwind/LICENSE.TXT",
       "bytes": 16706,
       "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/llvm-libc/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/llvm-libc/LICENSE.TXT",
       "bytes": 15140,
       "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/mimalloc/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/mimalloc/LICENSE",
       "bytes": 1096,
       "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/openmp/LICENSE.TXT",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/openmp/LICENSE.TXT",
       "bytes": 19741,
       "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
     },
     {
-      "path": "llama-cpp/licenses/1/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
+      "path": "llama-cpp-browser-core/licenses/1/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
       "bytes": 1485,
       "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
     },
     {
-      "path": "llama-cpp/licenses/1/test/sounds/LICENSE.txt",
+      "path": "llama-cpp-browser-core/licenses/1/test/sounds/LICENSE.txt",
       "bytes": 836,
       "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537"
     },
     {
-      "path": "llama-cpp/licenses/1/third_party/closure-compiler/node-externs/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/third_party/closure-compiler/node-externs/LICENSE",
       "bytes": 11358,
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
-      "path": "llama-cpp/licenses/1/third_party/leb128/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/third_party/leb128/LICENSE",
       "bytes": 1065,
       "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208"
     },
     {
-      "path": "llama-cpp/licenses/1/third_party/terser/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/1/third_party/terser/LICENSE",
       "bytes": 1348,
       "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f"
     },
     {
-      "path": "llama-cpp/licenses/2/webgpu/src/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/2/webgpu/src/LICENSE",
       "bytes": 3291,
       "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
     },
     {
-      "path": "llama-cpp/licenses/2/webgpu_cpp/LICENSE",
+      "path": "llama-cpp-browser-core/licenses/2/webgpu_cpp/LICENSE",
       "bytes": 1561,
       "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/hash/sha1/sha1.c.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/hash/sha1/sha1.c.txt",
       "bytes": 7676,
       "sha256": "6de78afb7c2e54ccbd742c0307015db4dceaa64d85533709f99de05074d639e4"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/miniaudio/miniaudio.h.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/miniaudio/miniaudio.h.txt",
       "bytes": 4108168,
       "sha256": "ac7af4de748b7e26b777f37e01cee313a308a7296a3eb080e2906b320cc55c89"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/nlohmann/json.hpp.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/nlohmann/json.hpp.txt",
       "bytes": 953436,
       "sha256": "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/nlohmann/json_fwd.hpp.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/nlohmann/json_fwd.hpp.txt",
       "bytes": 6656,
       "sha256": "fb6aa70cbece087f37ab4685c182b287c53be54f785f981b9db9d30d2d028b37"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/sheredom/subprocess.h.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/sheredom/subprocess.h.txt",
       "bytes": 68500,
       "sha256": "ddec448cb93c2a5096f914a5b796f707dcf0a9e91591ca13000d210200160cb1"
     },
     {
-      "path": "llama-cpp/licenses/embedded/vendor/stb/stb_image.h.txt",
+      "path": "llama-cpp-browser-core/licenses/embedded/vendor/stb/stb_image.h.txt",
       "bytes": 283010,
       "sha256": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3"
     },
     {
-      "path": "llama-cpp/manifest.json",
+      "path": "llama-cpp-browser-core/manifest.json",
       "bytes": 53063,
-      "sha256": "8eeaa0d92d5d293a4056b4035df157d7c59d8e3288621f0574df0927e43091c2"
+      "sha256": "4c05ec803073b05d67dc8940fa720e75e1f8dd0b0ce696fc5420dd55a8cac6d5"
     },
     {
-      "path": "llama-cpp/package.json",
+      "path": "llama-cpp-browser-core/package.json",
       "bytes": 655,
       "sha256": "ff0a3c9d6757acc79b25a554a6be7a4d42eeb1925b9fc7edc52aa6664b6e70ad"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/browser/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.d.ts",
       "bytes": 89188,
       "sha256": "22a49be029e31165f27f58fe41d6480c8028e312e5b206a9e1f66d89b4b4b6bb"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/browser/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.mjs",
       "bytes": 220277,
       "sha256": "4a1282dd60014d3e88cd4c616021ba7a28d1c9769fc05453b135e1a74a8d6bd6"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/browser/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.wasm",
       "bytes": 6039372,
-      "sha256": "693c126e34f21fbdd70d9f399378bcd62b7294da5730a874661c0cc660b30265"
+      "sha256": "03a3c09ec6a4230769d60bc13bf59434fc3d665f4dc0e4736e129aeb4daa3968"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/test/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/test/core.d.ts",
       "bytes": 89348,
       "sha256": "04ce591b8e7d11dbd9c7b576be906bf8ced5bac884b4665b749becce9b1227e8"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/test/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/test/core.mjs",
       "bytes": 533472,
       "sha256": "13504ec1fe20cdbdfb77d5f6cc1f55d86a295158ae0ad8d4ce286796a2a42ec5"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm32/test/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm32/test/core.wasm",
       "bytes": 6196441,
-      "sha256": "2942944ee7c9352c5a373d0ebfc2e40a017d4122c5fb076bac4566f5ff0a075c"
+      "sha256": "8bc23744a6eb0b3d033d765ec1e4e2d3b1ac784765a9990db6b619f1bb46c800"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/browser/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/browser/core.d.ts",
       "bytes": 89188,
       "sha256": "9a6e07c0ffdcb3cd8c88e98ca47e0a7822987088e548de6afb84dbfbf2123f0e"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/browser/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/browser/core.mjs",
       "bytes": 223439,
       "sha256": "781cf0adaf1865f3667f6b635d36381e7403c487a83f1af10cb53f7391ee1a94"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/browser/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/browser/core.wasm",
       "bytes": 6165794,
-      "sha256": "85673930e7231cf773f1daf2725fe75c1be19d3c32ff48a14a48057c7c012436"
+      "sha256": "3e0db5a690a1e1851b00f0e6d3af6ee9e8e8e40c93d0db0878efc52a1285c622"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/test/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/test/core.d.ts",
       "bytes": 89348,
       "sha256": "520d988493eb61a28afbe6b72c35f860258059b9978d85f7f710c9933dde8d20"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/test/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/test/core.mjs",
       "bytes": 537524,
       "sha256": "55c11133b043395de40fa2cc0bb70b299e0b8e3e450195b8112c48539ff65b0f"
     },
     {
-      "path": "llama-cpp/profiles/cpu-wasm64/test/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/cpu-wasm64/test/core.wasm",
       "bytes": 6328044,
-      "sha256": "43ebabbfebe4e1f70744e24b75fb7c140ebc0556928519b6d90068022135d22d"
+      "sha256": "61ff83ec9f62833c2485448901009106cf6dfd3b1944804b8f413ffcd69c5d7e"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
       "bytes": 89188,
       "sha256": "22a49be029e31165f27f58fe41d6480c8028e312e5b206a9e1f66d89b4b4b6bb"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/browser/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 305489,
       "sha256": "f2b6738260a3df25ad3e0c0cd6067286b19c18309afde875ca6e7995229113ad"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/browser/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.wasm",
       "bytes": 14053099,
-      "sha256": "38b56047975f488a8c3efc761a541d2e65a6b113f2cb7919f6f51c7702eebb3a"
+      "sha256": "85347cf7bb080fd048d9f40c5d801e3a0d377633a89bf60bb78e84526b6667a5"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/test/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.d.ts",
       "bytes": 89348,
       "sha256": "04ce591b8e7d11dbd9c7b576be906bf8ced5bac884b4665b749becce9b1227e8"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/test/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.mjs",
       "bytes": 658832,
       "sha256": "5d73c8b01d5c55c003dc296e4091064f3242b7b3865ef1b81ce4df4243e65789"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-asyncify/test/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.wasm",
       "bytes": 14300785,
-      "sha256": "bb985754cfe251dd4eddcf7c422ae05ab7b91c669500c0d68f5f8dd3d7ebf143"
+      "sha256": "fd11a4e48d1c964714a31c3ff319d525fe12a7bb4c68c86c54c86b872e5e9743"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/browser/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.d.ts",
       "bytes": 97792,
       "sha256": "1b16f3cb4db272ca4bf1928de7b3d4e4bc8c327f1e23a8dc67d1db726cb7334c"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/browser/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.mjs",
       "bytes": 312036,
       "sha256": "c78ecaec3a98602a917063deed8639b5712a9f4fe8987672e97566c147ef962c"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/browser/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.wasm",
       "bytes": 7911892,
-      "sha256": "facead1f7213df7885da06753eb1665be6bebd1af5e23467895fb12d340de731"
+      "sha256": "a8de8b4f7f18536ded1df9b26a4ee30eaca77b675a06947c862cb5b74b928065"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/test/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.d.ts",
       "bytes": 97952,
       "sha256": "d7845eeca67a9cd1e71dab3d3a7f64914a683e43c22e20e49a02ab005547b28c"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/test/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.mjs",
       "bytes": 613707,
       "sha256": "49bc1f1e0bd61e1e29676379494b02d92f966f8584d0d300c516b13c71ff77b7"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm32-jspi/test/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.wasm",
       "bytes": 8086840,
-      "sha256": "2c47d7750a80d98f1800fd637bf3e13ae6ab262fbf860399c295e7078e8d28c0"
+      "sha256": "8f22939d74531361e447cb9cf29addf5dbe8a8adbbac4c26a04bc709ce9e4907"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/browser/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.d.ts",
       "bytes": 97792,
       "sha256": "f6b7e17a915f1edb3bc862af498b3e0fbcb89d84e616ce552b5a7edbd50f5395"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/browser/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.mjs",
       "bytes": 317098,
       "sha256": "cd3bd72e161cdaef9fe635f0a7ea05a1d9f9abe12e2f7bd0f5eab011beeefd0a"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/browser/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.wasm",
       "bytes": 8073672,
-      "sha256": "cb2561f84239f4e5b6a969293eee6b186ade098a1faf1d4c56a9636e9e879c03"
+      "sha256": "30eb1c6cc28fb6076a56d5df75cd46cc2c1107ec54d1f3b2be0abee3374753f3"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/test/core.d.ts",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.d.ts",
       "bytes": 97952,
       "sha256": "c88cadc5d5bfc198265c39319c320a02e4f41d71b5847b26421585e74144afd4"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/test/core.mjs",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.mjs",
       "bytes": 619617,
       "sha256": "3110cec093f17e91b9ac004fc7d18c4927dd74fc115c131080534bf0ec92d596"
     },
     {
-      "path": "llama-cpp/profiles/webgpu-wasm64-jspi/test/core.wasm",
+      "path": "llama-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.wasm",
       "bytes": 8253010,
-      "sha256": "97760ad53a0731484ea0536bba30fe719c573b783f2e71f52f84312c6d12d019"
+      "sha256": "732573ed32b82e7b1257187b33bf6ee7b2944ae31e78d343bd097d2cc169378a"
     },
     {
       "path": "package.json",
-      "bytes": 958,
-      "sha256": "5fc39de6cc7736906d27cd02d332dd87a1731c03c135aa8f6557f9613db03d03"
+      "bytes": 1114,
+      "sha256": "fc32727528bb010f17ce0c3a188a92f435ddc9f35474a72d99fefcb635f8def1"
     },
     {
-      "path": "stable-diffusion-cpp/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/LICENSE",
       "bytes": 1064,
       "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4"
     },
     {
-      "path": "stable-diffusion-cpp/README.md",
+      "path": "stable-diffusion-cpp-browser-core/README.md",
       "bytes": 9671,
       "sha256": "c89a849dc1ff36abe99629b69ff7929a20fe01f84d7e47181189bb5486994967"
     },
     {
-      "path": "stable-diffusion-cpp/api/functions.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/api/functions.d.ts",
       "bytes": 4223,
       "sha256": "1388478645e30c2ebabca1a5a01042ad327a35d943324d9e273d28d4f6b85164"
     },
     {
-      "path": "stable-diffusion-cpp/api/schema.json",
+      "path": "stable-diffusion-cpp-browser-core/api/schema.json",
       "bytes": 58147,
       "sha256": "fa0e2738b76fb583006513977b26034ebb1bcf71b3aa34dd0390dbea407ad871"
     },
     {
-      "path": "stable-diffusion-cpp/api/schema.mjs",
+      "path": "stable-diffusion-cpp-browser-core/api/schema.mjs",
       "bytes": 33484,
       "sha256": "b92e91244d7cf81a442c63322fb7ebf5a97b5c1af001efc9d35e2cce2331a1f9"
     },
     {
-      "path": "stable-diffusion-cpp/examples/runtime/README.md",
+      "path": "stable-diffusion-cpp-browser-core/examples/runtime/README.md",
       "bytes": 3185,
       "sha256": "5bb6e11c1e7a49f15f896b76f7590d3d241c024d105cec4d0403629b4f83cc4c"
     },
     {
-      "path": "stable-diffusion-cpp/examples/runtime/bindings.mjs",
+      "path": "stable-diffusion-cpp-browser-core/examples/runtime/bindings.mjs",
       "bytes": 8808,
       "sha256": "0889e9d751ba32f60e15f22255af2d43f53e536a3ab22eedffbf98dc78dcbd1d"
     },
     {
-      "path": "stable-diffusion-cpp/examples/runtime/index.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/examples/runtime/index.d.ts",
       "bytes": 1580,
       "sha256": "185fc6331c1ed38aba649f91bce67dfa8d69c01442f8e48984353a07204d14f3"
     },
     {
-      "path": "stable-diffusion-cpp/examples/runtime/index.mjs",
+      "path": "stable-diffusion-cpp-browser-core/examples/runtime/index.mjs",
       "bytes": 257,
       "sha256": "95f98a546ae3cd83b96e319c1ce347706f0db47e0297f713afc2d5d1d3f2888a"
     },
     {
-      "path": "stable-diffusion-cpp/examples/runtime/read-only-file.mjs",
+      "path": "stable-diffusion-cpp-browser-core/examples/runtime/read-only-file.mjs",
       "bytes": 3627,
       "sha256": "c3d583c770bbdcc2d7e33601c1d6089747781f68b649a1cb4ec34b72fc351f6b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/embedded/json.hpp.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/embedded/json.hpp.txt",
       "bytes": 907858,
       "sha256": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/embedded/stb_image.h.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/embedded/stb_image.h.txt",
       "bytes": 284733,
       "sha256": "38e08c1c5ab8869ae8d605ddaefa85ad3fea24a2964fd63a099c0c0f79c70bcc"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/embedded/stb_image_resize.h.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/embedded/stb_image_resize.h.txt",
       "bytes": 113565,
       "sha256": "8b430895b231a541c234cb7441756e9f4c857ea140dbf3275dfdf12f92b83082"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/embedded/stb_image_write.h.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/embedded/stb_image_write.h.txt",
       "bytes": 72926,
       "sha256": "683e15c6dfdc2d57b06b9e166ba27665328e0854a9c1130c2ba9958afaf2f8da"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/ggml/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/ggml/LICENSE",
       "bytes": 1078,
       "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/LICENSE",
       "bytes": 1062,
       "sha256": "b53fa08f515cb5a6fff7b9fd8fcd0961a4b80df29d74372d25e1f9171aa042ee"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/examples/server/frontend/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/examples/server/frontend/LICENSE",
       "bytes": 1063,
       "sha256": "284389c9a1f1feb68465505dbb13f41147687254b2aa62ef5d138a62cfb5bb08"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/ggml/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/ggml/LICENSE",
       "bytes": 1078,
       "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE",
       "bytes": 11357,
       "sha256": "178f46f58127373d449565589a32c2b5b60c082934618c17b7ce6890c61ef394"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/thirdparty/LICENSE.darts_clone.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/thirdparty/LICENSE.darts_clone.txt",
       "bytes": 1481,
       "sha256": "155f59997298ee336602c49f9c1110f268ac394ca2197eb02647a3555935ad52"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/thirdparty/libwebm/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/thirdparty/libwebm/LICENSE.TXT",
       "bytes": 1496,
       "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/thirdparty/libwebp/COPYING",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/thirdparty/libwebp/COPYING",
       "bytes": 1496,
       "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/thirdparty/oniguruma/COPYING",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/thirdparty/oniguruma/COPYING",
       "bytes": 1366,
       "sha256": "0dff717fb611b9c9bd9776a5df9c4e029030f8dbc023b77f3678cf495495b933"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/stable-diffusion/thirdparty/utf8proc/LICENSE.md",
+      "path": "stable-diffusion-cpp-browser-core/licenses/stable-diffusion/thirdparty/utf8proc/LICENSE.md",
       "bytes": 5218,
       "sha256": "767edbcafb23016d7f203aaf2cbdef5690ad58bcede52ee241427dcb816cd644"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE",
       "bytes": 3291,
       "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE",
       "bytes": 1561,
       "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/LICENSE",
       "bytes": 5093,
       "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING",
       "bytes": 1031,
       "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE",
       "bytes": 1080,
       "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE",
       "bytes": 1079,
       "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE",
       "bytes": 1079,
       "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE",
       "bytes": 1072,
       "sha256": "1c632a84f7ba5a7b32d9c15e707f419b2393e7ad7de362bd9c837b5e435a197b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE",
       "bytes": 1080,
       "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/acorn/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/acorn/LICENSE",
       "bytes": 1099,
       "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE",
       "bytes": 1072,
       "sha256": "3e4463779450389b73c530449c4e7ee29f83cb47343c1f2584c6f49de76584da"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/ansi-styles/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/ansi-styles/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/b4a/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/b4a/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/bare-events/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/bare-events/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE",
       "bytes": 1078,
       "sha256": "14275f5c8139d02054c5259d52a88ccbba662a86af18c30f071c8d082dc6004c"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/camel-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/camel-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/chalk/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/chalk/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/clean-css/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/clean-css/LICENSE",
       "bytes": 1062,
       "sha256": "7b43b9a9057033055cf8a6b4e032f932727e0576db2426303c800d73c2ac733f"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/clone/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/clone/LICENSE",
       "bytes": 1070,
       "sha256": "3fb0857ef0133928cf72c88dfc464e931486e88778961eedec25585e2321507f"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/color-convert/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/color-convert/LICENSE",
       "bytes": 1087,
       "sha256": "693866fc419c6f61c8570438ec00659d156ec2b4d4a4d04091711f5f11a365d4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/color-name/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/color-name/LICENSE",
       "bytes": 1085,
       "sha256": "c064f7a3e353bc1bc977f3c897941c75ef763f44f41677e0a15370ca0853d6e2"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/dot-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/dot-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/entities/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/entities/LICENSE",
       "bytes": 1260,
       "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/events-universal/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/events-universal/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE",
       "bytes": 1079,
       "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/has-flag/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/has-flag/license",
       "bytes": 1109,
       "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE",
       "bytes": 1071,
       "sha256": "20cc01510a65e1d0dfdf4e2b8c81528b84bbc5b8103796a4d9ad5c1e19cb2e5a"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
       "bytes": 1098,
       "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/lower-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/lower-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/minimist/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/minimist/LICENSE",
       "bytes": 1073,
       "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/no-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/no-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/param-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/param-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE",
       "bytes": 1103,
       "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/relateurl/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/relateurl/license",
       "bytes": 1111,
       "sha256": "4c97d11c3d10ddede28b756f4d834e660bc49d67d9a8aae16bda5e59efcd479f"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license",
       "bytes": 696,
       "sha256": "aff6a0eab5763020fd4b179927f918152be1f9b6bfec360cffda972e6adf73e7"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE",
       "bytes": 1169,
       "sha256": "287229fb1c78f51e413ab4c7625bf447356c7c1208417b92e03a1ad6ec9585d6"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md",
       "bytes": 1079,
       "sha256": "3a7d3bb198e909ed642bd68bd29a7d7c09a636d27a51ec663d35f00c4760ec42"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/streamx/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/streamx/LICENSE",
       "bytes": 1079,
       "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/teex/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/teex/LICENSE",
       "bytes": 1079,
       "sha256": "69b1ce578ad0aa97ce5302c7cb8d507c2fbe5a670712b02f0b4a2b95cae3184a"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/terser/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/terser/LICENSE",
       "bytes": 1303,
       "sha256": "901d0a7fcaccaae9917d165039c0473c354e5da2e0e94140dde67aad9ffb19da"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE",
       "bytes": 1098,
       "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt",
       "bytes": 822,
       "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt",
       "bytes": 655,
       "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/vinyl/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/vinyl/LICENSE",
       "bytes": 1155,
       "sha256": "d21ca3ba63e7c2b9452d3d455fcfac84ab89e3333fa7eb600e33e5e63a439887"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
       "bytes": 1526,
       "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/include/SDL/COPYING",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/include/SDL/COPYING",
       "bytes": 1031,
       "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT",
       "bytes": 16708,
       "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT",
       "bytes": 6196,
       "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT",
       "bytes": 16703,
       "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT",
       "bytes": 16706,
       "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT",
       "bytes": 16706,
       "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT",
       "bytes": 15140,
       "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE",
       "bytes": 1096,
       "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT",
       "bytes": 19741,
       "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
       "bytes": 1485,
       "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/test/sounds/LICENSE.txt",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/test/sounds/LICENSE.txt",
       "bytes": 836,
       "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE",
       "bytes": 11358,
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/third_party/leb128/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/third_party/leb128/LICENSE",
       "bytes": 1065,
       "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208"
     },
     {
-      "path": "stable-diffusion-cpp/licenses/toolchain/emscripten/third_party/terser/LICENSE",
+      "path": "stable-diffusion-cpp-browser-core/licenses/toolchain/emscripten/third_party/terser/LICENSE",
       "bytes": 1348,
       "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f"
     },
     {
-      "path": "stable-diffusion-cpp/manifest.json",
+      "path": "stable-diffusion-cpp-browser-core/manifest.json",
       "bytes": 103343,
-      "sha256": "80e58eb73c56a5db30d70c5c91860eb48072ad322e50c52d92d27735910a2f4c"
+      "sha256": "f16ca3a8bcfdf824142e27abca35c536c4bcb21ad106197431d3f60d8f2f2ee6"
     },
     {
-      "path": "stable-diffusion-cpp/package.json",
+      "path": "stable-diffusion-cpp-browser-core/package.json",
       "bytes": 517,
       "sha256": "83871be037311bb1c62a1f9f15b716f5124f283aaa3e112cedb74b6f909a424a"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/browser/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 197661,
       "sha256": "01a9e048d630641b77e99a9deae1d10675f5e3e2387a9edbabe7d1076aac0183"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/browser/core.wasm",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.wasm",
       "bytes": 43547773,
-      "sha256": "dce50908c5bb417608d990a5af4f277c6a2a24b646c91603c1657eab30aa06c6"
+      "sha256": "a59d7f2ac8b1e30dcc5d10451b634fa176b2872ccf0d25cc56c9a8a1b345af96"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/test/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/test/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.mjs",
       "bytes": 327913,
       "sha256": "59cf3489af3094ee088538b28bec5d4f510b95f07b5c1ab824b181f284b799ca"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43831547,
-      "sha256": "229263aecace4c429b2ad880ff717d656b06c8c01eeb4d6e82d335d1741630cb"
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.wasm",
+      "bytes": 43831545,
+      "sha256": "3cf67a98910b0a26cd21b38e1d7f0d9648cfb08e93818d643453b170270fc894"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/browser/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/browser/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.mjs",
       "bytes": 132890,
       "sha256": "416fd7363cf9ca61bd8cd7f1f351dc817dd471c0b1faba0d783704c2e9755997"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/browser/core.wasm",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.wasm",
       "bytes": 37749488,
-      "sha256": "a19520d38c661de752b1c5c3ff66a27a9ae4cb350b569be2216006b9e62f90ae"
+      "sha256": "9a2c53f6b164aede4a7b0d69313d2b491ebc171059e4c5850208504d6beea28f"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/test/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/test/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.mjs",
       "bytes": 211946,
       "sha256": "ae34cc653fb8bccccb353d602e74f6456c902c8455f56f232aa5a9fb822c7cfa"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm32-jspi/test/core.wasm",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.wasm",
       "bytes": 37947672,
-      "sha256": "1635c976a55b8ed773763ac3df29f0aa28f12725474ebd59f8452fb46b9e447b"
+      "sha256": "096ee5d816f7ef4043934663cd01abad22b981f2acafa565b80670ebbbbe7d2b"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/browser/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/browser/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.mjs",
       "bytes": 135690,
       "sha256": "1448efbf65a49a166db12c510672f9e9c7b4c3a2ee35a8d0161695975cb52782"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/browser/core.wasm",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.wasm",
       "bytes": 38063491,
-      "sha256": "8a584878a1c1182d9cc66dd3553776bca2c9d8e18f8176e030705a56f93314f2"
+      "sha256": "1d575142f088c5ecdd65e81a0e9e3b9a7cb4dd705b91c288a5b124bf9c2eba07"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/test/core.d.ts",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.d.ts",
       "bytes": 1403,
       "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/test/core.mjs",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.mjs",
       "bytes": 215484,
       "sha256": "94e4a86ac86c53c3da1dde305ab1625244578e906016c742c5e7b00d539f6f8a"
     },
     {
-      "path": "stable-diffusion-cpp/profiles/webgpu-wasm64-jspi/test/core.wasm",
+      "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.wasm",
       "bytes": 38272156,
-      "sha256": "06469a5f5346679e7a2c7fc6fed5ac1fd56fc41d3af33d7f7998117f57007bc4"
+      "sha256": "7ae287a395a280541597cc8cdc75641ae4014e755f443ce30057928dd6cde3ba"
     }
   ]
 }
