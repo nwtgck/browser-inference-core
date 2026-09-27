@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+  "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -259,11 +259,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485177,
+          "builtAtUnix": 1790498428,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -272,14 +285,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -339,7 +352,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -507,11 +520,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485327,
+          "builtAtUnix": 1790498406,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -520,7 +546,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -531,7 +557,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -591,7 +617,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -759,11 +785,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485275,
+          "builtAtUnix": 1790498299,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -772,14 +811,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -839,7 +878,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1007,11 +1046,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485240,
+          "builtAtUnix": 1790498313,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1020,7 +1072,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -1031,7 +1083,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1091,7 +1143,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1259,11 +1311,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485275,
+          "builtAtUnix": 1790498355,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1272,14 +1337,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "11678331d782dcfc024838f85bf8cca47a5d45a4",
+          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1339,7 +1404,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
+            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1507,11 +1572,24 @@
                   }
                 ],
                 "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790485181,
+          "builtAtUnix": 1790498343,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1520,7 +1598,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference); no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -1535,8 +1613,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 9671,
-      "sha256": "c89a849dc1ff36abe99629b69ff7929a20fe01f84d7e47181189bb5486994967"
+      "bytes": 9828,
+      "sha256": "ec15b41b8890385a2ecc6f7147fce8b28e006df033ab2a287e356f6f11ab4d31"
     },
     {
       "path": "api/functions.d.ts",
@@ -1980,8 +2058,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43547773,
-      "sha256": "a59d7f2ac8b1e30dcc5d10451b634fa176b2872ccf0d25cc56c9a8a1b345af96"
+      "bytes": 43546769,
+      "sha256": "ec6c769be3eb3177656f20fff477512938199b1c6c80e92421b740635e4070b3"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -1990,13 +2068,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 327913,
-      "sha256": "59cf3489af3094ee088538b28bec5d4f510b95f07b5c1ab824b181f284b799ca"
+      "bytes": 328254,
+      "sha256": "8f0586da670e7cb112d3aff7d1e7bb16ac0180d5746786a6ccff96c40c8520e7"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43831545,
-      "sha256": "3cf67a98910b0a26cd21b38e1d7f0d9648cfb08e93818d643453b170270fc894"
+      "bytes": 43843628,
+      "sha256": "a42ff23abdb2333e437ce4000d49167996cac0d4a123d91d38f94cbf91575522"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2010,8 +2088,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37749488,
-      "sha256": "9a2c53f6b164aede4a7b0d69313d2b491ebc171059e4c5850208504d6beea28f"
+      "bytes": 37749259,
+      "sha256": "30e50d15ffc467f2c5aeb7536aa5d9cb089f1400e2e7bef2d537366ecf34d7ec"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2020,13 +2098,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 211946,
-      "sha256": "ae34cc653fb8bccccb353d602e74f6456c902c8455f56f232aa5a9fb822c7cfa"
+      "bytes": 212287,
+      "sha256": "7f9897f88b725cb9c92ca213b62b15dd800b4b092aa44f5849d8ee495c0681eb"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37947672,
-      "sha256": "096ee5d816f7ef4043934663cd01abad22b981f2acafa565b80670ebbbbe7d2b"
+      "bytes": 37951785,
+      "sha256": "33d7f084b5dec3ccaff08c9175080887b97c62228dd1b20797505ddff1ae239c"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2040,8 +2118,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38063491,
-      "sha256": "1d575142f088c5ecdd65e81a0e9e3b9a7cb4dd705b91c288a5b124bf9c2eba07"
+      "bytes": 38063239,
+      "sha256": "82ce0aa92f97f66f2e59f6355fae1d4e8004175e1155dd4c8524ad9c8ddeb45e"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2050,13 +2128,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 215484,
-      "sha256": "94e4a86ac86c53c3da1dde305ab1625244578e906016c742c5e7b00d539f6f8a"
+      "bytes": 215825,
+      "sha256": "f7f52488497353c59e0e0f0cbc0d7e092004bd214177475df40a7c43301c9c8b"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38272156,
-      "sha256": "7ae287a395a280541597cc8cdc75641ae4014e755f443ce30057928dd6cde3ba"
+      "bytes": 38276211,
+      "sha256": "9405c108ac140fb8200963f6de6ede5b0997e70d319af28f8ad1b83d543fe6ba"
     }
   ]
 }
