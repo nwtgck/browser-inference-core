@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 2,
-  "schemaSha256": "6b733b706f0110c79844ec106c4393868fd5ac97ee3033b23084f17c8d52293d",
+  "schemaSha256": "fa0e2738b76fb583006513977b26034ebb1bcf71b3aa34dd0390dbea407ad871",
   "capabilities": {
     "ggufFileOffsetBits": 64,
     "callerOwnedRandomAccess": true,
@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+  "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -216,11 +216,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465638,
+          "builtAtUnix": 1790478963,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -236,7 +279,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -296,7 +339,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -421,11 +464,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465665,
+          "builtAtUnix": 1790478927,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -445,7 +531,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -505,7 +591,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -630,11 +716,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465563,
+          "builtAtUnix": 1790478857,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -650,7 +779,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -710,7 +839,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -835,11 +964,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465556,
+          "builtAtUnix": 1790478824,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -859,7 +1031,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -919,7 +1091,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1044,11 +1216,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465582,
+          "builtAtUnix": 1790478848,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -1064,7 +1279,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "1d724311cf1200df9a2fc7b3396eeecb1a8d04f0",
+          "sourceCommit": "2f6854f62c6a9ce8d46952d58e8107eb2d5fa6e2",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1124,7 +1339,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/llama-cpp-browser-core/llama-cpp-browser-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "787788566f833ad03a08fda9cca823b38e4f750bbc8db10beaf77ca0e980c610",
+            "inventorySha256": "9ceccb63ef844408173e3679d5894146c0aa95c6cfed5db2782b87718ee0265f",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1249,11 +1464,54 @@
                   }
                 ],
                 "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790465585,
+          "builtAtUnix": 1790478887,
           "buildCache": {
             "identity": "97f1b2486eeb5a55708a04764804c44ec36325bf344f602e1088df5052fa171a",
             "compilerWrapper": "ccache"
@@ -1287,13 +1545,13 @@
     },
     {
       "path": "api/schema.json",
-      "bytes": 58004,
-      "sha256": "6b733b706f0110c79844ec106c4393868fd5ac97ee3033b23084f17c8d52293d"
+      "bytes": 58147,
+      "sha256": "fa0e2738b76fb583006513977b26034ebb1bcf71b3aa34dd0390dbea407ad871"
     },
     {
       "path": "api/schema.mjs",
-      "bytes": 33407,
-      "sha256": "8dc1b9f901dd4639657361ba4cbda07a5f311e8883edf9266ad01997a6028d6e"
+      "bytes": 33484,
+      "sha256": "b92e91244d7cf81a442c63322fb7ebf5a97b5c1af001efc9d35e2cce2331a1f9"
     },
     {
       "path": "examples/runtime/README.md",
@@ -1722,8 +1980,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43545027,
-      "sha256": "81fc11fd4950f0fd9ef3091fdbb694d2a0f9ef00ca5677ac329703adf7436842"
+      "bytes": 43547773,
+      "sha256": "c2c55f0ab107d3358f79fa4d85b8d8bb15778694f17e27e1bb8f056cff27a7ef"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -1732,13 +1990,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 327002,
-      "sha256": "43e67b11b6d4332afd395b169812eafc3d562d17bdaeda621651bdf7ca8baa45"
+      "bytes": 327913,
+      "sha256": "59cf3489af3094ee088538b28bec5d4f510b95f07b5c1ab824b181f284b799ca"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43799279,
-      "sha256": "f7fc11af43463738e56c6ee94fc204550916ba4409b7d90db7360471d99d321f"
+      "bytes": 43831547,
+      "sha256": "e3039da709b17e3e9776ebe00f462742b39190d03b07e1b487b6258002e257a2"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -1752,8 +2010,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37748236,
-      "sha256": "f3a0372883b03683103d849b8a6aaeb66f8aee345e2988718a7627e045cdc525"
+      "bytes": 37749488,
+      "sha256": "0efcbae4fe76c112f8f66eefe64680649851f5b2345a4237b1ae8a045030e7c6"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -1762,13 +2020,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 211013,
-      "sha256": "72768fe4fdb06163084193f00e926e7c6dc851d6a902419c7b89c14d4f0a49f5"
+      "bytes": 211946,
+      "sha256": "ae34cc653fb8bccccb353d602e74f6456c902c8455f56f232aa5a9fb822c7cfa"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37936194,
-      "sha256": "d427b8c7e7021e35496078239412e4aefa52f4e951936fe747a0d123d6125941"
+      "bytes": 37947672,
+      "sha256": "3d6afe15bce5e6aaa3ecaf511b39790d192714ae3326587da2a304093a830923"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -1782,8 +2040,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38062238,
-      "sha256": "c28d026ad9bfdd2752e3c3676d3dab223045b2a73ed012a83058b4c11ac0a66d"
+      "bytes": 38063491,
+      "sha256": "96807097ba045362be6de3dbdd8dc57327e412c62775ed6b5cdb395d8d148e00"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -1792,13 +2050,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 214511,
-      "sha256": "44cdf80ecccfbc1fba7ba6ebe02a27f1267519021bb5db646cf58c8c29185116"
+      "bytes": 215484,
+      "sha256": "94e4a86ac86c53c3da1dde305ab1625244578e906016c742c5e7b00d539f6f8a"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38260069,
-      "sha256": "8b7cb916db1e537b7371d98a8ef4f4fd0c2b1dc20ecb546ce5aa013ed554f2b6"
+      "bytes": 38272156,
+      "sha256": "1bf6a8f437274ecf58cfd7766043bcb84e62194558a9259799d6bd9aba6cc85a"
     }
   ]
 }

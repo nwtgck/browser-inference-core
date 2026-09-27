@@ -1604,6 +1604,12 @@
           "cType": "int",
           "kind": "signed",
           "id": 51
+        },
+        {
+          "name": "webgpu_bf16_type",
+          "cType": "enum sd_type_t",
+          "kind": "signed",
+          "id": 52
         }
       ],
       "id": 3
