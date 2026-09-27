@@ -480,7 +480,7 @@
     {
       "path": "llama-cpp/manifest.json",
       "bytes": 53063,
-      "sha256": "127bba4e3fa3f3b085172d956711d02ba22a211c24b33d49eafcf90c18d5a391"
+      "sha256": "8eeaa0d92d5d293a4056b4035df157d7c59d8e3288621f0574df0927e43091c2"
     },
     {
       "path": "llama-cpp/package.json",
@@ -1080,7 +1080,7 @@
     {
       "path": "stable-diffusion-cpp/manifest.json",
       "bytes": 103343,
-      "sha256": "8157da4f98990a3ffefda9b84ec1aa9316b256f27c4b115a65095a71fb672213"
+      "sha256": "80e58eb73c56a5db30d70c5c91860eb48072ad322e50c52d92d27735910a2f4c"
     },
     {
       "path": "stable-diffusion-cpp/package.json",
