@@ -1,0 +1,194 @@
+diff --git a/include/stable-diffusion.h b/include/stable-diffusion.h
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@ -248,6 +248,7 @@
+     const char* tokenizer;           // tokenizer.json path or main=FILE,clip-l=FILE,clip-g=FILE assignments; required for PiD and Lens
+     bool sage_attn;
+     int conditioning_cache_size;  // Maximum cached conditioning entries per context; 0 disables caching (default: 4)
++    enum sd_type_t webgpu_bf16_type;  // BF16 parameters on WebGPU: F32 (default, exact widening) or F16 (lossy, opt-in)
+ } sd_ctx_params_t;
+ 
+ typedef struct {
+diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
+--- a/src/stable-diffusion.cpp
++++ b/src/stable-diffusion.cpp
+@@ -328,6 +328,7 @@
+     sd_ctx_params->n_threads                 = sd_get_num_physical_cores();
+     sd_ctx_params->conditioning_cache_size   = 4;
+     sd_ctx_params->wtype                     = SD_TYPE_COUNT;
++    sd_ctx_params->webgpu_bf16_type           = SD_TYPE_F32;
+     sd_ctx_params->rng_type                  = CUDA_RNG;
+     sd_ctx_params->sampler_rng_type          = RNG_TYPE_COUNT;
+     sd_ctx_params->prediction                = PREDICTION_COUNT;
+diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@ -914,6 +914,10 @@
+     if (!validate_tensor_types(sd_ctx_params->wtype, sd_ctx_params->tensor_type_rules)) {
+         return false;
+     }
++    if (sd_ctx_params->webgpu_bf16_type != SD_TYPE_F32 && sd_ctx_params->webgpu_bf16_type != SD_TYPE_F16) {
++        LOG_ERROR("webgpu_bf16_type must be F32 or F16");
++        return false;
++    }
+     for (float scale : {sd_ctx_params->linear_scale, sd_ctx_params->attn_scale}) {
+         if (!std::isfinite(scale) || scale < 0.f || (scale > 0.f && !std::isfinite(1.f / scale))) {
+             LOG_ERROR("scale overrides must be finite positive values, or 0 to keep model defaults");
+@@ -959,6 +963,7 @@
+     ggml_log_set(sd_ggml_log_callback, nullptr);
+ 
+     model_manager = std::make_shared<ModelManager>();
++    model_manager->set_webgpu_bf16_type(sd_type_to_ggml_type(sd_ctx_params->webgpu_bf16_type));
+     model_manager->set_n_threads(n_threads);
+     model_manager->set_enable_mmap(enable_mmap);
+     model_manager->set_segmented_compute_disabled(disable_segmented_compute);
+@@ -980,6 +985,7 @@
+     if (auto_fit_enabled) {
+         if (!sd::backend_fit::derive_backend_specs(model_loader,
+                                                    sd_type_to_ggml_type(sd_ctx_params->wtype),
++                                                   sd_type_to_ggml_type(sd_ctx_params->webgpu_bf16_type),
+                                                    max_vram_assignment,
+                                                    backend_spec,
+                                                    params_backend_spec)) {
+diff --git a/src/model_manager.h b/src/model_manager.h
+--- a/src/model_manager.h
++++ b/src/model_manager.h
+@@ -33,6 +33,7 @@
+ 
+ private:
+     static constexpr size_t MAX_RESIDENCY_BLOCK_BYTES = 1024ULL * 1024ULL * 1024ULL;
++    ggml_type webgpu_bf16_type_ = GGML_TYPE_F32;
+ 
+     struct TensorState {
+         std::string name;
+@@ -200,6 +201,10 @@
+     }
+     void set_prefetch_disabled(bool disabled) { prefetch_disabled_ = disabled; }
+     void set_enable_mmap(bool enable_mmap) { enable_mmap_ = enable_mmap; }
++    void set_webgpu_bf16_type(ggml_type type) {
++        GGML_ASSERT(type == GGML_TYPE_F32 || type == GGML_TYPE_F16);
++        webgpu_bf16_type_ = type;
++    }
+     void set_writable_mmap(bool writable_mmap) { writable_mmap_ = writable_mmap; }
+     void set_common_ignore_tensors(std::set<std::string> ignore_tensors);
+     bool prepare_lora_sources(std::vector<LoraSpec>& loras);
+diff --git a/src/model_manager.cpp b/src/model_manager.cpp
+--- a/src/model_manager.cpp
++++ b/src/model_manager.cpp
+@@ -224,10 +224,6 @@
+         LOG_ERROR("model manager tensor component is invalid");
+         return false;
+     }
+-    if (registered_tensor_size != nullptr) {
+-        *registered_tensor_size += estimate_tensors_size(tensors);
+-    }
+-
+     const auto scoped_sources = source_file != 0 ? model_loader_.file_tensors(source_file, source_version) : String2TensorStorage{};
+     const auto& sources       = source_file != 0 ? scoped_sources : model_loader_.get_tensor_storage_map();
+     std::unordered_set<ggml_tensor*> new_tensors;
+@@ -274,6 +270,51 @@
+         new_states.push_back(std::move(state));
+     }
+ 
++#ifdef SD_BROWSER_WEBGPU
++    size_t converted_tensors = 0;
++    uint64_t source_bytes = 0, destination_bytes = 0;
++    if (sd_backend_is(compute_backend, "WebGPU")) {
++        for (auto& state : new_states) {
++            ggml_tensor* tensor = state->tensor;
++            if (!state->has_source || state->source.type != GGML_TYPE_BF16 || tensor->type != GGML_TYPE_BF16) {
++                continue;
++            }
++            // Change only unallocated parameter metadata. The loader must retain
++            // the original file type/offset and convert once into this destination.
++            if (tensor->buffer != nullptr || tensor->data != nullptr || tensor->view_src != nullptr ||
++                !ggml_is_contiguous(tensor) || uint64_t(ggml_nelements(tensor)) > SIZE_MAX / ggml_type_size(webgpu_bf16_type_)) {
++                LOG_ERROR("cannot prepare BF16 parameter storage for WebGPU");
++                return false;
++            }
++            source_bytes += ggml_nbytes(tensor);
++            destination_bytes += uint64_t(ggml_nelements(tensor)) * ggml_type_size(webgpu_bf16_type_);
++            ++converted_tensors;
++        }
++        // Do not leave earlier tensors changed when a later candidate is invalid.
++        for (auto& state : new_states) {
++            ggml_tensor* tensor = state->tensor;
++            if (!state->has_source || state->source.type != GGML_TYPE_BF16 || tensor->type != GGML_TYPE_BF16) {
++                continue;
++            }
++            tensor->type = webgpu_bf16_type_;
++            tensor->nb[0] = ggml_type_size(tensor->type);
++            for (int i = 1; i < GGML_MAX_DIMS; ++i) {
++                tensor->nb[i] = tensor->nb[i - 1] * tensor->ne[i - 1];
++            }
++        }
++    }
++    if (converted_tensors != 0) {
++        // These are unique parameter bytes, not repeated graph operand uses or
++        // peak memory: the loader additionally needs per-tensor conversion buffers.
++        LOG_INFO("browser-weight-conversion-v1 target=%s tensors=%zu source_bytes=%llu destination_bytes=%llu extra_bytes=%llu",
++                 ggml_type_name(webgpu_bf16_type_), converted_tensors,
++                 (unsigned long long)source_bytes, (unsigned long long)destination_bytes,
++                 (unsigned long long)(destination_bytes - source_bytes));
++    }
++#endif
++    if (registered_tensor_size != nullptr) {
++        *registered_tensor_size += estimate_tensors_size(tensors);
++    }
+     resolved_tensor_states_.clear();
+     for (auto& state : new_states) {
+         TensorState* registered_state                      = state.get();
+diff --git a/src/core/backend_fit.h b/src/core/backend_fit.h
+--- a/src/core/backend_fit.h
++++ b/src/core/backend_fit.h
+@@ -11,6 +11,7 @@
+ 
+     bool derive_backend_specs(ModelLoader& loader,
+                               ggml_type override_wtype,
++                              ggml_type webgpu_bf16_type,
+                               sd::ggml_graph_cut::MaxVramAssignment& budgets,
+                               std::string& runtime_spec,
+                               std::string& params_spec);
+diff --git a/src/core/backend_fit.cpp b/src/core/backend_fit.cpp
+--- a/src/core/backend_fit.cpp
++++ b/src/core/backend_fit.cpp
+@@ -96,7 +96,7 @@
+         return false;
+     }
+ 
+-    static std::vector<Component> estimate_components(ModelLoader& loader, ggml_type override_wtype) {
++    static std::vector<Component> estimate_components(ModelLoader& loader, ggml_type override_wtype, ggml_type webgpu_bf16_type) {
+         int64_t bytes[3]          = {0, 0, 0};
+         int64_t largest_tensor[3] = {0, 0, 0};
+         for (const auto& [name, stored_tensor] : loader.get_tensor_storage_map()) {
+@@ -110,6 +110,13 @@
+             } else if (override_wtype != GGML_TYPE_COUNT && loader.tensor_should_be_converted(ts, override_wtype)) {
+                 ts.type = override_wtype;
+             }
++#ifdef SD_BROWSER_WEBGPU
++            // Placement is decided later. Include widening conservatively even
++            // for components the planner may ultimately assign to CPU.
++            if (stored_tensor.type == GGML_TYPE_BF16 && ts.type == GGML_TYPE_BF16) {
++                ts.type = webgpu_bf16_type;
++            }
++#endif
+             const int64_t tensor_bytes = (int64_t)ts.nbytes() + 64;
+             bytes[int(kind)] += tensor_bytes;
+             largest_tensor[int(kind)] = std::max(largest_tensor[int(kind)], tensor_bytes);
+@@ -417,6 +424,7 @@
+ 
+     bool derive_backend_specs(ModelLoader& loader,
+                               ggml_type override_wtype,
++                              ggml_type webgpu_bf16_type,
+                               sd::ggml_graph_cut::MaxVramAssignment& budgets,
+                               std::string& runtime_spec,
+                               std::string& params_spec) {
+@@ -428,7 +436,7 @@
+ 
+         // Resolve once to ensure dynamic backends are loaded before enumerating devices.
+         sd_backend_resolve_name("");
+-        const auto components = estimate_components(loader, override_wtype);
++        const auto components = estimate_components(loader, override_wtype, webgpu_bf16_type);
+         const auto devices    = enumerate_gpu_devices(budgets, !runtime_spec.empty());
+         std::vector<Runtime> runtimes;
+         if (!runtime_spec.empty() && !resolve_runtimes(components, devices, runtime_spec, runtimes, error)) {

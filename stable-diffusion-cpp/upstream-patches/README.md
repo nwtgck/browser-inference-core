@@ -57,6 +57,24 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
    original weight placement as well as arithmetic. Remove when an upstream
    passive allocation summary provides equivalent coverage without names/data.
 
+9. BF16 parameter storage: under `SD_BROWSER_WEBGPU`, register original BF16
+   parameters for WebGPU compute as F32 before allocating buffers. The per-context
+   `webgpu_bf16_type` field accepts F32 (default, exact widening) or F16 (explicit
+   lossy conversion, including possible overflow/underflow). CPU compute and other
+   parameter types, including quantized weights, retain their existing types.
+   Source metadata and files stay unchanged; the existing loader converts into
+   the destination storage using per-tensor temporary buffers. Converted weights
+   remain in the selected residency backend until released or evicted.
+   F32 doubles the converted parameters' raw bytes; F16 retains their byte count.
+   Strides, registered bytes and allocation budgets use the destination type.
+   Auto-fit includes widening conservatively before deciding placement, so CPU
+   components can be overestimated. A fixed log reports unique converted bytes,
+   not graph operand uses, alignment overhead or peak memory. The synthetic
+   `bf16-weights-probe.cpp` covers both file formats, preserved quantization,
+   values, accounting and optional WebGPU placement; it does not certify model
+   quality, speed or bitwise parity with CPU arithmetic. Remove when upstream
+   provides equivalent backend-aware BF16 loading with caller-selected precision.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime

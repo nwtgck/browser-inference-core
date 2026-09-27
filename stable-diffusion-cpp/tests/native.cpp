@@ -10,6 +10,7 @@
 #include <vector>
 extern "C" uint32_t sdc_abi_version();
 extern "C" int sdc_test_qwen_timestep(const char*);
+extern "C" int sdc_test_bf16_weights(const char*);
 extern "C" uint32_t sdc_model_io_capabilities();
 extern "C" uint64_t sdc_test_safetensors_offset(const char*);
 extern "C" uint32_t sdc_test_safetensors_value(const char*);
@@ -122,12 +123,14 @@ int main() {
         check(placement_message.find("webgpu_weights=0 host_weights=1 other_weights=0 webgpu_cpu_bf16=0 webgpu_cpu_bf16_use_bytes=0") != std::string::npos,
               "CPU placement is not reported as GPU weight transfer");
         check(placement_message.find("probe") == std::string::npos, "Placement diagnostics omit tensor names");
+        check(sdc_test_bf16_weights("CPU")==1,"CPU loading retains BF16, F16 and quantized parameter types");
         model_io_checks();
         sd_ctx_params_t context{};sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
         sd_ctx_params_t reference{};sd_ctx_params_init(&reference);
         check(context.n_threads==reference.n_threads && context.enable_mmap==reference.enable_mmap &&
             context.auto_fit==reference.auto_fit && context.conditioning_cache_size==reference.conditioning_cache_size,
             "binding must retain upstream defaults");
+        check(context.webgpu_bf16_type==SD_TYPE_F32,"BF16 WebGPU policy defaults to exact F32 widening");
         sd_img_gen_params_t image{};sdc_sd_img_gen_params_init(uint64_t(uintptr_t(&image)));
         sd_img_gen_params_t defaults{};sd_img_gen_params_init(&defaults);
         check(image.width==defaults.width && image.height==defaults.height && image.batch_count==defaults.batch_count &&
