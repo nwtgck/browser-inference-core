@@ -480,7 +480,7 @@
     {
       "path": "llama-cpp-browser-core/manifest.json",
       "bytes": 53063,
-      "sha256": "4c05ec803073b05d67dc8940fa720e75e1f8dd0b0ce696fc5420dd55a8cac6d5"
+      "sha256": "934b881062209475c55e10ce7284d50bac35f8c34b54f403b7dc6410a2125804"
     },
     {
       "path": "llama-cpp-browser-core/package.json",
@@ -1080,7 +1080,7 @@
     {
       "path": "stable-diffusion-cpp-browser-core/manifest.json",
       "bytes": 103343,
-      "sha256": "f16ca3a8bcfdf824142e27abca35c536c4bcb21ad106197431d3f60d8f2f2ee6"
+      "sha256": "085afbea3ec86e396220601038721a5d114620ce927d5649c4e4c3edf7b1af19"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/package.json",
