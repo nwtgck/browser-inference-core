@@ -42,7 +42,8 @@ def parse_json(raw: bytes):
 
 
 def image_scope(test_webgpu: bool) -> str:
-    return IMAGE_SCOPE + ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') + '; no trained-model image generation'
+    return (IMAGE_SCOPE + ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
+            ', plus deep graph construction/selection; no trained-model image generation')
 
 
 def checked_results(runtime: str, profiles: dict, variants: dict, results: object,
@@ -66,8 +67,12 @@ def checked_results(runtime: str, profiles: dict, variants: dict, results: objec
             elif (result.get('mockedAdapter') is not True or result.get('suspension') is not True or
                   result.get('syntheticModel', False) is not False):
                 raise ValueError('Wrong GPU smoke scope')
-        elif result.get('scope') != image_scope(test_webgpu):
-            raise ValueError('Wrong image smoke scope')
+        else:
+            if result.get('scope') != image_scope(test_webgpu):
+                raise ValueError('Wrong image smoke scope')
+            if ((pair[1] == 'test' and result.get('graphWalk') is not True) or
+                    (pair[1] == 'browser' and 'graphWalk' in result)):
+                raise ValueError('Wrong image graph walk evidence')
     return results
 
 

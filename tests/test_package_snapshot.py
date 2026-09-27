@@ -100,6 +100,65 @@ class PackageInputs(unittest.TestCase):
             read_regular(self.source / 'file', limit=5)
 
 
+class ImageSmokeResults(unittest.TestCase):
+    def setUp(self):
+        runtime = ROOT / 'stable-diffusion-cpp'
+        self.profiles = json.loads((runtime / 'config/profiles.json').read_text())
+        self.variants = json.loads((runtime / 'config/variants.json').read_text())
+
+    def results(self, test_webgpu):
+        # Match the producer's emitted contract independently of image_scope().
+        scope = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
+                 'test variants also check synthetic Qwen BF16 timestep graph arithmetic on ' +
+                 ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
+                 ', plus deep graph construction/selection; no trained-model image generation')
+        return [{'profile': profile, 'variant': variant, 'passed': True, 'scope': scope,
+                 **({'graphWalk': True} if variant == 'test' else {})}
+                for profile in self.profiles for variant in self.variants]
+
+    def check(self, results, test_webgpu):
+        return snapshot.checked_results('stable-diffusion-cpp', self.profiles, self.variants,
+                                        results, test_webgpu=test_webgpu)
+
+    def test_accepts_cpu_and_webgpu_scopes_with_test_only_graph_evidence(self):
+        for test_webgpu in (False, True):
+            with self.subTest(test_webgpu=test_webgpu):
+                results = self.results(test_webgpu)
+                self.assertEqual(self.check(results, test_webgpu), results)
+
+    def test_rejects_old_scope_and_wrong_backend_scope(self):
+        for test_webgpu in (False, True):
+            results = self.results(test_webgpu)
+            results[0]['scope'] = results[0]['scope'].replace(', plus deep graph construction/selection', '')
+            with self.subTest(old_scope=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(results, test_webgpu)
+            with self.subTest(wrong_backend=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(self.results(not test_webgpu), test_webgpu)
+
+    def test_requires_true_graph_walk_for_every_test_profile(self):
+        for profile in self.profiles:
+            for value in (False, None, 0, 1, 'true'):
+                results = self.results(False)
+                result = next(item for item in results if item['profile'] == profile and item['variant'] == 'test')
+                result['graphWalk'] = value
+                with self.subTest(profile=profile, value=value), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                    self.check(results, False)
+            results = self.results(False)
+            result = next(item for item in results if item['profile'] == profile and item['variant'] == 'test')
+            result.pop('graphWalk')
+            with self.subTest(profile=profile, missing=True), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                self.check(results, False)
+
+    def test_rejects_graph_walk_key_on_every_browser_profile(self):
+        for profile in self.profiles:
+            for value in (True, False, None):
+                results = self.results(False)
+                result = next(item for item in results if item['profile'] == profile and item['variant'] == 'browser')
+                result['graphWalk'] = value
+                with self.subTest(profile=profile, value=value), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                    self.check(results, False)
+
+
 class RuntimeSnapshot(unittest.TestCase):
     def setUp(self):
         self.fixture = fixtures.MultiRuntime(); self.fixture.setUp()
@@ -145,7 +204,9 @@ class RuntimeSnapshot(unittest.TestCase):
         for profile in profiles:
             for variant in variants:
                 item = {'profile': profile, 'variant': variant, 'passed': True}
-                if self.runtime == 'stable-diffusion-cpp': item['scope'] = snapshot.image_scope(False)
+                if self.runtime == 'stable-diffusion-cpp':
+                    item['scope'] = snapshot.image_scope(False)
+                    if variant == 'test': item['graphWalk'] = True
                 elif profile.startswith('cpu-'): item['syntheticModel'] = True
                 else: item.update(mockedAdapter=True, suspension=True)
                 result.append(item)
@@ -248,6 +309,17 @@ class RuntimeSnapshot(unittest.TestCase):
         self.runtime = 'llama-cpp'
         self.result_mutator = lambda env: env['results'][0].__setitem__('syntheticModel', 'true')
         with self.assertRaisesRegex(ValueError, 'scope'): self.validate()
+
+    def test_missing_graph_walk_evidence_cannot_finalize_or_leave_a_receipt(self):
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('{"status":"complete"}')
+        def mutate(envelope):
+            next(item for item in envelope['results'] if item['variant'] == 'test').pop('graphWalk')
+        self.result_mutator = mutate
+        with self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+            self.validate()
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
 
     def test_failed_child_preserves_failure_and_removes_old_success_receipt(self):
         self.receipt().write_text('{"status":"complete"}')
