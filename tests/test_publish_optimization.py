@@ -53,6 +53,20 @@ class PublicationOptimization(unittest.TestCase):
     def assemble(self):
         package.assemble(self.inputs, self.out, check_npm_pack=False)
 
+    def test_workflow_summary_adds_details_without_repeating_install_command(self):
+        self.assemble()
+        summary = Path(self.env['GITHUB_STEP_SUMMARY'])
+        summary.write_text('## Runtime artifact commit\n\n```sh\nnpm install github:example/lcore#' + 'd' * 40 + '\n```\n')
+        self.report_main(digest=package.identity(self.out / 'manifest.json')['sha256'])
+        text = summary.read_text()
+        self.assertEqual(text.count('npm install github:example/lcore#'), 1)
+        self.assertEqual(text.count('## Runtime artifact commit'), 1)
+        self.assertNotIn('## Runtime artifact published', text)
+        self.assertIn('## Consumer integration details', text)
+        self.assertIn('stableDiffusion:', text)
+        self.assertIn('consumerIntegration:', text)
+        self.assertIn('npm install', (self.root / 'report/consumer-update.md').read_text())
+
     def report_main(self, *, digest=None, lock_effect=None, commit='d' * 40):
         args = ['consumer_metadata.py', '--package', str(self.out), '--commit', commit,
                 '--output', str(self.root / 'report')]
@@ -101,7 +115,7 @@ class PublicationOptimization(unittest.TestCase):
         for runtime in package.RUNTIMES:
             with self.subTest(runtime=runtime), \
                  patch.object(subprocess, 'check_output', wraps=subprocess.check_output) as calls:
-                package.runtime_module(runtime).validate(self.out / runtime)
+                package.runtime_module(runtime).validate(self.out / package.ARTIFACT_DIRS[runtime])
             self.assertEqual(len(pack_calls(calls)), 1)
 
     def test_standalone_assembly_and_verify_cli_do_not_defer_by_default(self):
@@ -178,7 +192,7 @@ class PublicationOptimization(unittest.TestCase):
     def test_payload_tampering_cannot_reuse_a_matching_manifest_digest(self):
         self.assemble()
         digest = package.identity(self.out / 'manifest.json')['sha256']
-        target = self.out / 'llama-cpp/profiles/cpu-wasm32/browser/core.mjs'
+        target = self.out / 'llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.mjs'
         target.write_bytes(b'X' * target.stat().st_size)
         with self.assertRaisesRegex(ValueError, 'hash/size'):
             reporter.validate_for_report(self.out, digest)
@@ -212,7 +226,7 @@ class PublicationOptimization(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case):
                 self.assemble()
-                image = self.out / 'stable-diffusion-cpp'
+                image = self.out / 'stable-diffusion-cpp-browser-core'
                 manifest = json.loads((image / 'manifest.json').read_text())
                 profile = next(iter(manifest['profiles']))
                 item = manifest['profiles'][profile]['variants']['browser']
@@ -239,7 +253,7 @@ class PublicationOptimization(unittest.TestCase):
         for runtime in package.RUNTIMES:
             with self.subTest(runtime=runtime):
                 self.assemble()
-                inner = self.out / runtime
+                inner = self.out / package.ARTIFACT_DIRS[runtime]
                 target = next(inner.glob('profiles/*/browser/core.wasm'))
                 target.write_bytes(b'not wasm')
                 fixtures.write_manifest(inner, json.loads((inner / 'manifest.json').read_text()))
@@ -257,7 +271,7 @@ class PublicationOptimization(unittest.TestCase):
         for runtime in (*package.RUNTIMES, ''):
             with self.subTest(runtime=runtime):
                 self.assemble()
-                directory = self.out / runtime
+                directory = self.out / package.ARTIFACT_DIRS[runtime] if runtime else self.out
                 pkg = json.loads((directory / 'package.json').read_text()); pkg['files'] = ['LICENSE']
                 (directory / 'package.json').write_text(json.dumps(pkg))
                 if runtime:
@@ -276,7 +290,7 @@ class PublicationOptimization(unittest.TestCase):
         copytree = shutil.copytree
         def corrupt(source, destination, *args, **kwargs):
             result = copytree(source, destination, *args, **kwargs)
-            if Path(source) == self.out / 'llama-cpp':
+            if Path(source) == self.out / 'llama-cpp-browser-core':
                 (Path(destination) / 'profiles/cpu-wasm32/browser/core.wasm').write_bytes(b'not wasm')
             return result
         with patch.object(shutil, 'copytree', side_effect=corrupt), \

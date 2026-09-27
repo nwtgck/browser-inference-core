@@ -76,6 +76,9 @@ class MultiRuntime(unittest.TestCase):
         self.assertEqual(result['formatVersion'], 3)
         self.assertEqual(set(result['runtimes']), set(package.RUNTIMES))
         self.assertFalse((self.out / 'profiles').exists())
+        self.assertEqual({path.name for path in self.out.iterdir() if path.is_dir()}, set(package.ARTIFACT_DIRS.values()))
+        self.assertEqual(result['runtimes']['llama-cpp']['manifest'], 'llama-cpp-browser-core/manifest.json')
+        self.assertEqual(result['runtimes']['stable-diffusion-cpp']['manifest'], 'stable-diffusion-cpp-browser-core/manifest.json')
         subprocess.run(['node', '--input-type=module', '-e', """
           const old = await import('llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.mjs');
           const named = await import('llama-cpp-browser-core/llama-cpp/profiles/cpu-wasm32/browser/core.mjs');
@@ -93,9 +96,10 @@ class MultiRuntime(unittest.TestCase):
         self.assertTrue(data['retrieval']['sourceRawBase'].endswith('/llama-cpp/'))
         self.assertEqual(data['retrieval']['sourceRawBase'], data['retrieval']['sourceRepositoryRawBase']+'llama-cpp/')
         self.assertEqual(data['runtime']['manifestFormatVersion'], 3)
-        self.assertTrue(data['browserProfiles']['cpu-wasm32']['wasm']['path'].startswith('llama-cpp/profiles/'))
+        self.assertTrue(data['browserProfiles']['cpu-wasm32']['wasm']['path'].startswith('llama-cpp-browser-core/profiles/'))
+        self.assertEqual(data['runtime']['llamaManifestPath'], 'llama-cpp-browser-core/manifest.json')
         sd = data['stableDiffusion']
-        self.assertEqual(sd['manifest']['path'], 'stable-diffusion-cpp/manifest.json')
+        self.assertEqual(sd['manifest']['path'], 'stable-diffusion-cpp-browser-core/manifest.json')
         self.assertIn('#' + 'd' * 40, sd['installSeparatelyForNaidan'])
         for profile in sd['profiles'].values():
             for item in profile['variants'].values():
@@ -113,7 +117,7 @@ class MultiRuntime(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'mix'): package.assemble(self.inputs, self.out)
     def test_tampering_is_detected(self):
         package.assemble(self.inputs, self.out)
-        (self.out / 'stable-diffusion-cpp/profiles/webgpu-wasm32-asyncify/browser/core.wasm').write_bytes(b'invalid')
+        (self.out / 'stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.wasm').write_bytes(b'invalid')
         with self.assertRaisesRegex(ValueError, 'hash/size'): package.validate(self.out)
     def test_missing_variant_is_not_publishable(self):
         root = self.inputs / 'stable-diffusion-cpp'; m = json.loads((root / 'manifest.json').read_text())

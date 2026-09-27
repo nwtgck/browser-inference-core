@@ -16,6 +16,7 @@ from pipeline_metrics import measured, span
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_NAME = 'llama-cpp-browser-core'
 RUNTIMES = ('llama-cpp', 'stable-diffusion-cpp')
+ARTIFACT_DIRS = {'llama-cpp': 'llama-cpp-browser-core', 'stable-diffusion-cpp': 'stable-diffusion-cpp-browser-core'}
 
 def runtime_module(runtime: str):
     if runtime not in RUNTIMES: raise ValueError('Unknown runtime')
@@ -58,10 +59,11 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
             raise ValueError('Artifact hash/size mismatch: ' + entry['path'])
         if entry['bytes'] >= 100 * 1024**2: raise ValueError('Single-file artifact size limit exceeded')
     for runtime in RUNTIMES:
-        runtime_module(runtime).validate(directory / runtime, require_clean=require_clean, check_npm_pack=check_npm_pack)
-        inner = json.loads((directory / runtime / 'manifest.json').read_text())
+        artifact_dir = ARTIFACT_DIRS[runtime]
+        runtime_module(runtime).validate(directory / artifact_dir, require_clean=require_clean, check_npm_pack=check_npm_pack)
+        inner = json.loads((directory / artifact_dir / 'manifest.json').read_text())
         if inner['sourceCommit'] != manifest['sourceCommit']: raise ValueError('Mixed source commits')
-        if manifest['runtimes'][runtime] != {'manifest': runtime + '/manifest.json', 'manifestFormatVersion': inner['formatVersion']}:
+        if manifest['runtimes'][runtime] != {'manifest': artifact_dir + '/manifest.json', 'manifestFormatVersion': inner['formatVersion']}:
             raise ValueError('Wrong runtime manifest binding')
     if check_npm_pack:
         with span('package.npm_pack', packageKind='root'):
@@ -77,22 +79,24 @@ def assemble(inputs: Path, destination: Path, *, check_npm_pack: bool = True) ->
     with tempfile.TemporaryDirectory(prefix='lcore-package-') as temporary:
         out = Path(temporary)
         for runtime in RUNTIMES:
+            artifact_dir = ARTIFACT_DIRS[runtime]
             runtime_module(runtime).validate(inputs / runtime, check_npm_pack=check_npm_pack)
             manifest = json.loads((inputs / runtime / 'manifest.json').read_text())
             if source is not None and source != manifest['sourceCommit']: raise ValueError('Cannot mix source revisions')
             source = manifest['sourceCommit']
-            shutil.copytree(inputs / runtime, out / runtime)
-            runtimes[runtime] = {'manifest': runtime + '/manifest.json', 'manifestFormatVersion': manifest['formatVersion']}
+            shutil.copytree(inputs / runtime, out / artifact_dir)
+            runtimes[runtime] = {'manifest': artifact_dir + '/manifest.json', 'manifestFormatVersion': manifest['formatVersion']}
         shutil.copy2(ROOT / 'LICENSE', out / 'LICENSE')
         shutil.copy2(ROOT / 'README.md', out / 'README.md')
         pkg = {'name': RUNTIME_NAME, 'version': '0.1.0', 'private': True, 'type': 'module', 'license': 'MIT',
-               'files': [*RUNTIMES, 'manifest.json', 'README.md', 'LICENSE'],
-               'exports': {'./stable-diffusion-cpp/examples/runtime': {'types': './stable-diffusion-cpp/examples/runtime/index.d.ts', 'import': './stable-diffusion-cpp/examples/runtime/index.mjs'}, './llama-cpp/*': './llama-cpp/*', './stable-diffusion-cpp/*': './stable-diffusion-cpp/*',
+               'files': [*ARTIFACT_DIRS.values(), 'manifest.json', 'README.md', 'LICENSE'],
+               'exports': {'./stable-diffusion-cpp/examples/runtime': {'types': './stable-diffusion-cpp-browser-core/examples/runtime/index.d.ts', 'import': './stable-diffusion-cpp-browser-core/examples/runtime/index.mjs'},
+                           './llama-cpp/*': './llama-cpp-browser-core/*', './stable-diffusion-cpp/*': './stable-diffusion-cpp-browser-core/*',
                            './manifest.json': './manifest.json',
                            # Legacy imports remain aliases, not duplicate multi-megabyte payloads.
-                           './api/*': './llama-cpp/api/*', './profiles/*': './llama-cpp/profiles/*',
-                           './profiles/*/core.mjs': {'types': './llama-cpp/profiles/*/core.d.ts', 'import': './llama-cpp/profiles/*/core.mjs'},
-                           './examples/runtime': {'types': './llama-cpp/examples/runtime/index.d.ts', 'import': './llama-cpp/examples/runtime/index.mjs'}}}
+                           './api/*': './llama-cpp-browser-core/api/*', './profiles/*': './llama-cpp-browser-core/profiles/*',
+                           './profiles/*/core.mjs': {'types': './llama-cpp-browser-core/profiles/*/core.d.ts', 'import': './llama-cpp-browser-core/profiles/*/core.mjs'},
+                           './examples/runtime': {'types': './llama-cpp-browser-core/examples/runtime/index.d.ts', 'import': './llama-cpp-browser-core/examples/runtime/index.mjs'}}}
         (out / 'package.json').write_text(json.dumps(pkg, indent=2) + '\n')
         manifest = {'formatVersion': 3, 'sourceCommit': source, 'runtimes': runtimes,
                     'files': [{'path': p.relative_to(out).as_posix(), **identity(p)} for p in sorted(out.rglob('*')) if p.is_file()]}

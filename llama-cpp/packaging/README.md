@@ -3,7 +3,7 @@
 This branch distributes a prebuilt runtime. Source code and build instructions are on the source branches of the same repository. Installing this package does not install Emscripten or compile C/C++.
 
 ```sh
-npm install github:nwtgck/llama-cpp-browser-core#ARTIFACT_COMMIT_SHA
+npm install github:nwtgck/browser-inference-core#ARTIFACT_COMMIT_SHA
 ```
 
 Replace `ARTIFACT_COMMIT_SHA` with the complete commit hash containing the chosen runtime artifacts, not a source commit. No npm registry publication is required.

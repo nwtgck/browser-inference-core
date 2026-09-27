@@ -67,7 +67,7 @@ class AdversarialPublication(unittest.TestCase):
         real_output = subprocess.check_output
         def change(command, *args, **kwargs):
             result = real_output(command, *args, **kwargs)
-            if command[:3] == ['npm', 'pack', '--dry-run'] and (Path(kwargs['cwd']) / 'llama-cpp').is_dir():
+            if command[:3] == ['npm', 'pack', '--dry-run'] and (Path(kwargs['cwd']) / 'llama-cpp-browser-core').is_dir():
                 target = Path(kwargs['cwd']) / 'README.md'
                 target.write_bytes(b'X' * target.stat().st_size)
             return result
@@ -116,12 +116,12 @@ class AdversarialPublication(unittest.TestCase):
     def test_manifest_and_payload_may_contain_unusual_filenames(self):
         # ls-tree must use NUL framing, not line splitting or quoted paths.
         name = 'unicode-資料 space\ttab\nline.txt'
-        (self.out / 'llama-cpp/licenses' / name).write_bytes(b'notice\x00binary\xff')
-        inner = self.out / 'llama-cpp'
+        (self.out / 'llama-cpp-browser-core/licenses' / name).write_bytes(b'notice\x00binary\xff')
+        inner = self.out / 'llama-cpp-browser-core'
         fixtures.write_manifest(inner, json.loads((inner / 'manifest.json').read_text()))
         self.rewrite_root_manifest()
         commit = publisher.publish(self.out, str(self.remote))
-        data = subprocess.check_output(['git', '--git-dir=' + str(self.remote), 'show', commit + ':llama-cpp/licenses/' + name])
+        data = subprocess.check_output(['git', '--git-dir=' + str(self.remote), 'show', commit + ':llama-cpp-browser-core/licenses/' + name])
         self.assertEqual(data, b'notice\x00binary\xff')
 
     def test_mutation_during_report_construction_never_writes_report(self):
@@ -131,7 +131,7 @@ class AdversarialPublication(unittest.TestCase):
                 digest = package.identity(self.out / 'manifest.json')['sha256'] if receipt else None
                 original = reporter.legacy.metadata
                 def change(*args, **kwargs):
-                    path = self.out / 'llama-cpp/manifest.json'
+                    path = self.out / 'llama-cpp-browser-core/manifest.json'
                     m = json.loads(path.read_text()); m['sourceCommit'] = 'e' * 40
                     path.write_text(json.dumps(m))
                     return original(*args, **kwargs)
@@ -143,7 +143,7 @@ class AdversarialPublication(unittest.TestCase):
     def test_temporarily_replaced_manifest_cannot_poison_in_memory_metadata(self):
         digest = package.identity(self.out / 'manifest.json')['sha256']
         original = reporter.legacy.metadata
-        path = self.out / 'llama-cpp/manifest.json'; saved = path.read_bytes()
+        path = self.out / 'llama-cpp-browser-core/manifest.json'; saved = path.read_bytes()
         def change(*args, **kwargs):
             m = json.loads(saved); m['sourceCommit'] = 'e' * 40
             path.write_text(json.dumps(m))
@@ -158,7 +158,7 @@ class AdversarialPublication(unittest.TestCase):
         original = reporter.validate_for_report
         def change(*args, **kwargs):
             result = original(*args, **kwargs)
-            path = self.out / 'llama-cpp/manifest.json'
+            path = self.out / 'llama-cpp-browser-core/manifest.json'
             m = json.loads(path.read_text()); m['sourceCommit'] = 'e' * 40
             path.write_text(json.dumps(m))
             return result
@@ -173,7 +173,7 @@ class AdversarialPublication(unittest.TestCase):
             for kind in ('directory-link', 'dangling-link', 'fifo'):
                 for packing in (True, False):
                     with self.subTest(runtime=runtime, kind=kind, packing=packing):
-                        directory = self.out / runtime
+                        directory = self.out / package.ARTIFACT_DIRS[runtime] if runtime else self.out
                         target = directory / 'unexpected'
                         if kind == 'fifo': os.mkfifo(target)
                         else:
@@ -191,7 +191,7 @@ class AdversarialPublication(unittest.TestCase):
     def test_manifest_symlink_is_rejected_before_reading_in_all_validators(self):
         for runtime in ('', *package.RUNTIMES):
             with self.subTest(runtime=runtime):
-                directory = self.out / runtime
+                directory = self.out / package.ARTIFACT_DIRS[runtime] if runtime else self.out
                 path = directory / 'manifest.json'; saved = path.read_bytes()
                 outside = self.root / 'outside-manifest'; outside.write_bytes(saved)
                 path.unlink(); path.symlink_to(outside)
@@ -210,7 +210,7 @@ class AdversarialPublication(unittest.TestCase):
             for key, value in fields.items():
                 with self.subTest(runtime=runtime, field=key):
                     self.fixture.assemble()
-                    directory = self.out / runtime
+                    directory = self.out / package.ARTIFACT_DIRS[runtime] if runtime else self.out
                     path = directory / 'package.json'; data = json.loads(path.read_text()); data[key] = value
                     path.write_text(json.dumps(data))
                     if runtime: fixtures.write_manifest(directory, json.loads((directory / 'manifest.json').read_text()))
@@ -244,16 +244,16 @@ class AdversarialPublication(unittest.TestCase):
 
     def test_streaming_git_verification_accepts_empty_and_multichunk_blobs(self):
         # Synthetic data beyond the verifier's one-MiB read window, not Wasm.
-        notices = self.out / 'llama-cpp/licenses'
+        notices = self.out / 'llama-cpp-browser-core/licenses'
         (notices / 'empty.txt').write_bytes(b'')
         (notices / 'large.txt').write_bytes(b'x' * (2 * 1024 * 1024 + 7))
-        inner = self.out / 'llama-cpp'
+        inner = self.out / 'llama-cpp-browser-core'
         fixtures.write_manifest(inner, json.loads((inner / 'manifest.json').read_text()))
         self.rewrite_root_manifest()
         publisher.publish(self.out, str(self.remote))
 
     def test_standalone_metadata_hashes_the_exact_bytes_it_parses(self):
-        inner = self.out / 'llama-cpp'
+        inner = self.out / 'llama-cpp-browser-core'
         original = Path.read_bytes; reads = []
         def read(path):
             if path == inner / 'manifest.json': reads.append(path)

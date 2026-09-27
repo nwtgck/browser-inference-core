@@ -164,7 +164,7 @@ def main():
             # It is job output only, never a runtime payload or a cross-run cache.
             f.write('commit='+commit+'\nmanifest-sha256='+manifest_sha256+'\n')
     if os.environ.get('GITHUB_STEP_SUMMARY'):
-        repo=os.environ.get('GITHUB_REPOSITORY','nwtgck/llama-cpp-browser-core')
+        repo=os.environ.get('GITHUB_REPOSITORY','nwtgck/browser-inference-core')
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
             f.write(f'## Runtime artifact commit\n\n`{commit}`\n\n```sh\nnpm install github:{repo}#{commit}\n```\n')
 if __name__=='__main__': main()

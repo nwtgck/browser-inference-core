@@ -256,6 +256,18 @@ def render_markdown(data: dict, yaml: str) -> str:
     )
 
 
+def render_summary_markdown(data: dict) -> str:
+    runtime = data['runtime']
+    return (
+        '## Consumer integration details\n\n'
+        f'**Source commit:** `{runtime["sourceCommit"]}`  \n'
+        f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n'
+        'Recorded validation scope and integration metadata:\n\n'
+        '<details>\n<summary>Consumer integration metadata (YAML)</summary>\n\n'
+        '```yaml\n' + render_yaml(data) + '```\n\n</details>\n'
+    )
+
+
 def write_report(output: Path, data: dict, run_id: str, attempt: str) -> str:
     yaml = render_yaml(data)
     markdown = render_markdown(data, yaml)

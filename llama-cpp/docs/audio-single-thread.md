@@ -45,4 +45,4 @@ provenance, and the automatic updater's audio preflight.
 
 Primary sources:
 - https://github.com/ggml-org/llama.cpp/blob/7fe450e19305b828c199d602c23a8337aaa1f03b/tools/mtmd/mtmd-audio.cpp
-- https://github.com/nwtgck/llama-cpp-browser-core/blob/develop/config/profiles.json
+- https://github.com/nwtgck/browser-inference-core/blob/develop/llama-cpp/config/profiles.json

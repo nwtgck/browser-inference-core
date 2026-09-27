@@ -224,7 +224,7 @@ for (const variant of ['browser', 'test']) {
         self.assertNotIn('Co-authored-by:',body)
 
     def test_publication_summary_uses_project_or_workflow_repository(self):
-        for workflow_repo,expected_repo in ((None,'nwtgck/llama-cpp-browser-core'),
+        for workflow_repo,expected_repo in ((None,'nwtgck/browser-inference-core'),
                                             ('example-owner/core-fork','example-owner/core-fork')):
             with self.subTest(workflow_repo=workflow_repo):
                 summary=self.root/'summary.md'; output=self.root/'github-output'

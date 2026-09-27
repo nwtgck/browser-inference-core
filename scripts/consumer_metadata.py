@@ -10,9 +10,11 @@ import re
 import time
 from pathlib import Path
 import sys
-from package_runtime import validate, identity
+from package_runtime import ARTIFACT_DIRS, validate, identity
 from pipeline_metrics import measured, span
 ROOT = Path(__file__).resolve().parents[1]
+LLAMA_ARTIFACT_DIR = ARTIFACT_DIRS['llama-cpp']
+IMAGE_ARTIFACT_DIR = ARTIFACT_DIRS['stable-diffusion-cpp']
 sys.path.append(str(ROOT / 'llama-cpp/scripts'))
 from upstream_provenance import collect
 spec = importlib.util.spec_from_file_location('llama_consumer_metadata', ROOT / 'llama-cpp/scripts/consumer_metadata.py')
@@ -52,22 +54,24 @@ def metadata(package: Path, repo: str, commit: str, lock: dict, divergences: dic
     root_manifest, validated_digest = validate_for_report(package, published_manifest_sha256)
     files = {item['path']: item for item in root_manifest['files']}
     _, root_identity = read_bound_snapshot(package, 'manifest.json', validated_digest)
-    llama_bytes, _ = read_bound_snapshot(package, 'llama-cpp/manifest.json', files['llama-cpp/manifest.json']['sha256'])
-    sd_bytes, sd_identity = read_bound_snapshot(package, 'stable-diffusion-cpp/manifest.json', files['stable-diffusion-cpp/manifest.json']['sha256'])
+    llama_manifest = LLAMA_ARTIFACT_DIR + '/manifest.json'
+    image_manifest = IMAGE_ARTIFACT_DIR + '/manifest.json'
+    llama_bytes, _ = read_bound_snapshot(package, llama_manifest, files[llama_manifest]['sha256'])
+    sd_bytes, sd_identity = read_bound_snapshot(package, image_manifest, files[image_manifest]['sha256'])
     sd = json.loads(sd_bytes)
-    data = legacy.metadata(package / 'llama-cpp', repo, commit, lock, divergences, manifest_bytes=llama_bytes)
+    data = legacy.metadata(package / LLAMA_ARTIFACT_DIR, repo, commit, lock, divergences, manifest_bytes=llama_bytes)
     data['runtime']['manifestFormatVersion'] = root_manifest['formatVersion']
-    data['runtime']['llamaManifestPath'] = 'llama-cpp/manifest.json'
+    data['runtime']['llamaManifestPath'] = llama_manifest
     data['retrieval']['sourceRepositoryRawBase'] = data['retrieval']['sourceRawBase']
     data['retrieval']['sourceRawBase'] += 'llama-cpp/'
     data['retrieval']['sourceRuntimePath'] = 'llama-cpp/'
     data['retrieval']['manifest'] = {'path': 'manifest.json', **root_identity}
     for profile in data['browserProfiles'].values():
-        for file in profile.values(): file['path'] = 'llama-cpp/' + file['path']
-    for file in data['interfaceFiles']: file['path'] = 'llama-cpp/' + file['path']
+        for file in profile.values(): file['path'] = LLAMA_ARTIFACT_DIR + '/' + file['path']
+    for file in data['interfaceFiles']: file['path'] = LLAMA_ARTIFACT_DIR + '/' + file['path']
     # Link full per-variant provenance by digest instead of repeating toolchain and
     # patch inventories for every profile/variant in the bounded PR comment.
-    data['stableDiffusion'] = {'manifest': {'path': 'stable-diffusion-cpp/manifest.json', **sd_identity},
+    data['stableDiffusion'] = {'manifest': {'path': image_manifest, **sd_identity},
         'abiVersion': sd['abiVersion'], 'schemaSha256': sd['schemaSha256'],
         'capabilities': sd['capabilities'], 'upstreams': sd['upstreams'],
         'profiles': {name: {'variants': {variant: {'validation': item['validation'],
@@ -93,7 +97,8 @@ def main() -> None:
     root_manifest, validated_digest = validate_for_report(package, a.published_manifest_sha256)
     print(f'[publication] report-input-validation: {time.monotonic()-started:.3f}s', file=sys.stderr)
     files = {item['path']: item for item in root_manifest['files']}
-    llama_bytes, _ = read_bound_snapshot(package, 'llama-cpp/manifest.json', files['llama-cpp/manifest.json']['sha256'])
+    llama_manifest = LLAMA_ARTIFACT_DIR + '/manifest.json'
+    llama_bytes, _ = read_bound_snapshot(package, llama_manifest, files[llama_manifest]['sha256'])
     package_bytes, _ = read_bound_snapshot(package, 'package.json', files['package.json']['sha256'])
     llama = json.loads(llama_bytes)
     repo = os.environ['GITHUB_REPOSITORY']
@@ -111,5 +116,5 @@ def main() -> None:
         markdown = legacy.write_report(a.output, data, os.environ['GITHUB_RUN_ID'], os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
     print(markdown)
     if os.environ.get('GITHUB_STEP_SUMMARY'):
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out: out.write(markdown)
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out: out.write(legacy.render_summary_markdown(data))
 if __name__ == '__main__': main()

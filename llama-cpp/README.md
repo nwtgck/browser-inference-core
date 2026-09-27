@@ -19,7 +19,7 @@ Applications own model downloads, storage, workers, generation loops, and conver
 Install a specific **artifact commit**, not a commit from a source branch:
 
 ```sh
-npm install github:nwtgck/llama-cpp-browser-core#ARTIFACT_COMMIT_SHA
+npm install github:nwtgck/browser-inference-core#ARTIFACT_COMMIT_SHA
 ```
 
 Replace `ARTIFACT_COMMIT_SHA` with the complete commit hash of the chosen runtime artifacts. No npm registry publication or install-time C/C++ compilation is required.
