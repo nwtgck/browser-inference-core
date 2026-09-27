@@ -10,6 +10,10 @@ import subprocess
 import sys
 import tempfile
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT.parent / 'scripts'))
+from package_inputs import copy_regular, copy_regular_tree, read_regular, regular_path
+from pipeline_metrics import measured, span
+
 VARIANTS = json.loads((ROOT / 'config/variants.json').read_text())
 PROFILES = json.loads((ROOT / 'config/profiles.json').read_text())
 NAME = 'stable-diffusion-cpp-browser-core'
@@ -20,8 +24,10 @@ CAPABILITIES = {'ggufFileOffsetBits': 64, 'callerOwnedRandomAccess': True, 'upst
 def sha(path: Path) -> str:
     with path.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
 
+@measured('package.validate', packageKind='image')
 def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: bool = True) -> dict:
     # This switch defers only compression, never the payload/provenance checks.
+    directory = regular_path(directory, directory=True)
     entries = list(directory.rglob('*'))
     if any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in entries):
         raise ValueError('Linked or non-regular entry in runtime package')
@@ -80,11 +86,13 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
         if not any(path.startswith(f'licenses/toolchain/{name}/') for path in expected):
             raise ValueError('Missing image toolchain notices: ' + name)
     if check_npm_pack:
-        packed = json.loads(subprocess.check_output(['npm', 'pack', '--dry-run', '--json'], cwd=directory, text=True))
+        with span('package.npm_pack', packageKind='image'):
+            packed = json.loads(subprocess.check_output(['npm', 'pack', '--dry-run', '--json'], cwd=directory, text=True))
         if {entry['path'] for entry in packed[0]['files']} != actual: raise ValueError('npm package tree differs')
     return manifest
 
-def package(build_root: Path, destination: Path, license_roots: list[Path]) -> None:
+@measured('package.assemble', packageKind='image')
+def package(build_root: Path, destination: Path, license_roots: list[Path], *, check_npm_pack: bool = True) -> None:
     sys.path.insert(0, str(ROOT.parent / 'scripts'))
     from package_notices import collect_notices, collect_subtree_notices
     profiles = {}; source = None; upstreams = None; schema_bytes = None
@@ -94,23 +102,24 @@ def package(build_root: Path, destination: Path, license_roots: list[Path]) -> N
             profiles[profile] = {'variants': {}}
             for variant in VARIANTS:
                 build = build_root / profile / variant
-                data = json.loads((build / 'provenance.json').read_text())
+                data = json.loads(read_regular(build / 'provenance.json'))
                 if source is not None and (source != data['sourceCommit'] or upstreams != data['upstreams']):
                     raise ValueError('Mixed source commits')
                 source = data['sourceCommit']; upstreams = data['upstreams']
                 profiles[profile]['variants'][variant] = data
-                shutil.copytree(build / 'runtime', out / 'profiles' / profile / variant)
-                current = (build / 'generated/schema.json').read_bytes()
+                with span('package.copy_payload', packageKind='image', profile=profile, variant=variant):
+                    copy_regular_tree(build / 'runtime', out / 'profiles' / profile / variant)
+                current = read_regular(build / 'generated/schema.json')
                 if schema_bytes is not None and current != schema_bytes: raise ValueError('Mixed image binding schemas')
                 schema_bytes = current
                 if not (out / 'api').exists():
                     (out / 'api').mkdir()
-                    for name in API_FILES: shutil.copy2(build / 'generated' / name, out / 'api' / name)
+                    for name in API_FILES: copy_regular(build / 'generated' / name, out / 'api' / name)
         (out / 'examples/runtime').mkdir(parents=True)
-        for name in HELPERS: shutil.copy2(ROOT / 'examples/runtime' / name, out / 'examples/runtime' / name)
+        for name in HELPERS: copy_regular(ROOT / 'examples/runtime' / name, out / 'examples/runtime' / name)
 
-        shutil.copy2(ROOT / 'LICENSE', out / 'LICENSE')
-        shutil.copy2(ROOT / 'README.md', out / 'README.md')
+        copy_regular(ROOT / 'LICENSE', out / 'LICENSE')
+        copy_regular(ROOT / 'README.md', out / 'README.md')
         sd = ROOT / 'vendor/stable-diffusion.cpp'
         ggml = ROOT / 'vendor/ggml-webgpu-source'
         collect_notices(sd, out / 'licenses/stable-diffusion')
@@ -118,7 +127,7 @@ def package(build_root: Path, destination: Path, license_roots: list[Path]) -> N
         (out / 'licenses/embedded').mkdir(parents=True)
         # Preserve the entire embedded notices rather than extract partial licenses.
         for name in ('json.hpp', 'stb_image.h', 'stb_image_resize.h', 'stb_image_write.h'):
-            shutil.copy2(sd / 'thirdparty' / name, out / 'licenses/embedded' / (name + '.txt'))
+            copy_regular(sd / 'thirdparty' / name, out / 'licenses/embedded' / (name + '.txt'))
         roots = {root.name: root for root in license_roots}
         if len(roots) != len(license_roots) or set(roots) != {'emscripten', 'emdawnwebgpu_pkg'}:
             raise ValueError('Provide exactly the Emscripten and Dawn notice roots')
@@ -133,10 +142,14 @@ def package(build_root: Path, destination: Path, license_roots: list[Path]) -> N
                     'experimental': True, 'files': [{'path': p.relative_to(out).as_posix(), 'bytes': p.stat().st_size, 'sha256': sha(p)}
                     for p in sorted(out.rglob('*')) if p.is_file()]}
         (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-        validate(out)
-        if destination.exists(): shutil.rmtree(destination)
+        validate(out, check_npm_pack=False)
+        if destination.exists() or destination.is_symlink():
+            regular_path(destination, directory=True)
+            shutil.rmtree(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(out, destination)
+        with span('package.commit_output', packageKind='image'):
+            copy_regular_tree(out, destination)
+        validate(destination, check_npm_pack=check_npm_pack)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
@@ -144,8 +157,11 @@ if __name__ == '__main__':
     p.add_argument('--output', type=Path, default=ROOT / 'dist/package')
     p.add_argument('--license-root', type=Path, action='append', default=None)
     p.add_argument('--verify-only', action='store_true')
+    p.add_argument('--defer-npm-pack', action='store_true',
+                   help='Defer compression only; run validate_runtime_package.py before upload')
     a = p.parse_args()
+    if a.verify_only and a.defer_npm_pack: p.error('--verify-only always includes npm packing')
     if not a.verify_only:
         roots = a.license_root or [ROOT.parent / '.tools/emsdk/upstream/emscripten', ROOT.parent / '.tools/emdawnwebgpu_pkg']
-        package(a.build_root, a.output, roots)
-    print(json.dumps({'sourceCommit': validate(a.output)['sourceCommit']}))
+        package(a.build_root, a.output, roots, check_npm_pack=False)
+    print(json.dumps({'sourceCommit': validate(a.output, check_npm_pack=not a.defer_npm_pack)['sourceCommit']}))

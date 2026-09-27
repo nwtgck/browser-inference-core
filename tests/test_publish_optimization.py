@@ -339,13 +339,14 @@ class PublicationWorkflow(unittest.TestCase):
         self.assertLess(publish.index('Verify package source before publication'), publish.index('scripts/publish_artifacts.py'))
         self.assertLess(publish.index('scripts/publish_artifacts.py'), publish.index('scripts/consumer_metadata.py'))
         self.assertIn("failure() && steps.publish.outputs.commit != ''", publish)
-        self.assertEqual(workflow.count('submodules: recursive'), 6)
+        self.assertEqual(workflow.count('submodules: false'), 7)
+        self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 6)
         self.assertIn('submodules: false', publish)
         self.assertIn('persist-credentials: false', publish)
 
     def test_selective_checkout_uses_the_gitlink_not_remote_tip_or_nested_submodules(self):
         publish = (ROOT / '.github/workflows/build.yml').read_text().split('\n  publish:\n', 1)[1]
-        command = re.search(r'run: (git submodule update[^\n]+)', publish)[1]
+        command = re.search(r'(git submodule update[^\n]+)', publish)[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             upstream = root / 'upstream'; upstream.mkdir()

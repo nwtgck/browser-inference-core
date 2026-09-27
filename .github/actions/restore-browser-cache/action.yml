@@ -1,6 +1,10 @@
 name: Prepare shared browser toolchain and caches
 description: Restore hash-checked downloads and isolated compiler caches without caching a build tree.
 inputs:
+  mode:
+    required: false
+    default: enabled
+    description: enabled or cold (no shared restores or saves)
   runtime:
     required: true
     description: Runtime directory
@@ -17,8 +21,17 @@ outputs:
   dawn-path:
     value: ${{ steps.plan.outputs.dawn-path }}
     description: Single download file
+  dawn-matched-key:
+    value: ${{ steps.dawn.outputs.cache-matched-key }}
+    description: Actual restored key (observation, not an admission decision)
+  dawn-accepted:
+    value: ${{ steps.admit-dawn.outputs.accepted }}
+    description: Restored data passed admission before use
+  dawn-save-allowed:
+    value: ${{ steps.admit-dawn.outputs.save-allowed }}
+    description: No cold run or known corrupt immutable exact entry
   dawn-hit:
-    value: ${{ steps.dawn.outputs.cache-hit }}
+    value: ${{ steps.admit-dawn.outputs.hit }}
     description: Exact Dawn hit
   em-key:
     value: ${{ steps.plan.outputs.em-key }}
@@ -26,8 +39,17 @@ outputs:
   em-path:
     value: ${{ steps.plan.outputs.em-path }}
     description: Emscripten cache only
+  em-matched-key:
+    value: ${{ steps.em.outputs.cache-matched-key }}
+    description: Actual restored key (observation, not an admission decision)
+  em-accepted:
+    value: ${{ steps.admit-em.outputs.accepted }}
+    description: Restored data passed admission before use
+  em-save-allowed:
+    value: ${{ steps.admit-em.outputs.save-allowed }}
+    description: No cold run or known corrupt immutable exact entry
   em-hit:
-    value: ${{ steps.em.outputs.cache-hit }}
+    value: ${{ steps.admit-em.outputs.hit }}
     description: Exact Emscripten hit
   cc-key:
     value: ${{ steps.plan.outputs.cc-key }}
@@ -35,8 +57,17 @@ outputs:
   cc-path:
     value: ${{ steps.plan.outputs.cc-path }}
     description: Isolated ccache data
+  cc-matched-key:
+    value: ${{ steps.cc.outputs.cache-matched-key }}
+    description: Actual restored key (observation, not an admission decision)
+  cc-accepted:
+    value: ${{ steps.admit-cc.outputs.accepted }}
+    description: Restored data passed admission before use
+  cc-save-allowed:
+    value: ${{ steps.admit-cc.outputs.save-allowed }}
+    description: No cold run or known corrupt immutable exact entry
   cc-hit:
-    value: ${{ steps.cc.outputs.cache-hit }}
+    value: ${{ steps.admit-cc.outputs.hit }}
     description: Exact ccache snapshot hit
 runs:
   using: composite
@@ -49,26 +80,107 @@ runs:
         PROFILE: ${{ inputs.profile }}
         VARIANT: ${{ inputs.variant }}
       run: python3 "$GITHUB_WORKSPACE/scripts/ci_cache.py" --runtime "$RUNTIME" --profile "$PROFILE" --variant "$VARIANT"
+    - name: Empty the single download restore target
+      shell: bash
+      run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" clear-dawn
     - uses: actions/cache/restore@v4
       id: dawn
+      if: inputs.mode != 'cold'
+      continue-on-error: true
       with:
         path: ${{ steps.plan.outputs.dawn-path }}
         key: ${{ steps.plan.outputs.dawn-key }}
+    - name: Admit dawn cache or recover clean inputs
+      id: admit-dawn
+      shell: bash
+      env:
+        REQUESTED: ${{ steps.plan.outputs.dawn-key }}
+        MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
+        HIT: ${{ steps.dawn.outputs.cache-hit }}
+        RESTORE_OUTCOME: ${{ steps.dawn.outcome }}
+        CACHE_USE_MODE: ${{ inputs.mode }}
+        CC_PATH: ${{ steps.plan.outputs.cc-path }}
+      run: >-
+        python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" finish --kind dawn
+        --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT"
+        --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
     - name: Install and verify pinned compiler and Dawn (also on a cache hit)
       shell: bash
-      run: python3 "$GITHUB_WORKSPACE/scripts/setup_toolchain.py"
+      run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase sdk.install -- python3 "$GITHUB_WORKSPACE/scripts/setup_toolchain.py"
+    - name: Park the clean SDK cache before any restore can overwrite it
+      shell: bash
+      env:
+        REQUESTED: ${{ steps.plan.outputs.em-key }}
+        CC_PATH: ${{ steps.plan.outputs.cc-path }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" park-em --requested "$REQUESTED"
+        python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" clear-cc --path "$CC_PATH"
     - uses: actions/cache/restore@v4
       id: em
+      if: inputs.mode != 'cold'
+      continue-on-error: true
       with:
         path: ${{ steps.plan.outputs.em-path }}
         key: ${{ steps.plan.outputs.em-key }}
+    - name: Admit em cache or recover clean inputs
+      id: admit-em
+      shell: bash
+      env:
+        REQUESTED: ${{ steps.plan.outputs.em-key }}
+        MATCHED: ${{ steps.em.outputs.cache-matched-key }}
+        HIT: ${{ steps.em.outputs.cache-hit }}
+        RESTORE_OUTCOME: ${{ steps.em.outcome }}
+        CACHE_USE_MODE: ${{ inputs.mode }}
+        CC_PATH: ${{ steps.plan.outputs.cc-path }}
+      run: >-
+        python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" finish --kind em
+        --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT"
+        --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
     - uses: actions/cache/restore@v4
       id: cc
+      if: inputs.mode != 'cold'
+      continue-on-error: true
       with:
         path: ${{ steps.plan.outputs.cc-path }}
         key: ${{ steps.plan.outputs.cc-key }}
         # Only source snapshots within this exact compiler/runtime/profile/variant.
         restore-keys: ${{ steps.plan.outputs.cc-prefix }}
+    - name: Admit cc cache or recover clean inputs
+      id: admit-cc
+      shell: bash
+      env:
+        REQUESTED: ${{ steps.plan.outputs.cc-key }}
+        MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
+        HIT: ${{ steps.cc.outputs.cache-hit }}
+        RESTORE_OUTCOME: ${{ steps.cc.outcome }}
+        CACHE_USE_MODE: ${{ inputs.mode }}
+        CC_PATH: ${{ steps.plan.outputs.cc-path }}
+      run: >-
+        python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" finish --kind cc --path "$CC_PATH"
+        --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT"
+        --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
     - name: Reset counters (not cached objects)
       shell: bash
       run: ccache --zero-stats
+    - name: Observe requested and restored cache identities
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        DAWN_REQUESTED: ${{ steps.plan.outputs.dawn-key }}
+        DAWN_MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
+        DAWN_HIT: ${{ steps.dawn.outputs.cache-hit }}
+        DAWN_OUTCOME: ${{ steps.dawn.outcome }}
+        EM_REQUESTED: ${{ steps.plan.outputs.em-key }}
+        EM_MATCHED: ${{ steps.em.outputs.cache-matched-key }}
+        EM_HIT: ${{ steps.em.outputs.cache-hit }}
+        EM_OUTCOME: ${{ steps.em.outcome }}
+        CC_REQUESTED: ${{ steps.plan.outputs.cc-key }}
+        CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
+        CC_HIT: ${{ steps.cc.outputs.cache-hit }}
+        CC_OUTCOME: ${{ steps.cc.outcome }}
+        SAVE_ELIGIBLE: ${{ inputs.mode != 'cold' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.actor != 'dependabot[bot]' }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache --kind dawn --requested "$DAWN_REQUESTED" --matched "$DAWN_MATCHED" --hit "$DAWN_HIT" --outcome "$DAWN_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache --kind em --requested "$EM_REQUESTED" --matched "$EM_MATCHED" --hit "$EM_HIT" --outcome "$EM_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache --kind cc --requested "$CC_REQUESTED" --matched "$CC_MATCHED" --hit "$CC_HIT" --outcome "$CC_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"

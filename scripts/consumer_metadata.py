@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 import sys
 from package_runtime import validate, identity
+from pipeline_metrics import measured, span
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / 'llama-cpp/scripts'))
 from upstream_provenance import collect
@@ -18,6 +19,7 @@ spec = importlib.util.spec_from_file_location('llama_consumer_metadata', ROOT / 
 if spec is None or spec.loader is None: raise RuntimeError('Missing llama report helper')
 legacy = importlib.util.module_from_spec(spec); spec.loader.exec_module(legacy)
 
+@measured('report.input_validate')
 def validate_for_report(package: Path, published_manifest_sha256: str | None = None) -> tuple[dict, str]:
     """Reuse npm packing only for the exact tree checked by this job's publisher.
 
@@ -44,6 +46,7 @@ def read_bound_snapshot(package: Path, relative: str, expected_sha256: str) -> t
     return raw, info
 
 
+@measured('report.metadata')
 def metadata(package: Path, repo: str, commit: str, lock: dict, divergences: dict, *,
              published_manifest_sha256: str | None = None) -> dict:
     root_manifest, validated_digest = validate_for_report(package, published_manifest_sha256)
@@ -95,13 +98,17 @@ def main() -> None:
     llama = json.loads(llama_bytes)
     repo = os.environ['GITHUB_REPOSITORY']
     started = time.monotonic()
-    lock = legacy.generate_lock(repo, a.commit, json.loads(package_bytes)['version'])
+    with span('report.lock_resolve'):
+        lock = legacy.generate_lock(repo, a.commit, json.loads(package_bytes)['version'])
     print(f'[publication] npm-lock-resolution: {time.monotonic()-started:.3f}s', file=sys.stderr)
     # Check again after network/provenance work. A concurrent modification must
     # fail rather than silently report a different tree or reuse stale evidence.
-    data = metadata(package, repo, a.commit, lock, collect(ROOT / 'llama-cpp', llama),
+    with span('report.collect_provenance'):
+        provenance = collect(ROOT / 'llama-cpp', llama)
+    data = metadata(package, repo, a.commit, lock, provenance,
                     published_manifest_sha256=validated_digest)
-    markdown = legacy.write_report(a.output, data, os.environ['GITHUB_RUN_ID'], os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+    with span('report.write'):
+        markdown = legacy.write_report(a.output, data, os.environ['GITHUB_RUN_ID'], os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
     print(markdown)
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out: out.write(markdown)

@@ -12,11 +12,19 @@ import sys
 import tempfile
 import time
 from package_runtime import identity, validate
+from pipeline_metrics import measured, span
 
 
 def run(*args,cwd=None,check=True,env=None):
-    return subprocess.run(args,cwd=cwd,check=check,text=True,capture_output=True,env=env)
+    phases = {'ls-remote': 'git.remote_head', 'fetch': 'git.fetch_parent',
+              'add': 'git.stage', 'write-tree': 'git.write_tree',
+              'commit-tree': 'git.commit_tree', 'push': 'git.push'}
+    with span(phases.get(args[1] if len(args) > 1 else '', 'git.setup')) as timing:
+        result = subprocess.run(args,cwd=cwd,check=check,text=True,capture_output=True,env=env)
+        timing['exitCode'] = result.returncode
+        return result
 
+@measured('publish.git_blob_verify')
 def verify_git_tree(work: Path, tree: str, manifest: dict, manifest_identity: dict) -> None:
     """Check immutable Git blobs, not the working tree filtered by git add.
 
@@ -65,6 +73,7 @@ def verify_git_tree(work: Path, tree: str, manifest: dict, manifest_identity: di
             raise
 
 
+@measured('publish.total')
 def publish(package: Path, remote: str, branch='artifacts', attempts=20, *, expected_manifest_sha256: str | None = None):
     if branch != 'artifacts' and not branch.startswith('artifacts/'):
         raise ValueError('Refusing to publish over a source branch')
@@ -76,19 +85,22 @@ def publish(package: Path, remote: str, branch='artifacts', attempts=20, *, expe
         raise ValueError('Package manifest changed before publication')
     # Check inputs before copytree can dereference links. npm packing belongs to
     # the private snapshot below: that is the tree actually committed and pushed.
-    manifest=validate(package,check_npm_pack=False)
+    with span('publish.input_check'):
+        manifest=validate(package,check_npm_pack=False)
     source=manifest['sourceCommit']
     with tempfile.TemporaryDirectory(prefix='lcb-publish-') as tmp:
         work=Path(tmp)
-        for p in package.iterdir():
-            if p.is_dir(): shutil.copytree(p,work/p.name)
-            else: shutil.copy2(p,work/p.name)
+        with span('publish.snapshot_copy'):
+            for p in package.iterdir():
+                if p.is_dir(): shutil.copytree(p,work/p.name)
+                else: shutil.copy2(p,work/p.name)
         if identity(work/'manifest.json')['sha256'] != manifest_sha256:
             raise ValueError('Package manifest changed while staging publication')
         # Always run all three npm checks, including for standalone publication.
         # Do this before git init, since .git is not part of the runtime payload.
-        if validate(work) != manifest:
-            raise ValueError('Package manifest changed while staging publication')
+        with span('publish.snapshot_validate'):
+            if validate(work) != manifest:
+                raise ValueError('Package manifest changed while staging publication')
         print(f'[publication] stage-and-validate: {time.monotonic()-started:.3f}s',file=sys.stderr)
         git_started=time.monotonic()
         run('git','init','-q',cwd=work)
@@ -126,7 +138,8 @@ def publish(package: Path, remote: str, branch='artifacts', attempts=20, *, expe
                 return commit
             if 'non-fast-forward' not in pushed.stderr and 'fetch first' not in pushed.stderr and 'cannot lock ref' not in pushed.stderr:
                 raise RuntimeError(pushed.stderr)
-            time.sleep(min(attempt+1,5))
+            with span('git.retry_wait', attempt=attempt+1):
+                time.sleep(min(attempt+1,5))
         raise RuntimeError('Publication conflicted repeatedly; rerun this job. No history was overwritten.')
 
 def main():

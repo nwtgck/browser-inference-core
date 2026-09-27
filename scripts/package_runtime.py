@@ -10,6 +10,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
+sys.path.append(str(Path(__file__).resolve().parent))
+from pipeline_metrics import measured, span
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_NAME = 'llama-cpp-browser-core'
 RUNTIMES = ('llama-cpp', 'stable-diffusion-cpp')
@@ -26,6 +29,7 @@ def identity(path: Path) -> dict:
     with path.open('rb') as stream: digest = hashlib.file_digest(stream, 'sha256').hexdigest()
     return {'bytes': path.stat().st_size, 'sha256': digest}
 
+@measured('package.validate', packageKind='root')
 def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: bool = True) -> dict:
     """Check the complete tree; only npm compression can be explicitly deferred."""
     directory = directory.resolve()
@@ -60,10 +64,12 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
         if manifest['runtimes'][runtime] != {'manifest': runtime + '/manifest.json', 'manifestFormatVersion': inner['formatVersion']}:
             raise ValueError('Wrong runtime manifest binding')
     if check_npm_pack:
-        packed = json.loads(subprocess.check_output(['npm', 'pack', '--dry-run', '--json'], cwd=directory, text=True))
+        with span('package.npm_pack', packageKind='root'):
+            packed = json.loads(subprocess.check_output(['npm', 'pack', '--dry-run', '--json'], cwd=directory, text=True))
         if {f['path'] for f in packed[0]['files']} != actual: raise ValueError('npm pack tree mismatch')
     return manifest
 
+@measured('package.assemble', packageKind='root')
 def assemble(inputs: Path, destination: Path, *, check_npm_pack: bool = True) -> None:
     # CI defers npm packing until publication, not any integrity checks. Keep
     # full validation as the default for callers that only assemble a package.

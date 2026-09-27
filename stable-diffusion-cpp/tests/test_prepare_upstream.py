@@ -1,6 +1,9 @@
 import hashlib
 import importlib.util
 import json
+import os
+import shutil
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import unittest
@@ -52,4 +55,43 @@ class Preparation(unittest.TestCase):
         original = self.sources['stable-diffusion'] / 'a.txt'; original.unlink()
         (self.root / 'outside.txt').write_text('before\n'); original.symlink_to(self.root / 'outside.txt')
         with self.assertRaises(ValueError): self.apply()
+    def test_completed_tree_is_moved_not_copied_again(self):
+        with patch.object(prepare_module.shutil, 'copytree', wraps=shutil.copytree) as copied:
+            self.apply()
+        self.assertEqual(copied.call_count, 2)
+        self.assertEqual(list(self.root.glob('sdb-prepare-*')), [])
+
+    def test_modes_and_untouched_internal_links_survive_move(self):
+        binary = self.sources['ggml'] / 'tool'; binary.write_bytes(b'fixture'); binary.chmod(0o755)
+        (self.sources['ggml'] / 'alias').symlink_to('tool')
+        self.apply()
+        self.assertEqual((self.root / 'prepared/ggml/tool').stat().st_mode & 0o777, 0o755)
+        self.assertEqual(os.readlink(self.root / 'prepared/ggml/alias'), 'tool')
+        self.assertEqual((self.root / 'prepared').stat().st_mode & 0o777, 0o700)
+        self.assertEqual(binary.read_bytes(), b'fixture')
+
+    def test_dangling_destination_link_is_not_replaced(self):
+        output = self.root / 'prepared'; output.symlink_to(self.root / 'nonexistent')
+        with self.assertRaisesRegex(ValueError, 'already exist'): self.apply()
+        self.assertTrue(output.is_symlink())
+
+    def test_failed_atomic_move_cleans_temporary_without_partial_output(self):
+        with patch.object(Path, 'rename', side_effect=OSError('injected move failure')):
+            with self.assertRaises(OSError): self.apply()
+        self.assertFalse((self.root / 'prepared').exists())
+        self.assertEqual(list(self.root.glob('sdb-prepare-*')), [])
+        self.assertEqual((self.sources['stable-diffusion'] / 'a.txt').read_text(), 'before\n')
+
+    def test_destination_created_during_preparation_is_preserved(self):
+        digest = prepare_module.digest
+        def create_output(path):
+            value = digest(path)
+            if path.name == 'fix.patch':
+                output = self.root / 'prepared'; output.mkdir(); (output / 'keep').touch()
+            return value
+        with patch.object(prepare_module, 'digest', side_effect=create_output):
+            with self.assertRaisesRegex(ValueError, 'appeared'): self.apply()
+        self.assertTrue((self.root / 'prepared/keep').is_file())
+        self.assertEqual(list(self.root.glob('sdb-prepare-*')), [])
+
 if __name__ == '__main__': unittest.main()

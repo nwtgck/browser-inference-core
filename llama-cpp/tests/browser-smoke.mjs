@@ -134,6 +134,9 @@ try {
       results.push(result); await page.close();
     }
   }
-  await writeFile('build/browser-results.json', JSON.stringify(results, null, 2)+'\n');
+  const resultFile = process.env.BIC_BROWSER_RESULTS_FILE || 'build/browser-results.json';
+  const output = process.env.BIC_BROWSER_SESSION_JSON
+    ? { session: JSON.parse(process.env.BIC_BROWSER_SESSION_JSON), results } : results;
+  await writeFile(resultFile, JSON.stringify(output, null, 2)+'\n');
   console.log(JSON.stringify(results, null, 2));
 } finally { await browser.close(); server.close(); }

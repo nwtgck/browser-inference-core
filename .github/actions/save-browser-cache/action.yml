@@ -1,6 +1,13 @@
 name: Save browser compiler caches
 description: Save validated downloads and reusable intermediates after a successful trusted build.
 inputs:
+  mode:
+    required: false
+    default: enabled
+    description: Cold comparison runs never populate shared caches
+  dawn-save-allowed:
+    required: true
+    description: Admission output from restore-browser-cache
   dawn-key:
     required: true
     description: Value from restore-browser-cache
@@ -11,6 +18,9 @@ inputs:
     required: false
     default: 'false'
     description: Value from restore-browser-cache
+  em-save-allowed:
+    required: true
+    description: Admission output from restore-browser-cache
   em-key:
     required: true
     description: Value from restore-browser-cache
@@ -21,6 +31,9 @@ inputs:
     required: false
     default: 'false'
     description: Value from restore-browser-cache
+  cc-save-allowed:
+    required: true
+    description: Admission output from restore-browser-cache
   cc-key:
     required: true
     description: Value from restore-browser-cache
@@ -34,27 +47,81 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/cache/save@v4
+    - name: Check live dawn cache before saving
+      id: check-dawn
       if: >-
         github.event_name == 'push' &&
         github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-        github.actor != 'dependabot[bot]' && inputs.dawn-hit != 'true'
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.dawn-save-allowed == 'true' && inputs.dawn-hit != 'true'
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.dawn-path }}
+      run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind dawn --path "$CACHE_PATH"
+    - uses: actions/cache/save@v4
+      id: save-dawn
+      if: >-
+        github.event_name == 'push' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.dawn-save-allowed == 'true' && inputs.dawn-hit != 'true' && steps.check-dawn.outputs.allowed == 'true'
+      continue-on-error: true
       with:
         path: ${{ inputs.dawn-path }}
         key: ${{ inputs.dawn-key }}
-    - uses: actions/cache/save@v4
+    - name: Check live em cache before saving
+      id: check-em
       if: >-
         github.event_name == 'push' &&
         github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-        github.actor != 'dependabot[bot]' && inputs.em-hit != 'true'
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.em-save-allowed == 'true' && inputs.em-hit != 'true'
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.em-path }}
+      run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind em --path "$CACHE_PATH"
+    - uses: actions/cache/save@v4
+      id: save-em
+      if: >-
+        github.event_name == 'push' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.em-save-allowed == 'true' && inputs.em-hit != 'true' && steps.check-em.outputs.allowed == 'true'
+      continue-on-error: true
       with:
         path: ${{ inputs.em-path }}
         key: ${{ inputs.em-key }}
-    - uses: actions/cache/save@v4
+    - name: Check live cc cache before saving
+      id: check-cc
       if: >-
         github.event_name == 'push' &&
         github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-        github.actor != 'dependabot[bot]' && inputs.cc-hit != 'true'
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.cc-save-allowed == 'true' && inputs.cc-hit != 'true'
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.cc-path }}
+      run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind cc --path "$CACHE_PATH"
+    - uses: actions/cache/save@v4
+      id: save-cc
+      if: >-
+        github.event_name == 'push' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        github.actor != 'dependabot[bot]' && inputs.mode != 'cold' &&
+        inputs.cc-save-allowed == 'true' && inputs.cc-hit != 'true' && steps.check-cc.outputs.allowed == 'true'
+      continue-on-error: true
       with:
         path: ${{ inputs.cc-path }}
         key: ${{ inputs.cc-key }}
+    - name: Observe cache save outcomes (not just eligibility)
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        DAWN_SAVE: ${{ steps.save-dawn.outcome }}
+        EM_SAVE: ${{ steps.save-em.outcome }}
+        CC_SAVE: ${{ steps.save-cc.outcome }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache-save --kind dawn --outcome "$DAWN_SAVE"
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache-save --kind em --outcome "$EM_SAVE"
+        python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" cache-save --kind cc --outcome "$CC_SAVE"

@@ -1,5 +1,6 @@
 """Copy complete notices, including repository licenses for compiled subtrees."""
 from pathlib import Path
+from pipeline_metrics import measured
 import shutil
 
 
@@ -10,6 +11,7 @@ def copy_notice(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+@measured('package.collect_notices')
 def collect_notices(source: Path, destination: Path, *, required: bool = True) -> int:
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f'Missing or linked notice source: {source}')
@@ -30,6 +32,7 @@ def collect_notices(source: Path, destination: Path, *, required: bool = True) -
     return count
 
 
+@measured('package.collect_subtree_notices')
 def collect_subtree_notices(repository: Path, subtree: str, destination: Path) -> None:
     source = repository / subtree
     if repository.is_symlink() or not source.resolve().is_relative_to(repository.resolve()):

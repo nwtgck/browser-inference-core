@@ -13,12 +13,25 @@ on:
       - artifacts
       - 'artifacts/**'
   workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: Shared cache use (cold also forbids saving)
+        type: choice
+        default: enabled
+        options: [enabled, cold]
+      metrics_mode:
+        description: Optional pipeline timings (does not disable validation or tests)
+        type: choice
+        options: [basic, 'off']
+        default: basic
 
 # PR events normally check out a synthetic merge commit. All jobs deliberately
 # build the immutable PR head instead, so push and PR artifacts share a source
 # identity and comments can match the manifest to the actual PR head.
 env:
+  BIC_CACHE_MODE: ${{ github.event.inputs.cache_mode || 'enabled' }}
   LCB_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  BIC_METRICS_MODE: ${{ inputs.metrics_mode || 'basic' }}
 
 defaults:
   run:
@@ -35,12 +48,17 @@ jobs:
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      BIC_METRICS_RUNTIME: llama-cpp
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -49,14 +67,28 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
       - name: Test host and publication code
         run: |
-          npm test
-          python3 -m unittest discover -s tests -p 'test_*.py'
-          python3 -m unittest discover -s ../tests -p 'test_*.py'
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.node_host -- npm test
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.llama_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s tests -p 'test_*.py'
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.publication_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s ../tests -p 'test_*.py'
       - name: Test bounded BF16 weight expansion with native GGML
         run: |
-          cmake -S tests/mtmd-bf16 -B build/mtmd-bf16-tests -DLCB_LLAMA_SOURCE="$PWD/vendor/llama.cpp"
-          cmake --build build/mtmd-bf16-tests --target mtmd-bf16-test --parallel 2
-          build/mtmd-bf16-tests/mtmd-bf16-test
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.configure -- cmake -S tests/mtmd-bf16 -B build/mtmd-bf16-tests -DLCB_LLAMA_SOURCE="$PWD/vendor/llama.cpp"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.build -- cmake --build build/mtmd-bf16-tests --target mtmd-bf16-test --parallel 2
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.test -- build/mtmd-bf16-tests/mtmd-bf16-test
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-test
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   compile:
     name: Build llama.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
     if: >-
@@ -78,21 +110,31 @@ jobs:
         variant:
           - browser
           - test
+    env:
+      BIC_METRICS_RUNTIME: llama-cpp
+      BIC_METRICS_PROFILE: ${{ matrix.profile }}
+      BIC_METRICS_VARIANT: ${{ matrix.variant }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - name: Install build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang cmake ccache
+        run: |
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.update -- sudo apt-get update
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.install -- sudo apt-get install -y ninja-build clang cmake ccache
       - name: Prepare shared toolchain and isolated caches
         id: cache
         uses: ./.github/actions/restore-browser-cache
         with:
+          mode: ${{ env.BIC_CACHE_MODE }}
           runtime: llama-cpp
           profile: ${{ matrix.profile }}
           variant: ${{ matrix.variant }}
@@ -102,8 +144,12 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           VARIANT: ${{ matrix.variant }}
         run: |
+          planned_em_cache="$EM_CACHE"
           source ../.tools/emsdk/emsdk_env.sh
-          python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT"
+          # SDK activation can unset EM_CACHE; reapply the plan afterwards.
+          export EM_CACHE="$planned_em_cache"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" environment
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT"
       - name: Stage package inputs
         shell: bash
         env:
@@ -114,7 +160,7 @@ jobs:
           if [[ "$PROFILE" == "webgpu-wasm64-jspi" && "$VARIANT" == "browser" ]]; then
             extra+=(--include-toolchain-notices)
           fi
-          python3 scripts/stage_ci_build.py --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.stage_upload -- python3 scripts/stage_ci_build.py --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: profile-build-${{ matrix.profile }}-${{ matrix.variant }}
@@ -129,11 +175,15 @@ jobs:
         run: ccache --show-stats
       - name: Save reusable intermediates (trusted default-branch pushes only)
         if: >-
-          success() && github.event_name == 'push' &&
+          success() && github.event_name == 'push' && env.BIC_CACHE_MODE != 'cold' &&
           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
           github.actor != 'dependabot[bot]'
         uses: ./.github/actions/save-browser-cache
         with:
+          mode: ${{ env.BIC_CACHE_MODE }}
+          dawn-save-allowed: ${{ steps.cache.outputs.dawn-save-allowed }}
+          em-save-allowed: ${{ steps.cache.outputs.em-save-allowed }}
+          cc-save-allowed: ${{ steps.cache.outputs.cc-save-allowed }}
           dawn-key: ${{ steps.cache.outputs.dawn-key }}
           dawn-path: ${{ steps.cache.outputs.dawn-path }}
           dawn-hit: ${{ steps.cache.outputs.dawn-hit }}
@@ -150,17 +200,43 @@ jobs:
           git diff --stat
           git diff --cached --stat
           git submodule foreach --recursive 'git status --short --untracked-files=all --ignore-submodules=none'
+      - name: Observe Ninja output intervals
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        env:
+          PROFILE: ${{ matrix.profile }}
+          VARIANT: ${{ matrix.variant }}
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --ninja "build/$PROFILE/$VARIANT/.ninja_log"
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   build:
     name: Package and validate llama.cpp
     needs: [test, compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      BIC_METRICS_RUNTIME: llama-cpp
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -172,26 +248,18 @@ jobs:
           merge-multiple: true
       - name: Assemble runtime-only package
         run: |
-          python3 scripts/package_runtime.py \
+          python3 scripts/package_runtime.py --defer-npm-pack \
             --license-root vendor/llama.cpp \
             --license-root build/toolchain-licenses/emscripten \
             --license-root build/toolchain-licenses/emdawnwebgpu_pkg
-      - name: Test the Node-enabled Asyncify variant with real Wasm
-        run: node tests/asyncify-rewind.mjs
-      - name: Test both variants with real CPU Wasm and GPU suspension in Chromium
-        run: |
-          npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
-          ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
-          python3 scripts/make_test_model.py build/fixture.gguf
-          node tests/browser-smoke.mjs dist/package build/fixture.gguf
-      - name: Record verified scope and repackage
-        run: |
-          python3 scripts/record_browser_validation.py
-          python3 scripts/package_runtime.py \
-            --license-root vendor/llama.cpp \
-            --license-root build/toolchain-licenses/emscripten \
-            --license-root build/toolchain-licenses/emdawnwebgpu_pkg
-          python3 scripts/package_runtime.py --verify-only
+      - name: Install browser test harness
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.npm_install -- npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
+      - name: Prepare Chromium and OS dependencies
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.browser_prepare -- ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test and finalize the same runtime snapshot
+        # Includes all existing Node/Chromium checks, clean-source verification,
+        # complete payload hashes and exactly one final npm pack (also on fork PRs).
+        run: python3 ../scripts/validate_runtime_package.py --runtime llama-cpp --package dist/package
       - uses: actions/upload-artifact@v4
         with:
           name: llama-runtime-package
@@ -206,6 +274,20 @@ jobs:
           git diff --stat
           git diff --cached --stat
           git submodule foreach --recursive 'git status --short --untracked-files=all --ignore-submodules=none'
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-build
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   image-native:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
@@ -215,26 +297,45 @@ jobs:
     defaults:
       run:
         working-directory: stable-diffusion-cpp
+    env:
+      BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
       - name: Test exact patch preparation and host code
         run: |
-          python3 -m unittest discover -s tests -p 'test_*.py'
-          node --test tests/*.test.mjs
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.image_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s tests -p 'test_*.py'
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.image_node -- node --test tests/*.test.mjs
       - name: Native bridge and actual patched normalization tests
         run: |
-          python3 scripts/prepare_upstream.py --output build/native-src
-          cmake -S . -B build/native -G Ninja \
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.prepare -- python3 scripts/prepare_upstream.py --output build/native-src
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.configure -- cmake -S . -B build/native -G Ninja \
             -DSDCB_NATIVE_CHECK=ON -DCMAKE_BUILD_TYPE=Release \
             '-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG' \
             -DSDCB_SOURCE="$PWD/build/native-src/stable-diffusion" \
             -DSDCB_GGML_SOURCE="$PWD/build/native-src/ggml/ggml"
-          cmake --build build/native --parallel 2
-          ctest --test-dir build/native --output-on-failure
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.build -- cmake --build build/native --parallel 2
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.test -- ctest --test-dir build/native --output-on-failure
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-image-native
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   image-compile:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
@@ -255,21 +356,31 @@ jobs:
         variant:
           - browser
           - test
+    env:
+      BIC_METRICS_RUNTIME: stable-diffusion-cpp
+      BIC_METRICS_PROFILE: ${{ matrix.profile }}
+      BIC_METRICS_VARIANT: ${{ matrix.variant }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - name: Install build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang cmake ccache
+        run: |
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.update -- sudo apt-get update
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.install -- sudo apt-get install -y ninja-build clang cmake ccache
       - name: Prepare shared toolchain and isolated caches
         id: cache
         uses: ./.github/actions/restore-browser-cache
         with:
+          mode: ${{ env.BIC_CACHE_MODE }}
           runtime: stable-diffusion-cpp
           profile: ${{ matrix.profile }}
           variant: ${{ matrix.variant }}
@@ -279,12 +390,16 @@ jobs:
           VARIANT: ${{ matrix.variant }}
         shell: bash
         run: |
+          planned_em_cache="$EM_CACHE"
           source ../.tools/emsdk/emsdk_env.sh
+          # SDK activation can unset EM_CACHE; reapply the plan afterwards.
+          export EM_CACHE="$planned_em_cache"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" environment
           extra=()
           if [[ "$PROFILE" == "webgpu-wasm32-jspi" && "$VARIANT" == "browser" ]]; then
             extra+=(--include-toolchain-notices)
           fi
-          python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: image-build-${{ matrix.profile }}-${{ matrix.variant }}
@@ -298,11 +413,15 @@ jobs:
         run: ccache --show-stats
       - name: Save reusable intermediates (trusted default-branch pushes only)
         if: >-
-          success() && github.event_name == 'push' &&
+          success() && github.event_name == 'push' && env.BIC_CACHE_MODE != 'cold' &&
           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
           github.actor != 'dependabot[bot]'
         uses: ./.github/actions/save-browser-cache
         with:
+          mode: ${{ env.BIC_CACHE_MODE }}
+          dawn-save-allowed: ${{ steps.cache.outputs.dawn-save-allowed }}
+          em-save-allowed: ${{ steps.cache.outputs.em-save-allowed }}
+          cc-save-allowed: ${{ steps.cache.outputs.cc-save-allowed }}
           dawn-key: ${{ steps.cache.outputs.dawn-key }}
           dawn-path: ${{ steps.cache.outputs.dawn-path }}
           dawn-hit: ${{ steps.cache.outputs.dawn-hit }}
@@ -312,6 +431,27 @@ jobs:
           cc-key: ${{ steps.cache.outputs.cc-key }}
           cc-path: ${{ steps.cache.outputs.cc-path }}
           cc-hit: ${{ steps.cache.outputs.cc-hit }}
+      - name: Observe Ninja output intervals
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        env:
+          PROFILE: ${{ matrix.profile }}
+          VARIANT: ${{ matrix.variant }}
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --ninja "build/$PROFILE/$VARIANT/.ninja_log"
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-image-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   image-build:
     name: Package and validate stable-diffusion.cpp
     needs: [image-native, image-compile]
@@ -320,12 +460,17 @@ jobs:
     defaults:
       run:
         working-directory: stable-diffusion-cpp
+    env:
+      BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -336,23 +481,37 @@ jobs:
           merge-multiple: true
       - name: Package image runtime
         run: |
-          python3 scripts/package_runtime.py \
+          python3 scripts/package_runtime.py --defer-npm-pack \
             --license-root build/toolchain-licenses/emscripten \
             --license-root build/toolchain-licenses/emdawnwebgpu_pkg
-      - name: Real Wasm ABI smoke (not image inference)
-        run: |
-          npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
-          ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
-          node tests/browser-smoke.mjs dist/package
-          python3 scripts/package_runtime.py \
-            --license-root build/toolchain-licenses/emscripten \
-            --license-root build/toolchain-licenses/emdawnwebgpu_pkg
+      - name: Install browser test harness
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.npm_install -- npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
+      - name: Prepare Chromium and OS dependencies
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.browser_prepare -- ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test and finalize the same runtime snapshot
+        # Includes all existing Node/Chromium checks, clean-source verification,
+        # complete payload hashes and exactly one final npm pack (also on fork PRs).
+        run: python3 ../scripts/validate_runtime_package.py --runtime stable-diffusion-cpp --package dist/package
       - uses: actions/upload-artifact@v4
         with:
           name: image-runtime-package
           path: stable-diffusion-cpp/dist/package/
           if-no-files-found: error
           include-hidden-files: true
+          retention-days: 14
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-image-build
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
           retention-days: 14
   publish:
     needs: [build, image-build]
@@ -368,6 +527,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      BIC_METRICS_RUNTIME: root
     steps:
       - uses: actions/checkout@v4
         with:
@@ -376,7 +537,7 @@ jobs:
           submodules: false
           persist-credentials: false
       - name: Check out the upstream needed for consumer provenance
-        run: git submodule update --init --checkout --depth=1 -- llama-cpp/vendor/llama.cpp
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --checkout --depth=1 -- llama-cpp/vendor/llama.cpp
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -425,3 +586,17 @@ jobs:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
         run: |
           echo "Runtime artifact $ARTIFACT_COMMIT is already published; consumer reporting failed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-publish
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14

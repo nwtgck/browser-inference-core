@@ -56,7 +56,8 @@ class ParallelWorkflow(unittest.TestCase):
     def test_only_trusted_default_branch_pushes_invoke_and_save_caches(self):
         conditions = ["github.event_name == 'push'", "github.event.repository.default_branch", "github.actor != 'dependabot[bot]'"]
         self.assertEqual(SAVE.count('uses: actions/cache/save@v4'), 3)
-        for condition in conditions: self.assertEqual(SAVE.count(condition), 3)
+        # Each of three save steps AND its live-data preflight is trust-gated.
+        for condition in conditions: self.assertEqual(SAVE.count(condition), 6)
         for name in ('compile','image-compile'):
             body = jobs(BUILD)[name].split('- name: Save reusable intermediates', 1)[1]
             for condition in conditions: self.assertIn(condition, body)

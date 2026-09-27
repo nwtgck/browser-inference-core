@@ -8,7 +8,7 @@ expected={(profile,variant) for profile in
           ('cpu-wasm32','cpu-wasm64','webgpu-wasm32-jspi','webgpu-wasm64-jspi','webgpu-wasm32-asyncify')
           for variant in ('browser','test')}
 if (len(results)!=len(expected) or {(r['profile'],r['variant']) for r in results}!=expected
-        or not all(r['passed'] for r in results)):
+        or not all(r.get('passed') is True for r in results)):
     raise RuntimeError('Missing or failed profile/variant browser smoke tests')
 for result in results:
     path=ROOT/'build'/result['profile']/result['variant']/'provenance.json'

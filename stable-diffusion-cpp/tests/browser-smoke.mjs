@@ -27,7 +27,7 @@ try {
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const profiles = JSON.parse(await readFile('config/profiles.json', 'utf8'));
-  const failures = [];
+  const failures = [], results = [];
   for (const profile of Object.keys(profiles)) {
     for (const variant of ['browser', 'test']) {
       try {
@@ -182,11 +182,16 @@ try {
           }
         }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu });
         console.log(JSON.stringify(result, null, 2));
-        const file = path.resolve('build', profile, variant, 'provenance.json');
-        const provenance = JSON.parse(await readFile(file, 'utf8'));
-        provenance.validation.browserSmoke = true;
-        provenance.validation.browserSmokeScope = result.scope;
-        await writeFile(file, JSON.stringify(provenance, null, 2) + '\n');
+        results.push(result);
+        // The pipeline wrapper finalizes its tested package snapshot, not build/.
+        // Preserve the standalone recorder behavior outside that explicit mode.
+        if (!process.env.BIC_BROWSER_RESULTS_FILE) {
+          const file = path.resolve('build', profile, variant, 'provenance.json');
+          const provenance = JSON.parse(await readFile(file, 'utf8'));
+          provenance.validation.browserSmoke = true;
+          provenance.validation.browserSmokeScope = result.scope;
+          await writeFile(file, JSON.stringify(provenance, null, 2) + '\n');
+        }
       } catch (error) {
         const failure = { profile, variant, passed: false, error: String(error.stack || error) };
         failures.push(failure);
@@ -195,6 +200,11 @@ try {
     }
   }
   if (failures.length) throw new Error(`${failures.length} image browser smoke configuration(s) failed; see per-profile diagnostics`);
+  if (process.env.BIC_BROWSER_RESULTS_FILE) {
+    const output = process.env.BIC_BROWSER_SESSION_JSON
+      ? { session: JSON.parse(process.env.BIC_BROWSER_SESSION_JSON), results } : results;
+    await writeFile(process.env.BIC_BROWSER_RESULTS_FILE, JSON.stringify(output, null, 2) + '\n');
+  }
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

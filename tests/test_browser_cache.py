@@ -37,6 +37,22 @@ class BrowserCache(unittest.TestCase):
         p = self.root / path
         data = json.loads(p.read_text()); data[key] = value; p.write_text(json.dumps(data))
 
+    def test_observer_and_packaging_edits_do_not_change_compiler_partition(self):
+        def all_plans():
+            return [self.plan(runtime=runtime, profile=profile, variant=variant)
+                    for runtime in ('llama-cpp', 'stable-diffusion-cpp')
+                    for profile in json.loads((self.root / runtime / 'config/profiles.json').read_text())
+                    for variant in ('browser', 'test')]
+        before = all_plans()
+        self.assertEqual(len(before), 16)
+        for name in ('scripts/pipeline_metrics.py', 'scripts/validate_runtime_package.py',
+                     'scripts/package_inputs.py', 'scripts/summarize_pipeline_metrics.py',
+                     'scripts/cache_admission.py', 'stable-diffusion-cpp/scripts/prepare_upstream.py',
+                     'llama-cpp/scripts/package_runtime.py', 'stable-diffusion-cpp/scripts/package_runtime.py'):
+            with (self.root / name).open('a') as out:
+                out.write('\n# observational/package-only fixture change\n')
+        self.assertEqual(before, all_plans())
+
     def test_source_snapshots_accumulate_ccache_but_share_only_exact_partition(self):
         old, new = self.plan(), self.plan(source='b'*40)
         self.assertNotEqual(old['cc-key'], new['cc-key'])

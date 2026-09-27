@@ -8,9 +8,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT.parent / 'scripts'))
+from pipeline_metrics import measured, span
 
 def digest(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
@@ -27,11 +30,12 @@ def safe_file(root: Path, relative: str) -> Path:
         raise ValueError('Patch path escapes the source')
     return result
 
+@measured('build.prepare_upstream', runtime='stable-diffusion-cpp')
 def prepare(sources: dict[str, Path], destination: Path, patches: Path = ROOT / 'upstream-patches') -> dict:
     inventory = json.loads((patches / 'series.json').read_text())
     if inventory['formatVersion'] != 1 or set(sources) != {'stable-diffusion', 'ggml'}:
         raise ValueError('Unknown patch inventory/source set')
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise ValueError('Prepared source destination must not already exist')
     for source in sources.values():
         if destination.resolve().is_relative_to(source.resolve()):
@@ -39,9 +43,13 @@ def prepare(sources: dict[str, Path], destination: Path, patches: Path = ROOT / 
     destination.parent.mkdir(parents=True, exist_ok=True)
     records = []
     with tempfile.TemporaryDirectory(prefix='sdb-prepare-', dir=destination.parent) as tmp:
-        work = Path(tmp)
+        # Keep a container for TemporaryDirectory to clean; the completed child
+        # can be renamed without copying the entire source tree a second time.
+        work = Path(tmp) / 'prepared'
+        work.mkdir(mode=0o700)  # Match the old TemporaryDirectory root mode.
         for name, source in sources.items():
-            shutil.copytree(source, work / name, ignore=shutil.ignore_patterns('.git', 'build', '.github'), symlinks=True)
+            with span('build.copy_upstream', context=name):
+                shutil.copytree(source, work / name, ignore=shutil.ignore_patterns('.git', 'build', '.github'), symlinks=True)
         for entry in inventory['patches']:
             if entry['target'] not in sources: raise ValueError('Unknown patch target')
             if not entry['files'] or len({f['path'] for f in entry['files']}) != len(entry['files']):
@@ -63,7 +71,13 @@ def prepare(sources: dict[str, Path], destination: Path, patches: Path = ROOT / 
                 if digest(safe_file(target, file['path'])) != file['afterSha256']:
                     raise ValueError(f'Unexpected patch output: {file["path"]}')
             records.append({**entry, 'sha256': digest(patch)})
-        shutil.copytree(work, destination, symlinks=True)
+        # Fail rather than overwriting an output created while patches ran.
+        # Callers must own the output path; this is not isolation from a process
+        # concurrently renaming arbitrary paths with the same OS credentials.
+        if destination.exists() or destination.is_symlink():
+            raise ValueError('Prepared source destination appeared during preparation')
+        with span('build.install_prepared'):
+            work.rename(destination)
     return {'inventorySha256': digest(patches / 'series.json'), 'patches': records,
             'vendorCheckoutModified': False}
 

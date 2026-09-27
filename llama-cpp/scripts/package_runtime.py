@@ -7,9 +7,14 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT.parent / 'scripts'))
+from package_inputs import copy_regular, copy_regular_tree, read_regular, regular_path
+from pipeline_metrics import measured, span
+
 RUNTIME_NAME='llama-cpp-browser-core'
 VARIANTS=json.loads((ROOT/'config/variants.json').read_text())
 # Preserve complete original files where notices are embedded in source. This
@@ -25,6 +30,7 @@ EMBEDDED_NOTICE_FILES = (
 EXAMPLE_RUNTIME_FILES = ('index.mjs', 'index.d.ts', 'bindings.mjs', 'read-only-file.mjs', 'README.md')
 
 
+@measured('package.copy_embedded_notices', packageKind='llama')
 def copy_embedded_notices(source: Path, destination: Path):
     for relative in EMBEDDED_NOTICE_FILES:
         original=source/relative
@@ -32,29 +38,32 @@ def copy_embedded_notices(source: Path, destination: Path):
             raise ValueError(f'Missing embedded notice source: {original}')
         target=destination/(relative+'.txt')
         target.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copy2(original,target)
+        copy_regular(original,target)
 
 
+@measured('package.copy_notices', packageKind='llama')
 def copy_license_notices(source: Path, destination: Path):
     """Copy the same standalone notices for local packaging and CI transfer."""
     if not source.exists(): raise ValueError(f'Missing license source: {source}')
+    regular_path(source, directory=True)
     copied=0
     for path in sorted(source.rglob('*')):
         if not path.is_file() or path.is_symlink() or '.git' in path.parts: continue
         if path.name.upper().startswith(('LICENSE','COPYING','COPYRIGHT')):
             target=destination/path.relative_to(source)
             target.parent.mkdir(parents=True,exist_ok=True)
-            shutil.copy2(path,target); copied+=1
+            copy_regular(path,target); copied+=1
     return copied
 
 
 def sha(path):
     with path.open('rb') as f: return hashlib.file_digest(f,'sha256').hexdigest()
 
+@measured('package.validate', packageKind='llama')
 def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True):
     # Assembly may defer compression to the publisher. Every payload and
     # provenance check still runs; standalone validation includes npm pack.
-    directory=directory.resolve()
+    directory=regular_path(directory, directory=True)
     entries=list(directory.rglob('*'))
     if any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in entries):
         raise ValueError('Linked or non-regular entry in runtime package')
@@ -100,21 +109,23 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
                 if wasm.read(8) != b'\x00asm\x01\x00\x00\x00':
                     raise ValueError('Not a WebAssembly module')
     if check_npm_pack:
-        packed=json.loads(subprocess.check_output(['npm','pack','--dry-run','--json'],cwd=directory,text=True))
+        with span('package.npm_pack', packageKind='llama'):
+            packed=json.loads(subprocess.check_output(['npm','pack','--dry-run','--json'],cwd=directory,text=True))
         pack_paths={x['path'] for x in packed[0]['files']}
         if pack_paths != actual: raise ValueError(f'npm pack file mismatch: {sorted(actual ^ pack_paths)}')
     return {'files':len(actual),'bytes':sum(p.stat().st_size for p in directory.rglob('*') if p.is_file()),
             'profiles':list(manifest['profiles'])}
 
-def build_package(build_root: Path, destination: Path, profiles: list[str], *, license_roots: list[Path]):
+@measured('package.assemble', packageKind='llama')
+def build_package(build_root: Path, destination: Path, profiles: list[str], *, license_roots: list[Path], check_npm_pack: bool = True):
     source=None; upstream=None; schema=None; provenance={}
     with tempfile.TemporaryDirectory(prefix='lcb-package-') as tmp:
-        out=Path(tmp)
+        out=Path(tmp).resolve()
         for name in profiles:
             provenance[name]={'variants':{}}
             for variant in VARIANTS:
                 build=build_root/name/variant
-                data=json.loads((build/'provenance.json').read_text())
+                data=json.loads(read_regular(build/'provenance.json'))
                 if data['profile']!=name: raise ValueError('Profile mismatch')
                 if data['variant']!=variant or data['variantConfiguration']!=VARIANTS[variant]:
                     raise ValueError(f'Variant provenance mismatch: {name}/{variant}')
@@ -123,23 +134,22 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
                 source=data['sourceCommit']; upstream=data['llamaCommit']
                 provenance[name]['variants'][variant]=data
                 generated=build/'generated'
-                current=(generated/'schema.json').read_bytes()
+                current=read_regular(generated/'schema.json')
                 if schema is not None and current!=schema: raise ValueError('Mixed binding schemas')
                 schema=current
                 runtime=out/'profiles'/name/variant
-                shutil.copytree(build/'runtime',runtime)
-                for p in runtime.rglob('*'):
-                    if p.is_symlink(): raise ValueError('Unexpected symlink in runtime output')
+                with span('package.copy_payload', packageKind='llama', profile=name, variant=variant):
+                    copy_regular_tree(build/'runtime',runtime)
                 if not (out/'api').exists():
                     (out/'api').mkdir()
                     for file in ('schema.json','schema.mjs','functions.d.ts','exports.json'):
-                        shutil.copy2(generated/file,out/'api'/file)
+                        copy_regular(generated/file,out/'api'/file)
         example=out/'examples/runtime'; example.mkdir(parents=True)
         for file in EXAMPLE_RUNTIME_FILES:
-            shutil.copy2(ROOT/'examples/runtime'/file,example/file)
-        shutil.copy2(ROOT/'packaging/README.md',out/'README.md')
-        shutil.copy2(ROOT/'docs/chat-and-multimodal.md',out/'chat-and-multimodal.md')
-        shutil.copy2(ROOT/'LICENSE',out/'LICENSE')
+            copy_regular(ROOT/'examples/runtime'/file,example/file)
+        copy_regular(ROOT/'packaging/README.md',out/'README.md')
+        copy_regular(ROOT/'docs/chat-and-multimodal.md',out/'chat-and-multimodal.md')
+        copy_regular(ROOT/'LICENSE',out/'LICENSE')
         licenses=out/'licenses'; licenses.mkdir()
         copied=0
         for i,root in enumerate(license_roots):
@@ -157,10 +167,14 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
                   'files':[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)}
                            for p in sorted(out.rglob('*')) if p.is_file()]}
         (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-        validate(out,require_clean=False)
-        if destination.exists(): shutil.rmtree(destination)
+        validate(out,require_clean=False,check_npm_pack=False)
+        if destination.exists() or destination.is_symlink():
+            regular_path(destination, directory=True)
+            shutil.rmtree(destination)
         destination.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copytree(out,destination)
+        with span('package.commit_output', packageKind='llama'):
+            copy_regular_tree(out,destination)
+        validate(destination,require_clean=False,check_npm_pack=check_npm_pack)
     return destination
 
 def main():
@@ -170,10 +184,13 @@ def main():
     p.add_argument('--profiles',nargs='+')
     p.add_argument('--license-root',type=Path,action='append')
     p.add_argument('--verify-only',action='store_true')
+    p.add_argument('--defer-npm-pack',action='store_true',
+                   help='Defer compression only; run validate_runtime_package.py before upload')
     a=p.parse_args()
+    if a.verify_only and a.defer_npm_pack: p.error('--verify-only always includes npm packing')
     if not a.verify_only:
         profiles=a.profiles or list(json.loads((ROOT/'config/profiles.json').read_text()))
         roots=a.license_root or [ROOT/'vendor/llama.cpp',ROOT.parent/'.tools/emsdk/upstream/emscripten',ROOT.parent/'.tools/emdawnwebgpu_pkg']
-        build_package(a.build_root,a.output,profiles,license_roots=roots)
-    print(json.dumps(validate(a.output,require_clean=a.verify_only),indent=2))
+        build_package(a.build_root,a.output,profiles,license_roots=roots,check_npm_pack=False)
+    print(json.dumps(validate(a.output,require_clean=a.verify_only,check_npm_pack=not a.defer_npm_pack),indent=2))
 if __name__=='__main__': main()
