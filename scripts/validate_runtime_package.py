@@ -26,7 +26,7 @@ TEST_INPUTS = {
                              'tests/model-io-fixtures.mjs'),
 }
 IMAGE_SCOPE = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
-               'test variants also check synthetic Qwen BF16 timestep graph arithmetic on ')
+               'test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ')
 
 
 def parse_json(raw: bytes):
@@ -73,6 +73,16 @@ def checked_results(runtime: str, profiles: dict, variants: dict, results: objec
             if ((pair[1] == 'test' and result.get('graphWalk') is not True) or
                     (pair[1] == 'browser' and 'graphWalk' in result)):
                 raise ValueError('Wrong image graph walk evidence')
+            if pair[1] == 'test':
+                expected_backends = ['CPU', 'WebGPU'] if test_webgpu else ['CPU']
+                convolution = result.get('conv3dBias')
+                if (not isinstance(convolution, list) or len(convolution) != len(expected_backends) or
+                        any(not isinstance(item, dict) or item.get('backend') != backend or
+                            item.get('passed') is not True
+                            for item, backend in zip(convolution, expected_backends))):
+                    raise ValueError('Wrong image 3D convolution bias evidence')
+            elif 'conv3dBias' in result:
+                raise ValueError('Wrong image 3D convolution bias evidence')
     return results
 
 

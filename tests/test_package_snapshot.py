@@ -109,11 +109,14 @@ class ImageSmokeResults(unittest.TestCase):
     def results(self, test_webgpu):
         # Match the producer's emitted contract independently of image_scope().
         scope = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
-                 'test variants also check synthetic Qwen BF16 timestep graph arithmetic on ' +
+                 'test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ' +
                  ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
                  ', plus deep graph construction/selection; no trained-model image generation')
         return [{'profile': profile, 'variant': variant, 'passed': True, 'scope': scope,
-                 **({'graphWalk': True} if variant == 'test' else {})}
+                 **({'graphWalk': True, 'conv3dBias': [
+                     {'backend': backend, 'passed': True}
+                     for backend in (['CPU', 'WebGPU'] if test_webgpu else ['CPU'])
+                 ]} if variant == 'test' else {})}
                 for profile in self.profiles for variant in self.variants]
 
     def check(self, results, test_webgpu):
@@ -157,6 +160,37 @@ class ImageSmokeResults(unittest.TestCase):
                 result['graphWalk'] = value
                 with self.subTest(profile=profile, value=value), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
                     self.check(results, False)
+
+    def test_requires_convolution_evidence_from_every_expected_backend(self):
+        for test_webgpu in (False, True):
+            for value in (None, [], [{'backend': 'CPU', 'passed': False}],
+                          [{'backend': 'CPU', 'passed': 1}], [{'backend': 'WebGPU', 'passed': True}]):
+                results = self.results(test_webgpu)
+                result = next(item for item in results if item['variant'] == 'test')
+                result['conv3dBias'] = value
+                with self.subTest(test_webgpu=test_webgpu, value=value), self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+                    self.check(results, test_webgpu)
+            results = self.results(test_webgpu)
+            result = next(item for item in results if item['variant'] == 'test')
+            result.pop('conv3dBias')
+            with self.subTest(test_webgpu=test_webgpu, missing=True), self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+                self.check(results, test_webgpu)
+        results = self.results(True)
+        result = next(item for item in results if item['variant'] == 'test')
+        result['conv3dBias'] = [{'backend': 'CPU', 'passed': True}]
+        with self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+            self.check(results, True)
+
+    def test_rejects_convolution_probe_in_browser_variants_and_old_scope(self):
+        results = self.results(False)
+        result = next(item for item in results if item['variant'] == 'browser')
+        result['conv3dBias'] = None
+        with self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+            self.check(results, False)
+        results = self.results(False)
+        results[0]['scope'] = results[0]['scope'].replace(' and 3D convolution bias', '')
+        with self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+            self.check(results, False)
 
 
 class RuntimeSnapshot(unittest.TestCase):
@@ -206,7 +240,9 @@ class RuntimeSnapshot(unittest.TestCase):
                 item = {'profile': profile, 'variant': variant, 'passed': True}
                 if self.runtime == 'stable-diffusion-cpp':
                     item['scope'] = snapshot.image_scope(False)
-                    if variant == 'test': item['graphWalk'] = True
+                    if variant == 'test':
+                        item['graphWalk'] = True
+                        item['conv3dBias'] = [{'backend': 'CPU', 'passed': True}]
                 elif profile.startswith('cpu-'): item['syntheticModel'] = True
                 else: item.update(mockedAdapter=True, suspension=True)
                 result.append(item)

@@ -170,6 +170,18 @@
           "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
         }
       ]
+    },
+    {
+      "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+      "target": "stable-diffusion",
+      "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+          "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+        }
+      ]
     }
   ]
 }

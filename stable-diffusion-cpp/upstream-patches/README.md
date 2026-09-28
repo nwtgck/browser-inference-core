@@ -90,6 +90,24 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
     does not evaluate weights or certify image quality. Remove when the pinned
     external GGML has an equivalent non-recursive traversal passing these cases.
 
+11. 3D convolution bias: under `SD_BROWSER_WEBGPU`, use an out-of-place addition
+    for the shared 3D convolution helper. Its direct convolution can fall back to
+    CPU while the runner assigns the supported bias addition to WebGPU. The
+    in-place output would retain the CPU convolution's `view_src`; copying the
+    addition's input does not relocate that output. Keep convolution selection,
+    arithmetic and parameter types unchanged. Non-browser builds retain the
+    original in-place path. Each bias output is an additional F32 tensor of the
+    convolution's output shape; allocator reuse determines the peak overhead.
+    `tests/conv3d-bias-probe.cpp` checks direct, automatic and forced-F32 paths,
+    with and without bias, against an independent small convolution reference.
+    Native/test-variant CPU checks detect the alias before allocation. Optional
+    WebGPU smoke additionally requires CPU convolution/im2col and WebGPU bias
+    placement, compatible buffers and completed numerical evaluation. This is
+    not trained-model VAE validation or proof of any particular browser crash's
+    cause. Remove after a reviewed upstream equivalent passes the same mixed
+    placement and arithmetic checks; revise the no-view assertion if an upstream
+    scheduler safely relocates views instead.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime
