@@ -226,6 +226,48 @@
           "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
         }
       ]
+    },
+    {
+      "file": "0014-opt-in-graph-stage-diagnostics.patch",
+      "target": "stable-diffusion",
+      "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+      "files": [
+        {
+          "path": "include/stable-diffusion.h",
+          "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+          "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+        },
+        {
+          "path": "src/core/util.h",
+          "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+          "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+        },
+        {
+          "path": "src/core/util.cpp",
+          "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+          "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+        },
+        {
+          "path": "src/core/ggml_runner.h",
+          "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+          "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+        },
+        {
+          "path": "src/core/ggml_runner.cpp",
+          "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+          "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+        },
+        {
+          "path": "src/core/compute_workspace.h",
+          "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+          "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+        },
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+          "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+        }
+      ]
     }
   ]
 }

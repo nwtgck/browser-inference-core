@@ -148,6 +148,7 @@ try {
                 modelIoReads.push(fixture.safetensors.summary());
               } finally { core.free(pointer); core.free(shard); for (const file of mounted.reverse()) file.remove(); }
             }
+            if (typeof core.api.sd_set_graph_diagnostics !== 'function') throw Error('Graph diagnostics API missing');
             const logs = [], progress = [];
             const log = module.addFunction((level, text, data) => logs.push([level, core.readUtf8(BigInt(text)), Number(data)]), 'vipp');
             const update = module.addFunction((step, steps, time, data) => progress.push([step, steps, time, Number(data)]), 'viifp');
@@ -157,6 +158,19 @@ try {
               if (variant === 'test') {
                 module._sdc_test_callbacks();
                 if (!logs.at(-1)[1].includes('native callback probe') || logs.at(-1)[2] !== 17 || JSON.stringify(progress) !== '[[1,4,0.125,19]]') throw Error('Native callback ABI mismatch');
+                if (logs.some(entry => entry[1].includes('graph-stage-v1 '))) throw Error('Graph diagnostics enabled by default');
+                const stages = () => logs.filter(entry => entry[1].includes('graph-stage-v1 ')).map(entry => entry[1].match(/event=(\w+)/)?.[1]);
+                try {
+                  // Re-enabling starts a fresh window, even without an intervening disable.
+                  for (let attempt = 0; attempt < 2; attempt++) {
+                    await core.api.sd_set_graph_diagnostics(1);
+                    module._sdc_test_callbacks();
+                  }
+                  if (JSON.stringify(stages()) !== JSON.stringify(['begin', 'end', 'begin', 'failed', 'begin', 'end', 'begin', 'failed'])) throw Error('Graph diagnostic gate/order mismatch');
+                } finally { await core.api.sd_set_graph_diagnostics(0); }
+                const beforeDisabled = stages().length;
+                module._sdc_test_callbacks();
+                if (stages().length !== beforeDisabled) throw Error('Disabled graph diagnostics still emitted');
               } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);

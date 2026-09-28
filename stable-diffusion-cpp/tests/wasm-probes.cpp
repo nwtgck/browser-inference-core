@@ -27,6 +27,22 @@ uint32_t sdc_test_gguf_value(const char* path) {
 void sdc_test_callbacks() {
     log_printf(SD_LOG_INFO, __FILE__, __LINE__, "native callback probe");
     pretty_progress(1, 4, 0.125f);
+    static uint64_t previous_window = 0;
+    const auto epoch = sd_graph_diagnostics_epoch();
+    if (epoch == 0) {
+        uint64_t observed = 0;
+        if (sd_begin_graph_diagnostics(observed) || observed != 0) throw std::runtime_error("disabled graph diagnostics changed state");
+    } else {
+        if (epoch == previous_window) throw std::runtime_error("enable did not start a new diagnostic window");
+        previous_window = epoch;
+        for (const char* outcome : {"end", "failed"}) {
+            uint64_t observed = 0;
+            if (!sd_begin_graph_diagnostics(observed)) throw std::runtime_error("missing diagnostic window");
+            sd_log_graph_stage("callback-probe", "attempt", "begin");
+            sd_log_graph_stage("callback-probe", "attempt", outcome);
+            if (sd_begin_graph_diagnostics(observed)) throw std::runtime_error("diagnostic attempt repeated after completion/failure");
+        }
+    }
 }
 }
 

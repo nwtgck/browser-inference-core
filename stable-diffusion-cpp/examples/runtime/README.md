@@ -85,6 +85,34 @@ the getters add no work to generation; the context initializer additionally owns
 the previously omitted audio-encoder path with one string copy. This design property is
 separate from an actual performance measurement.
 
+## Opt-in graph-stage logs
+
+Register a log callback, then call `await core.api.sd_set_graph_diagnostics(1)`
+while the runtime is idle before the request to inspect. In a `finally` block,
+after that native request has settled, call
+`await core.api.sd_set_graph_diagnostics(0)`. These module-global diagnostics
+start disabled; callbacks must not re-enter a native operation. Each enable
+call opens a new observation window, including when already enabled. Each
+runner logs only its first attempt after graph-cut plan resolution in that
+window. Enable again before another request or a changed graph/resolution.
+This bounds repeated denoiser-step logging; failures before plan resolution
+remain outside these markers.
+
+Debug messages use `graph-stage-v1 runner=... stage=... event=begin|end|failed`.
+Receiver timestamps can locate a long measurement, weight preparation,
+workspace allocation, input copy or execution interval. `workspace-reprepare`
+covers a possible remeasurement and capacity checks; `workspace-allocate`
+covers the actual workspace allocation call. `reserve-including-sync` includes
+the scheduler's existing synchronization, graph splitting and allocator size
+estimation, without distinguishing those internal operations. A last `begin`
+without an `end` locates an unfinished interval, not proof of a deadlock.
+
+No native timers, additional tensor walks, GPU synchronization or readbacks are
+added. With diagnostics disabled, boundary helpers only check the gate/null
+label and perform no formatting or callback work. Enabled logging has callback
+overhead and is not a performance benchmark. This API requires an artifact built
+with the graph-stage patch; older ABI 2 artifacts do not expose it.
+
 ## Public GGML queries
 
 The generated schema also includes explicitly selected functions from pinned

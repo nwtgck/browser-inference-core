@@ -1,0 +1,262 @@
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@ -498,4 +498,14 @@
+ 
+ SD_API void sd_set_log_callback(sd_log_cb_t sd_log_cb, void* data);
++// Opt-in graph preparation/execution boundary logs; disabled by default.
++// Module-global like the log callback. Call only while native operations are idle.
++// Each enable call starts a new observation window: each runner logs its first
++// post-plan graph attempt (including failure) in that window. Failures before
++// plan resolution are not covered. Enable again before a new
++// request or changed graph/resolution; no per-step log flood. Disable explicitly
++// after the request. No timers, extra graph walks, synchronization or readbacks.
++// Scheduler reserve includes its existing synchronization; these markers do not
++// distinguish that internal wait from splitting/allocator size estimation.
++SD_API void sd_set_graph_diagnostics(bool enabled);
+ SD_API void sd_set_progress_callback(sd_progress_cb_t cb, void* data);
+ // In each sampling pass, a positive interval previews every Nth denoiser step, while a
+--- a/src/core/util.h
++++ b/src/core/util.h
+@@ -89,4 +89,18 @@
+ void log_printf(sd_log_level_t level, const char* file, int line, const char* format, ...);
+ void sd_ggml_log_callback(ggml_log_level level, const char* text, void*);
++uint64_t sd_graph_diagnostics_epoch();
++inline bool sd_begin_graph_diagnostics(uint64_t& observed_epoch) {
++    const auto epoch = sd_graph_diagnostics_epoch();
++    if (epoch == 0 || epoch == observed_epoch) return false;
++    observed_epoch = epoch; // An unsuccessful attempt also consumes this window.
++    return true;
++}
++// A null label is the disabled path: no formatting, timers or callback work.
++inline void sd_log_graph_stage(const char* label, const char* stage, const char* event) {
++    if (label != nullptr) {
++        log_printf(SD_LOG_DEBUG, __FILE__, __LINE__,
++                   "graph-stage-v1 runner=%s stage=%s event=%s", label, stage, event);
++    }
++}
+ 
+ ggml_type sd_type_to_ggml_type(sd_type_t sdtype);
+--- a/src/core/util.cpp
++++ b/src/core/util.cpp
+@@ -641,4 +641,19 @@
+ static sd_log_cb_t sd_log_cb = nullptr;
+ void* sd_log_cb_data         = nullptr;
++static uint64_t sd_graph_diagnostics_serial = 0;
++static uint64_t sd_graph_diagnostics_active = 0;
++
++void sd_set_graph_diagnostics(bool enabled) {
++    if (!enabled) {
++        sd_graph_diagnostics_active = 0;
++        return;
++    }
++    if (++sd_graph_diagnostics_serial == 0) ++sd_graph_diagnostics_serial;
++    sd_graph_diagnostics_active = sd_graph_diagnostics_serial;
++}
++
++uint64_t sd_graph_diagnostics_epoch() {
++    return sd_log_cb != nullptr ? sd_graph_diagnostics_active : 0;
++}
+ 
+ static void sd_log_dispatch(sd_log_level_t level, const std::string& origin, const std::string& text) {
+--- a/src/core/ggml_runner.h
++++ b/src/core/ggml_runner.h
+@@ -132,7 +132,8 @@
+     std::map<ggml_backend_t, size_t> logged_compute_bytes_;
+     size_t logged_segment_count_     = 0;
++    uint64_t graph_diagnostics_epoch_ = 0;
+     ggml_status last_compute_status_ = GGML_STATUS_SUCCESS;
+ 
+-    sd::ComputeWorkspace::Measurement measure(ggml_cgraph* graph, size_t direct_bytes);
++    sd::ComputeWorkspace::Measurement measure(ggml_cgraph* graph, size_t direct_bytes, const char* diagnostic_label = nullptr);
+     std::vector<DeviceMemoryRequest> memory_requests(const std::vector<sd::BackendBufferSize>& sizes,
+                                                      size_t pending_cache_bytes) const;
+--- a/src/core/ggml_runner.cpp
++++ b/src/core/ggml_runner.cpp
+@@ -700,5 +700,5 @@
+ }
+ 
+-ComputeWorkspace::Measurement GGMLRunner::measure(ggml_cgraph* graph, size_t direct_bytes) {
++ComputeWorkspace::Measurement GGMLRunner::measure(ggml_cgraph* graph, size_t direct_bytes, const char* diagnostic_label) {
+     auto external_backend = [&](const ggml_tensor* tensor) -> ggml_backend_t {
+         if (!params_tensor_set_.count(tensor)) {
+@@ -711,5 +711,5 @@
+         pin_multi_device_nodes(scheduler, copy, graph);
+     };
+-    return workspace_.measure(graph, direct_bytes, external_backend, assign_nodes);
++    return workspace_.measure(graph, direct_bytes, external_backend, assign_nodes, diagnostic_label);
+ }
+ 
+@@ -827,9 +827,22 @@
+     const auto params           = collect_used_param_tensors(graph);
+     const auto& cached_plan     = resolve_graph_cut_plan(graph);
+-    const auto full_measurement = measure(graph, cached_plan.compute_buffer_size);
++    std::optional<std::string> diagnostic_name;
++    if (sd_begin_graph_diagnostics(graph_diagnostics_epoch_)) {
++        diagnostic_name = get_desc();
++    }
++    const char* diagnostic_label = diagnostic_name ? diagnostic_name->c_str() : nullptr;
++    auto trace = [&](const char* stage, const char* event) {
++        sd_log_graph_stage(diagnostic_label, stage, event);
++    };
++    trace("graph", "begin");
++    trace("full-measure", "begin");
++    const auto full_measurement = measure(graph, cached_plan.compute_buffer_size, diagnostic_label);
++    trace("full-measure", full_measurement.buffers.empty() ? "failed" : "end");
+     if (full_measurement.buffers.empty()) {
++        trace("graph", "failed");
+         last_compute_status_ = GGML_STATUS_ALLOC_FAILED;
+         return std::nullopt;
+     }
++    trace("segment-planning", "begin");
+     auto manager         = residency_manager.lock();
+     const bool segmented = !is_multi_device() && !sd_backend_is_cpu(runtime_backend) &&
+@@ -869,4 +882,5 @@
+                                   segmented && manager != nullptr && manager->prefetch_enabled());
+ 
++    trace("segment-planning", "end");
+     std::map<ggml_backend_t, size_t> peak_compute_bytes;
+     auto track_compute_buffer = [&](ggml_backend_t backend) {
+@@ -881,4 +895,5 @@
+         const bool last     = index + 1 == plan.segments.size();
+         auto fail_segment   = [&](const char* phase) {
++            trace("graph", "failed");
+             LOG_ERROR("%s segment %zu/%zu (%s) failed during %s", get_desc().c_str(),
+                         index + 1, plan.segments.size(), segment.group_name.c_str(), phase);
+@@ -910,9 +925,11 @@
+         } segment_cleanup{*this, weights, bindings, segment_context};
+ 
+-        auto measurement = segmented ? measure(segment_graph, segment.compute_buffer_size) : full_measurement;
++        trace("workspace-prepare", "begin");
++        auto measurement = segmented ? measure(segment_graph, segment.compute_buffer_size, diagnostic_label) : full_measurement;
+         if (!workspace_.prepare(measurement)) {
+             last_compute_status_ = GGML_STATUS_ALLOC_FAILED;
+             return fail_segment("workspace preparation");
+         }
++        trace("workspace-prepare", "end");
+         const size_t cut_bytes       = last ? 0 : cut_cache_.estimate_output_bytes(graph, segment);
+         const size_t new_cache_bytes = add_bytes(cut_bytes, cache_.pending_bytes(segment_graph));
+@@ -933,10 +950,13 @@
+             return ready;
+         };
++        trace("weight-preparation", "begin");
+         if (!weights.segment_start(index, ensure_capacity)) {
+             return fail_segment("weight preparation");
+         }
++        trace("weight-preparation", "end");
++        trace("workspace-reprepare", "begin");
+         // Preparing weights can execute LoRA graphs and reclaim an idle workspace.
+         if (!workspace_.measurement_matches(segment_graph, measurement)) {
+-            measurement = measure(segment_graph, segment.compute_buffer_size);
++            measurement = measure(segment_graph, segment.compute_buffer_size, diagnostic_label);
+         }
+         if (!workspace_.prepare(measurement)) {
+@@ -947,4 +967,6 @@
+             return fail_segment("workspace capacity check");
+         }
++        trace("workspace-reprepare", "end");
++        trace("workspace-allocate", "begin");
+         if (!workspace_.allocate(segment_graph, [&](ggml_backend_sched_t scheduler, ggml_cgraph* current) {
+                 pin_multi_device_nodes(scheduler, current);
+@@ -953,4 +975,5 @@
+             return fail_segment("workspace allocation");
+         }
++        trace("workspace-allocate", "end");
+         for (const auto& size : measurement.buffers) {
+             track_compute_buffer(size.backend);
+@@ -959,12 +982,19 @@
+             track_compute_buffer(workspace_.cpu_backend());
+         }
++        trace("allocated-capacity", "begin");
+         if (!ensure_capacity()) {
+             return fail_segment("allocated capacity check");
+         }
++        trace("allocated-capacity", "end");
++        trace("input-copy", "begin");
+         copy_data_to_backend_tensor(segment_graph, false);
++        trace("input-copy", "end");
++        trace("prefetch", "begin");
+         auto prefetch_requests = memory_requests(measurement.buffers, new_cache_bytes);
+         if (!prefetch_requests.empty()) {
+             weights.enqueue_next(index, prefetch_requests.front());
+         }
++        trace("prefetch", "end");
++        trace("execute", "begin");
+         LOG_DEBUG("%s executing segment %zu/%zu: %s", get_desc().c_str(),
+                   index + 1, plan.segments.size(), segment.group_name.c_str());
+@@ -972,4 +1002,5 @@
+             return fail_segment("execution");
+         }
++        trace("execute", "end");
+         auto cache_status = cache_.capture(segment_graph);
+         if (cache_status == GGML_STATUS_SUCCESS) {
+@@ -1010,4 +1041,5 @@
+         logged_segment_count_ = plan.segments.size();
+     }
++    trace("graph", "end");
+     return output;
+ }
+--- a/src/core/compute_workspace.h
++++ b/src/core/compute_workspace.h
+@@ -50,5 +50,6 @@
+             size_t direct_bytes,
+             const std::function<ggml_backend_t(const ggml_tensor*)>& external_backend,
+-            const AssignNodes& assign_nodes);
++            const AssignNodes& assign_nodes,
++            const char* diagnostic_label = nullptr);
+         void synchronize() const;
+         bool segment_end() noexcept;
+--- a/src/core/compute_workspace.cpp
++++ b/src/core/compute_workspace.cpp
+@@ -224,8 +224,18 @@
+         size_t direct_bytes,
+         const std::function<ggml_backend_t(const ggml_tensor*)>& external_backend,
+-        const AssignNodes& assign_nodes) {
+-        if (!needs_scheduler(graph)) {
++        const AssignNodes& assign_nodes,
++        const char* diagnostic_label) {
++        auto trace = [&](const char* stage, const char* event) {
++            sd_log_graph_stage(diagnostic_label, stage, event);
++        };
++        trace("measure", "begin");
++        trace("scheduler-check", "begin");
++        const bool scheduler_needed = needs_scheduler(graph);
++        trace("scheduler-check", "end");
++        if (!scheduler_needed) {
++            trace("measure", "end");
+             return {{{backend_, direct_bytes}}, false};
+         }
++        trace("measure-copy", "begin");
+         std::vector<const ggml_tensor*> tensors;
+         std::unordered_set<const ggml_tensor*> seen;
+@@ -250,4 +260,6 @@
+         auto context            = ggml_init({tensors.size() * ggml_tensor_overhead() + ggml_graph_overhead_custom(graph_size, false), nullptr, true});
+         if (context == nullptr) {
++            trace("measure-copy", "failed");
++            trace("measure", "failed");
+             return {};
+         }
+@@ -288,11 +300,18 @@
+             copy_graph->leafs[i] = copies.at(graph->leafs[i]);
+         }
++        trace("measure-copy", "end");
+         Measurement result;
+         result.scheduler = true;
++        trace("scheduler-create", "begin");
+         auto scheduler   = make_scheduler(graph_size);
++        trace("scheduler-create", scheduler != nullptr ? "end" : "failed");
+         if (scheduler != nullptr) {
++            trace("scheduler-assign", "begin");
+             assign_nodes(scheduler, copy_graph);
++            trace("scheduler-assign", "end");
+             std::vector<size_t> sizes(extra_backends_.size() + 2);
++            trace("reserve-including-sync", "begin");
+             ggml_backend_sched_reserve_size(scheduler, copy_graph, sizes.data());
++            trace("reserve-including-sync", "end");
+             result.buffers.push_back({backend_, sizes[0]});
+             for (size_t i = 0; i < extra_backends_.size(); ++i) {
+@@ -305,4 +324,5 @@
+         }
+         ggml_free(context);
++        trace("measure", result.buffers.empty() ? "failed" : "end");
+         return result;
+     }

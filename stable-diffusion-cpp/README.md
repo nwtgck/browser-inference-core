@@ -7,7 +7,7 @@ from functional browser bring-up.
 
 ## Boundary: native capability, application policy
 
-ABI 2 is generated from the pinned `include/stable-diffusion.h`: all 63 public
+ABI 2 is generated from the patched `include/stable-diffusion.h`: all 64 public
 functions, 18 public records and 140 constants (including filesystem/error helpers) are exposed. Native
 pointers and 64-bit integers are represented as `bigint` on both Wasm widths.
 Record sizes, offsets and constants come from the compiled binary. A SHA-256

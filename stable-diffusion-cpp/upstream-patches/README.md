@@ -160,3 +160,21 @@ patch, relax input hashes, or substitute a different upstream revision.
     These tests do not validate loaded-model snapshots, performance or real GPU
     memory accounting. Remove when upstream exposes equivalent documented idle
     snapshots with the same failure/ownership and passive-observation guarantees.
+
+14. Opt-in graph-stage diagnostics: `sd_set_graph_diagnostics` enables bounded
+    `graph-stage-v1` debug logs through the existing log callback. It is disabled
+    by default. Each enable call opens a new window; each runner reports its
+    first attempt after graph-cut plan resolution, including failure. Re-enable
+    before another request or graph/resolution and disable after the request.
+    Earlier failures retain their existing logs. Boundaries cover measurement,
+    scheduler setup/reserve, weight preparation, workspace preparation and actual
+    allocation, input copy, prefetch and execution. `reserve-including-sync`
+    includes the scheduler's existing synchronization and size estimation; it
+    does not isolate that synchronization. The consumer can timestamp callbacks;
+    no native timers, added tensor walks, GPU synchronization or readbacks are
+    introduced. Disabled calls only check the gate/null label, without formatting
+    or callbacks. Generation behavior and arithmetic are unchanged. The existing
+    callback smoke probe checks default-off, begin/end and failed-attempt gating,
+    re-enabling and disabling. Its simulated attempt does not establish real
+    runner timing or diagnose a trained-model stall. Remove when upstream offers
+    equivalent explicitly enabled, bounded preparation/execution diagnostics.
