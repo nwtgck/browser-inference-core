@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+  "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -285,11 +285,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562709,
+          "builtAtUnix": 1790565355,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -305,7 +318,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -365,7 +378,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -559,11 +572,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562713,
+          "builtAtUnix": 1790565360,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -583,7 +609,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -643,7 +669,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -837,11 +863,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562670,
+          "builtAtUnix": 1790565233,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -857,7 +896,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -917,7 +956,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1111,11 +1150,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562644,
+          "builtAtUnix": 1790565274,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1135,7 +1187,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1195,7 +1247,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1389,11 +1441,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562643,
+          "builtAtUnix": 1790565281,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1409,7 +1474,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
+          "sourceCommit": "b165fdbbc2b20012677eb9d05112adb4928dc9f3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1469,7 +1534,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
+            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1663,11 +1728,24 @@
                   }
                 ],
                 "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790562656,
+          "builtAtUnix": 1790565301,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -2136,8 +2214,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43546769,
-      "sha256": "cb2d6e55769b0acca7412b431cf7e412486b2f2052ebe5b73facf0fc933e415e"
+      "bytes": 43547548,
+      "sha256": "7432d39bcd03e2a1029d7a92a455947f010b67629fb0180e4e76f1d3b33b7ab5"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2151,8 +2229,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43853540,
-      "sha256": "a0d3a937d39132f51b5e73964a89611110365d08b4362b626f12a2d5c5252f46"
+      "bytes": 43858668,
+      "sha256": "ebf84a3a893ac8a7e7ddb713304435b540d4bd58c9d6dd4b08d98544f377d9aa"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2166,8 +2244,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37749259,
-      "sha256": "669405d095897afd0780131ac2f0d9771a5194c48bb5a01cf617de2658886f70"
+      "bytes": 37749516,
+      "sha256": "a86510a07f08e4993da8f2aa3b6971fe5331372f66a5b4074786660723262f63"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2181,8 +2259,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37955863,
-      "sha256": "31ed742ca5fe3c4c66059bf9c05dbb9a8068c1b0edbe13126545b751dfa3c5d2"
+      "bytes": 37957642,
+      "sha256": "3c99d358475dd58363dbc934fb809101a299244f9ad67b88daff7c2818b4d2c7"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2196,8 +2274,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38063239,
-      "sha256": "c1eaf198c9af5ff38f458fe62a5c37b6cab6e218fb8cc0db097d639e04029c78"
+      "bytes": 38063499,
+      "sha256": "323929c0bdd119d50acb3af9925ba58cf5c796c6f2d91d12a2b2062e142ab7f3"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2211,8 +2289,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38280406,
-      "sha256": "3fa1b2377f6a9bdd6a848429c87fb543277761d0b188dbd98d5810f4e96b874d"
+      "bytes": 38281965,
+      "sha256": "b3d3798b7388c4c5a8c504b4cd7599c39a2dc4f7eedea772939c5d94a86b970e"
     }
   ]
 }
