@@ -158,6 +158,42 @@
           "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
         }
       ]
+    },
+    {
+      "file": "0010-iterative-graph-traversal.patch",
+      "target": "ggml",
+      "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+      "files": [
+        {
+          "path": "ggml/src/ggml.c",
+          "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+          "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+        }
+      ]
+    },
+    {
+      "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+      "target": "stable-diffusion",
+      "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+          "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+        }
+      ]
+    },
+    {
+      "file": "0012-webgpu-single-depth-convolution.patch",
+      "target": "stable-diffusion",
+      "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+          "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+        }
+      ]
     }
   ]
 }

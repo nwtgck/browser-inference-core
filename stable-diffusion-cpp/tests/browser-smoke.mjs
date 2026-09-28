@@ -1,5 +1,5 @@
-// Real Wasm/Worker/filesystem/callback tests plus a tiny synthetic CPU Qwen
-// timestep graph. Optional SDCB_TEST_WEBGPU=1 also checks real WebGPU arithmetic;
+// Real Wasm/Worker/filesystem/callback tests plus small synthetic Qwen timestep
+// and 3D convolution graphs. Optional SDCB_TEST_WEBGPU=1 checks WebGPU arithmetic;
 // neither mode is a trained-model image-generation/quality test.
 import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -107,7 +107,7 @@ try {
               if (variant === 'test') {
                 module._sdc_test_callbacks();
                 if (!logs.at(-1)[1].includes('native callback probe') || logs.at(-1)[2] !== 17 || JSON.stringify(progress) !== '[[1,4,0.125,19]]') throw Error('Native callback ABI mismatch');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -120,6 +120,9 @@ try {
             }
             const timestep = [];
             const bf16Weights = [];
+            const conv3dBias = variant === 'test' ? [] : undefined;
+            const graphWalk = variant === 'test' ? module._sdc_test_graph_walk() === 1 : undefined;
+            if (graphWalk === false) throw Error('Deep graph construction/compute propagation failed');
             if (variant === 'test') {
               for (const name of testWebGpu ? ['CPU', 'WebGPU'] : ['CPU']) {
                 const pointer = core.utf8(name);
@@ -155,6 +158,11 @@ try {
                   if (conversions.length !== expectedConversions.length || expectedConversions.some((target, index) =>
                     !conversions[index].includes(`target=${target} tensors=2 source_bytes=2064 destination_bytes=${target === 'f32' ? 4128 : 2064} extra_bytes=${target === 'f32' ? 2064 : 0}`))) throw Error('BF16 unique-byte accounting failed');
                   bf16Weights.push({ backend: name, passed: true });
+                  const convolution = await module.ccall('sdc_test_conv3d_bias', 'number',
+                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
+                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
+                  if (convolution !== 1) throw Error(`Synthetic 3D convolution bias ${name} failed: ${convolution}`);
+                  conv3dBias.push({ backend: name, passed: true });
                 } finally {
                   await core.api.sd_set_log_callback(0n, 0n);
                   module.removeFunction(placementLog);
@@ -162,9 +170,9 @@ try {
                 }
               }
             }
-            return { passed: true, reads, modelIoReads, timestep, bf16Weights,
-              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on ' +
-                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + '; no trained-model image generation' };
+            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias,
+              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ' +
+                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + ', plus deep graph construction/selection; no trained-model image generation' };
           };
           const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));

@@ -1,0 +1,40 @@
+diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -513,8 +513,33 @@
+         if (im2col_3d_supported) {
+             x = ggml_conv_3d(ctx, w, x, IC, s0, s1, s2, p0, p1, p2, d0, d1, d2);
+         } else {
+-            int64_t OC = w->ne[3] / IC;
+-            int64_t N  = x->ne[3] / IC;
+-            x          = ggml_conv_3d_direct(ctx, w, x, s0, s1, s2, p0, p1, p2, d0, d1, d2, (int)IC, (int)N, (int)OC);
++            ggml_tensor* collapsed = nullptr;
++#ifdef SD_BROWSER_WEBGPU
++            // One sequence's full-depth window is a 2D convolution with depth folded
++            // into channels. Reshapes preserve storage types and avoid a large
++            // im2col_3d buffer when the backend lacks that operation.
++            if (IC > 0 && s2 == 1 && p2 == 0 && d2 == 1 && x->ne[2] == w->ne[2] &&
++                x->ne[3] == IC && w->ne[3] % IC == 0 &&
++                x->type == GGML_TYPE_F32 && (w->type == GGML_TYPE_F16 || w->type == GGML_TYPE_F32) &&
++                ggml_is_contiguous(x) && ggml_is_contiguous(w)) {
++                const int64_t channels = IC * x->ne[2];
++                const int64_t batches  = x->ne[3] / IC;
++                const int64_t outputs  = w->ne[3] / IC;
++                auto input2d = ggml_reshape_4d(ctx, x, x->ne[0], x->ne[1], channels, batches);
++                auto weight2d = ggml_reshape_4d(ctx, w, w->ne[0], w->ne[1], channels, outputs);
++                auto candidate = ggml_conv_2d_direct(ctx, weight2d, input2d, s0, s1, p0, p1, d0, d1);
++                // This also checks the backend's per-buffer binding limits.
++                if (ggml_backend_supports_op(backend, candidate)) {
++                    collapsed = ggml_reshape_4d(ctx, candidate, candidate->ne[0], candidate->ne[1], 1, outputs * batches);
++                }
++            }
++#endif
++            if (collapsed != nullptr) {
++                x = collapsed;
++            } else {
++                int64_t OC = w->ne[3] / IC;
++                int64_t N  = x->ne[3] / IC;
++                x          = ggml_conv_3d_direct(ctx, w, x, s0, s1, s2, p0, p1, p2, d0, d1, d2, (int)IC, (int)N, (int)OC);
++            }
+         }
+     }

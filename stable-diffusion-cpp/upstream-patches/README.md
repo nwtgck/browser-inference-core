@@ -75,6 +75,59 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
    quality, speed or bitwise parity with CPU arithmetic. Remove when upstream
    provides equivalent backend-aware BF16 loading with caller-selected precision.
 
+10. Graph traversal: replace the external GGML parent's recursive postorder walk
+    with an explicit heap-backed stack. Deep dependency chains no longer consume
+    the browser's native/Wasm call stack. Preserve source ordering, leaf/parameter
+    classification, automatic names, shared operand use counts and compute-flag
+    propagation through already-visited nodes. Allocation growth is checked and
+    the temporary stack is freed on completion or growth failure. Traversal depth
+    is bounded by the existing visited capacity; malformed cycles cannot grow
+    the heap indefinitely. Invalid graphs retain fatal errors. No stack-size
+    increase, model-specific branch or public ABI change. The test-only graph
+    probe covers both traversal orders,
+    a shared DAG, repeated expansion, and a 32,768-node unselected chain followed
+    by compute propagation. Native CI and browser smoke run the same probe; it
+    does not evaluate weights or certify image quality. Remove when the pinned
+    external GGML has an equivalent non-recursive traversal passing these cases.
+
+11. 3D convolution bias: under `SD_BROWSER_WEBGPU`, use an out-of-place addition
+    for the shared 3D convolution helper. Its direct convolution can fall back to
+    CPU while the runner assigns the supported bias addition to WebGPU. The
+    in-place output would retain the CPU convolution's `view_src`; copying the
+    addition's input does not relocate that output. Keep convolution selection,
+    arithmetic and parameter types unchanged. Non-browser builds retain the
+    original in-place path. Each bias output is an additional F32 tensor of the
+    convolution's output shape; allocator reuse determines the peak overhead.
+    `tests/conv3d-bias-probe.cpp` checks direct, automatic and forced-F32 paths,
+    with and without bias, against an independent small convolution reference.
+    Native/test-variant CPU checks detect the alias before allocation. Optional
+    WebGPU smoke additionally requires CPU convolution/im2col and WebGPU bias
+    placement, compatible buffers and completed numerical evaluation. This is
+    not trained-model VAE validation or proof of any particular browser crash's
+    cause. Remove after a reviewed upstream equivalent passes the same mixed
+    placement and arithmetic checks; revise the no-view assertion if an upstream
+    scheduler safely relocates views instead.
+
+12. Single-depth 3D convolution: when the automatic browser path cannot use
+    `IM2COL_3D`, fold depth into channels and use supported direct `CONV_2D` for
+    one sequence and one full-depth window. Require contiguous input/weights,
+    equal input/kernel depth, temporal stride/dilation 1 and padding 0, F32
+    input, F16/F32 weights, and backend support including buffer binding limits.
+    Reshape the output back to the original 3D layout and retain patch 11's
+    separate bias output. Unsupported cases, explicit direct requests and
+    forced-F32 requests retain their previous paths. No new weight conversion,
+    model-name branch, full im2col allocation or public API is introduced.
+    Views add only tensor metadata; the direct output replaces the 3D output.
+    CPU direct convolution rounds input patches to the weight type, whereas
+    WebGPU direct convolution can retain F32 input, so parity is not bitwise.
+    The existing convolution probe checks F16/F32 arithmetic, bias/no-bias and
+    the excluded temporal, batch, backend and explicit-mode cases. CPU checks
+    simulate unsupported IM2COL only during graph selection, then evaluate on
+    the real CPU. Optional WebGPU checks require the real 2D operation on GPU.
+    Neither CPU simulation nor small GPU graphs establish trained-model speed
+    or memory use. Remove when the pinned upstream provides an equivalent
+    type-preserving selection passing the same shape and fallback checks.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime

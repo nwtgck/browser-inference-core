@@ -1,0 +1,17 @@
+diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -521,7 +521,13 @@
+ 
+     if (b != nullptr) {
+         b = ggml_reshape_4d(ctx, b, 1, 1, 1, b->ne[0]);  // [OC, 1, 1, 1]
++#ifdef SD_BROWSER_WEBGPU
++        // The convolution can run on CPU while the bias addition runs on WebGPU.
++        // Give the addition its own output instead of aliasing a CPU buffer.
++        x = ggml_add(ctx, x, b);
++#else
+         x = ggml_add_inplace(ctx, x, b);
++#endif
+     }
+     return x;
+ }
