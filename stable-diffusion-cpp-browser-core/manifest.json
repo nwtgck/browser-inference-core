@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+  "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -374,11 +374,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576307,
+          "builtAtUnix": 1790579865,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -394,7 +407,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -454,7 +467,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -737,11 +750,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576326,
+          "builtAtUnix": 1790579772,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -761,7 +787,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -821,7 +847,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1104,11 +1130,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576173,
+          "builtAtUnix": 1790579775,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1124,7 +1163,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1184,7 +1223,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1467,11 +1506,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576139,
+          "builtAtUnix": 1790579765,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1491,7 +1543,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1551,7 +1603,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1834,11 +1886,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576224,
+          "builtAtUnix": 1790579775,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1854,7 +1919,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
+          "sourceCommit": "f1cf2bb24a909dd7fc5634b0f9d850f595143978",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1914,7 +1979,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
+            "inventorySha256": "27a0d68699b84ec8ce07f942d579a1a0a9f64b65211ccbffe1ce40ec165521da",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2197,11 +2262,24 @@
                   }
                 ],
                 "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790576202,
+          "builtAtUnix": 1790579692,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -2670,8 +2748,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43640665,
-      "sha256": "f2aee968eedb1d3479c8e49fb5be3e61d5485ea623164623c674970b2b920fb3"
+      "bytes": 43640657,
+      "sha256": "143261b2337127afa7c1d69dbdec68f41443922b8b7b90f3566c642d0c27b24b"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2681,12 +2759,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
       "bytes": 453639,
-      "sha256": "61d41dcddd50057b9aa430f7bd402407012b5ee29a7b8f19a007a566b045d9a0"
+      "sha256": "8eb17193a9f526c841c3627c514525f5c7993327c11741793c54904d34478086"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43962312,
-      "sha256": "eb77711f15def4d8d82b08791b9635aef85ee47c6c243c481966c204f42ae13c"
+      "bytes": 43973402,
+      "sha256": "0d7fb4af19bc43dd081fe764c67c438f603168ef393becf1d7d54f0caadd66c0"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2700,8 +2778,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37791777,
-      "sha256": "ac8ec6073b88b04219ddba5d5f34a9791de5e3d7d6057cecc8e4eb0c0dfedb2b"
+      "bytes": 37791769,
+      "sha256": "e26c901b2fbc8a06e7635cfc4c19db61ad447a02d25d6cbc18ae4becaf3354f2"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2715,8 +2793,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38001387,
-      "sha256": "857c72be204b43ec864df8b8e21b68ce3f63e017a8a2ed7c596c67e1a54021d6"
+      "bytes": 38005023,
+      "sha256": "20504e413147380ea9257f7f96c9fd33251a38d454baa073fe5918e4f5afdef4"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2730,8 +2808,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38096131,
-      "sha256": "20f50cb3971f66ce987d0e6d36bb4e61481ba5b646c36cf0cd4aaee26da7a7a3"
+      "bytes": 38096123,
+      "sha256": "3a14de5379b8b88cfb35e2f2346606804d3b451c59668d7a34fe2508b11456ee"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2745,8 +2823,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38315763,
-      "sha256": "2a98bf29d8a39b626b2bff7550d3da1788b5f4717222ac66497ebcbd918396b5"
+      "bytes": 38319570,
+      "sha256": "8f3939770f70d39c03514a5d179c30958134e9f2c4ad57896ac33176d7d77f13"
     }
   ]
 }
