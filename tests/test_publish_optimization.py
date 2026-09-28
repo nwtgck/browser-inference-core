@@ -2,7 +2,7 @@
 
 No compiler, model inference, GitHub push or network lock resolution is claimed.
 """
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -159,6 +159,52 @@ class PublicationOptimization(unittest.TestCase):
         committed = subprocess.check_output(['git', '--git-dir=' + str(self.remote), 'show', values['commit'] + ':manifest.json'])
         self.assertEqual(values['manifest-sha256'], hashlib.sha256(committed).hexdigest())
         self.assertIn(values['commit'], summary.read_text())
+
+    def test_early_summary_shows_escaped_source_title_without_another_install(self):
+        self.assemble()
+        with self.assertRaisesRegex(ValueError, 'Invalid source commit'):
+            publisher.source_commit_subject('--upload-pack=unexpected', self.root)
+        source_repo = self.root / 'source'
+        source_repo.mkdir()
+        git('init', '-q', cwd=source_repo)
+        git('config', 'user.name', 'Test', cwd=source_repo)
+        git('config', 'user.email', 'test@example.com', cwd=source_repo)
+        sentinel = self.root / 'unexpected'
+        title = f'Improve <img src=x> & `GPU` $(touch {sentinel})'
+        git('commit', '--allow-empty', '-q', '-m', title, cwd=source_repo)
+        source = git('rev-parse', 'HEAD', cwd=source_repo)
+        manifest_path = self.out / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text())
+        manifest['sourceCommit'] = source
+        manifest_path.write_text(json.dumps(manifest))
+        summary = self.root / 'source-summary.md'
+        args = ['publish_artifacts.py', '--package', str(self.out), '--remote', str(self.remote),
+                '--source-repo', str(source_repo)]
+        with patch.object(sys, 'argv', args), \
+             patch.dict(os.environ, {**self.env, 'GITHUB_STEP_SUMMARY': str(summary)}), \
+             patch.object(publisher, 'publish', return_value='d' * 40), redirect_stdout(io.StringIO()):
+            publisher.main()
+        text = summary.read_text()
+        self.assertIn(f'**Source commit:** `{source}`', text)
+        self.assertIn('**Source commit title:** <code>Improve &lt;img src=x&gt; &amp; `GPU` $(touch ', text)
+        self.assertNotIn('<img', text)
+        self.assertFalse(sentinel.exists())
+        self.assertEqual(text.count('npm install github:example/lcore#'), 1)
+        self.assertIn('`' + 'd' * 40 + '`', text)
+
+    def test_unavailable_source_title_preserves_early_publication_receipt(self):
+        self.assemble()
+        summary = self.root / 'missing-title-summary.md'
+        args = ['publish_artifacts.py', '--package', str(self.out), '--remote', str(self.remote),
+                '--source-repo', str(self.root / 'missing-repo')]
+        with patch.object(sys, 'argv', args), \
+             patch.dict(os.environ, {**self.env, 'GITHUB_STEP_SUMMARY': str(summary)}), \
+             patch.object(publisher, 'publish', return_value='d' * 40), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            publisher.main()
+        text = summary.read_text()
+        self.assertIn('`' + 'd' * 40 + '`', text)
+        self.assertEqual(text.count('npm install github:example/lcore#'), 1)
 
     def test_reporting_with_publisher_digest_avoids_packing_but_matches_full_report(self):
         self.assemble()

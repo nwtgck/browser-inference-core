@@ -178,3 +178,19 @@ patch, relax input hashes, or substitute a different upstream revision.
     re-enabling and disabling. Its simulated attempt does not establish real
     runner timing or diagnose a trained-model stall. Remove when upstream offers
     equivalent explicitly enabled, bounded preparation/execution diagnostics.
+15. Preserve external tensor address metadata in scheduler measurement clones.
+    The former pointer value `1` was only a marker, but the pinned WebGPU
+    `GET_ROWS` support check interprets it as a backend address. Relative to its
+    `0x1000` base, the resulting odd offset cannot satisfy F16/F32 alignment;
+    its backwards alignment loop can take an impractical number of iterations
+    on memory64. Keep the source `data` and view offsets already copied with the
+    tensor. The existing non-null, zero-size backend buffer is sufficient to
+    classify an external weight, including one whose data is still null. No
+    tensor data is read, allocated or converted by this correction, and backend
+    selection policy is unchanged. The existing Qwen timestep test probe also
+    checks real scheduler measurement with F16/F32 resident and unallocated
+    weights, nonzero row views, unchanged `GET_ROWS` support, reservation sizes
+    and source tensors. CPU checks exercise clone ownership; optional WebGPU
+    checks exercise that backend's actual support predicate. This is not
+    trained-model inference. Remove when upstream preserves valid address
+    metadata when constructing measurement graphs.

@@ -4,8 +4,11 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+from html import escape
+import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +26,16 @@ def run(*args,cwd=None,check=True,env=None):
         result = subprocess.run(args,cwd=cwd,check=check,text=True,capture_output=True,env=env)
         timing['exitCode'] = result.returncode
         return result
+
+
+def source_commit_subject(source: str, repository: Path) -> str:
+    if not re.fullmatch(r'[0-9a-f]{40}', source):
+        raise ValueError('Invalid source commit')
+    subject = run('git', 'show', '-s', '--format=%s', source, cwd=repository).stdout.rstrip('\n')
+    subject = ''.join(char if char.isprintable() else ' ' for char in subject).strip()
+    if not subject:
+        raise ValueError('Source commit has no subject')
+    return subject
 
 @measured('publish.git_blob_verify')
 def verify_git_tree(work: Path, tree: str, manifest: dict, manifest_identity: dict) -> None:
@@ -147,6 +160,8 @@ def main():
     p.add_argument('--package',type=Path,required=True)
     p.add_argument('--remote',required=True)
     p.add_argument('--branch',default='artifacts')
+    p.add_argument('--source-repo',type=Path,
+                   help='Checked-out source repository for the Actions summary title')
     a=p.parse_args()
     token=os.environ.get('GH_TOKEN')
     if token and a.remote.startswith('https://github.com/'):
@@ -156,6 +171,13 @@ def main():
         os.environ['GIT_CONFIG_VALUE_0']='AUTHORIZATION: basic '+encoded
     package=a.package.resolve()
     manifest_sha256=identity(package/'manifest.json')['sha256']
+    source=json.loads((package/'manifest.json').read_text())['sourceCommit']
+    subject=None
+    if a.source_repo is not None:
+        try:
+            subject=source_commit_subject(source,a.source_repo.resolve())
+        except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            print(f'[publication] source commit title unavailable: {error}',file=sys.stderr)
     commit=publish(package,a.remote,a.branch,expected_manifest_sha256=manifest_sha256)
     print(commit)
     if os.environ.get('GITHUB_OUTPUT'):
@@ -166,5 +188,9 @@ def main():
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         repo=os.environ.get('GITHUB_REPOSITORY','nwtgck/browser-inference-core')
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-            f.write(f'## Runtime artifact commit\n\n`{commit}`\n\n```sh\nnpm install github:{repo}#{commit}\n```\n')
+            f.write(f'## Runtime artifact commit\n\n`{commit}`\n\n'
+                    f'**Source commit:** `{source}`\n\n')
+            if subject is not None:
+                f.write(f'**Source commit title:** <code>{escape(subject)}</code>\n\n')
+            f.write(f'```sh\nnpm install github:{repo}#{commit}\n```\n')
 if __name__=='__main__': main()

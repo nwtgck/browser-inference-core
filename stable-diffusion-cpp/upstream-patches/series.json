@@ -268,6 +268,18 @@
           "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
         }
       ]
+    },
+    {
+      "file": "0015-preserve-measurement-tensor-addresses.patch",
+      "target": "stable-diffusion",
+      "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+      "files": [
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+          "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+        }
+      ]
     }
   ]
 }
