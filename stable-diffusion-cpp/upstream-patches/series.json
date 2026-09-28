@@ -182,6 +182,18 @@
           "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
         }
       ]
+    },
+    {
+      "file": "0012-webgpu-single-depth-convolution.patch",
+      "target": "stable-diffusion",
+      "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+          "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+        }
+      ]
     }
   ]
 }

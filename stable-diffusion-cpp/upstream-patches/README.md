@@ -108,6 +108,26 @@ llama.cpp checkout is used only as a source for its `ggml/` subtree.
     placement and arithmetic checks; revise the no-view assertion if an upstream
     scheduler safely relocates views instead.
 
+12. Single-depth 3D convolution: when the automatic browser path cannot use
+    `IM2COL_3D`, fold depth into channels and use supported direct `CONV_2D` for
+    one sequence and one full-depth window. Require contiguous input/weights,
+    equal input/kernel depth, temporal stride/dilation 1 and padding 0, F32
+    input, F16/F32 weights, and backend support including buffer binding limits.
+    Reshape the output back to the original 3D layout and retain patch 11's
+    separate bias output. Unsupported cases, explicit direct requests and
+    forced-F32 requests retain their previous paths. No new weight conversion,
+    model-name branch, full im2col allocation or public API is introduced.
+    Views add only tensor metadata; the direct output replaces the 3D output.
+    CPU direct convolution rounds input patches to the weight type, whereas
+    WebGPU direct convolution can retain F32 input, so parity is not bitwise.
+    The existing convolution probe checks F16/F32 arithmetic, bias/no-bias and
+    the excluded temporal, batch, backend and explicit-mode cases. CPU checks
+    simulate unsupported IM2COL only during graph selection, then evaluate on
+    the real CPU. Optional WebGPU checks require the real 2D operation on GPU.
+    Neither CPU simulation nor small GPU graphs establish trained-model speed
+    or memory use. Remove when the pinned upstream provides an equivalent
+    type-preserving selection passing the same shape and fallback checks.
+
 The smoke fixture reports byte ranges and total bytes rather than guessing from
 read-call counts. Its 4 KiB chunk / 256 KiB total budget applies only to the tiny
 synthetic fixture; it is not a metadata or model size limit in the core. Runtime
