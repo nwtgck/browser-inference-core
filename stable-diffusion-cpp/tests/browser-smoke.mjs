@@ -55,6 +55,56 @@ try {
             core.setField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type', core.constant('SD_TYPE_F16'));
             if (core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type') !== core.constant('SD_TYPE_F16')) throw Error('BF16 policy roundtrip failed');
             core.free(contextParams);
+            // Public snapshot ABI and failure atomicity in every pointer-width/profile.
+            for (const [record, getter] of [
+              ['sd_runtime_info_t', 'sd_ctx_get_runtime_info'],
+              ['sd_memory_info_t', 'sd_ctx_get_memory_info'],
+              ['sd_ctx_params_t', 'sd_ctx_get_params'],
+            ]) {
+              const out = core.allocRecord(record), size = core.recordSize(record);
+              try {
+                const start = Number(out), length = Number(size);
+                module.HEAPU8.fill(0xa5, start, start + length);
+                if (await core.api[getter](0n, out, BigInt(length)) !== 0 ||
+                    module.HEAPU8.subarray(start, start + length).some(byte => byte !== 0xa5)) throw Error('Snapshot failure changed caller output');
+                if (await core.api[getter](0n, 0n, 0n) !== 0) throw Error('Null snapshot accepted');
+              } finally { core.free(out); }
+            }
+            if (core.constant('SD_RUNTIME_INFO_VERSION') !== 1 || core.constant('SD_MEMORY_INFO_VERSION') !== 1) throw Error('Snapshot version mismatch');
+            // Explicit public queries; do not assume a particular adapter or memory size.
+            if (!core.readUtf8(await core.api.ggml_version()) ||
+                core.readUtf8(await core.api.ggml_type_name(core.constant('GGML_TYPE_F32'))) !== 'f32' ||
+                await core.api.ggml_type_size(core.constant('GGML_TYPE_F32')) !== 4n) throw Error('Public GGML type/version query failed');
+            const deviceTextSize = await core.api.sd_list_devices(0n, 0n);
+            const deviceText = core.alloc(deviceTextSize + 1n);
+            try {
+              if (await core.api.sd_list_devices(deviceText, deviceTextSize + 1n) !== deviceTextSize) throw Error('Device enumeration changed unexpectedly');
+              core.readUtf8(deviceText);
+            } finally { core.free(deviceText); }
+            const deviceCount = await core.api.ggml_backend_dev_count();
+            if (deviceCount > 0n) {
+              const device = await core.api.ggml_backend_dev_get(0n);
+              const properties = core.allocRecord('ggml_backend_dev_props');
+              try {
+                await core.api.ggml_backend_dev_get_props(device, properties);
+                if (!core.readUtf8(core.getField('ggml_backend_dev_props', properties, 'name'))) throw Error('Device properties have no name');
+              } finally { core.free(properties); }
+            }
+            // Real by-value public record bridge: a minimal, valid metadata-only GGUF.
+            const ggufBytes = core.alloc(24), ggufParams = core.allocRecord('gguf_init_params');
+            try {
+              module.HEAPU8.fill(0, Number(ggufBytes), Number(ggufBytes) + 24);
+              const header = new DataView(module.HEAPU8.buffer, Number(ggufBytes), 24);
+              header.setUint32(0, 0x46554747, true);
+              header.setUint32(4, core.constant('GGUF_VERSION'), true);
+              core.setField('gguf_init_params', ggufParams, 'no_alloc', 1);
+              const metadata = await core.api.gguf_init_from_buffer(ggufBytes, 24n, ggufParams);
+              if (!metadata) throw Error('Public GGUF buffer constructor failed');
+              try {
+                if (await core.api.gguf_get_version(metadata) !== core.constant('GGUF_VERSION') ||
+                    await core.api.gguf_get_n_kv(metadata) !== 0n || await core.api.gguf_get_n_tensors(metadata) !== 0n) throw Error('Public GGUF metadata query failed');
+              } finally { await core.api.gguf_free(metadata); }
+            } finally { core.free(ggufParams); core.free(ggufBytes); }
             module.FS.mkdir('/models');
             const reads = [];
             for (const gib of [0, 2, 4, 8]) {

@@ -18,6 +18,13 @@ adapts synchronous range reads to Emscripten's filesystem. None owns a model,
 conversation, tool loop, or worker. CPU Chromium tests use these shipped files for
 synthetic model loading/decode/state operations; host tests cover the helpers.
 
+The generated low-level surface includes public `ggml.h` and `ggml-alloc.h` functions,
+their named public record layouts, and selected integer macro constants. Each
+generated function has a normalized `lcb_` entry and a direct native export.
+Deprecated and variadic declarations are listed in `schema.excluded`; callback
+pointers are raw native addresses, so callers must manage their lifetime and ABI.
+`ggml-cpu.h` and `ggml-opt.h` are not yet included in this binding surface.
+
 The default `variant: 'browser'` omits Node.js support and Emscripten assertions.
 Use `createCore({ profile: 'cpu-wasm32', variant: 'test' })` for Node.js tests;
 that variant retains both. The loader selects JavaScript and Wasm from the same

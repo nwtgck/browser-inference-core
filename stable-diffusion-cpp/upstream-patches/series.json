@@ -194,6 +194,38 @@
           "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
         }
       ]
+    },
+    {
+      "file": "0013-passive-context-snapshots.patch",
+      "target": "stable-diffusion",
+      "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+      "files": [
+        {
+          "path": "include/stable-diffusion.h",
+          "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+          "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+        },
+        {
+          "path": "src/model_manager.h",
+          "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+          "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+        },
+        {
+          "path": "src/model_manager.cpp",
+          "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+          "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+        },
+        {
+          "path": "src/stable-diffusion.cpp",
+          "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+          "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+        },
+        {
+          "path": "src/pipeline/diffusion_engine.h",
+          "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+          "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+        }
+      ]
     }
   ]
 }

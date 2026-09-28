@@ -23,11 +23,15 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(SDCB_CLANG NAMES clang REQUIRED)
 set(SDCB_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_bindings.py"
-    --source "${SDCB_SOURCE}" --output "${SDCB_GENERATED}" --clang "${SDCB_CLANG}"
+    --source "${SDCB_SOURCE}" --ggml-source "${SDCB_GGML_SOURCE}" --output "${SDCB_GENERATED}" --clang "${SDCB_CLANG}"
     COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_bindings.py"
-    "${SDCB_SOURCE}/include/stable-diffusion.h")
+    "${SDCB_SOURCE}/include/stable-diffusion.h"
+    "${SDCB_GGML_SOURCE}/include/ggml.h"
+    "${SDCB_GGML_SOURCE}/include/ggml-backend.h"
+    "${SDCB_GGML_SOURCE}/include/ggml-cpu.h"
+    "${SDCB_GGML_SOURCE}/include/gguf.h")
 if(SDCB_MEMORY64 AND NOT SDCB_JSPI)
     message(FATAL_ERROR "The memory64 profile requires JSPI")
 endif()
@@ -118,7 +122,7 @@ else()
     endif()
     configure_file(bridge/core.d.ts "${CMAKE_CURRENT_BINARY_DIR}/runtime/core.d.ts" COPYONLY)
 endif()
-target_include_directories(core PRIVATE "${SDCB_SOURCE}/include" "${SDCB_SOURCE}/thirdparty")
+target_include_directories(core PRIVATE "${SDCB_SOURCE}/include" "${SDCB_SOURCE}/thirdparty" "${SDCB_GGML_SOURCE}/include")
 target_link_libraries(core PRIVATE stable-diffusion)
 if(SDCB_NATIVE_CHECK)
     add_executable(browser-boundary-test tests/native.cpp tests/wasm-probes.cpp tests/qwen-timestep-probe.cpp tests/bf16-weights-probe.cpp tests/graph-walk-probe.cpp tests/conv3d-bias-probe.cpp)
