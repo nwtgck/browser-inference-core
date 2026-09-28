@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+  "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -272,11 +272,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498428,
+          "builtAtUnix": 1790562709,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -285,14 +298,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -352,7 +365,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -533,11 +546,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498406,
+          "builtAtUnix": 1790562713,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -546,7 +572,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -557,7 +583,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -617,7 +643,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -798,11 +824,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498299,
+          "builtAtUnix": 1790562670,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -811,14 +850,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -878,7 +917,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1059,11 +1098,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498313,
+          "builtAtUnix": 1790562644,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1072,7 +1124,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -1083,7 +1135,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1143,7 +1195,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1324,11 +1376,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498355,
+          "builtAtUnix": 1790562643,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1337,14 +1402,14 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "42623f0eabc6dc1bd853252d3a08e11aa0b48914",
+          "sourceCommit": "a43a9de77fa934e3e054d2b8365a753567c32a52",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1404,7 +1469,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "7057be3d873ae45f01d6d0c78568bcc61d9de9c1d4be40270cd343c894681244",
+            "inventorySha256": "357567869dc5ccb864226783dfb935f46efb57b09cd05068e26779cd71de27d7",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1585,11 +1650,24 @@
                   }
                 ],
                 "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790498343,
+          "builtAtUnix": 1790562656,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1598,7 +1676,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
           }
         }
       }
@@ -2059,7 +2137,7 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
       "bytes": 43546769,
-      "sha256": "ec6c769be3eb3177656f20fff477512938199b1c6c80e92421b740635e4070b3"
+      "sha256": "cb2d6e55769b0acca7412b431cf7e412486b2f2052ebe5b73facf0fc933e415e"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2068,13 +2146,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 328254,
-      "sha256": "8f0586da670e7cb112d3aff7d1e7bb16ac0180d5746786a6ccff96c40c8520e7"
+      "bytes": 329293,
+      "sha256": "57579eda9972b2c5083b3cdd46faa311d16650e1ce3ac359a31354f69612ec8f"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43843628,
-      "sha256": "a42ff23abdb2333e437ce4000d49167996cac0d4a123d91d38f94cbf91575522"
+      "bytes": 43853540,
+      "sha256": "a0d3a937d39132f51b5e73964a89611110365d08b4362b626f12a2d5c5252f46"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2089,7 +2167,7 @@
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
       "bytes": 37749259,
-      "sha256": "30e50d15ffc467f2c5aeb7536aa5d9cb089f1400e2e7bef2d537366ecf34d7ec"
+      "sha256": "669405d095897afd0780131ac2f0d9771a5194c48bb5a01cf617de2658886f70"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2098,13 +2176,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 212287,
-      "sha256": "7f9897f88b725cb9c92ca213b62b15dd800b4b092aa44f5849d8ee495c0681eb"
+      "bytes": 212658,
+      "sha256": "d8b3432bec27daa1f40c760b67446184950701408d0e07a6dcd62e41786da9ad"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37951785,
-      "sha256": "33d7f084b5dec3ccaff08c9175080887b97c62228dd1b20797505ddff1ae239c"
+      "bytes": 37955863,
+      "sha256": "31ed742ca5fe3c4c66059bf9c05dbb9a8068c1b0edbe13126545b751dfa3c5d2"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2119,7 +2197,7 @@
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
       "bytes": 38063239,
-      "sha256": "82ce0aa92f97f66f2e59f6355fae1d4e8004175e1155dd4c8524ad9c8ddeb45e"
+      "sha256": "c1eaf198c9af5ff38f458fe62a5c37b6cab6e218fb8cc0db097d639e04029c78"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2128,13 +2206,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 215825,
-      "sha256": "f7f52488497353c59e0e0f0cbc0d7e092004bd214177475df40a7c43301c9c8b"
+      "bytes": 216196,
+      "sha256": "bbc5fc875f6025077c5a17f187d63b147b362cbf641def4a102948480b03e1aa"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38276211,
-      "sha256": "9405c108ac140fb8200963f6de6ede5b0997e70d319af28f8ad1b83d543fe6ba"
+      "bytes": 38280406,
+      "sha256": "3fa1b2377f6a9bdd6a848429c87fb543277761d0b188dbd98d5810f4e96b874d"
     }
   ]
 }
