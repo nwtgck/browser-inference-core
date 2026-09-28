@@ -55,6 +55,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml-alloc.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml-backend.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-cpu.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-opt.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/gguf.h"
     "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd.h"
     "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd-helper.h")

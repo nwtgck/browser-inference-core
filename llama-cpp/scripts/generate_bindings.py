@@ -29,6 +29,14 @@ EXTRA_CONSTANTS = [
     'SEEK_SET', 'SEEK_CUR', 'SEEK_END',
 ]
 
+# The pinned header declares this function but no upstream translation unit
+# defines it. Keep the reason visible in schema.excluded; reconsider this entry
+# when updating the upstream pin, rather than inventing a private implementation.
+UNIMPLEMENTED_PUBLIC_FUNCTIONS = {
+    'ggml_threadpool_get_n_threads':
+        'declared in ggml-cpu.h but not implemented by the pinned upstream',
+}
+
 def walk(node):
     yield node
     for child in node.get('inner', []):
@@ -92,6 +100,9 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     for n in nodes:
         name = n.get('name', '')
         if n.get('kind') != 'FunctionDecl' or not name.startswith(('llama_', 'gguf_', 'ggml_', 'mtmd_')):
+            continue
+        if name in UNIMPLEMENTED_PUBLIC_FUNCTIONS:
+            excluded.append({'name': name, 'reason': UNIMPLEMENTED_PUBLIC_FUNCTIONS[name]})
             continue
         if name.startswith('mtmd_helper_video_') and name != 'mtmd_helper_video_init_params_default':
             excluded.append({'name': name, 'reason': 'requires subprocess video support (MTMD_VIDEO=OFF)'})

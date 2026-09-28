@@ -26,6 +26,37 @@ def function(name, result, *parameters, variadic=False):
 
 
 class GgmlBindings(unittest.TestCase):
+    def test_unimplemented_threadpool_query_is_explained_and_not_exported(self):
+        source = ROOT / 'vendor/llama.cpp'
+        missing = 'ggml_threadpool_get_n_threads'
+        ast = {'inner': [
+            function(missing, 'int', 'struct ggml_threadpool *'),
+            function('ggml_threadpool_pause', 'void', 'struct ggml_threadpool *'),
+            function('ggml_threadpool_resume', 'void', 'struct ggml_threadpool *'),
+        ]}
+        with tempfile.TemporaryDirectory(prefix='lcb-unimplemented-binding-') as temp, \
+             patch.object(generate_bindings.subprocess, 'check_output', return_value=json.dumps(ast)):
+            output = Path(temp)
+            schema = generate_bindings.generate(source, output, 'clang')
+            self.assertEqual({entry['name'] for entry in schema['functions']},
+                             {'ggml_threadpool_pause', 'ggml_threadpool_resume'})
+            self.assertEqual(schema['excluded'], [{
+                'name': missing,
+                'reason': 'declared in ggml-cpu.h but not implemented by the pinned upstream',
+            }])
+            for name in ('exports.json', 'jspi-exports.json', 'bindings.cpp', 'functions.d.ts'):
+                self.assertNotIn(missing, (output / name).read_text(), name)
+            for name in ('ggml_threadpool_pause', 'ggml_threadpool_resume'):
+                self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
+                self.assertIn('_' + name, json.loads((output / 'exports.json').read_text()))
+            if shutil.which('g++'):
+                subprocess.run([
+                    'g++', '-std=c++17', '-fsyntax-only',
+                    '-I' + str(source / 'include'),
+                    '-I' + str(source / 'ggml/include'),
+                    '-I' + str(source / 'tools/mtmd'), str(output / 'bindings.cpp'),
+                ], check=True, capture_output=True, text=True)
+
     def test_public_ggml_functions_records_and_exports(self):
         source = ROOT / 'vendor/llama.cpp'
         ast = {'inner': [
