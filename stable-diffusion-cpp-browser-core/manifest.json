@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 2,
-  "schemaSha256": "fa0e2738b76fb583006513977b26034ebb1bcf71b3aa34dd0390dbea407ad871",
+  "schemaSha256": "3b359d0184f3a86002f0357d1c527c2f3009a3c25031253baa4ddd104cddd608",
   "capabilities": {
     "ggufFileOffsetBits": 64,
     "callerOwnedRandomAccess": true,
@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+  "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -298,11 +298,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575782,
+          "builtAtUnix": 1790576307,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -318,7 +394,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -378,7 +454,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -585,11 +661,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575671,
+          "builtAtUnix": 1790576326,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -609,7 +761,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -669,7 +821,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -876,11 +1028,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575768,
+          "builtAtUnix": 1790576173,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -896,7 +1124,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -956,7 +1184,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1163,11 +1391,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575582,
+          "builtAtUnix": 1790576139,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1187,7 +1491,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1247,7 +1551,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1454,11 +1758,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575636,
+          "builtAtUnix": 1790576224,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1474,7 +1854,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "23637e4d8d138c77adf34cd279475f79398b2827",
+          "sourceCommit": "4d075a67f6a78b206957b3fac19ef781162c6aa6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1534,7 +1914,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "64429ae8b5845e380e9086dc9b539788fccc12ab86876cd1bbcfcb8937b72181",
+            "inventorySha256": "4903b353c8dc21db1b9b18342e1fa0a1c737186f097cd8d6134cbd52a2a0fc55",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1741,11 +2121,87 @@
                   }
                 ],
                 "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790575634,
+          "builtAtUnix": 1790576202,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1769,28 +2225,28 @@
     },
     {
       "path": "README.md",
-      "bytes": 9828,
-      "sha256": "ec15b41b8890385a2ecc6f7147fce8b28e006df033ab2a287e356f6f11ab4d31"
+      "bytes": 9829,
+      "sha256": "cb6fe7f585ae57bc7d70f3f4105b48b6868d46a55732d482a717069f6c5a8301"
     },
     {
       "path": "api/functions.d.ts",
-      "bytes": 4223,
-      "sha256": "1388478645e30c2ebabca1a5a01042ad327a35d943324d9e273d28d4f6b85164"
+      "bytes": 13907,
+      "sha256": "985057757a683c8f6e8e6f00bf4a6a7eef18f28999720ec409d029dd87cb5bd5"
     },
     {
       "path": "api/schema.json",
-      "bytes": 58147,
-      "sha256": "fa0e2738b76fb583006513977b26034ebb1bcf71b3aa34dd0390dbea407ad871"
+      "bytes": 176958,
+      "sha256": "3b359d0184f3a86002f0357d1c527c2f3009a3c25031253baa4ddd104cddd608"
     },
     {
       "path": "api/schema.mjs",
-      "bytes": 33484,
-      "sha256": "b92e91244d7cf81a442c63322fb7ebf5a97b5c1af001efc9d35e2cce2331a1f9"
+      "bytes": 111763,
+      "sha256": "5ecca7498fd0ff767b607e819fad105fb90abd5e920ff96a62a5a8b32454ea3a"
     },
     {
       "path": "examples/runtime/README.md",
-      "bytes": 3185,
-      "sha256": "5bb6e11c1e7a49f15f896b76f7590d3d241c024d105cec4d0403629b4f83cc4c"
+      "bytes": 9182,
+      "sha256": "dd89d2e36b18234f2d713744deac8346de80e6c0ffe0361aff371f967a3bab15"
     },
     {
       "path": "examples/runtime/bindings.mjs",
@@ -2209,13 +2665,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
-      "bytes": 197661,
-      "sha256": "01a9e048d630641b77e99a9deae1d10675f5e3e2387a9edbabe7d1076aac0183"
+      "bytes": 231403,
+      "sha256": "ab58246376190fce9600d4cc6630468e710a3ef64ccc9d47de85f4df8f1d3622"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43547548,
-      "sha256": "01c3ae8b8a7da4333ffd7bff50b4980c12feac9c438601b4dd9226e48d399250"
+      "bytes": 43640665,
+      "sha256": "f2aee968eedb1d3479c8e49fb5be3e61d5485ea623164623c674970b2b920fb3"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2224,13 +2680,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 329293,
-      "sha256": "57579eda9972b2c5083b3cdd46faa311d16650e1ce3ac359a31354f69612ec8f"
+      "bytes": 453639,
+      "sha256": "61d41dcddd50057b9aa430f7bd402407012b5ee29a7b8f19a007a566b045d9a0"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43858668,
-      "sha256": "540dda667c01cc6dd9390f788fc366848e8d846f39c11fd0ed6c4c1d94a71db1"
+      "bytes": 43962312,
+      "sha256": "eb77711f15def4d8d82b08791b9635aef85ee47c6c243c481966c204f42ae13c"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2239,13 +2695,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs",
-      "bytes": 132890,
-      "sha256": "416fd7363cf9ca61bd8cd7f1f351dc817dd471c0b1faba0d783704c2e9755997"
+      "bytes": 181080,
+      "sha256": "58fb9a09603173159a97a815cabdd85c77466e21cf3810875409a0b101988af4"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37749516,
-      "sha256": "82a8612ba52d320a73ad32aedd7b22a6473ab33d76afa9ebdefa6fd3265a67c0"
+      "bytes": 37791777,
+      "sha256": "ac8ec6073b88b04219ddba5d5f34a9791de5e3d7d6057cecc8e4eb0c0dfedb2b"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2254,13 +2710,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 212658,
-      "sha256": "d8b3432bec27daa1f40c760b67446184950701408d0e07a6dcd62e41786da9ad"
+      "bytes": 344738,
+      "sha256": "a2875be1143109b331b5a6c4c25fe510a412fecdfd8399347ed4f865b39913f9"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 37957642,
-      "sha256": "e1615554d60822722ff5eb42c941568e536f7a22db779c2a4c2a6029a49de5a8"
+      "bytes": 38001387,
+      "sha256": "857c72be204b43ec864df8b8e21b68ce3f63e017a8a2ed7c596c67e1a54021d6"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2269,13 +2725,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.mjs",
-      "bytes": 135690,
-      "sha256": "1448efbf65a49a166db12c510672f9e9c7b4c3a2ee35a8d0161695975cb52782"
+      "bytes": 183880,
+      "sha256": "59df47b43bb5c20206d56854f29a54977c42a4c391c541fa1b3deb538aa5aec5"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38063499,
-      "sha256": "31d81ac310799188cd5059176c1f75a36eede22b7ef86554ec680d8baee63f48"
+      "bytes": 38096131,
+      "sha256": "20f50cb3971f66ce987d0e6d36bb4e61481ba5b646c36cf0cd4aaee26da7a7a3"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2284,13 +2740,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 216196,
-      "sha256": "bbc5fc875f6025077c5a17f187d63b147b362cbf641def4a102948480b03e1aa"
+      "bytes": 348276,
+      "sha256": "fdd9ff8514a9e7f9364dfbef3c465657a499aad6a4296097ba2d60f2ace857d2"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38281965,
-      "sha256": "becee5a60cdd9c9aa361d14bdd9475cc4ffb7402e3524ad0de2cbadbf05c0ddd"
+      "bytes": 38315763,
+      "sha256": "2a98bf29d8a39b626b2bff7550d3da1788b5f4717222ac66497ebcbd918396b5"
     }
   ]
 }
