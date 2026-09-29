@@ -140,3 +140,57 @@ GPU budget or Qwen-specific sampling policy in these patches or the bridge.
 Removal criteria: replace each patch with an upstream equivalent when its same
 threading/normalization/memory/large-file tests pass. Never silently skip a failed
 patch, relax input hashes, or substitute a different upstream revision.
+
+13. Passive context snapshots: expose versioned runtime and memory records plus
+    borrowed context configuration. Getters use the existing execution mutex with
+    a nonblocking lock and reject reentry; normal generation gains no new locks,
+    timers, hooks, metadata walks, synchronization or readbacks. The context
+    initializer also takes ownership of the previously omitted audio-encoder path
+    with one string copy, preventing a borrowed snapshot from returning a dangling
+    caller pointer. Memory collection
+    walks existing manager bookkeeping only when requested. Logical tensor bytes,
+    unique manager buffer-handle sizes (host/non-host), and runners' last published
+    retained runtime bytes remain separate; none is physical/free/peak GPU memory
+    or a complete process allocation total. Aggregation uses saturating uint64_t
+    on both Wasm address widths. Configuration pointers are borrowed until the
+    next mutation or context destruction; resolved thread/runner flags are in the
+    runtime record instead. Existing BF16 loader probes check logical/allocated
+    distinction, buffer deduplication/release and reports above 4 GiB; every
+    browser smoke variant checks the public records and null-failure atomicity.
+    These tests do not validate loaded-model snapshots, performance or real GPU
+    memory accounting. Remove when upstream exposes equivalent documented idle
+    snapshots with the same failure/ownership and passive-observation guarantees.
+
+14. Opt-in graph-stage diagnostics: `sd_set_graph_diagnostics` enables bounded
+    `graph-stage-v1` debug logs through the existing log callback. It is disabled
+    by default. Each enable call opens a new window; each runner reports its
+    first attempt after graph-cut plan resolution, including failure. Re-enable
+    before another request or graph/resolution and disable after the request.
+    Earlier failures retain their existing logs. Boundaries cover measurement,
+    scheduler setup/reserve, weight preparation, workspace preparation and actual
+    allocation, input copy, prefetch and execution. `reserve-including-sync`
+    includes the scheduler's existing synchronization and size estimation; it
+    does not isolate that synchronization. The consumer can timestamp callbacks;
+    no native timers, added tensor walks, GPU synchronization or readbacks are
+    introduced. Disabled calls only check the gate/null label, without formatting
+    or callbacks. Generation behavior and arithmetic are unchanged. The existing
+    callback smoke probe checks default-off, begin/end and failed-attempt gating,
+    re-enabling and disabling. Its simulated attempt does not establish real
+    runner timing or diagnose a trained-model stall. Remove when upstream offers
+    equivalent explicitly enabled, bounded preparation/execution diagnostics.
+15. Preserve external tensor address metadata in scheduler measurement clones.
+    The former pointer value `1` was only a marker, but the pinned WebGPU
+    `GET_ROWS` support check interprets it as a backend address. Relative to its
+    `0x1000` base, the resulting odd offset cannot satisfy F16/F32 alignment;
+    its backwards alignment loop can take an impractical number of iterations
+    on memory64. Keep the source `data` and view offsets already copied with the
+    tensor. The existing non-null, zero-size backend buffer is sufficient to
+    classify an external weight, including one whose data is still null. No
+    tensor data is read, allocated or converted by this correction, and backend
+    selection policy is unchanged. The existing Qwen timestep test probe also
+    checks real scheduler measurement with F16/F32 resident and unallocated
+    weights, nonzero row views, unchanged `GET_ROWS` support, reservation sizes
+    and source tensors. CPU checks exercise clone ownership; optional WebGPU
+    checks exercise that backend's actual support predicate. This is not
+    trained-model inference. Remove when upstream preserves valid address
+    metadata when constructing measurement graphs.

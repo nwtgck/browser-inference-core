@@ -1,0 +1,215 @@
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@ -455,4 +455,38 @@
+ } sd_vid_gen_params_t;
+ 
++// Passive, on-demand context snapshots. No sampling or instrumentation is enabled.
++// Each versioned record starts with the size actually written and its version.
++enum sd_snapshot_version_t {
++    SD_RUNTIME_INFO_VERSION = 1,
++    SD_MEMORY_INFO_VERSION = 1,
++};
++
++typedef struct {
++    uint32_t struct_size;
++    uint32_t version;
++    int32_t n_threads; // Resolved execution thread count, unlike requested params.
++    bool runners_ready;
++    bool eager_load;
++    bool enable_mmap;
++    bool disable_prefetch;
++    bool disable_segmented_compute;
++    bool auto_fit_enabled;
++} sd_runtime_info_t;
++
++typedef struct {
++    uint32_t struct_size;
++    uint32_t version;
++    uint64_t registered_tensor_count;
++    uint64_t registered_tensor_bytes; // Logical ggml_nbytes, not allocated memory.
++    uint64_t manager_host_buffer_count;
++    uint64_t manager_host_buffer_bytes;
++    uint64_t manager_device_buffer_count;
++    uint64_t manager_device_buffer_bytes;
++    uint64_t tracked_runtime_cpu_bytes;
++    uint64_t tracked_runtime_non_cpu_bytes;
++    uint64_t tracked_runtime_unknown_bytes;
++    bool saturated; // At least one aggregate exceeded UINT64_MAX.
++} sd_memory_info_t;
++
+ typedef struct sd_ctx_t sd_ctx_t;
+ struct ggml_tensor;
+@@ -472,4 +506,22 @@
+ SD_API int32_t sd_get_num_physical_cores();
+ SD_API const char* sd_get_system_info();
++// Call only while this context is idle. Null arguments, an undersized output,
++// or a busy context return false without changing output. No GPU sync/readback.
++// out_size must be >= sizeof(the current output type); extra bytes stay untouched.
++SD_API bool sd_ctx_get_runtime_info(sd_ctx_t* sd_ctx, sd_runtime_info_t* out, size_t out_size);
++// Walks existing bookkeeping only on demand. Manager buffers are deduplicated by
++// handle and classified with ggml_backend_buffer_is_host (device means non-host,
++// not necessarily GPU). Counts include parameter, staging, prefetch and retained
++// mapped buffer handles. Aliased handles may overlap; bare mappings, file caches,
++// allocator/driver overhead and unrelated allocations are not included.
++// Runtime bytes are the runners' last published retained-workspace/cache reports,
++// classified by backend device type. They may be stale and are NOT physical VRAM,
++// free memory, peak usage or additive with manager/logical bytes.
++SD_API bool sd_ctx_get_memory_info(sd_ctx_t* sd_ctx, sd_memory_info_t* out, size_t out_size);
++// Copies the context-owned configuration, including later ControlNet path changes.
++// This is requested configuration, not resolved node/device placement. Pointer
++// fields remain borrowed and read-only until the next context mutation or free;
++// copy their contents before another native operation and never free them.
++SD_API bool sd_ctx_get_params(sd_ctx_t* sd_ctx, sd_ctx_params_t* out, size_t out_size);
+ SD_API bool sd_ctx_supports_image_generation(const sd_ctx_t* sd_ctx);
+ SD_API bool sd_ctx_supports_video_generation(const sd_ctx_t* sd_ctx);
+--- a/src/model_manager.h
++++ b/src/model_manager.h
+@@ -177,4 +177,19 @@
+ 
+ public:
++    struct MemoryInfo {
++        uint64_t registered_tensor_count = 0;
++        uint64_t registered_tensor_bytes = 0;
++        uint64_t manager_host_buffer_count = 0;
++        uint64_t manager_host_buffer_bytes = 0;
++        uint64_t manager_device_buffer_count = 0;
++        uint64_t manager_device_buffer_bytes = 0;
++        uint64_t tracked_runtime_cpu_bytes = 0;
++        uint64_t tracked_runtime_non_cpu_bytes = 0;
++        uint64_t tracked_runtime_unknown_bytes = 0;
++        bool saturated = false;
++    };
++    // Caller owns the idle context lock. Does not synchronize or refresh residency.
++    MemoryInfo memory_info() const;
++
+     ~ModelManager() override;
+ 
+--- a/src/model_manager.cpp
++++ b/src/model_manager.cpp
+@@ -1399,4 +1399,56 @@
+ }
+ 
++ModelManager::MemoryInfo ModelManager::memory_info() const {
++    MemoryInfo result;
++    auto add = [&](uint64_t& total, uint64_t value) {
++        if (value > UINT64_MAX - total) {
++            total = UINT64_MAX;
++            result.saturated = true;
++        } else {
++            total += value;
++        }
++    };
++    std::unordered_set<const ggml_tensor*> tensors;
++    for (const auto& state : tensor_states_) {
++        if (state && state->tensor && tensors.insert(state->tensor).second) {
++            add(result.registered_tensor_count, 1);
++            add(result.registered_tensor_bytes, ggml_nbytes(state->tensor));
++        }
++    }
++    std::unordered_set<ggml_backend_buffer_t> buffers;
++    auto add_buffer = [&](ggml_backend_buffer_t buffer) {
++        if (buffer == nullptr || !buffers.insert(buffer).second) return;
++        const bool host = ggml_backend_buffer_is_host(buffer);
++        add(host ? result.manager_host_buffer_count : result.manager_device_buffer_count, 1);
++        add(host ? result.manager_host_buffer_bytes : result.manager_device_buffer_bytes,
++            ggml_backend_buffer_get_size(buffer));
++    };
++    for (auto buffer : model_loader_.get_device_mmap_buffers()) add_buffer(buffer);
++    for (const auto& block : params_storage_blocks_) {
++        if (!block) continue;
++        add_buffer(block->buffer);
++        for (const auto& store : block->mmap_tensor_stores) add_buffer(store.mmbuffer.get());
++    }
++    for (const auto& block : compute_staging_blocks_) {
++        if (block) add_buffer(block->buffer);
++    }
++    for (const auto& entry : prefetch_blocks_) {
++        if (!entry.second) continue;
++        for (const auto& block : entry.second->staging_blocks) {
++            if (block) add_buffer(block->buffer);
++        }
++    }
++    // Existing runner publications: no runner traversal or forced synchronization.
++    for (const auto& entry : runtime_residencies_) {
++        auto backend = entry.second.compute_backend;
++        auto device = backend ? ggml_backend_get_device(backend) : nullptr;
++        auto& bytes = device == nullptr ? result.tracked_runtime_unknown_bytes
++                    : ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_CPU
++                        ? result.tracked_runtime_cpu_bytes : result.tracked_runtime_non_cpu_bytes;
++        add(bytes, entry.second.resident_bytes);
++    }
++    return result;
++}
++
+ size_t ModelManager::compute_backend_resident_bytes(ggml_backend_t compute_backend) const {
+     if (compute_backend == nullptr) {
+--- a/src/stable-diffusion.cpp
++++ b/src/stable-diffusion.cpp
+@@ -682,4 +682,57 @@
+ }
+ 
++// Reuse the engine's existing ownership mutex; generation does no extra work.
++// A recursive callback may acquire the mutex, so also reject executing_.
++SD_API bool sd_ctx_get_runtime_info(sd_ctx_t* ctx, sd_runtime_info_t* out, size_t out_size) {
++    if (!ctx || !ctx->sd || !out || out_size < sizeof(*out)) return false;
++    auto& sd = *ctx->sd;
++    std::unique_lock<std::recursive_mutex> lock(sd.execution_mutex, std::try_to_lock);
++    if (!lock.owns_lock() || sd.executing_) return false;
++    sd_runtime_info_t info{};
++    info.struct_size = sizeof(info);
++    info.version = SD_RUNTIME_INFO_VERSION;
++    info.n_threads = sd.n_threads;
++    info.runners_ready = sd.runner_state_.ready;
++    info.eager_load = sd.eager_load;
++    info.enable_mmap = sd.enable_mmap;
++    info.disable_prefetch = sd.disable_prefetch;
++    info.disable_segmented_compute = sd.disable_segmented_compute;
++    info.auto_fit_enabled = sd.auto_fit_enabled;
++    *out = info;
++    return true;
++}
++
++SD_API bool sd_ctx_get_memory_info(sd_ctx_t* ctx, sd_memory_info_t* out, size_t out_size) {
++    if (!ctx || !ctx->sd || !out || out_size < sizeof(*out)) return false;
++    auto& sd = *ctx->sd;
++    std::unique_lock<std::recursive_mutex> lock(sd.execution_mutex, std::try_to_lock);
++    if (!lock.owns_lock() || sd.executing_ || !sd.model_manager) return false;
++    const auto memory = sd.model_manager->memory_info();
++    sd_memory_info_t info{};
++    info.struct_size = sizeof(info);
++    info.version = SD_MEMORY_INFO_VERSION;
++    info.registered_tensor_count = memory.registered_tensor_count;
++    info.registered_tensor_bytes = memory.registered_tensor_bytes;
++    info.manager_host_buffer_count = memory.manager_host_buffer_count;
++    info.manager_host_buffer_bytes = memory.manager_host_buffer_bytes;
++    info.manager_device_buffer_count = memory.manager_device_buffer_count;
++    info.manager_device_buffer_bytes = memory.manager_device_buffer_bytes;
++    info.tracked_runtime_cpu_bytes = memory.tracked_runtime_cpu_bytes;
++    info.tracked_runtime_non_cpu_bytes = memory.tracked_runtime_non_cpu_bytes;
++    info.tracked_runtime_unknown_bytes = memory.tracked_runtime_unknown_bytes;
++    info.saturated = memory.saturated;
++    *out = info;
++    return true;
++}
++
++SD_API bool sd_ctx_get_params(sd_ctx_t* ctx, sd_ctx_params_t* out, size_t out_size) {
++    if (!ctx || !ctx->sd || !out || out_size < sizeof(*out)) return false;
++    auto& sd = *ctx->sd;
++    std::unique_lock<std::recursive_mutex> lock(sd.execution_mutex, std::try_to_lock);
++    if (!lock.owns_lock() || sd.executing_ || !sd.config_) return false;
++    *out = sd.config_->params;
++    return true;
++}
++
+ SD_API bool sd_ctx_supports_image_generation(const sd_ctx_t* sd_ctx) {
+     if (sd_ctx == nullptr || sd_ctx->sd == nullptr) {
+--- a/src/pipeline/diffusion_engine.h
++++ b/src/pipeline/diffusion_engine.h
+@@ -135,5 +135,6 @@
+                                 &sd_ctx_params_t::high_noise_diffusion_model_path, &sd_ctx_params_t::uncond_diffusion_model_path,
+                                 &sd_ctx_params_t::embeddings_connectors_path, &sd_ctx_params_t::vae_path,
+-                                &sd_ctx_params_t::audio_vae_path, &sd_ctx_params_t::taesd_path,
++                                &sd_ctx_params_t::audio_vae_path, &sd_ctx_params_t::audio_encoder_path,
++                                &sd_ctx_params_t::taesd_path,
+                                 &sd_ctx_params_t::control_net_path, &sd_ctx_params_t::ip_adapter_path,
+                                 &sd_ctx_params_t::motion_module_path, &sd_ctx_params_t::photo_maker_path,

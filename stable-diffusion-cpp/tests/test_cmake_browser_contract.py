@@ -33,7 +33,9 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-options.txt"
 ''')
         sd, ggml = root/'upstream', root/'ggml'
         for path in (sd,ggml): (path/'include').mkdir(parents=True)
-        (sd/'include/stable-diffusion.h').write_text('void sd_ctx_params_init(void *p);');(ggml/'include/ggml.h').touch()
+        (sd/'include/stable-diffusion.h').write_text('void sd_ctx_params_init(void *p);')
+        # Public GGML declarations feed the real generator; no GGML source is built.
+        shutil.copytree(ROOT/'vendor/ggml-webgpu-source/ggml/include', ggml/'include', dirs_exist_ok=True)
         (sd/'stub.cpp').write_text('// No compilation\n')
         (sd/'CMakeLists.txt').write_text('''
 add_library(stable-diffusion STATIC stub.cpp)

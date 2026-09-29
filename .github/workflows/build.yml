@@ -566,7 +566,7 @@ jobs:
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/publish_artifacts.py --package dist/package --remote "https://github.com/${GITHUB_REPOSITORY}.git"
+        run: python3 scripts/publish_artifacts.py --package dist/package --remote "https://github.com/${GITHUB_REPOSITORY}.git" --source-repo "$GITHUB_WORKSPACE"
       - name: Generate npm lock and consumer integration metadata
         env:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}

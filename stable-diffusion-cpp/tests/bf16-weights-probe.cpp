@@ -4,6 +4,7 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "model_manager.h"
+#include "pipeline/diffusion_engine.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -81,7 +82,46 @@ static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target
     if (registered_bytes != expected_bytes || manager.registered_params_size({ModelComponent::Diffusion}) != expected_bytes ||
         weights.at("weight")->type != expected_type || weights.at("range")->type != expected_type ||
         weights.at("control")->type != control_type || !ggml_is_contiguous(weights.at("weight"))) return -23;
+    const auto before_load = manager.memory_info();
+    if (before_load.registered_tensor_count != 3 || before_load.registered_tensor_bytes != expected_bytes ||
+        before_load.manager_host_buffer_bytes != 0 || before_load.manager_device_buffer_bytes != 0 || before_load.saturated) return -35;
     if (manager.loader().get_tensor_storage_map().at("weight").type != GGML_TYPE_BF16 || !manager.load_all_params_eagerly()) return -24;
+    const auto after_load = manager.memory_info();
+    std::set<ggml_backend_buffer_t> buffers;
+    uint64_t host_bytes = 0, device_bytes = 0, host_count = 0, device_count = 0;
+    for (const auto& weight : weights) {
+        const auto buffer = weight.second->buffer;
+        if (!buffer || !buffers.insert(buffer).second) continue;
+        const bool host = ggml_backend_buffer_is_host(buffer);
+        (host ? host_bytes : device_bytes) += ggml_backend_buffer_get_size(buffer);
+        ++(host ? host_count : device_count);
+    }
+    if (buffers.empty() || after_load.manager_host_buffer_bytes != host_bytes ||
+        after_load.manager_device_buffer_bytes != device_bytes || after_load.manager_host_buffer_count != host_count ||
+        after_load.manager_device_buffer_count != device_count || after_load.registered_tensor_bytes != expected_bytes ||
+        after_load.saturated) return -36;
+    // Synthetic last-published reports, not allocations: sum beyond 4 GiB on wasm32 too.
+    manager.update_runtime_residency(1, backend, size_t(3) << 30);
+    manager.update_runtime_residency(2, backend, size_t(2) << 30);
+    const auto runtime = manager.memory_info();
+    const bool cpu = ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU;
+    if ((cpu ? runtime.tracked_runtime_cpu_bytes : runtime.tracked_runtime_non_cpu_bytes) != (uint64_t(5) << 30) ||
+        runtime.tracked_runtime_unknown_bytes != 0 || runtime.manager_host_buffer_bytes != host_bytes ||
+        runtime.manager_device_buffer_bytes != device_bytes) return -37;
+    manager.update_runtime_residency(1, backend, 1024);
+    manager.update_runtime_residency(2, backend, 0);
+    const auto replaced = manager.memory_info();
+    if ((cpu ? replaced.tracked_runtime_cpu_bytes : replaced.tracked_runtime_non_cpu_bytes) != 1024) return -38;
+    manager.update_runtime_residency(1, backend, 0);
+    if (SIZE_MAX == UINT64_MAX) {
+        manager.update_runtime_residency(1, backend, SIZE_MAX);
+        manager.update_runtime_residency(2, backend, SIZE_MAX);
+        const auto overflow = manager.memory_info();
+        if (!overflow.saturated || (cpu ? overflow.tracked_runtime_cpu_bytes : overflow.tracked_runtime_non_cpu_bytes) != UINT64_MAX) return -42;
+        manager.update_runtime_residency(1, backend, 0);
+        manager.update_runtime_residency(2, backend, 0);
+    }
+
     std::vector<uint8_t> loaded(ggml_nbytes(weights.at("range")));
     ggml_backend_tensor_get(weights.at("range"), loaded.data(), 0, loaded.size());
     const auto original_range = static_cast<const ggml_bf16_t*>(ggml_get_tensor(source.get(), "range")->data);
@@ -118,10 +158,25 @@ static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target
     }
     if (file_bytes(path) != original) return -32;
     if (!manager.unregister_param_tensors(ModelComponent::Diffusion, &registered_bytes) || registered_bytes != 0) return -33;
+    const auto released = manager.memory_info();
+    if (released.registered_tensor_count != 0 || released.registered_tensor_bytes != 0 ||
+        released.manager_host_buffer_bytes != 0 || released.manager_device_buffer_bytes != 0 ||
+        released.tracked_runtime_cpu_bytes != 0 || released.tracked_runtime_non_cpu_bytes != 0) return -39;
+
     return 1;
 }
 
 extern "C" int sdc_test_bf16_weights(const char* backend_name) {
+    // Configuration snapshot pointers must belong to the context, not its caller.
+    sd_ctx_params_t params{};
+    sd_ctx_params_init(&params);
+    char audio_path[] = "/models/audio.safetensors";
+    params.audio_encoder_path = audio_path;
+    StableDiffusionGGML::ModelConfig config(params);
+    if (config.params.audio_encoder_path == audio_path || std::strcmp(config.params.audio_encoder_path, audio_path) != 0) return -40;
+    audio_path[0] = 'X';
+    if (config.params.audio_encoder_path[0] != '/') return -41;
+
     std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend(
         ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
     if (!backend) return -1;

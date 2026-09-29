@@ -8,13 +8,34 @@ from pathlib import Path
 import re
 import subprocess
 
-EXTRA_FUNCTIONS = {
-    'ggml_type_name', 'ggml_type_size', 'ggml_blck_size', 'ggml_row_size',
-    'ggml_is_quantized', 'ggml_nbytes', 'ggml_nelements', 'ggml_nrows',
-    'ggml_get_name', 'ggml_set_name', 'ggml_validate_row_data',
+EXTRA_CONSTANTS = [
+    'LLAMA_DEFAULT_SEED', 'LLAMA_TOKEN_NULL',
+    'LLAMA_FILE_MAGIC_GGLA', 'LLAMA_FILE_MAGIC_GGSN', 'LLAMA_FILE_MAGIC_GGSQ',
+    'LLAMA_SESSION_MAGIC', 'LLAMA_SESSION_VERSION',
+    'LLAMA_STATE_SEQ_MAGIC', 'LLAMA_STATE_SEQ_VERSION',
+    'LLAMA_STATE_SEQ_FLAGS_NONE', 'LLAMA_STATE_SEQ_FLAGS_SWA_ONLY',
+    'LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY', 'LLAMA_STATE_SEQ_FLAGS_ON_DEVICE',
+    'GGUF_VERSION', 'GGUF_DEFAULT_ALIGNMENT',
+    'GGML_FILE_MAGIC', 'GGML_FILE_VERSION', 'GGML_QNT_VERSION',
+    'GGML_QNT_VERSION_FACTOR', 'GGML_MAX_DIMS', 'GGML_MAX_PARAMS',
+    'GGML_MAX_SRC', 'GGML_MAX_N_THREADS', 'GGML_MAX_OP_PARAMS', 'GGML_MAX_NAME',
+    'GGML_TENSOR_SIZE',
+    'GGML_DEFAULT_N_THREADS', 'GGML_DEFAULT_GRAPH_SIZE', 'GGML_MEM_ALIGN',
+    'GGML_EXIT_SUCCESS', 'GGML_EXIT_ABORTED',
+    'GGML_ROPE_TYPE_NORMAL', 'GGML_ROPE_TYPE_NEOX', 'GGML_ROPE_TYPE_MROPE',
+    'GGML_ROPE_TYPE_VISION', 'GGML_ROPE_TYPE_IMROPE', 'GGML_MROPE_SECTIONS',
+    'GGML_N_TASKS_MAX', 'GGML_BACKEND_META_MAX_DEVICES',
+    'EINVAL', 'EIO', 'EOVERFLOW', 'EROFS', 'ENOENT',
+    'SEEK_SET', 'SEEK_CUR', 'SEEK_END',
+]
+
+# The pinned header declares this function but no upstream translation unit
+# defines it. Keep the reason visible in schema.excluded; reconsider this entry
+# when updating the upstream pin, rather than inventing a private implementation.
+UNIMPLEMENTED_PUBLIC_FUNCTIONS = {
+    'ggml_threadpool_get_n_threads':
+        'declared in ggml-cpu.h but not implemented by the pinned upstream',
 }
-EXTRA_CONSTANTS = ['LLAMA_DEFAULT_SEED', 'LLAMA_TOKEN_NULL', 'EINVAL', 'EIO',
-                   'EOVERFLOW', 'EROFS', 'ENOENT', 'SEEK_SET', 'SEEK_CUR', 'SEEK_END']
 
 def walk(node):
     yield node
@@ -24,7 +45,8 @@ def walk(node):
 def generate(source: Path, output: Path, compiler: str) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     unit = output / 'headers.c'
-    unit.write_text('#include "llama.h"\n#include "gguf.h"\n#include "ggml-backend.h"\n'
+    unit.write_text('#include "llama.h"\n#include "gguf.h"\n#include "ggml.h"\n'
+                    '#include "ggml-alloc.h"\n#include "ggml-backend.h"\n'
                     '#include "mtmd.h"\n#include "mtmd-helper.h"\n')
     command = [compiler, '-x', 'c', '-std=c11', '-fsyntax-only',
                '-I'+str(source/'include'), '-I'+str(source/'ggml/include'),
@@ -41,6 +63,8 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
             typ = aliases.get(typ, typ)
         return typ
     def classify(typ):
+        # The public BF16 scalar is an anonymous struct typedef passed by value.
+        if typ == 'ggml_bf16_t': return 'record'
         t = resolve(typ).strip()
         if '*' in t or t.endswith(']') and '(' in t:
             return 'pointer'
@@ -75,7 +99,10 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     functions, excluded = [], []
     for n in nodes:
         name = n.get('name', '')
-        if n.get('kind') != 'FunctionDecl' or not (name.startswith(('llama_', 'gguf_', 'ggml_backend_', 'mtmd_')) or name in EXTRA_FUNCTIONS):
+        if n.get('kind') != 'FunctionDecl' or not name.startswith(('llama_', 'gguf_', 'ggml_', 'mtmd_')):
+            continue
+        if name in UNIMPLEMENTED_PUBLIC_FUNCTIONS:
+            excluded.append({'name': name, 'reason': UNIMPLEMENTED_PUBLIC_FUNCTIONS[name]})
             continue
         if name.startswith('mtmd_helper_video_') and name != 'mtmd_helper_video_init_params_default':
             excluded.append({'name': name, 'reason': 'requires subprocess video support (MTMD_VIDEO=OFF)'})
@@ -96,7 +123,7 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     records = []
     for n in nodes:
         name = n.get('name', '')
-        if n.get('kind') != 'RecordDecl' or not n.get('completeDefinition') or not name.startswith(('llama_', 'gguf_', 'ggml_backend_', 'mtmd_')) and name != 'ggml_tensor':
+        if n.get('kind') != 'RecordDecl' or not n.get('completeDefinition') or not name.startswith(('llama_', 'gguf_', 'ggml_', 'mtmd_')):
             continue
         fields = []
         for p in n.get('inner', []):
@@ -111,12 +138,16 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
             kind = 'array' if re.search(r'\[[0-9]*\]$', typ) else classify(typ)
             fields.append({'name': p['name'], 'cType': typ, 'kind': kind})
         records.append({'name': name, 'cType': n.get('tagUsed', 'struct')+' '+name, 'fields': fields})
+    records.append({'name': 'ggml_bf16_t', 'cType': 'ggml_bf16_t', 'fields': [
+        {'name': 'bits', 'cType': 'uint16_t', 'kind': 'unsigned'},
+    ]})
     records = sorted({r['name']: r for r in records}.values(), key=lambda r: r['name'])
     enum_names = sorted({n['name'] for n in nodes if n.get('kind') == 'EnumConstantDecl'
                          and n.get('name','').startswith(('LLAMA_', 'GGML_', 'GGUF_', 'MTMD_'))})
     constants = sorted(set(enum_names + EXTRA_CONSTANTS))
     cpp = ['// Generated; do not edit.', '#include "llama.h"', '#include "gguf.h"',
-           '#include "ggml-backend.h"', '#include "mtmd.h"', '#include "mtmd-helper.h"',
+           '#include "ggml.h"', '#include "ggml-alloc.h"', '#include "ggml-backend.h"',
+           '#include "mtmd.h"', '#include "mtmd-helper.h"',
            '#include <stdint.h>', '#include <stddef.h>',
            '#include <errno.h>', '#include <stdlib.h>', '#include <stdexcept>',
            'static uintptr_t lcb_checked_pointer(uint64_t p) {',
