@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+  "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -400,11 +400,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645603,
+          "builtAtUnix": 1790655607,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -420,7 +443,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -480,7 +503,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -789,11 +812,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645669,
+          "builtAtUnix": 1790655630,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -813,7 +859,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -873,7 +919,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1182,11 +1228,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645359,
+          "builtAtUnix": 1790655582,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1202,7 +1271,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1262,7 +1331,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1571,11 +1640,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645537,
+          "builtAtUnix": 1790655577,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1595,7 +1687,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1655,7 +1747,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1964,11 +2056,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645359,
+          "builtAtUnix": 1790655600,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -1984,7 +2099,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "28a0c902cc8fd98a41d944bf8ecdc0f60631e0b6",
+          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2044,7 +2159,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "dfdb7225a2e5167f57e2a6723a2e89b2a664ff30eccc0ef59630db89baf1bc3c",
+            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2353,11 +2468,34 @@
                   }
                 ],
                 "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790645490,
+          "builtAtUnix": 1790655560,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -2826,8 +2964,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43641416,
-      "sha256": "64d3c9304dd4e92fb4cae76fa955b95c50f1f12159612f8f200bc67432560bec"
+      "bytes": 43643048,
+      "sha256": "75db041ff23b17c94e827826da9a48d3fc6f9924156f9145240670e75ae4e7c0"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2841,8 +2979,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43974161,
-      "sha256": "9a34ad5a034ee904a3755791e4ce30634fc3a29c0e9fe37754084d19dd63022b"
+      "bytes": 43975821,
+      "sha256": "2a1f1a9442038828dc92de1fadf5a2be9f6cd8fe417d6ead097150d8d71fbbfe"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2856,8 +2994,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37792105,
-      "sha256": "e11735b60128b80281ae57b5fbe891950696f17cd8fdbbc6090a3f249a42b901"
+      "bytes": 37792762,
+      "sha256": "03887a6dee4a1f3768bbbea7e93fbbb14ef604c10b805f7914c91a0b943e9b73"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -2871,8 +3009,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38005365,
-      "sha256": "ea1f7892f111843ddd1b24c48b03098780fd9d810bc071a98689733f8201d2ed"
+      "bytes": 38006025,
+      "sha256": "5d163c5566b74928025d042fe50ef7e25b5f97b5710b5121f3ede3b8250a4e2d"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -2886,8 +3024,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38096457,
-      "sha256": "c8655916636120d8b11fc61ce71daa8d0eea50e94a2586446e9df621fe351cb4"
+      "bytes": 38097161,
+      "sha256": "5d936815024c8ad6e49a8bae0a40abd633919407778992c3654b8cd21f146c7a"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -2901,8 +3039,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38319909,
-      "sha256": "24ff985cf5de897fec2fe4b375ab398c1591abc33ea42f8cb2c9eb14bfe1106d"
+      "bytes": 38320617,
+      "sha256": "3e471f085ca1207e3e22517cf2a568bf8bf916bb749dca7db70510c41afe9c35"
     }
   ]
 }
