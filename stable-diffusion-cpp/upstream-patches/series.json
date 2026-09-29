@@ -280,6 +280,18 @@
           "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
         }
       ]
+    },
+    {
+      "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+      "target": "stable-diffusion",
+      "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+          "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+        }
+      ]
     }
   ]
 }

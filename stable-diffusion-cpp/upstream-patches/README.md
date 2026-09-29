@@ -194,3 +194,16 @@ patch, relax input hashes, or substitute a different upstream revision.
     checks exercise that backend's actual support predicate. This is not
     trained-model inference. Remove when upstream preserves valid address
     metadata when constructing measurement graphs.
+
+16. Temporal pointwise convolution: when WebGPU cannot execute IM2COL_3D,
+    a contiguous multi-frame 1x1x1 kernel with unit stride/dilation and no padding
+    can be expressed as channel matrix multiplication plus contiguous layout
+    changes. This covers H3's 24-channel post-quantization video VAE convolution
+    without materializing a 3D im2col buffer. Every materialized node must pass the
+    backend capability predicate; otherwise the existing fallback remains. The
+    old single-frame/full-depth path, explicit direct-convolution choice and
+    forced-precision branch are unchanged. Native tests exercise 40 synthetic
+    type/batch/bias/fallback cases against an independent CPU numerical reference.
+    These checks are not H3 inference or WebGPU performance/accuracy validation.
+    The lowering becomes redundant if upstream supplies an equivalent supported
+    temporal pointwise path or the backend supports the original operation.
