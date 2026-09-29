@@ -292,6 +292,28 @@
           "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
         }
       ]
+    },
+    {
+      "file": "0017-browser-h3-checked-video-publication.patch",
+      "target": "stable-diffusion",
+      "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+      "files": [
+        {
+          "path": "src/core/util.h",
+          "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+          "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+        },
+        {
+          "path": "src/core/util.cpp",
+          "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+          "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+        },
+        {
+          "path": "src/pipeline/video.cpp",
+          "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+          "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+        }
+      ]
     }
   ]
 }
