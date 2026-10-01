@@ -131,6 +131,11 @@ if(SDCB_NATIVE_CHECK)
     target_link_libraries(browser-boundary-test PRIVATE core stable-diffusion)
     enable_testing()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
+    if(UNIX)
+        add_test(NAME webgpu-queue-wait-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-wait-probe.py"
+            --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu.cpp" --cxx "${CMAKE_CXX_COMPILER}")
+    endif()
     add_executable(h3-pointwise-test tests/h3-pointwise-test.cpp)
     target_compile_definitions(h3-pointwise-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
     target_include_directories(h3-pointwise-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")

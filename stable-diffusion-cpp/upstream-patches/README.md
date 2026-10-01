@@ -207,3 +207,15 @@ patch, relax input hashes, or substitute a different upstream revision.
     These checks are not H3 inference or WebGPU performance/accuracy validation.
     The lowering becomes redundant if upstream supplies an equivalent supported
     temporal pointwise path or the backend supports the original operation.
+
+18. A finite video queue completion budget: allow 180 seconds for submitted GPU
+    work, while keeping buffer-map and event synchronization at 30 seconds.
+    User H3 traces had completed steps around 22-28 seconds before the next
+    30-second queue wait aborted; this does not establish a driver failure.
+    The wait-status and callback-status checks remain unchanged. No repeated
+    wait, queue resubmission, tensor change or precision fallback is added.
+    Timeout messages include the actual selected budget. The extracted-source
+    contract probe checks both call sites and synthetic completion/failure cases;
+    it does not execute WebGPU or H3. All SD WebGPU builds receive this queue
+    budget; the separately built llama runtime is unchanged. Replaced by an
+    upstream configurable finite workload budget with equivalent failure checks.

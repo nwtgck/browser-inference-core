@@ -314,6 +314,18 @@
           "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
         }
       ]
+    },
+    {
+      "file": "0018-browser-video-queue-wait-budget.patch",
+      "target": "ggml",
+      "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+          "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+        }
+      ]
     }
   ]
 }

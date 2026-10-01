@@ -1,0 +1,49 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -88,6 +88,10 @@
+ 
+ #define WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE 64u
+ #define WEBGPU_NUM_PARAM_SLOT_SAFETY_MARGIN      10u
++// Queue completion can include a full video denoising graph. The map/event
++// deadlines remain independent and finite. This is not a device-loss retry.
++#define WEBGPU_QUEUE_WAIT_TIMEOUT_MS             180000u
++#define WEBGPU_QUEUE_WAIT_TIMEOUT_NS             (uint64_t(WEBGPU_QUEUE_WAIT_TIMEOUT_MS) * 1000000ull)
+ #define WEBGPU_RUNTIME_WAIT_TIMEOUT_MS           30000u
+ #define WEBGPU_RUNTIME_WAIT_TIMEOUT_NS           (WEBGPU_RUNTIME_WAIT_TIMEOUT_MS * 1e6)
+ #define WEBGPU_PARAMS_BUF_SIZE_BYTES             128  // enough for 32 parameters
+@@ -494,9 +498,10 @@
+                                                   T                success_status,
+                                                   const char *     wait_name,
+                                                   const char *     failure_name,
+-                                                  const char *     callback_message) {
++                                                  const char *     callback_message,
++                                                  uint32_t         timeout_ms) {
+     if (wait_status == wgpu::WaitStatus::TimedOut) {
+-        GGML_ABORT("ggml_webgpu: %s timed out after %u ms\n", wait_name, WEBGPU_RUNTIME_WAIT_TIMEOUT_MS);
++        GGML_ABORT("ggml_webgpu: %s timed out after %u ms\n", wait_name, timeout_ms);
+     }
+     if (wait_status == wgpu::WaitStatus::Error) {
+         GGML_ABORT("ggml_webgpu: %s failed\n", wait_name);
+@@ -527,10 +532,10 @@
+                 callback_status  = status;
+                 callback_message = std::string(message);
+             }),
+-        WEBGPU_RUNTIME_WAIT_TIMEOUT_NS);
++        WEBGPU_QUEUE_WAIT_TIMEOUT_NS);
+ 
+     ggml_backend_webgpu_check_wait_status(wait_status, callback_status, wgpu::QueueWorkDoneStatus::Success,
+-                                          "Queue wait", "Queue work", callback_message.c_str());
++                                          "Queue wait", "Queue work", callback_message.c_str(), WEBGPU_QUEUE_WAIT_TIMEOUT_MS);
+ }
+ 
+ static void ggml_backend_webgpu_map_buffer(webgpu_global_context & ctx,
+@@ -550,7 +555,7 @@
+         WEBGPU_RUNTIME_WAIT_TIMEOUT_NS);
+ 
+     ggml_backend_webgpu_check_wait_status(wait_status, callback_status, wgpu::MapAsyncStatus::Success,
+-                                          "Buffer map wait", "Buffer map", callback_message.c_str());
++                                          "Buffer map wait", "Buffer map", callback_message.c_str(), WEBGPU_RUNTIME_WAIT_TIMEOUT_MS);
+ }
+ 
+ static void ggml_backend_webgpu_submit_commands(webgpu_context &          ctx,
