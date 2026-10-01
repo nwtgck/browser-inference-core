@@ -326,6 +326,18 @@
           "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
         }
       ]
+    },
+    {
+      "file": "0019-webgpu-completion-based-waits.patch",
+      "target": "ggml",
+      "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+          "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+        }
+      ]
     }
   ]
 }

@@ -132,7 +132,7 @@ if(SDCB_NATIVE_CHECK)
     enable_testing()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
     if(UNIX)
-        add_test(NAME webgpu-queue-wait-contract COMMAND "${Python3_EXECUTABLE}"
+        add_test(NAME webgpu-completion-wait-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-wait-probe.py"
             --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu.cpp" --cxx "${CMAKE_CXX_COMPILER}")
     endif()

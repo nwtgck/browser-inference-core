@@ -1,0 +1,126 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -88,12 +88,10 @@
+ 
+ #define WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE 64u
+ #define WEBGPU_NUM_PARAM_SLOT_SAFETY_MARGIN      10u
+-// Queue completion can include a full video denoising graph. The map/event
+-// deadlines remain independent and finite. This is not a device-loss retry.
+-#define WEBGPU_QUEUE_WAIT_TIMEOUT_MS             180000u
+-#define WEBGPU_QUEUE_WAIT_TIMEOUT_NS             (uint64_t(WEBGPU_QUEUE_WAIT_TIMEOUT_MS) * 1000000ull)
+-#define WEBGPU_RUNTIME_WAIT_TIMEOUT_MS           30000u
+-#define WEBGPU_RUNTIME_WAIT_TIMEOUT_NS           (WEBGPU_RUNTIME_WAIT_TIMEOUT_MS * 1e6)
++// Queue work, readback and backend events depend on workload and device speed.
++// UINT64_MAX uses the completion-based WaitAny path (no JS timeout in Emdawn).
++// Errors still fail; cancellation is owned by the caller, not a wall-clock limit.
++#define WEBGPU_COMPLETION_WAIT_TIMEOUT_NS        UINT64_MAX
+ #define WEBGPU_PARAMS_BUF_SIZE_BYTES             128  // enough for 32 parameters
+ #define WEBGPU_SET_ROWS_ERROR_BUF_SIZE_BYTES     4
+ #define WEBGPU_STORAGE_BUF_BINDING_MULT          4    // a storage buffer binding size must be a multiple of 4
+@@ -498,13 +496,12 @@
+                                                   T                success_status,
+                                                   const char *     wait_name,
+                                                   const char *     failure_name,
+-                                                  const char *     callback_message,
+-                                                  uint32_t         timeout_ms) {
+-    if (wait_status == wgpu::WaitStatus::TimedOut) {
+-        GGML_ABORT("ggml_webgpu: %s timed out after %u ms\n", wait_name, timeout_ms);
+-    }
+-    if (wait_status == wgpu::WaitStatus::Error) {
+-        GGML_ABORT("ggml_webgpu: %s failed\n", wait_name);
++                                                  const char *     callback_message) {
++    if (wait_status != wgpu::WaitStatus::Success) {
++        // TimedOut is also unexpected for this completion-based wait. Never
++        // interpret it (or an unknown status) as successful GPU completion.
++        GGML_ABORT("ggml_webgpu: %s failed with wait status %d (no deadline)\n",
++                   wait_name, static_cast<int>(wait_status));
+     }
+     if (callback_status != success_status) {
+         GGML_ABORT("ggml_webgpu: %s failed with status %d: %s\n", failure_name, static_cast<int>(callback_status),
+@@ -532,10 +529,10 @@
+                 callback_status  = status;
+                 callback_message = std::string(message);
+             }),
+-        WEBGPU_QUEUE_WAIT_TIMEOUT_NS);
++        WEBGPU_COMPLETION_WAIT_TIMEOUT_NS);
+ 
+     ggml_backend_webgpu_check_wait_status(wait_status, callback_status, wgpu::QueueWorkDoneStatus::Success,
+-                                          "Queue wait", "Queue work", callback_message.c_str(), WEBGPU_QUEUE_WAIT_TIMEOUT_MS);
++                                          "Queue wait", "Queue work", callback_message.c_str());
+ }
+ 
+ static void ggml_backend_webgpu_map_buffer(webgpu_global_context & ctx,
+@@ -552,10 +549,10 @@
+                             callback_status  = status;
+                             callback_message = std::string(message);
+                         }),
+-        WEBGPU_RUNTIME_WAIT_TIMEOUT_NS);
++        WEBGPU_COMPLETION_WAIT_TIMEOUT_NS);
+ 
+     ggml_backend_webgpu_check_wait_status(wait_status, callback_status, wgpu::MapAsyncStatus::Success,
+-                                          "Buffer map wait", "Buffer map", callback_message.c_str(), WEBGPU_RUNTIME_WAIT_TIMEOUT_MS);
++                                          "Buffer map wait", "Buffer map", callback_message.c_str());
+ }
+ 
+ static void ggml_backend_webgpu_submit_commands(webgpu_context &          ctx,
+@@ -3532,9 +3529,15 @@
+     return GGML_STATUS_SUCCESS;
+ }
+ 
++struct ggml_backend_webgpu_event_result {
++    wgpu::QueueWorkDoneStatus status = wgpu::QueueWorkDoneStatus::Error;
++    std::string message;
++};
++
+ struct ggml_backend_webgpu_event_context {
+     webgpu_global_context global_ctx;
+     wgpu::Future          future;
++    std::shared_ptr<ggml_backend_webgpu_event_result> result;
+     bool                  recorded = false;
+ };
+ 
+@@ -3563,19 +3566,30 @@
+         return;
+     }
+     wgpu::WaitStatus status =
+-        event_ctx->global_ctx->instance.WaitAny(event_ctx->future, WEBGPU_RUNTIME_WAIT_TIMEOUT_NS);
+-    if (status == wgpu::WaitStatus::TimedOut) {
+-        GGML_ABORT("ggml_webgpu: event_synchronize timed out after %u ms\n", WEBGPU_RUNTIME_WAIT_TIMEOUT_MS);
+-    }
++        event_ctx->global_ctx->instance.WaitAny(event_ctx->future, WEBGPU_COMPLETION_WAIT_TIMEOUT_NS);
++    if (!event_ctx->result) {
++        GGML_ABORT("ggml_webgpu: recorded event has no completion state\n");
++    }
++    ggml_backend_webgpu_check_wait_status(status, event_ctx->result->status, wgpu::QueueWorkDoneStatus::Success,
++                                          "Event wait", "Event work", event_ctx->result->message.c_str());
+     event_ctx->recorded = false;
++    event_ctx->result.reset();
+ }
+ 
+ static void ggml_backend_webgpu_event_record(ggml_backend_t backend, ggml_backend_event_t event) {
+     ggml_backend_webgpu_context *       backend_ctx = (ggml_backend_webgpu_context *) backend->context;
+     ggml_backend_webgpu_event_context * event_ctx   = (ggml_backend_webgpu_event_context *) event->context;
+ 
++    // Keep one completion state per recording. A late callback must not write
++    // through a freed event or overwrite the state of a newer recording.
++    auto result = std::make_shared<ggml_backend_webgpu_event_result>();
+     event_ctx->future = backend_ctx->webgpu_ctx->global_ctx->queue.OnSubmittedWorkDone(
+-        wgpu::CallbackMode::AllowSpontaneous, [](wgpu::QueueWorkDoneStatus, wgpu::StringView) {});
++        wgpu::CallbackMode::AllowSpontaneous,
++        [result](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {
++            result->status = status;
++            result->message = std::string(message);
++        });
++    event_ctx->result = std::move(result);
+     event_ctx->recorded = true;
+ }
+ 
+@@ -4141,6 +4155,7 @@
+             }),
+         UINT64_MAX);
+     GGML_ASSERT(ctx->webgpu_global_ctx->device != nullptr);
++    GGML_LOG_INFO("ggml_webgpu: completion-wait-policy-v1 queue=completion map=completion event=completion\n");
+ 
+     ggml_webgpu_init_memset_pipeline(ctx->webgpu_global_ctx);
+     ggml_webgpu_create_buffer(ctx->webgpu_global_ctx->device, ctx->webgpu_global_ctx->memset_params_buf,
