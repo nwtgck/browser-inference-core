@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+  "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -436,11 +436,24 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815357,
+          "builtAtUnix": 1790839419,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -456,7 +469,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -516,7 +529,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -861,11 +874,24 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815294,
+          "builtAtUnix": 1790839327,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -885,7 +911,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -945,7 +971,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1290,11 +1316,24 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815405,
+          "builtAtUnix": 1790839312,
           "buildCache": {
             "identity": "09958df5db9be24e0470393e90e782e1fef7301478a8f39800ec796e5017aea0",
             "compilerWrapper": "ccache"
@@ -1310,7 +1349,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1370,7 +1409,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1715,11 +1754,24 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815300,
+          "builtAtUnix": 1790839435,
           "buildCache": {
             "identity": "09958df5db9be24e0470393e90e782e1fef7301478a8f39800ec796e5017aea0",
             "compilerWrapper": "ccache"
@@ -1739,7 +1791,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1799,7 +1851,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2144,13 +2196,26 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815297,
+          "builtAtUnix": 1790839404,
           "buildCache": {
-            "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
+            "identity": "09958df5db9be24e0470393e90e782e1fef7301478a8f39800ec796e5017aea0",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -2164,7 +2229,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
+          "sourceCommit": "440af536ae30479549cc0499477c4deaadecc7e7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2224,7 +2289,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2569,11 +2634,24 @@
                   }
                 ],
                 "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790815297,
+          "builtAtUnix": 1790839369,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -3038,12 +3116,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 231403,
-      "sha256": "ab58246376190fce9600d4cc6630468e710a3ef64ccc9d47de85f4df8f1d3622"
+      "sha256": "ac27b9cf91933823cf6ae4388a2ca3e43018abd32f0d940b3cacc06a1141fce3"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43643048,
-      "sha256": "d098a698e37ba7d365cdecd96820b430b88319ce41f02f15bfaff5ffbdd69271"
+      "bytes": 43645494,
+      "sha256": "f8cdd90ee0a881b96b86724ae49ab70c814801d8c27210c238a921a4aee21099"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -3057,8 +3135,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43975821,
-      "sha256": "1c1f0fc7c339ab2c4296314e6e9cdb8ebe58eae069e57d9292d5bbdbcd039ea1"
+      "bytes": 43978300,
+      "sha256": "43eeecbd000a73e29a00d37737a4815467bf13f2ab2a54a854253cc70faf73a1"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -3072,8 +3150,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37792762,
-      "sha256": "e1050899792148e0edca08692e8165eb2680dc472e0c9b5e6197874ff304d3cb"
+      "bytes": 37792970,
+      "sha256": "dceb6826c05583db365f90603bd76688287bddff3cee557f0fa6c8a2b8201efc"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -3087,8 +3165,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38006025,
-      "sha256": "cfc6cea920e114dfb3893185a9311454b2720e5c7cf0d43a4ee17b667c539dc1"
+      "bytes": 38007322,
+      "sha256": "b2409d02d8bd1c10a09c7d32d2cd1dd78f68e915ba4974e291e4aea3b0e3ab8d"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -3102,8 +3180,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38097162,
-      "sha256": "5b3e4d43acae0e5f31213776765cd36000af555567c6a6cb559b05fb96881123"
+      "bytes": 38097287,
+      "sha256": "567641cc56a8cedbd46295a7a9e5d45cfb1101974089ea5c0bde8644986096b1"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -3117,8 +3195,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38320617,
-      "sha256": "be0665a94943bb8c2e8e1842365b2db9ab35d578e8700cb81049c1e864e26e5f"
+      "bytes": 38321831,
+      "sha256": "ce39cd6d0e9ad66d240c832614799d8baca7b7b45a125d0760c310277127fc79"
     }
   ]
 }
