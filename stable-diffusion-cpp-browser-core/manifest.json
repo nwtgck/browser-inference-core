@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+  "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -423,11 +423,24 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655607,
+          "builtAtUnix": 1790815357,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -443,7 +456,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -503,7 +516,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -835,11 +848,24 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655630,
+          "builtAtUnix": 1790815294,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -859,7 +885,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -919,7 +945,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1251,13 +1277,26 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655582,
+          "builtAtUnix": 1790815405,
           "buildCache": {
-            "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
+            "identity": "09958df5db9be24e0470393e90e782e1fef7301478a8f39800ec796e5017aea0",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -1271,7 +1310,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1331,7 +1370,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1663,13 +1702,26 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655577,
+          "builtAtUnix": 1790815300,
           "buildCache": {
-            "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
+            "identity": "09958df5db9be24e0470393e90e782e1fef7301478a8f39800ec796e5017aea0",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -1687,7 +1739,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1747,7 +1799,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2079,11 +2131,24 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655600,
+          "builtAtUnix": 1790815297,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -2099,7 +2164,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "8878e887d5becc8dfad5b5c9740a681eed1d3920",
+          "sourceCommit": "ebca8f1bdc8ec6c547d0cbb34286a8765c0e7cf8",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2159,7 +2224,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "e90c3ce8bc8023132d20d5148f84b7413f24e03236d9e3141442cbdacc1e1390",
+            "inventorySha256": "fbdd1f4f5702a3ff6ce24696db79a62d99a041318c5e676ead3f90517f80559e",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2491,11 +2556,24 @@
                   }
                 ],
                 "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1790655560,
+          "builtAtUnix": 1790815297,
           "buildCache": {
             "identity": "e3f9fe487ce0d432da0ea6329a2277bb46db32f693e92d0431f9e53fc450938e",
             "compilerWrapper": "ccache"
@@ -2965,7 +3043,7 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
       "bytes": 43643048,
-      "sha256": "75db041ff23b17c94e827826da9a48d3fc6f9924156f9145240670e75ae4e7c0"
+      "sha256": "d098a698e37ba7d365cdecd96820b430b88319ce41f02f15bfaff5ffbdd69271"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -2980,7 +3058,7 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
       "bytes": 43975821,
-      "sha256": "2a1f1a9442038828dc92de1fadf5a2be9f6cd8fe417d6ead097150d8d71fbbfe"
+      "sha256": "1c1f0fc7c339ab2c4296314e6e9cdb8ebe58eae069e57d9292d5bbdbcd039ea1"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -2995,7 +3073,7 @@
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
       "bytes": 37792762,
-      "sha256": "03887a6dee4a1f3768bbbea7e93fbbb14ef604c10b805f7914c91a0b943e9b73"
+      "sha256": "e1050899792148e0edca08692e8165eb2680dc472e0c9b5e6197874ff304d3cb"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -3010,7 +3088,7 @@
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
       "bytes": 38006025,
-      "sha256": "5d163c5566b74928025d042fe50ef7e25b5f97b5710b5121f3ede3b8250a4e2d"
+      "sha256": "cfc6cea920e114dfb3893185a9311454b2720e5c7cf0d43a4ee17b667c539dc1"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -3024,8 +3102,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38097161,
-      "sha256": "5d936815024c8ad6e49a8bae0a40abd633919407778992c3654b8cd21f146c7a"
+      "bytes": 38097162,
+      "sha256": "5b3e4d43acae0e5f31213776765cd36000af555567c6a6cb559b05fb96881123"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -3040,7 +3118,7 @@
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
       "bytes": 38320617,
-      "sha256": "3e471f085ca1207e3e22517cf2a568bf8bf916bb749dca7db70510c41afe9c35"
+      "sha256": "be0665a94943bb8c2e8e1842365b2db9ab35d578e8700cb81049c1e864e26e5f"
     }
   ]
 }
