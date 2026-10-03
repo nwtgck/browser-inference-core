@@ -1,0 +1,38 @@
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -515,10 +515,34 @@
+         } else {
+             ggml_tensor* collapsed = nullptr;
+ #ifdef SD_BROWSER_WEBGPU
++            // Multi-frame pointwise convolution (e.g. H3 post_quant_conv) is a
++            // channel matrix product, with no spatial/temporal neighborhood.
++            // Preserve single-frame paths and explicit direct/precision flags.
++            if (IC > 0 && x->ne[2] > 1 && x->ne[3] % IC == 0 && w->ne[3] % IC == 0 &&
++                w->ne[0] == 1 && w->ne[1] == 1 && w->ne[2] == 1 &&
++                s0 == 1 && s1 == 1 && s2 == 1 && p0 == 0 && p1 == 0 && p2 == 0 &&
++                d0 == 1 && d1 == 1 && d2 == 1 && x->type == GGML_TYPE_F32 &&
++                (w->type == GGML_TYPE_F16 || w->type == GGML_TYPE_F32) &&
++                ggml_is_contiguous(x) && ggml_is_contiguous(w)) {
++                const int64_t positions = x->ne[0] * x->ne[1] * x->ne[2];
++                const int64_t batches = x->ne[3] / IC;
++                const int64_t outputs = w->ne[3] / IC;
++                auto input = ggml_cont(ctx, ggml_permute(ctx, ggml_reshape_3d(ctx, x, positions, IC, batches), 1, 0, 2, 3));
++                auto weight = ggml_reshape_2d(ctx, w, IC, outputs);
++                auto product = ggml_mul_mat(ctx, weight, input);
++                auto arranged = ggml_cont(ctx, ggml_permute(ctx, product, 1, 0, 2, 3));
++                // A backend can reject any materialized node (including binding
++                // size limits). In that case keep the original fallback graph.
++                if (ggml_backend_supports_op(backend, input) &&
++                    ggml_backend_supports_op(backend, product) &&
++                    ggml_backend_supports_op(backend, arranged)) {
++                    collapsed = ggml_reshape_4d(ctx, arranged, x->ne[0], x->ne[1], x->ne[2], outputs * batches);
++                }
++            }
+             // One sequence's full-depth window is a 2D convolution with depth folded
+             // into channels. Reshapes preserve storage types and avoid a large
+             // im2col_3d buffer when the backend lacks that operation.
+-            if (IC > 0 && s2 == 1 && p2 == 0 && d2 == 1 && x->ne[2] == w->ne[2] &&
++            if (collapsed == nullptr && IC > 0 && s2 == 1 && p2 == 0 && d2 == 1 && x->ne[2] == w->ne[2] &&
+                 x->ne[3] == IC && w->ne[3] % IC == 0 &&
+                 x->type == GGML_TYPE_F32 && (w->type == GGML_TYPE_F16 || w->type == GGML_TYPE_F32) &&
+                 ggml_is_contiguous(x) && ggml_is_contiguous(w)) {

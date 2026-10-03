@@ -194,3 +194,48 @@ patch, relax input hashes, or substitute a different upstream revision.
     checks exercise that backend's actual support predicate. This is not
     trained-model inference. Remove when upstream preserves valid address
     metadata when constructing measurement graphs.
+
+16. Temporal pointwise convolution: when WebGPU cannot execute IM2COL_3D,
+    a contiguous multi-frame 1x1x1 kernel with unit stride/dilation and no padding
+    can be expressed as channel matrix multiplication plus contiguous layout
+    changes. This covers H3's 24-channel post-quantization video VAE convolution
+    without materializing a 3D im2col buffer. Every materialized node must pass the
+    backend capability predicate; otherwise the existing fallback remains. The
+    old single-frame/full-depth path, explicit direct-convolution choice and
+    forced-precision branch are unchanged. Native tests exercise 40 synthetic
+    type/batch/bias/fallback cases against an independent CPU numerical reference.
+    These checks are not H3 inference or WebGPU performance/accuracy validation.
+    The lowering becomes redundant if upstream supplies an equivalent supported
+    temporal pointwise path or the backend supports the original operation.
+
+18. Superseded by patch 0019 (retained in the ordered source history).
+    A finite video queue completion budget: allow 180 seconds for submitted GPU
+    work, while keeping buffer-map and event synchronization at 30 seconds.
+    User H3 traces had completed steps around 22-28 seconds before the next
+    30-second queue wait aborted; this does not establish a driver failure.
+    The wait-status and callback-status checks remain unchanged. No repeated
+    wait, queue resubmission, tensor change or precision fallback is added.
+    Timeout messages include the actual selected budget. The extracted-source
+    contract probe checks both call sites and synthetic completion/failure cases;
+    it does not execute WebGPU or H3. All SD WebGPU builds receive this queue
+    budget; the separately built llama runtime is unchanged. Replaced by an
+    upstream configurable finite workload budget with equivalent failure checks.
+
+
+19. Completion-based WebGPU waits: remove application wall-clock deadlines for
+    queue completion, buffer mapping and backend events. Map/event waits can also
+    depend on queued GPU work; keeping their 30-second deadlines would move the
+    same workload-dependent failure to another synchronization point. UINT64_MAX
+    selects the Emdawn completion-only path already used for adapter/device waits.
+    This is a single wait on the original future, not polling or resubmission.
+    Wait errors, unexpected wait statuses and failed/cancelled callbacks still
+    abort. Backend events now retain the callback result per recording; a late
+    callback cannot access a freed event or overwrite a later recording.
+    The runtime announces completion-wait-policy-v1 at device initialization.
+    Callers must retain explicit cancellation/Worker termination and device-loss
+    handling. This patch does not disable browser/OS driver watchdogs or force
+    an unresponsive GPU to recover. All SD WebGPU profiles receive the policy;
+    the separately built llama runtime remains unchanged. The prepared-source
+    probe covers long completions, errors and callback lifetimes; it does not
+    execute GPU work. The patch is removable when the pinned upstream implements
+    equivalent completion-based waits and failure/ownership checks.

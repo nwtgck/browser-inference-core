@@ -19,6 +19,8 @@ extern "C" uint32_t sdc_test_safetensors_value(const char*);
 extern "C" uint32_t sdc_test_model_tensor_count(const char*);
 extern "C" void sdc_sd_ctx_params_init(uint64_t);
 extern "C" void sdc_sd_img_gen_params_init(uint64_t);
+extern "C" void sdc_sd_vid_gen_params_init(uint64_t);
+extern "C" int32_t sdc_generate_video(uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t);
 extern "C" uint64_t sdc_test_gguf_offset(const char*);
 extern "C" uint32_t sdc_test_gguf_value(const char*);
 extern "C" void sdc_test_callbacks();
@@ -139,6 +141,20 @@ int main() {
         sd_img_gen_params_t defaults{};sd_img_gen_params_init(&defaults);
         check(image.width==defaults.width && image.height==defaults.height && image.batch_count==defaults.batch_count &&
             image.sample_params.sample_method==defaults.sample_params.sample_method,"no generation policy in core");
+        { // Exercise the generated video ABI, not a TypeScript field mock.
+            sd_vid_gen_params_t video{}, reference_video{};
+            sdc_sd_vid_gen_params_init(uint64_t(uintptr_t(&video)));
+            sd_vid_gen_params_init(&reference_video);
+            check(video.video_frames==reference_video.video_frames && video.fps==reference_video.fps &&
+                  video.seed==reference_video.seed && video.vae_tiling_params.rel_size_x==reference_video.vae_tiling_params.rel_size_x &&
+                  video.sample_params.sample_method==reference_video.sample_params.sample_method,"video bindings preserve native defaults");
+            sd_image_t sentinel_image{};sd_audio_t sentinel_audio{};
+            sd_image_t* frames=&sentinel_image;sd_audio_t* audio=&sentinel_audio;int count=73,fps=24;
+            check(sdc_generate_video(0,uint64_t(uintptr_t(&video)),uint64_t(uintptr_t(&frames)),
+                                     uint64_t(uintptr_t(&count)),uint64_t(uintptr_t(&audio)),uint64_t(uintptr_t(&fps)))==0,
+                  "null-context video generation fails without inference");
+            check(frames==nullptr && audio==nullptr && count==0 && fps==0,"video failure zeroes all distinct output slots");
+        }
         for(uint32_t gib : {0,2,4,8}) {
             const char* path="large-offset-test.gguf";
             const uint64_t offset=sparse_gguf(path,gib,gib==2?2:3);
