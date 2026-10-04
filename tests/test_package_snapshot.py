@@ -285,6 +285,46 @@ class RuntimeSnapshot(unittest.TestCase):
             for info in final['profiles'].values():
                 for data in info['variants'].values(): self.assertIs(data['validation']['realModelInference'], False)
 
+    def prepare_nightly_subset(self):
+        self.runtime='llama-cpp';rr=self.repo/self.runtime
+        config=json.loads((ROOT/'llama-cpp/config/sources.json').read_text())
+        (rr/'config/sources.json').write_text(json.dumps(config))
+        nightly=config['sources']['upstream-nightly']
+        p=rr/nightly['pinFile'];p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps({'llamaCommit':'b'*40}))
+        (rr/nightly['patchSeries']).write_text('{"testIdentityOnly":true}')
+        template=rr/nightly['vendorPath']/'models/templates/Qwen-Qwen3-0.6B.jinja'
+        template.parent.mkdir(parents=True,exist_ok=True);template.write_text('nightly synthetic template')
+        m=json.loads((self.package()/'manifest.json').read_text());m['sourceId']='upstream-nightly'
+        for profile in list(m['profiles']):
+            if profile not in nightly['profiles']:
+                del m['profiles'][profile];shutil.rmtree(self.package()/'profiles'/profile)
+            else:
+                for record in m['profiles'][profile]['variants'].values():record['sourceId']='upstream-nightly'
+        fixtures.write_manifest(self.package(),m)
+        self.result_mutator=lambda envelope:envelope.__setitem__('results',[item for item in envelope['results'] if item['profile'] in nightly['profiles']])
+        return template
+
+    def test_nightly_smoke_checks_only_registered_subset_without_claiming_asyncify(self):
+        template=self.prepare_nightly_subset();seen=[];original=self.fake_run
+        def run(command,phase,cwd,env=None):
+            if phase=='test.chromium_smoke':seen.append(env['BIC_LLAMA_CHAT_TEMPLATE'])
+            return original(command,phase,cwd,env)
+        with patch.object(snapshot,'_run',side_effect=run):
+            receipt=snapshot.validate_package(self.runtime,self.package(),self.receipt())
+        self.assertEqual(len(receipt['results']),4)
+        self.assertIsNone(receipt['nodeAsyncifyPassed'])
+        self.assertFalse(any(phase=='test.node_asyncify' for phase,_ in self.commands))
+        self.assertEqual(seen,[str(template)])
+
+    def test_nightly_template_change_and_wrong_pin_fail_closed(self):
+        template=self.prepare_nightly_subset()
+        self.after_command=lambda _:template.write_text('mutated template')
+        with self.assertRaisesRegex(ValueError,'implementation'):self.validate()
+        self.assertFalse(self.receipt().exists())
+        self.after_command=None
+        pin=self.repo/'llama-cpp/sources/upstream-nightly/pin.json';pin.write_text(json.dumps({'llamaCommit':'f'*40}))
+        with self.assertRaisesRegex(ValueError,'pin mismatch'):self.validate()
+
     def test_owned_temporary_directory_resolves_system_alias_before_use(self):
         actual = self.root / 'temporary-root'; actual.mkdir()
         alias = self.root / 'system-temp-alias'; alias.symlink_to(actual, target_is_directory=True)

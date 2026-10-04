@@ -391,55 +391,33 @@ class PublicationWorkflow(unittest.TestCase):
     def test_workflow_defers_only_assembly_and_uses_paired_publisher_outputs(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         publish = workflow.split('\n  publish:\n', 1)[1]
-        self.assertIn('scripts/package_runtime.py --defer-npm-pack', publish)
-        self.assertEqual(publish.count('--defer-npm-pack'), 1)
+        assembly = workflow.split('\n  assemble:\n',1)[1].split('\n  publish:\n',1)[0]
+        self.assertIn('scripts/assemble_source_plan.py', assembly)
+        self.assertIn('--verify-only', assembly)
+        self.assertIn('name: source-runtime-catalog', publish)
+        self.assertNotIn('--defer-npm-pack', publish)
         self.assertIn('ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}', publish)
         self.assertIn('PUBLISHED_MANIFEST_SHA256: ${{ steps.publish.outputs.manifest-sha256 }}', publish)
         self.assertIn('--published-manifest-sha256 "$PUBLISHED_MANIFEST_SHA256"', publish)
         self.assertLess(publish.index('Verify package source before publication'), publish.index('scripts/publish_artifacts.py'))
         self.assertLess(publish.index('scripts/publish_artifacts.py'), publish.index('scripts/consumer_metadata.py'))
         self.assertIn("failure() && steps.publish.outputs.commit != ''", publish)
-        self.assertEqual(workflow.count('submodules: false'), 7)
+        self.assertEqual(workflow.count('submodules: false'), 9)
         self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 6)
         self.assertIn('submodules: false', publish)
         self.assertIn('persist-credentials: false', publish)
 
-    def test_selective_checkout_uses_the_gitlink_not_remote_tip_or_nested_submodules(self):
-        publish = (ROOT / '.github/workflows/build.yml').read_text().split('\n  publish:\n', 1)[1]
-        command = re.search(r'(git submodule update[^\n]+)', publish)[1]
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            upstream = root / 'upstream'; upstream.mkdir()
-            source = root / 'source'; source.mkdir()
-            for path in (upstream, source):
-                git('init', '-q', cwd=path)
-                git('config', 'user.name', 'Fixture', cwd=path)
-                git('config', 'user.email', 'fixture@example.invalid', cwd=path)
-            (upstream / 'payload').write_text('pinned')
-            (upstream / '.gitmodules').write_text('[submodule "unused"]\n path = nested\n url = file:///not-a-repository\n')
-            git('add', '.', cwd=upstream)
-            git('update-index', '--add', '--cacheinfo', '160000,' + 'a' * 40 + ',nested', cwd=upstream)
-            git('commit', '-qm', 'pinned fixture', cwd=upstream)
-            pinned = git('rev-parse', 'HEAD', cwd=upstream)
-            (upstream / 'payload').write_text('newer remote tip')
-            git('commit', '-qam', 'tip fixture', cwd=upstream)
-            modules = []
-            for path in ('llama-cpp/vendor/llama.cpp', 'stable-diffusion-cpp/vendor/stable-diffusion.cpp',
-                         'stable-diffusion-cpp/vendor/ggml-webgpu-source'):
-                url = upstream.as_uri() if path.startswith('llama-cpp/') else 'file:///not-a-repository'
-                modules.append(f'[submodule "{path}"]\n path = {path}\n url = {url}\n')
-                git('update-index', '--add', '--cacheinfo', f'160000,{pinned},{path}', cwd=source)
-            (source / '.gitmodules').write_text(''.join(modules))
-            git('add', '.gitmodules', cwd=source)
-            git('commit', '-qm', 'fixture source gitlinks', cwd=source)
-            env = {**os.environ, 'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'protocol.file.allow',
-                   'GIT_CONFIG_VALUE_0': 'always', 'GIT_TERMINAL_PROMPT': '0'}
-            subprocess.run(['bash', '-e', '-c', command], cwd=source, env=env, check=True, capture_output=True)
-            checkout = source / 'llama-cpp/vendor/llama.cpp'
-            self.assertEqual(git('rev-parse', 'HEAD', cwd=checkout), pinned)
-            self.assertEqual((checkout / 'payload').read_text(), 'pinned')
-            self.assertFalse((checkout / 'nested/.git').exists())
-            self.assertFalse((source / 'stable-diffusion-cpp/vendor/ggml-webgpu-source/.git').exists())
+    def test_source_catalog_report_does_not_fetch_mutable_upstream_provenance(self):
+        workflow=(ROOT/'.github/workflows/build.yml').read_text()
+        publish=workflow.split('\n  publish:\n',1)[1]
+        self.assertNotIn('git submodule',publish)
+        self.assertNotIn('--remote',publish.split('scripts/publish_artifacts.py',1)[0])
+        self.assertIn('name: source-runtime-catalog',publish)
+        self.assertIn('ref: ${{ env.LCB_SOURCE_COMMIT }}',publish)
+        self.assertIn('persist-credentials: false',publish)
+        reporter=(ROOT/'scripts/consumer_metadata.py').read_text()
+        self.assertIn("collect(ROOT / 'llama-cpp', llama) if llama is not None else {}",reporter)
+        self.assertIn('read_bound_snapshot(package',reporter)
 
 
 if __name__ == '__main__': unittest.main()

@@ -34,6 +34,9 @@ def identity(path: Path) -> dict:
 def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: bool = True) -> dict:
     """Check the complete tree; only npm compression can be explicitly deferred."""
     directory = directory.resolve()
+    if not (directory / 'manifest.json').is_symlink() and json.loads((directory / 'manifest.json').read_text()).get('formatVersion') == 4:
+        from package_sources import validate as validate_sources
+        return validate_sources(directory, require_clean=require_clean, check_npm_pack=check_npm_pack)
     entries = list(directory.rglob('*'))
     if any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in entries):
         raise ValueError('Linked or non-regular entry in runtime package')

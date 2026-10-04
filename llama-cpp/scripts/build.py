@@ -12,6 +12,7 @@ import sys
 import time
 sys.path.append(str(Path(__file__).resolve().parents[2] / 'scripts'))
 from browser_toolchain import runtime_toolchain
+from source_config import get_source, fingerprint, patch_series, DEFAULT_SOURCE
 from patch_emscripten import verify_asyncify_bigint_patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,11 +32,16 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--profile', choices=list(profiles), required=True)
     p.add_argument('--variant', choices=list(variants), required=True)
+    p.add_argument('--source', default=DEFAULT_SOURCE)
     p.add_argument('--fresh', action='store_true', help='Discard this profile/variant build tree before configuration')
     p.add_argument('--jobs',type=int,default=min(os.cpu_count() or 2, 8))
     a=p.parse_args(); cfg=profiles[a.profile]
-    toolchain=runtime_toolchain(ROOT)
-    src=ROOT/'vendor/llama.cpp'
+    source=get_source(ROOT,a.source)
+    if a.profile not in source['profiles']: p.error('Profile is not enabled for this source')
+    toolchain={**runtime_toolchain(ROOT),'llamaCommit':source['commit']}
+    patches=patch_series(ROOT,source)
+    source_inputs=fingerprint(ROOT,a.source,a.profile,a.variant)
+    src=ROOT/source['vendorPath']
     if not (src/'include/llama.h').exists(): p.error('Run git submodule update --init --recursive')
     sha=output('git','rev-parse','HEAD',cwd=src)
     if sha != toolchain['llamaCommit']: p.error('Submodule HEAD does not match toolchain.json')
@@ -53,10 +59,12 @@ def main():
     status_before=source_status(ROOT)
     # Assertions affect linked Wasm as well as JavaScript. Each variant owns a
     # separate build tree; never reuse another variant's generated runtime files.
-    build=ROOT/'build'/a.profile/a.variant
+    build_root=ROOT/'build' if a.source==DEFAULT_SOURCE else ROOT/'build/sources'/a.source
+    build=build_root/a.profile/a.variant
     if a.fresh and build.exists(): shutil.rmtree(build)
     command=['emcmake','cmake','-S',str(ROOT),'-B',str(build),'-G','Ninja',
              '-DCMAKE_BUILD_TYPE=Release', '-DLCB_VARIANT='+a.variant,
+             '-DLCB_LLAMA_SOURCE='+str(src), '-DLCB_SOURCE_ID='+a.source,
              '-DLCB_MEMORY64='+('ON' if cfg['memory64'] else 'OFF'),
              '-DLCB_WEBGPU='+('ON' if cfg['webgpu'] else 'OFF'),
              # Reset cached comparison overrides and record the workaround in
@@ -79,7 +87,9 @@ def main():
         print('Source changes detected; this build cannot be published:\n'+json.dumps({
             'beforeBuild':status_before,'afterBuild':status_after,
         },indent=2),file=sys.stderr)
-    provenance={'profile':a.profile,'variant':a.variant,'configuration':cfg,
+    provenance={'sourceId':a.source,'sourceRepository':source['repository'],
+                'buildInputFingerprint':source_inputs['sha256'],'patchSeries':patches,
+                'profile':a.profile,'variant':a.variant,'configuration':cfg,
                 'variantConfiguration':variants[a.variant],'sourceCommit':source_commit,
                 'sourceDirty': bool(status_before or status_after),
                 'sourceStatusBeforeBuild':status_before,'sourceStatusAfterBuild':status_after,

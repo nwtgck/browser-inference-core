@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from fixture_sources import seed_sources
 from fixture_toolchain import merged_toolchain, seed_toolchain
 from unittest.mock import patch
 
@@ -46,7 +47,7 @@ class CiBuildArtifacts(unittest.TestCase):
                 (folder/'CMakeCache.txt').write_text('PRIVATE_BUILD_PATH=/example\n')
                 (folder/'object.o').write_bytes(b'not a runtime asset')
                 (folder/'libcore.a').write_bytes(b'not a runtime asset')
-                data={'profile':name,'variant':variant,'variantConfiguration':settings,'sourceCommit':self.source_commit,'sourceDirty':False,
+                data={'sourceId':'upstream-stable','profile':name,'variant':variant,'variantConfiguration':settings,'sourceCommit':self.source_commit,'sourceDirty':False,
                       'sourceStatusBeforeBuild':[],'sourceStatusAfterBuild':[],
                       'llamaCommit':self.toolchain['llamaCommit'],'toolchain':self.toolchain,
                       'configuration':cfg,'builtAtUnix':123456,
@@ -93,6 +94,12 @@ class CiBuildArtifacts(unittest.TestCase):
     def contents(directory):
         return {file.relative_to(directory).as_posix():file.read_bytes()
                 for file in directory.rglob('*') if file.is_file()}
+
+    def test_source_track_cannot_be_substituted_at_staging(self):
+        with self.assertRaisesRegex(ValueError,'source track'):
+            stage_profile(self.build,self.output,'cpu-wasm32',variant='browser',source_commit=self.source_commit,
+                          toolchain=self.toolchain,configuration=self.profiles['cpu-wasm32'],source_id='upstream-nightly')
+        self.assertFalse(self.output.exists())
 
     def test_stage_contains_complete_runtime_but_no_compiler_intermediates(self):
         folder=self.stage()
@@ -252,6 +259,7 @@ class CiBuildArtifacts(unittest.TestCase):
         config=self.root/'config'; config.mkdir()
         (config/'profiles.json').write_text(json.dumps(self.profiles))
         seed_toolchain(self.root, self.toolchain)
+        seed_sources(self.root)
         shutil.copytree(self.sdk,self.root.parent/'.tools/emsdk/upstream/emscripten')
         shutil.copytree(self.dawn,self.root.parent/'.tools/emdawnwebgpu_pkg')
         argv=['stage_ci_build.py','--profile','webgpu-wasm64-jspi','--variant','browser','--include-toolchain-notices']

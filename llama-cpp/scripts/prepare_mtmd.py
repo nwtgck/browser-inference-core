@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from source_config import patch_series, DEFAULT_SOURCE
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'
@@ -48,13 +49,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--source-id", default=DEFAULT_SOURCE)
     parser.add_argument("--component", choices=("vision", "audio"), default="vision")
     args = parser.parse_args()
-    if args.component == "audio":
-        prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-audio-single-thread.patch",
-                filename="mtmd-audio.cpp")
-    else:
-        prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-webgpu-bf16.patch")
+    entries=patch_series(ROOT,args.source_id)
+    item=next(p for p in entries if p['component']==args.component)
+    prepare(args.source,args.output,ROOT/item['file'],filename=item['translationUnit'])
+
 
 
 if __name__ == "__main__":

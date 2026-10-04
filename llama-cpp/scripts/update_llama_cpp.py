@@ -14,6 +14,7 @@ from urllib.parse import quote, urlencode
 
 from github_api import ApiError, GitHub, full_sha, git, git_auth_env, repository_name
 from prepare_mtmd import PATCH_DIRECTORY, prepare
+from source_config import get_source, patch_series, DEFAULT_SOURCE
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = 'ggml-org/llama.cpp'
@@ -36,20 +37,20 @@ def checked_ref(value: str) -> str:
     return value
 
 
-def peel(api: GitHub, obj: dict) -> str:
+def peel(api: GitHub, obj: dict, upstream=UPSTREAM) -> str:
     for _ in range(10):
         if obj['type'] == 'commit':
             return full_sha(obj['sha'])
         if obj['type'] != 'tag':
             break
-        obj = api.get_tag(UPSTREAM, full_sha(obj['sha']))['object']
+        obj = api.get_tag(upstream, full_sha(obj['sha']))['object']
     raise ValueError('Upstream ref does not resolve to a commit')
 
 
-def resolve_named_ref(api: GitHub, ref: str) -> str:
+def resolve_named_ref(api: GitHub, ref: str, upstream=UPSTREAM) -> str:
     checked_ref(ref)
     if re.fullmatch(r'[0-9a-f]{40}', ref):
-        result = api.get_commit(UPSTREAM, ref)
+        result = api.get_commit(upstream, ref)
         if result['sha'] != ref:
             raise ValueError('Commit resolution mismatch')
         return ref
@@ -57,16 +58,16 @@ def resolve_named_ref(api: GitHub, ref: str) -> str:
     objects = []
     for candidate in candidates:
         try:
-            objects.append(api.get_ref(UPSTREAM, candidate)['object'])
+            objects.append(api.get_ref(upstream, candidate)['object'])
         except ApiError as error:
             if error.status != 404:
                 raise
     if len(objects) != 1:
         raise ValueError('Ref is missing or ambiguous; use refs/tags/... or refs/heads/...')
-    return peel(api, objects[0])
+    return peel(api, objects[0], upstream)
 
 
-def resolve_target(api: GitHub, target: str, custom_ref: str = '') -> dict:
+def resolve_target(api: GitHub, target: str, custom_ref: str = '', upstream=UPSTREAM) -> dict:
     release = None
     if target == 'custom':
         ref = checked_ref(custom_ref)
@@ -74,7 +75,7 @@ def resolve_target(api: GitHub, target: str, custom_ref: str = '') -> dict:
         if custom_ref:
             raise ValueError('custom_ref is only valid with target=custom')
         if target == 'latest':
-            release = api.get_latest_release(UPSTREAM)
+            release = api.get_latest_release(upstream)
             # A tag pattern alone cannot establish release status. Conversely,
             # older bNNNN releases must never silently become the stable channel.
             if release['draft'] or release['prerelease'] or not STABLE.fullmatch(release['tag_name']):
@@ -82,7 +83,7 @@ def resolve_target(api: GitHub, target: str, custom_ref: str = '') -> dict:
         elif target == 'latest-unstable':
             # First published bNNNN pre-release in GitHub's release-list order.
             # This is the released nightly channel, never an unbuilt master tip.
-            release = next((item for item in api.iter_releases(UPSTREAM)
+            release = next((item for item in api.iter_releases(upstream)
                             if not item['draft'] and item['prerelease']
                             and item.get('published_at') and NIGHTLY.fullmatch(item['tag_name'])), None)
             if release is None:
@@ -90,41 +91,52 @@ def resolve_target(api: GitHub, target: str, custom_ref: str = '') -> dict:
         else:
             raise ValueError('Unknown update target')
         ref = 'refs/tags/' + release['tag_name']
-    result = {'requested': target, 'ref': ref, 'commit': resolve_named_ref(api, ref)}
+    result = {'requested': target, 'ref': ref, 'commit': resolve_named_ref(api, ref, upstream)}
     if release:
         result['release'] = {key: release[key] for key in ('tag_name', 'published_at', 'html_url', 'prerelease')}
     return result
 
 
-def read_pins(root: Path) -> tuple[str, dict]:
-    toolchain = json.loads((root / 'config/toolchain.json').read_text())
+def read_pins(root: Path, descriptor=None) -> tuple[str, dict]:
+    pin_file = descriptor['pinFile'] if descriptor else 'config/toolchain.json'
+    vendor = descriptor['vendorPath'] if descriptor else 'vendor/llama.cpp'
+    toolchain = json.loads((root / pin_file).read_text())
     commit = full_sha(toolchain['llamaCommit'])
-    entry = git('ls-tree', 'HEAD', '--', 'vendor/llama.cpp', cwd=root).stdout.split()
+    entry = git('ls-tree', 'HEAD', '--', vendor, cwd=root).stdout.split()
     if len(entry) != 4 or entry[:3] != ['160000', 'commit', commit]:
         raise ValueError('Submodule gitlink and toolchain.json disagree')
     return commit, toolchain
 
 
-def change_pins(root: Path, commit: str) -> None:
-    _, toolchain = read_pins(root)
-    src = root / 'vendor/llama.cpp'
-    git('fetch', '--no-tags', '--depth=1', 'https://github.com/' + UPSTREAM + '.git', full_sha(commit), cwd=src)
+def change_pins(root: Path, commit: str, descriptor=None) -> None:
+    _, toolchain = read_pins(root, descriptor)
+    pin_file = descriptor['pinFile'] if descriptor else 'config/toolchain.json'
+    vendor = descriptor['vendorPath'] if descriptor else 'vendor/llama.cpp'
+    upstream = descriptor['repository'] if descriptor else UPSTREAM
+    pins = {pin_file, vendor}
+    src = root / vendor
+    git('fetch', '--no-tags', '--depth=1', 'https://github.com/' + upstream + '.git', full_sha(commit), cwd=src)
     git('checkout', '--detach', commit, cwd=src)
     git('submodule', 'update', '--init', '--recursive', cwd=src)
     toolchain['llamaCommit'] = commit
-    (root / 'config/toolchain.json').write_text(json.dumps(toolchain, indent=2) + '\n')
-    git('add', '--', *sorted(PINS), cwd=root)
+    (root / pin_file).write_text(json.dumps(toolchain, indent=2) + '\n')
+    git('add', '--', *sorted(pins), cwd=root)
     changed = set(git('diff', '--cached', '--name-only', '--relative', cwd=root).stdout.splitlines())
-    if changed != PINS:
+    if changed != pins:
         raise ValueError('Updater may change only the submodule gitlink and llamaCommit')
 
 
-def overlay_preflight(root: Path) -> dict:
+def overlay_preflight(root: Path, descriptor=None) -> dict:
     try:
         with tempfile.TemporaryDirectory(prefix='lcb-update-overlay-') as tmp:
-            prepare(root / 'vendor/llama.cpp', Path(tmp) / 'vision', root / f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch', capture_output=True)
-            prepare(root / 'vendor/llama.cpp', Path(tmp) / 'audio', root / f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch',
-                    capture_output=True, filename='mtmd-audio.cpp')
+            if descriptor is not None:
+                for item in patch_series(root, descriptor):
+                    prepare(root / descriptor['vendorPath'], Path(tmp) / item['component'],
+                            root / item['file'], capture_output=True, filename=item['translationUnit'])
+            else:
+                prepare(root / 'vendor/llama.cpp', Path(tmp) / 'vision', root / f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch', capture_output=True)
+                prepare(root / 'vendor/llama.cpp', Path(tmp) / 'audio', root / f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch',
+                        capture_output=True, filename='mtmd-audio.cpp')
         return {'status': 'passed', 'scope': 'patch application only; not compilation or inference'}
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         # A failed overlay still leaves a candidate branch for human repair.
@@ -133,10 +145,11 @@ def overlay_preflight(root: Path) -> dict:
         return {'status': 'failed', 'scope': 'patch application only', 'error': details.strip()[:4000]}
 
 
-def candidate_branch(base: str, source: str, target: str) -> str:
+def candidate_branch(base: str, source: str, target: str, source_id=DEFAULT_SOURCE) -> str:
     # Base identity avoids collisions across source branches; including the base
     # commit avoids ever rebasing or force-pushing over manual repair commits.
-    identity = hashlib.sha256(base.encode()).hexdigest()[:12]
+    key = base if source_id == DEFAULT_SOURCE else base + '/' + source_id
+    identity = hashlib.sha256(key.encode()).hexdigest()[:12]
     return f'automation/llama-cpp/{identity}-{full_sha(source)[:12]}-{full_sha(target)[:12]}'
 
 
@@ -152,9 +165,9 @@ def pull_request_links(repository: str, result: dict) -> dict:
             f'- Proposed llama.cpp: `{target["commit"]}`\n'
             f'- Upstream relation: `{result["upstreamRelation"]}`\n'
             f'- Overlay preflight: **{preflight["status"]}** ({preflight["scope"]})\n\n'
-            f'[Upstream comparison](https://github.com/{UPSTREAM}/compare/{result["previousCommit"]}...{target["commit"]})\n\n'
+            f'[Upstream comparison](https://github.com/{result.get("upstreamRepository", UPSTREAM)}/compare/{result["previousCommit"]}...{target["commit"]})\n\n'
             'The automated commit changes only the submodule gitlink and '
-            '`config/toolchain.json`. A reused branch may also contain manual repairs. '
+            'the selected source pin file. A reused branch may also contain manual repairs. '
             'Preflight is not build or inference validation. Full preflight diagnostics '
             'are in the updater run summary and upstream-update-report artifact.\n\n'
             'Opening this PR starts the ordinary runtime workflow. A successful '
@@ -171,7 +184,7 @@ def pull_request_links(repository: str, result: dict) -> dict:
 
 
 def propose(root: Path, api: GitHub, repository: str, base: str, target: dict,
-            allow_non_fast_forward: bool = False, *, progress: dict | None = None) -> dict:
+            allow_non_fast_forward: bool = False, *, progress: dict | None = None, descriptor=None) -> dict:
     repository_name(repository)
     checked_ref(base)
     if base == 'artifacts' or base.startswith(('artifacts/', 'automation/llama-cpp/')):
@@ -179,16 +192,20 @@ def propose(root: Path, api: GitHub, repository: str, base: str, target: dict,
     if git('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none', cwd=root).stdout:
         raise ValueError('Updater requires a clean source checkout')
     source = full_sha(git('rev-parse', 'HEAD', cwd=root).stdout.strip())
-    previous, _ = read_pins(root)
+    previous, _ = read_pins(root, descriptor)
+    source_id = descriptor['id'] if descriptor else DEFAULT_SOURCE
+    upstream = descriptor['repository'] if descriptor else UPSTREAM
+    pin_file = descriptor['pinFile'] if descriptor else 'config/toolchain.json'
+    vendor = descriptor['vendorPath'] if descriptor else 'vendor/llama.cpp'
     result = progress if progress is not None else {}
-    result.update({'base': base, 'baseCommit': source, 'previousCommit': previous, 'target': target})
+    result.update({'base': base, 'baseCommit': source, 'previousCommit': previous, 'target': target, 'sourceId': source_id, 'upstreamRepository': upstream})
     if previous == target['commit']:
         return {**result, 'status': 'unchanged'}
-    comparison = api.compare_commits(UPSTREAM, previous, target['commit'])
+    comparison = api.compare_commits(upstream, previous, target['commit'])
     if comparison['status'] not in ('ahead', 'identical') and not allow_non_fast_forward:
         raise ValueError('Target is older or divergent; allow_non_fast_forward is required for this change')
     result['upstreamRelation'] = comparison['status']
-    branch = candidate_branch(base, source, target['commit'])
+    branch = candidate_branch(base, source, target['commit'], source_id)
     result.update({'branch': branch, 'branchUrl': f'https://github.com/{repository}/tree/{branch}'})
     remote = 'https://github.com/' + repository + '.git'
     existing = git('ls-remote', '--exit-code', '--heads', remote, 'refs/heads/' + branch, cwd=root, check=False, env=git_auth_env(os.environ['GH_TOKEN']))
@@ -202,15 +219,15 @@ def propose(root: Path, api: GitHub, repository: str, base: str, target: dict,
         # potentially stale probe SHA (which might not even be fetched).
         head = full_sha(git('rev-parse', '--verify', 'FETCH_HEAD', cwd=root).stdout.strip())
         # Only validate its pins. Any human fixes on a previous attempt survive.
-        pins = json.loads(git('show', head + ':' + repository_path(root, 'config/toolchain.json'), cwd=root).stdout)
-        link = git('ls-tree', head, '--', 'vendor/llama.cpp', cwd=root).stdout.split()
+        pins = json.loads(git('show', head + ':' + repository_path(root, pin_file), cwd=root).stdout)
+        link = git('ls-tree', head, '--', vendor, cwd=root).stdout.split()
         if pins.get('llamaCommit') != target['commit'] or len(link) != 4 or link[:3] != ['160000', 'commit', target['commit']]:
             raise ValueError('Existing updater branch has different pins; refusing to overwrite it')
         preflight = {'status': 'not-repeated', 'scope': 'existing branch preserved; full build is authoritative'}
         status = 'branch-exists'
     else:
-        change_pins(root, target['commit'])
-        preflight = overlay_preflight(root)
+        change_pins(root, target['commit'], descriptor)
+        preflight = overlay_preflight(root, descriptor)
         result['preflight'] = preflight
         git('-c', 'user.name=github-actions[bot]', '-c',
             'user.email=41898282+github-actions[bot]@users.noreply.github.com',
@@ -253,6 +270,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=['latest', 'latest-unstable', 'custom'], default='latest')
     parser.add_argument('--custom-ref', default='')
+    parser.add_argument('--source', default=DEFAULT_SOURCE)
     parser.add_argument('--base', required=True)
     parser.add_argument('--allow-non-fast-forward', action='store_true')
     args = parser.parse_args()
@@ -260,9 +278,12 @@ def main() -> None:
     result = {'requested': args.target, 'customRef': args.custom_ref, 'base': args.base}
     failed = False
     try:
-        target = resolve_target(api, args.target, args.custom_ref)
+        descriptor = get_source(ROOT, args.source)
+        if args.target != 'custom' and args.target != descriptor['updateTarget']:
+            raise ValueError('Update channel does not match the selected source')
+        target = resolve_target(api, args.target, args.custom_ref, descriptor['repository'])
         result = propose(ROOT, api, os.environ['GITHUB_REPOSITORY'], args.base, target,
-                         args.allow_non_fast_forward, progress=result)
+                         args.allow_non_fast_forward, progress=result, descriptor=descriptor)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         # A pushed branch can survive a later reporting failure. Its identity
         # remains visible and a rerun reuses it without replacing human changes.

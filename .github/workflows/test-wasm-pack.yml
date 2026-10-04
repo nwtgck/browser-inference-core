@@ -1,0 +1,29 @@
+name: Test lossless Wasm packaging
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'wasm-pack/**'
+      - '.github/workflows/test-wasm-pack.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Build the pinned producer tools and run native tests
+        run: python3 wasm-pack/prepare_ci_tools.py
+      - name: Selector, decoder, and codec integration
+        env:
+          BIC_TEST_WASM_ENCODER: ${{ github.workspace }}/build/wasm-pack-tools/wasm-encoder
+          BIC_TEST_ZSTD_DECODER: ${{ github.workspace }}/build/wasm-pack-tools/zstd-decoder.wasm
+        run: |
+          node --test wasm-pack/tests/*.test.mjs
+          python3 -m unittest discover -s wasm-pack/tests -p 'test_*.py'

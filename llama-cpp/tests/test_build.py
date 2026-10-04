@@ -49,6 +49,12 @@ class BuildProvenance(unittest.TestCase):
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root/'scripts').mkdir()
         shutil.copy2(ROOT/'scripts/build.py',self.root/'scripts/build.py')
+        shutil.copy2(ROOT/'scripts/source_config.py',self.root/'scripts/source_config.py')
+        shutil.copytree(ROOT/'sources/upstream-stable',self.root/'sources/upstream-stable')
+        shutil.copytree(ROOT/'upstream-patches-only-as-a-last-resort-with-explicit-user-approval',self.root/'upstream-patches-only-as-a-last-resort-with-explicit-user-approval')
+        cfg=json.loads((ROOT/'config/sources.json').read_text())
+        cfg['sources']={'upstream-stable':cfg['sources']['upstream-stable']}
+        (self.root/'config/sources.json').write_text(json.dumps(cfg))
         (self.root/'README.md').write_text('original\n')
         # The real CMake process intentionally runs a probe without WORKING_DIRECTORY,
         # matching the upstream configure-time pattern. No C/C++ or Wasm is compiled.
@@ -75,7 +81,7 @@ class BuildProvenance(unittest.TestCase):
                 elif mode=='restore':
                     (root/'README.md').write_text('original\\n')
         '''))
-        self.git(self.root,'add','.gitignore','.gitmodules','config','scripts','README.md','CMakeLists.txt','probe.py')
+        self.git(self.root,'add','.gitignore','.gitmodules','config','scripts','sources','upstream-patches-only-as-a-last-resort-with-explicit-user-approval','README.md','CMakeLists.txt','probe.py')
         self.commit(self.root)
         self.source_sha=self.git(self.root,'rev-parse','HEAD').strip()
         tools=self.work/'tools'

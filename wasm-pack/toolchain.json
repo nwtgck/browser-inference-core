@@ -1,0 +1,6 @@
+{
+  "wasmToolsRepository": "https://github.com/bytecodealliance/wasm-tools.git",
+  "wasmToolsCommit": "5793351e3190a178d0dbdd509d183b6da896090a",
+  "rustVersion": "1.98.0",
+  "nodeVersion": "22.16.0"
+}

@@ -21,7 +21,7 @@ def digest(value: object) -> str:
 
 
 def cache_plan(root: Path, runtime: str, profile: str, variant: str, source: str,
-               *, environment: dict, ccache_version: str) -> dict[str, str]:
+               *, environment: dict, ccache_version: str, source_id: str | None = None) -> dict[str, str]:
     if runtime not in RUNTIMES or not re.fullmatch(r'[0-9a-f]{40}', source):
         raise ValueError('Invalid runtime or source commit')
     profiles = json.loads((root / runtime / 'config/profiles.json').read_text())
@@ -39,6 +39,13 @@ def cache_plan(root: Path, runtime: str, profile: str, variant: str, source: str
         'workspace': str(root.resolve())})
     configuration = {'profile': profiles[profile], 'variant': variants[variant]}
     partition = f'{runtime}-{profile}-{variant}-{digest(configuration)[:16]}'
+    if source_id is not None:
+        if runtime != 'llama-cpp': raise ValueError('Only llama has multiple source tracks')
+        sys.path.append(str(root / 'llama-cpp/scripts'))
+        from source_config import get_source, patch_series
+        track = get_source(root / 'llama-cpp', source_id)
+        # Separate simultaneous stable/nightly writers even at one repo commit.
+        partition += '-' + source_id
     prefix = f'{POLICY}-cc-{compiler_identity}-{partition}-'
     inputs = {name: hashlib.sha256((root / runtime / name).read_bytes()).hexdigest()
               for name in ('CMakeLists.txt', 'scripts/build.py')}
@@ -51,6 +58,8 @@ def cache_plan(root: Path, runtime: str, profile: str, variant: str, source: str
         for path in sorted((root / runtime / name).glob('*')):
             if path.suffix in ('.patch', '.json') and path.is_file():
                 inputs[name + '/' + path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if source_id is not None:
+        inputs['selected-source'] = digest({'track': track, 'patches': patch_series(root/'llama-cpp',track)})
     return {
         'identity': compiler_identity,
         'dawn-key': f'{POLICY}-dawn-{cfg["dawnSha256"]}',
@@ -58,7 +67,7 @@ def cache_plan(root: Path, runtime: str, profile: str, variant: str, source: str
         # Restore after emsdk setup. Keep the SDK's populated sysroot on a miss.
         'em-path': '.tools/emsdk/upstream/emscripten/cache',
         'em-key': f'{POLICY}-em-{compiler_identity}-{partition}-{digest(inputs)[:16]}',
-        'cc-path': f'.cache/ccache/{runtime}/{profile}/{variant}',
+        'cc-path': f'.cache/ccache/{runtime}/{profile}/{variant}' + ('/' + source_id if source_id else ''),
         'cc-prefix': prefix,
         # Actions caches are immutable. A new source snapshot can retain new objects.
         'cc-key': prefix + source,
@@ -98,7 +107,7 @@ def main() -> None:
     args = parser.parse_args()
     version = subprocess.check_output(['ccache', '--version'], text=True).splitlines()[0]
     plan = cache_plan(ROOT, args.runtime, args.profile, args.variant,
-                      os.environ['LCB_SOURCE_COMMIT'], environment=os.environ, ccache_version=version)
+                      os.environ['LCB_SOURCE_COMMIT'], environment=os.environ, ccache_version=version, source_id=os.environ.get('SOURCE_ID') if args.runtime=='llama-cpp' else None)
     values = configure(ROOT, plan)
     write_values(os.environ['GITHUB_OUTPUT'], plan)
     write_values(os.environ['GITHUB_ENV'], values)

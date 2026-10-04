@@ -52,6 +52,8 @@ def read_bound_snapshot(package: Path, relative: str, expected_sha256: str) -> t
 def metadata(package: Path, repo: str, commit: str, lock: dict, divergences: dict, *,
              published_manifest_sha256: str | None = None) -> dict:
     root_manifest, validated_digest = validate_for_report(package, published_manifest_sha256)
+    if root_manifest['formatVersion'] == 4:
+        return source_catalog_metadata(package, repo, commit, lock, root_manifest, validated_digest)
     files = {item['path']: item for item in root_manifest['files']}
     _, root_identity = read_bound_snapshot(package, 'manifest.json', validated_digest)
     llama_manifest = LLAMA_ARTIFACT_DIR + '/manifest.json'
@@ -85,6 +87,57 @@ def metadata(package: Path, repo: str, commit: str, lock: dict, divergences: dic
     validate_for_report(package, validated_digest)
     return data
 
+def source_catalog_metadata(package, repo, commit, lock, manifest, digest):
+    """Report only artifact-bound evidence; never inspect today's vendor for reused builds."""
+    legacy.repository_name(repo);legacy.full_sha(commit)
+    files={entry['path']:entry for entry in manifest['files']}
+    _,root_identity=read_bound_snapshot(package,'manifest.json',digest)
+    sources={}
+    for name,entry in manifest['runtimes']['llama-cpp']['sources'].items():
+        raw,bound=read_bound_snapshot(package,entry['manifest'],files[entry['manifest']]['sha256'])
+        inner=json.loads(raw);base=str(Path(entry['manifest']).parent)+'/'
+        inventory={item['path']:item for item in inner['files']}
+        sources[name]={
+            'manifest':{'path':entry['manifest'],**bound},
+            'buildSourceCommit':inner['sourceCommit'],
+            'upstreamCommit':inner['llamaCommit'],
+            'browserProfiles':{profile:{kind:{**inventory[f'profiles/{profile}/browser/core.{ext}'],
+                'path':base+f'profiles/{profile}/browser/core.{ext}'} for kind,ext in [('wasm','wasm'),('mjs','mjs'),('types','d.ts')]}
+                for profile in inner['profiles']},
+            'interfaceFiles':[{**item,'path':base+item['path']} for item in inner['files'] if item['path'].startswith('api/')],
+            'validation':{profile:{variant:info['validation'] for variant,info in p['variants'].items()} for profile,p in inner['profiles'].items()},
+            'buildProvenanceScope':'The bound source manifest contains original build identities, patch series and toolchain evidence. The assembly commit is not substituted for reused build commits.',
+        }
+    images={name:{**entry} for name,entry in manifest['runtimes']['stable-diffusion-cpp']['sources'].items()}
+    data={'schemaVersion':2,
+        'runtime':{'repository':repo,'package':legacy.RUNTIME_NAME,'artifactCommit':commit,'sourceCommit':manifest['sourceCommit'],'manifestFormatVersion':4},
+        'retrieval':{'artifactArchive':f'https://codeload.github.com/{repo}/tar.gz/{commit}',
+            'artifactRawBase':f'https://raw.githubusercontent.com/{repo}/{commit}/',
+            'sourceRepositoryRawBase':f'https://raw.githubusercontent.com/{repo}/{manifest["sourceCommit"]}/',
+            'manifest':{'path':'manifest.json',**root_identity}},
+        'npm':lock,'llamaSources':sources,'imageSources':images,
+        'consumerIntegration':legacy.consumer_knowledge()}
+    if 'reuseInputs' in manifest:
+        data['reusedArtifactInputs'] = manifest['reuseInputs']
+    data['consumerIntegration']['sourceCatalog']={
+        'knownLocations':['src/features/llama-cpp-browser/build-artifact-package.ts','src/features/llama-cpp-browser/build-core.ts','src/features/llama-cpp-browser/build-runtime-assets.ts'],
+        'meaning':'Historical search hints, not a live consumer scan. Select source/profile targets explicitly. Missing profiles are not stable fallbacks. Bind reviewed glue and Wasm to each source.',
+        'embeddedSubset':'Standalone historically selects WebGPU32/64 JSPI and Brotli. A CPU or Asyncify full must not be introduced solely as an unselected delta base.',
+        'devParity':'Select the same packed representation and decoder for development and release of the same distribution. Do not silently bypass decode with raw Wasm.',
+    }
+    if manifest.get('packedWasm'):
+        path=manifest['packedWasm']['catalog'];raw,bound=read_bound_snapshot(package,path,files[path]['sha256']);catalog=json.loads(raw);prefix=str(Path(path).parent)+'/'
+        data['packedWasm']={'catalog':{'path':path,**bound},'decoderApiVersion':catalog['decoderApiVersion'],
+            'selector':prefix+'runtime/catalog.mjs',
+            'defaultLoader':prefix+catalog['runtime']['entry'],
+            'loaderEntries':{codec:prefix+entry for codec,entry in catalog['runtime'].get('entries',{}).items()},
+            'codecs':sorted({a['codec'] for a in catalog['assets'].values()}),
+            'selectionContract':'selectWasmAssets(catalog, {targets, codec, fullTargets}) returns exact file closure. Import plan.runtime.entry after selection; do not hard-code a loader or use defaultLoader for every codec. Only selected full targets can be delta bases. Empty selection has no assets. Full alternatives remain available.',
+            'verificationScope':'Every stored representation was reconstructed with the matching shipped decoder and compared with the raw Wasm. This is not evidence of real GPU inference or consumer bundling.',
+            'rawPreserved':True}
+    validate_for_report(package,digest)
+    return data
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--package', type=Path, required=True)
@@ -97,10 +150,12 @@ def main() -> None:
     root_manifest, validated_digest = validate_for_report(package, a.published_manifest_sha256)
     print(f'[publication] report-input-validation: {time.monotonic()-started:.3f}s', file=sys.stderr)
     files = {item['path']: item for item in root_manifest['files']}
-    llama_manifest = LLAMA_ARTIFACT_DIR + '/manifest.json'
-    llama_bytes, _ = read_bound_snapshot(package, llama_manifest, files[llama_manifest]['sha256'])
+    llama_bytes = None
+    if root_manifest['formatVersion'] != 4:
+        llama_manifest = LLAMA_ARTIFACT_DIR + '/manifest.json'
+        llama_bytes, _ = read_bound_snapshot(package, llama_manifest, files[llama_manifest]['sha256'])
     package_bytes, _ = read_bound_snapshot(package, 'package.json', files['package.json']['sha256'])
-    llama = json.loads(llama_bytes)
+    llama = json.loads(llama_bytes) if llama_bytes is not None else None
     repo = os.environ['GITHUB_REPOSITORY']
     started = time.monotonic()
     with span('report.lock_resolve'):
@@ -109,7 +164,7 @@ def main() -> None:
     # Check again after network/provenance work. A concurrent modification must
     # fail rather than silently report a different tree or reuse stale evidence.
     with span('report.collect_provenance'):
-        provenance = collect(ROOT / 'llama-cpp', llama)
+        provenance = collect(ROOT / 'llama-cpp', llama) if llama is not None else {}
     data = metadata(package, repo, a.commit, lock, provenance,
                     published_manifest_sha256=validated_digest)
     with span('report.write'):

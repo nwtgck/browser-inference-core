@@ -206,7 +206,10 @@ def make_directories(root: Path, relative: Path) -> Path:
 
 
 def cc_path(root: Path, relative: str) -> Path:
-    if not re.fullmatch(r'\.cache/ccache/(llama-cpp|stable-diffusion-cpp)/[a-z0-9-]+/(browser|test)', relative):
+    match = re.fullmatch(
+        r'\.cache/ccache/(llama-cpp|stable-diffusion-cpp)/[a-z0-9-]+/(browser|test)'
+        r'(?:/([a-z0-9]+(?:-[a-z0-9]+)*))?', relative)
+    if match is None or (match[3] is not None and match[1] != 'llama-cpp'):
         raise ValueError('Invalid compiler-cache path')
     path = root / relative
     make_directories(root, path.parent.relative_to(root))

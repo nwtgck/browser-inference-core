@@ -23,13 +23,14 @@ def dependencies(body):
 class ParallelWorkflow(unittest.TestCase):
     def test_only_final_publication_joins_llama_and_image(self):
         graph = jobs(BUILD)
-        self.assertEqual(set(graph), {'test','compile','build','image-native','image-compile','image-build','publish'})
-        self.assertEqual(dependencies(graph['compile']), set())
-        self.assertEqual(dependencies(graph['image-compile']), set())
-        self.assertEqual(dependencies(graph['image-native']), set())
-        self.assertEqual(dependencies(graph['build']), {'test','compile'})
-        self.assertEqual(dependencies(graph['image-build']), {'image-native','image-compile'})
-        self.assertEqual(dependencies(graph['publish']), {'build','image-build'})
+        self.assertEqual(set(graph), {'plan','test','compile','build','image-native','image-compile','image-build','assemble','publish'})
+        self.assertEqual(dependencies(graph['compile']), {'plan'})
+        self.assertEqual(dependencies(graph['image-compile']), {'plan'})
+        self.assertEqual(dependencies(graph['image-native']), {'plan'})
+        self.assertEqual(dependencies(graph['build']), {'plan','test','compile'})
+        self.assertEqual(dependencies(graph['image-build']), {'plan','image-native','image-compile'})
+        self.assertEqual(dependencies(graph['assemble']), {'plan','build','image-build'})
+        self.assertEqual(dependencies(graph['publish']), {'assemble'})
         self.assertNotIn('max-parallel:', re.sub(r'#.*', '', BUILD))
 
     def test_image_package_has_no_llama_source_or_artifact_dependency(self):

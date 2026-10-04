@@ -5,6 +5,7 @@ import re
 import sys
 import tempfile
 import unittest
+from fixture_sources import seed_sources
 from fixture_toolchain import merged_toolchain, seed_toolchain
 from unittest.mock import patch
 
@@ -17,13 +18,16 @@ class ProfileConfiguration(unittest.TestCase):
     def test_ci_builds_every_packaged_profile(self):
         profiles = json.loads((ROOT / 'config/profiles.json').read_text())
         workflow = (ROOT.parent / '.github/workflows/build.yml').read_text()
-        matrix = workflow.split('        profile:\n', 1)[1].split('        variant:', 1)[0]
-        self.assertEqual(set(re.findall(r'^          - ([a-z0-9-]+)$', matrix, re.MULTILINE)),
-                         set(profiles))
-        variants = json.loads((ROOT / 'config/variants.json').read_text())
-        variant_matrix = workflow.split('        variant:\n', 1)[1].split('    steps:', 1)[0]
-        self.assertEqual(set(re.findall(r'^          - ([a-z0-9-]+)$', variant_matrix, re.MULTILINE)),
-                         set(variants))
+        from source_config import matrix
+        entries=matrix(ROOT)
+        variants=json.loads((ROOT/'config/variants.json').read_text())
+        configured=json.loads((ROOT/'config/sources.json').read_text())['sources']
+        self.assertEqual({(e['source'],e['profile'],e['variant']) for e in entries},
+                         {(source,profile,variant) for source,cfg in configured.items()
+                          for profile in cfg['profiles'] for variant in variants})
+        self.assertEqual({e['profile'] for e in entries if e['source']=='upstream-stable'},set(profiles))
+        self.assertIn('matrix: ${{ fromJSON(needs.plan.outputs.compile-matrix) }}',workflow)
+        self.assertIn('python3 scripts/pipeline_plan.py',workflow)
 
     def test_each_profile_passes_its_suspension_and_memory_configuration(self):
         profiles = json.loads((ROOT / 'config/profiles.json').read_text())
@@ -48,6 +52,7 @@ class ProfileConfiguration(unittest.TestCase):
             (root / 'config/profiles.json').write_text(json.dumps(profiles))
             (root / 'config/variants.json').write_text(json.dumps(variants))
             seed_toolchain(root, toolchain)
+            seed_sources(root)
             (root / 'vendor/llama.cpp/include').mkdir(parents=True)
             (root / 'vendor/llama.cpp/include/llama.h').touch()
             (root.parent / '.tools/emdawnwebgpu_pkg').mkdir(parents=True)

@@ -246,8 +246,8 @@ def render_markdown(data: dict, yaml: str) -> str:
     return (
         '## Runtime artifact published\n\n'
         f'**Artifact commit:** `{runtime["artifactCommit"]}`  \n'
-        f'**Source commit:** `{runtime["sourceCommit"]}`  \n'
-        f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n'
+        f'**Source commit:** `{runtime["sourceCommit"]}`  \n' +
+        (f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n' if 'llamaCommit' in runtime else '**llama.cpp commits:** See the source-specific entries below.\n\n') +
         f'```sh\nnpm install {data["npm"]["specifier"]}\n```\n\n'
         'This immutable runtime is available before the source PR is merged. '
         'Recorded validation scope is included below.\n\n'
@@ -260,8 +260,8 @@ def render_summary_markdown(data: dict) -> str:
     runtime = data['runtime']
     return (
         '## Consumer integration details\n\n'
-        f'**Source commit:** `{runtime["sourceCommit"]}`  \n'
-        f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n'
+        f'**Source commit:** `{runtime["sourceCommit"]}`  \n' +
+        (f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n' if 'llamaCommit' in runtime else '**llama.cpp commits:** See the source-specific entries below.\n\n') +
         'Recorded validation scope and integration metadata:\n\n'
         '<details>\n<summary>Consumer integration metadata (YAML)</summary>\n\n'
         '```yaml\n' + render_yaml(data) + '```\n\n</details>\n'

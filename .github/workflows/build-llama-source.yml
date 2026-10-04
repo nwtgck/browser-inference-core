@@ -1,0 +1,144 @@
+name: Build one pinned llama.cpp source (candidate only)
+# This deliberately does not replace the published catalog. Selection-only builds
+# cannot delete or silently reuse other sources. Root publication is a separate gate.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Source ID from llama-cpp/config/sources.json
+        type: string
+        default: upstream-nightly
+        required: true
+  workflow_call:
+    inputs:
+      source:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      vendor: ${{ steps.plan.outputs.vendor }}
+      notice-profile: ${{ steps.plan.outputs.notice-profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: plan
+        env:
+          SOURCE_ID: ${{ inputs.source }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'llama-cpp/scripts')
+          from source_config import get_source, matrix, check_gitlink, patch_series
+          root=pathlib.Path('llama-cpp'); name=os.environ['SOURCE_ID']
+          source=get_source(root, name); check_gitlink(root, source); patch_series(root, source)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('matrix='+json.dumps({'include':matrix(root,[name])})+'\n')
+              out.write('vendor='+source['vendorPath']+'\n')
+              out.write('notice-profile='+source['profiles'][0]+'\n')
+          PY
+  compile:
+    needs: [plan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      # Use runner/account capacity; do not cap the matrix artificially.
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      SOURCE_ID: ${{ matrix.source }}
+      PROFILE: ${{ matrix.profile }}
+      VARIANT: ${{ matrix.variant }}
+      VENDOR: ${{ needs.plan.outputs.vendor }}
+      NOTICE_PROFILE: ${{ needs.plan.outputs.notice-profile }}
+      LCB_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: false
+          persist-credentials: false
+      - name: Fetch only the pinned source
+        run: git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Install build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang cmake ccache
+      - uses: ./.github/actions/restore-browser-cache
+        with:
+          mode: enabled
+          runtime: llama-cpp
+          profile: ${{ matrix.profile }}
+          variant: ${{ matrix.variant }}
+      - name: Build and stage this source/profile/variant
+        working-directory: llama-cpp
+        shell: bash
+        run: |
+          planned_em_cache="$EM_CACHE"
+          source ../.tools/emsdk/emsdk_env.sh
+          export EM_CACHE="$planned_em_cache"
+          python3 scripts/build.py --source "$SOURCE_ID" --fresh --profile "$PROFILE" --variant "$VARIANT"
+          extra=()
+          if [[ "$PROFILE" == "$NOTICE_PROFILE" && "$VARIANT" == browser ]]; then
+            extra+=(--include-toolchain-notices)
+          fi
+          python3 scripts/stage_ci_build.py --source "$SOURCE_ID" --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-build-${{ matrix.source }}-${{ matrix.profile }}-${{ matrix.variant }}
+          path: llama-cpp/build/ci-upload/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 14
+  package:
+    needs: [plan, compile]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_ID: ${{ inputs.source }}
+      VENDOR: ${{ needs.plan.outputs.vendor }}
+      LCB_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: false
+          persist-credentials: false
+      - run: git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: source-build-${{ inputs.source }}-*
+          path: llama-cpp/build/source-input/
+          merge-multiple: true
+      - name: Assemble only the selected source
+        working-directory: llama-cpp
+        run: |
+          python3 scripts/package_runtime.py --source "$SOURCE_ID" --build-root build/source-input --output dist/source-package --defer-npm-pack \
+            --license-root "$VENDOR" \
+            --license-root build/source-input/toolchain-licenses/emscripten \
+            --license-root build/source-input/toolchain-licenses/emdawnwebgpu_pkg
+      - name: Prepare Chromium harness
+        run: |
+          npm install --prefix .tools/browser --no-save --package-lock=false playwright@1.58.2
+          .tools/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Validate the same candidate snapshot
+        working-directory: llama-cpp
+        run: python3 ../scripts/validate_runtime_package.py --runtime llama-cpp --package dist/source-package --receipt build/source-validation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-llama-${{ inputs.source }}
+          path: llama-cpp/dist/source-package/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14

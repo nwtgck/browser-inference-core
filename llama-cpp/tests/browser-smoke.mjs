@@ -7,7 +7,9 @@ import { pathToFileURL } from 'node:url';
 const packageRoot = resolve(process.argv[2] || 'dist/package');
 const modelFile = resolve(process.argv[3] || 'build/fixture.gguf');
 const chatTestFile = resolve('tests/chat-surface.mjs');
-const chatTemplate = await readFile('vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
+const chatTemplate = await readFile(process.env.BIC_LLAMA_CHAT_TEMPLATE || 'vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
+const manifest = JSON.parse(await readFile(resolve(packageRoot, 'manifest.json'), 'utf8'));
+const availableProfiles = Object.keys(manifest.profiles);
 const playwrightPath = resolve('../.tools/browser/node_modules/playwright/index.mjs');
 const { chromium } = await import(pathToFileURL(playwrightPath).href);
 const mime = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
@@ -32,7 +34,7 @@ try {
   // suspension. A mocked missing adapter requires no physical GPU and does not
   // establish WebGPU inference or production-model support.
   for (const variant of ['browser', 'test']) {
-    for (const profile of ['webgpu-wasm32-jspi', 'webgpu-wasm64-jspi', 'webgpu-wasm32-asyncify']) {
+    for (const profile of availableProfiles.filter(profile => profile.startsWith('webgpu-'))) {
       const suspensionPage = await browser.newPage();
       await suspensionPage.goto(url);
       const suspensionResult = await suspensionPage.evaluate(async ({ profile, variant }) => {
@@ -78,7 +80,7 @@ try {
     }
   }
   for (const variant of ['browser', 'test']) {
-    for (const profile of ['cpu-wasm32', 'cpu-wasm64']) {
+    for (const profile of availableProfiles.filter(profile => profile.startsWith('cpu-'))) {
       const page = await browser.newPage();
       page.on('console', msg => { if (msg.type() === 'error') console.error(msg.text()); });
       await page.goto(url);

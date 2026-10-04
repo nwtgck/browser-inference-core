@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "patches": [
+    {
+      "component": "vision",
+      "file": "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch",
+      "sha256": "aa4300fdde4ea59cfdf84dd29231af2cbe7ac2c95d17f007d95419187c6264c0",
+      "translationUnit": "clip.cpp"
+    },
+    {
+      "component": "audio",
+      "file": "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch",
+      "sha256": "d2740473b8cf5c2db21ea44da2ca5f99c7dd922ceb186b31e265b73243597ce0",
+      "translationUnit": "mtmd-audio.cpp"
+    }
+  ]
+}

@@ -158,6 +158,26 @@ class CacheAdmission(unittest.TestCase):
         (self.active / 'sysroot/include/header.h').write_text('sdk changed after admission')
         self.assertFalse(admission.check_save(self.root, 'em'))
 
+    def test_source_cache_paths_are_admitted_and_isolated(self):
+        stable = self.ccrelative + '/upstream-stable'
+        nightly = self.ccrelative + '/upstream-nightly'
+        admission.clear_cc(self.root, stable)
+        admission.clear_cc(self.root, nightly)
+        keep = admission.cc_path(self.root, stable) / 'keep'
+        keep.write_bytes(b'stable object')
+        admission.clear_cc(self.root, nightly)
+        self.assertEqual(keep.read_bytes(), b'stable object')
+        self.assertNotEqual(admission.cc_path(self.root, stable), admission.cc_path(self.root, nightly))
+        self.assertEqual(admission.cc_path(self.root, self.ccrelative), self.cc)
+
+    def test_source_cache_path_rejects_traversal_and_image_sources(self):
+        for relative in (self.ccrelative + '/../other', self.ccrelative + '/UpperCase',
+                         self.ccrelative + '/source/extra', self.ccrelative + '//source',
+                         self.ccrelative + '/-source',
+                         '.cache/ccache/stable-diffusion-cpp/cpu-wasm32/browser/upstream-nightly'):
+            with self.subTest(relative=relative), self.assertRaises(ValueError):
+                admission.cc_path(self.root, relative)
+
     def finish_cc(self, matched=None, hit='true', outcome='success', mode='enabled'):
         return admission.finish_cc(self.root, self.ccrelative, self.cckey,
             self.cckey if matched is None else matched, hit, outcome, mode)

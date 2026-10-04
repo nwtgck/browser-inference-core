@@ -1,0 +1,32 @@
+name: Update llama.cpp nightly
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Released nightly, or an explicit custom revision
+        type: choice
+        options: [latest-unstable, custom]
+        default: latest-unstable
+      custom_ref:
+        description: Only for custom; tag, branch, or full commit
+        type: string
+        default: ''
+      allow_non_fast_forward:
+        description: Explicitly permit an older or divergent upstream revision
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/update-llama-cpp.yml
+    with:
+      source: upstream-nightly
+      target: ${{ inputs.target }}
+      custom_ref: ${{ inputs.custom_ref }}
+      allow_non_fast_forward: ${{ inputs.allow_non_fast_forward }}

@@ -238,6 +238,27 @@ class LocalGitProposal(unittest.TestCase):
         self.assertNotIn('pullRequest', result)
         self.assertNotIn('pullRequestUrl', result)
 
+    def test_nightly_changes_only_its_gitlink_and_pin_file(self):
+        import hashlib
+        self.git('-c','protocol.file.allow=always','submodule','add',str(self.upstream),'vendor/llama.cpp-nightly',cwd=self.root)
+        self.git('checkout','--detach',self.old,cwd=self.root/'vendor/llama.cpp-nightly')
+        pin=self.root/'sources/upstream-nightly/pin.json';pin.parent.mkdir(parents=True)
+        pin.write_text(json.dumps({'llamaCommit':self.old,'kept':True}))
+        items=[]
+        for component,file,unit in [('vision','mtmd-webgpu-bf16.patch','clip.cpp'),('audio','mtmd-audio-single-thread.patch','mtmd-audio.cpp')]:
+            relative='upstream-patches-only-as-a-last-resort-with-explicit-user-approval/'+file
+            items.append({'component':component,'file':relative,'translationUnit':unit,'sha256':hashlib.sha256((self.root/relative).read_bytes()).hexdigest()})
+        plan=pin.parent/'patches.json';plan.write_text(json.dumps({'formatVersion':1,'patches':items}))
+        self.git('add','.',cwd=self.root);self.git('commit','-qm','Separate nightly source',cwd=self.root)
+        base=self.git('rev-parse','HEAD',cwd=self.root);old_toolchain=(self.root/'config/toolchain.json').read_bytes()
+        descriptor={'id':'upstream-nightly','pinFile':'sources/upstream-nightly/pin.json','vendorPath':'vendor/llama.cpp-nightly','repository':update.UPSTREAM,'patchSeries':'sources/upstream-nightly/patches.json'}
+        result=self.propose(descriptor=descriptor)
+        self.assertEqual(result['preflight']['status'],'passed')
+        self.assertEqual(set(self.git('diff','--name-only',base,'HEAD',cwd=self.root).splitlines()),{'vendor/llama.cpp-nightly','sources/upstream-nightly/pin.json'})
+        self.assertEqual((self.root/'config/toolchain.json').read_bytes(),old_toolchain)
+        self.assertEqual(self.git('rev-parse','HEAD',cwd=self.root/'vendor/llama.cpp'),self.old)
+        self.assertEqual(json.loads(pin.read_text())['llamaCommit'],self.new)
+
     def test_no_op_creates_no_branch_or_remote_operations(self):
         self.target['commit'] = self.old
         self.assertEqual(self.propose()['status'], 'unchanged')
@@ -427,6 +448,7 @@ class FailureReporting(unittest.TestCase):
             summary = root / 'summary.md'
             with patch.object(update, 'ROOT', root), \
                  patch.object(update, 'resolve_target', side_effect=ApiError(404, 'No stable release')), \
+                 patch.object(update, 'get_source', return_value={'updateTarget':'latest','repository':update.UPSTREAM}), \
                  patch.object(sys, 'argv', ['update_llama_cpp.py', '--base', 'develop']), \
                  patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}), patch('builtins.print'):
                 with self.assertRaises(SystemExit) as failure:

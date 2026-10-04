@@ -17,6 +17,8 @@ import uuid
 from package_inputs import digest, file_identity, read_regular, regular_path, tree_identity
 from package_runtime import ROOT, RUNTIMES, runtime_module
 from pipeline_metrics import exit_like_child, run_command, span
+# The source registry is build-time code, not an upstream submodule dependency.
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'llama-cpp/scripts'))
 
 TEST_INPUTS = {
     'llama-cpp': ('tests/asyncify-rewind.mjs', 'tests/browser-smoke.mjs',
@@ -99,8 +101,13 @@ def add_validation(manifest: dict, runtime: str, results: list[dict]) -> dict:
     return updated
 
 
-def test_identity(runtime_root: Path, runtime: str, *, fixture: bool = True) -> dict:
+def test_identity(runtime_root: Path, runtime: str, *, fixture: bool = True, source_id: str | None = None) -> dict:
     names = [*TEST_INPUTS[runtime], 'config/profiles.json', 'config/variants.json']
+    if runtime == 'llama-cpp' and source_id is not None:
+        from source_config import get_source
+        entry = get_source(runtime_root, source_id)
+        names = [entry['vendorPath'] + name[len('vendor/llama.cpp'):] if name.startswith('vendor/llama.cpp/') else name for name in names]
+        names += ['config/sources.json', entry['pinFile'], entry['patchSeries']]
     if runtime == 'llama-cpp' and fixture:
         names.append('build/fixture.gguf')
     return {name: file_identity(runtime_root / name) for name in names}
@@ -124,11 +131,11 @@ def execution_context(runtime: str, source: str) -> dict:
 
 
 def assert_snapshot(package: Path, expected: dict, runtime_root: Path,
-                    runtime: str, tests: dict) -> None:
+                    runtime: str, tests: dict, source_id: str | None = None) -> None:
     with span('test.snapshot_check', runtime=runtime):
         if tree_identity(package) != expected:
             raise ValueError('Tested package snapshot changed')
-        if test_identity(runtime_root, runtime) != tests:
+        if test_identity(runtime_root, runtime, source_id=source_id) != tests:
             raise ValueError('Test implementation or fixture changed')
 
 
@@ -160,21 +167,29 @@ def validate_package(runtime: str, package: Path, receipt_path: Path) -> dict:
         context = execution_context(runtime, manifest['sourceCommit'])
         profiles = parse_json(read_regular(runtime_root / 'config/profiles.json'))
         variants = parse_json(read_regular(runtime_root / 'config/variants.json'))
+        source_id = manifest.get('sourceId') if runtime == 'llama-cpp' else None
+        chat_template = runtime_root / 'vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja'
+        if source_id is not None:
+            from source_config import get_source
+            entry = get_source(runtime_root, source_id)
+            if manifest['llamaCommit'] != entry['commit']: raise ValueError('Smoke source pin mismatch')
+            profiles = {name: profiles[name] for name in entry['profiles']}
+            chat_template = runtime_root / entry['vendorPath'] / 'models/templates/Qwen-Qwen3-0.6B.jinja'
         if set(manifest['profiles']) != set(profiles):
             raise ValueError('Smoke requires every configured profile')
         for data in manifest['profiles'].values():
             if set(data['variants']) != set(variants):
                 raise ValueError('Smoke requires every configured variant')
-        implementation = test_identity(runtime_root, runtime, fixture=False)
+        implementation = test_identity(runtime_root, runtime, fixture=False, source_id=source_id)
     if runtime == 'llama-cpp':
         _run([sys.executable, 'scripts/make_test_model.py', 'build/fixture.gguf'],
              'test.generate_fixture', runtime_root)
-    if test_identity(runtime_root, runtime, fixture=False) != implementation:
+    if test_identity(runtime_root, runtime, fixture=False, source_id=source_id) != implementation:
         raise ValueError('Test implementation changed while generating fixture')
-    tests = test_identity(runtime_root, runtime)
+    tests = test_identity(runtime_root, runtime, source_id=source_id)
     context.update(snapshotSha256=digest(snapshot), testInputsSha256=digest(tests),
                    testWebGpu=(runtime == 'stable-diffusion-cpp' and os.environ.get('SDCB_TEST_WEBGPU') == '1'))
-    assert_snapshot(package, snapshot, runtime_root, runtime, tests)
+    assert_snapshot(package, snapshot, runtime_root, runtime, tests, source_id)
     # A fresh, private result path plus a random, run-bound envelope prevents
     # stale success JSON from a previous attempt from being mistaken for this run.
     with tempfile.TemporaryDirectory(prefix='bic-smoke-') as temporary:
@@ -184,14 +199,16 @@ def validate_package(runtime: str, package: Path, receipt_path: Path) -> dict:
         env = dict(os.environ, BIC_BROWSER_RESULTS_FILE=str(result_path),
                    BIC_BROWSER_SESSION_JSON=json.dumps(context, separators=(',', ':')))
         if runtime == 'llama-cpp':
+            env['BIC_LLAMA_CHAT_TEMPLATE'] = str(chat_template)
+        if runtime == 'llama-cpp' and 'webgpu-wasm32-asyncify' in profiles:
             _run(['node', 'tests/asyncify-rewind.mjs', str(package / 'profiles/webgpu-wasm32-asyncify/test')],
                  'test.node_asyncify', runtime_root, env)
-            assert_snapshot(package, snapshot, runtime_root, runtime, tests)
+            assert_snapshot(package, snapshot, runtime_root, runtime, tests, source_id)
         command = ['node', 'tests/browser-smoke.mjs', str(package)]
         if runtime == 'llama-cpp':
             command.append(str(runtime_root / 'build/fixture.gguf'))
         _run(command, 'test.chromium_smoke', runtime_root, env)
-        assert_snapshot(package, snapshot, runtime_root, runtime, tests)
+        assert_snapshot(package, snapshot, runtime_root, runtime, tests, source_id)
         envelope = parse_json(read_regular(result_path))
         if (not isinstance(envelope, dict) or set(envelope) != {'session', 'results'} or
                 digest(envelope['session']) != digest(context)):
@@ -208,18 +225,18 @@ def validate_package(runtime: str, package: Path, receipt_path: Path) -> dict:
         # from the mutable build directory, including generated API or notices.
         manifest_path.write_bytes(final_bytes)
         try:
-            assert_snapshot(package, expected, runtime_root, runtime, tests)
+            assert_snapshot(package, expected, runtime_root, runtime, tests, source_id)
             with span('package.final_verify', runtime=runtime, context='final'):
                 validator.validate(package)  # Exactly one final npm pack; no skip option.
             # npm is allowed to read, never to change the snapshot that was tested.
-            assert_snapshot(package, expected, runtime_root, runtime, tests)
+            assert_snapshot(package, expected, runtime_root, runtime, tests, source_id)
         except BaseException:
             # A failure never leaves a partially completed validation receipt.
             manifest_path.write_bytes(before)
             raise
     receipt = {**context, 'status': 'complete', 'finalSnapshotSha256': digest(expected),
                'finalManifestSha256': expected['manifest.json']['sha256'],
-               'nodeAsyncifyPassed': True if runtime == 'llama-cpp' else None,
+               'nodeAsyncifyPassed': True if runtime == 'llama-cpp' and 'webgpu-wasm32-asyncify' in profiles else None,
                'results': results}
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     # Receipts are auxiliary local state, not published metadata or a cache.

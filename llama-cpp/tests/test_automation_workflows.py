@@ -18,10 +18,16 @@ class WorkflowBoundaries(unittest.TestCase):
         self.update = (folder / 'update-llama-cpp.yml').read_text()
         self.report = (folder / 'runtime-comments.yml').read_text()
 
-    def test_existing_push_publish_and_full_matrix_remain(self):
-        for profile in ['cpu-wasm32', 'cpu-wasm64', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']:
-            self.assertIn('- ' + profile, self.build)
-        self.assertIn('needs: [test, compile]', self.build)
+    def test_existing_push_publish_and_configured_matrix_remain(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'scripts'))
+        from source_config import matrix
+        entries=matrix(ROOT)
+        self.assertEqual({e['profile'] for e in entries if e['source']=='upstream-stable'},
+                         set(json.loads((ROOT/'config/profiles.json').read_text())))
+        self.assertEqual(len([e for e in entries if e['source']=='upstream-nightly']),4)
+        self.assertIn('matrix: ${{ fromJSON(needs.plan.outputs.compile-matrix) }}',self.build)
+        self.assertIn('needs: [plan, test, compile]', self.build)
         self.assertIn('fail-fast: false', self.build)
         self.assertIn('  pull_request:', self.build)
         self.assertIn('types: [opened, reopened, synchronize]', self.build)
@@ -41,8 +47,8 @@ class WorkflowBoundaries(unittest.TestCase):
 
     def test_all_jobs_check_out_the_same_immutable_head_not_the_merge_commit(self):
         self.assertIn('LCB_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}', self.build)
-        self.assertEqual(self.build.count('ref: ${{ env.LCB_SOURCE_COMMIT }}'), 7)
-        self.assertEqual(self.build.count('persist-credentials: false'), 7)
+        self.assertEqual(self.build.count('ref: ${{ env.LCB_SOURCE_COMMIT }}'), 9)
+        self.assertEqual(self.build.count('persist-credentials: false'), 9)
         self.assertNotIn('expected_source', self.build)
         self.assertIn('test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"', self.build)
         self.assertIn("source != os.environ['LCB_SOURCE_COMMIT']", self.build)
@@ -58,9 +64,18 @@ class WorkflowBoundaries(unittest.TestCase):
         self.assertNotIn('pull-requests: write', self.build)
 
     def test_artifact_branches_do_not_reenter_source_builds(self):
-        self.assertEqual(self.build.count("github.head_ref != 'artifacts'"), 4)
-        self.assertEqual(self.build.count("github.ref_name != 'artifacts'"), 4)
+        self.assertEqual(self.build.count("github.head_ref != 'artifacts'"), 2)
+        self.assertEqual(self.build.count("github.ref_name != 'artifacts'"), 2)
         self.assertEqual(self.build.count('    branches-ignore:'), 2)
+        # The two independent entry jobs reject artifact refs. Downstream jobs
+        # depend on the admitted plan rather than duplicating this policy.
+        blocks=dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)',self.build.split('\njobs:\n',1)[1],re.M|re.S))
+        for name in ('plan','test'):
+            self.assertIn("github.ref_name != 'artifacts'",blocks[name])
+        for name in ('compile','image-compile','image-native'):
+            self.assertIn('needs: [plan]',blocks[name])
+        self.assertIn("needs.plan.result == 'success'",blocks['assemble'])
+
 
     def test_lock_resolution_is_after_publication_and_report_is_attempt_bound(self):
         self.assertLess(self.build.index('scripts/publish_artifacts.py'), self.build.index('scripts/consumer_metadata.py'))
@@ -110,7 +125,7 @@ class WorkflowBoundaries(unittest.TestCase):
         self.assertNotRegex(jobs, r'(?m)^\s+permissions:')
 
     def test_updater_inputs_are_data_not_shell_interpolation(self):
-        for item in ['options: [latest, latest-unstable, custom]', 'allow_non_fast_forward:', 'contents: write']:
+        for item in ['options: [latest, custom]', 'allow_non_fast_forward:', 'contents: write']:
             self.assertIn(item, self.update)
         run = self.update.split('        run: |', 1)[1].split('      - uses:', 1)[0]
         self.assertNotIn('${{', run)

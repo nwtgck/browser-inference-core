@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "defaultSource": "upstream-stable",
+  "sources": {
+    "upstream-stable": {
+      "repository": "ggml-org/llama.cpp",
+      "vendorPath": "vendor/llama.cpp",
+      "pinFile": "config/toolchain.json",
+      "profiles": [
+        "cpu-wasm32",
+        "cpu-wasm64",
+        "webgpu-wasm32-asyncify",
+        "webgpu-wasm32-jspi",
+        "webgpu-wasm64-jspi"
+      ],
+      "patchSeries": "sources/upstream-stable/patches.json",
+      "updateTarget": "latest"
+    },
+    "upstream-nightly": {
+      "repository": "ggml-org/llama.cpp",
+      "vendorPath": "vendor/llama.cpp-nightly",
+      "pinFile": "sources/upstream-nightly/pin.json",
+      "profiles": [
+        "webgpu-wasm64-jspi",
+        "cpu-wasm32"
+      ],
+      "patchSeries": "sources/upstream-nightly/patches.json",
+      "updateTarget": "latest-unstable"
+    }
+  }
+}

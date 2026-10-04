@@ -7,3 +7,6 @@
 [submodule "stable-diffusion-cpp/vendor/ggml-webgpu-source"]
 	path = stable-diffusion-cpp/vendor/ggml-webgpu-source
 	url = https://github.com/ggml-org/llama.cpp.git
+[submodule "llama-cpp/vendor/llama.cpp-nightly"]
+	path = llama-cpp/vendor/llama.cpp-nightly
+	url = https://github.com/ggml-org/llama.cpp.git

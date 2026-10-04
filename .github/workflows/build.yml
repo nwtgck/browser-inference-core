@@ -41,6 +41,59 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    name: Pin previous artifact and admit source reuse
+    if: >-
+      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
+      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      compile-matrix: ${{ steps.plan.outputs.compile-matrix }}
+      source-matrix: ${{ steps.plan.outputs.source-matrix }}
+      has-compile: ${{ steps.plan.outputs.has-compile }}
+      reuse-image: ${{ steps.plan.outputs.reuse-image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.LCB_SOURCE_COMMIT }}
+          submodules: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Plan exact build inputs, never reuse failed or unbound packages
+        id: plan
+        shell: bash
+        run: |
+          extra=()
+          if [[ "$BIC_CACHE_MODE" == cold ]]; then extra+=(--cold); fi
+          python3 scripts/pipeline_plan.py --repository "$GITHUB_REPOSITORY" "${extra[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admitted-source-inputs
+          path: build/admitted-reuse/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 14
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-plan
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   test:
     name: Test host and publication code
     if: >-
@@ -90,27 +143,20 @@ jobs:
           compression-level: 1
           retention-days: 14
   compile:
-    name: Build llama.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
-    if: >-
-      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
-      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+    name: Build llama.cpp ${{ matrix.source }} / ${{ matrix.profile }} / ${{ matrix.variant }}
+    needs: [plan]
+    if: needs.plan.outputs.has-compile == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
       # Intentionally omit max-parallel: use all available runners to reduce build wait time.
       # Do not add a workflow-level parallelism cap; runner/account limits still apply.
-      matrix:
-        profile:
-          - cpu-wasm32
-          - cpu-wasm64
-          - webgpu-wasm32-asyncify
-          - webgpu-wasm32-jspi
-          - webgpu-wasm64-jspi
-        variant:
-          - browser
-          - test
+      matrix: ${{ fromJSON(needs.plan.outputs.compile-matrix) }}
     env:
+      SOURCE_ID: ${{ matrix.source }}
+      VENDOR: ${{ matrix.vendor }}
+      NOTICE_PROFILE: ${{ matrix.noticeProfile }}
       BIC_METRICS_RUNTIME: llama-cpp
       BIC_METRICS_PROFILE: ${{ matrix.profile }}
       BIC_METRICS_VARIANT: ${{ matrix.variant }}
@@ -122,7 +168,7 @@ jobs:
           persist-credentials: false
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -149,7 +195,7 @@ jobs:
           # SDK activation can unset EM_CACHE; reapply the plan afterwards.
           export EM_CACHE="$planned_em_cache"
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" environment
-          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT" --source "$SOURCE_ID"
       - name: Stage package inputs
         shell: bash
         env:
@@ -157,13 +203,13 @@ jobs:
           VARIANT: ${{ matrix.variant }}
         run: |
           extra=()
-          if [[ "$PROFILE" == "webgpu-wasm64-jspi" && "$VARIANT" == "browser" ]]; then
+          if [[ "$PROFILE" == "$NOTICE_PROFILE" && "$VARIANT" == "browser" ]]; then
             extra+=(--include-toolchain-notices)
           fi
-          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.stage_upload -- python3 scripts/stage_ci_build.py --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.stage_upload -- python3 scripts/stage_ci_build.py --source "$SOURCE_ID" --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         with:
-          name: profile-build-${{ matrix.profile }}-${{ matrix.variant }}
+          name: profile-build-${{ matrix.source }}-${{ matrix.profile }}-${{ matrix.variant }}
           path: llama-cpp/build/ci-upload/
           if-no-files-found: error
           # The staging script copies runtime/API/provenance and license files only.
@@ -216,17 +262,25 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          name: pipeline-metrics-${{ github.run_attempt }}-compile-${{ matrix.source }}-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
   build:
-    name: Package and validate llama.cpp
-    needs: [test, compile]
+    name: Package and validate llama.cpp ${{ matrix.source }}
+    needs: [plan, test, compile]
+    if: >-
+      always() && !cancelled() && needs.plan.result == 'success' && needs.test.result == 'success' &&
+      (needs.compile.result == 'success' || needs.compile.result == 'skipped')
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.source-matrix) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      SOURCE_ID: ${{ matrix.source }}
+      VENDOR: ${{ matrix.vendor }}
       BIC_METRICS_RUNTIME: llama-cpp
     steps:
       - uses: actions/checkout@v4
@@ -235,34 +289,52 @@ jobs:
           submodules: false
           persist-credentials: false
       - name: Check out only this runtime's pinned upstreams
+        if: ${{ !matrix.reuse }}
         working-directory: .
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - uses: actions/download-artifact@v4
+        if: ${{ !matrix.reuse }}
         with:
-          pattern: profile-build-*
+          pattern: profile-build-${{ matrix.source }}-*
           path: llama-cpp/build/
-          # Every shard owns one profile/variant pair; only wasm64 WebGPU JSPI/browser supplies notices.
+          # Every shard owns a source/profile/variant. The first configured profile supplies notices.
           merge-multiple: true
       - name: Assemble runtime-only package
+        if: ${{ !matrix.reuse }}
         run: |
-          python3 scripts/package_runtime.py --defer-npm-pack \
-            --license-root vendor/llama.cpp \
+          python3 scripts/package_runtime.py --source "$SOURCE_ID" --build-root build --defer-npm-pack \
+            --license-root "$VENDOR" \
             --license-root build/toolchain-licenses/emscripten \
             --license-root build/toolchain-licenses/emdawnwebgpu_pkg
       - name: Install browser test harness
+        if: ${{ !matrix.reuse }}
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.npm_install -- npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
       - name: Prepare Chromium and OS dependencies
+        if: ${{ !matrix.reuse }}
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.browser_prepare -- ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Test and finalize the same runtime snapshot
+        if: ${{ !matrix.reuse }}
         # Includes all existing Node/Chromium checks, clean-source verification,
         # complete payload hashes and exactly one final npm pack (also on fork PRs).
         run: python3 ../scripts/validate_runtime_package.py --runtime llama-cpp --package dist/package
+      - name: Retrieve admitted original package
+        if: matrix.reuse
+        uses: actions/download-artifact@v4
+        with:
+          name: admitted-source-inputs
+          path: build/admitted-reuse/
+      - name: Revalidate and restore the original source package
+        if: matrix.reuse
+        working-directory: .
+        run: >-
+          python3 scripts/restore_source_package.py --download build/admitted-reuse
+          --runtime llama-cpp --source "$SOURCE_ID" --output llama-cpp/dist/package
       - uses: actions/upload-artifact@v4
         with:
-          name: llama-runtime-package
+          name: llama-runtime-package-${{ matrix.source }}
           path: llama-cpp/dist/package/
           if-no-files-found: error
           include-hidden-files: true
@@ -283,15 +355,14 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-build
+          name: pipeline-metrics-${{ github.run_attempt }}-build-${{ matrix.source }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
   image-native:
-    if: >-
-      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
-      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+    needs: [plan]
+    if: needs.plan.outputs.reuse-image != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
@@ -337,9 +408,8 @@ jobs:
           compression-level: 1
           retention-days: 14
   image-compile:
-    if: >-
-      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
-      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+    needs: [plan]
+    if: needs.plan.outputs.reuse-image != 'true'
     name: Image ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -454,7 +524,11 @@ jobs:
           retention-days: 14
   image-build:
     name: Package and validate stable-diffusion.cpp
-    needs: [image-native, image-compile]
+    needs: [plan, image-native, image-compile]
+    if: >-
+      always() && !cancelled() && needs.plan.result == 'success' &&
+      ((needs.plan.outputs.reuse-image == 'true' && needs.image-native.result == 'skipped' && needs.image-compile.result == 'skipped') ||
+       (needs.image-native.result == 'success' && needs.image-compile.result == 'success'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -469,29 +543,47 @@ jobs:
           submodules: false
           persist-credentials: false
       - name: Check out only this runtime's pinned upstreams
+        if: needs.plan.outputs.reuse-image != 'true'
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.reuse-image != 'true'
         with:
           pattern: image-build-*
           path: stable-diffusion-cpp/build/
           merge-multiple: true
       - name: Package image runtime
+        if: needs.plan.outputs.reuse-image != 'true'
         run: |
           python3 scripts/package_runtime.py --defer-npm-pack \
             --license-root build/toolchain-licenses/emscripten \
             --license-root build/toolchain-licenses/emdawnwebgpu_pkg
       - name: Install browser test harness
+        if: needs.plan.outputs.reuse-image != 'true'
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.npm_install -- npm install --prefix ../.tools/browser --no-save --package-lock=false playwright@1.58.2
       - name: Prepare Chromium and OS dependencies
+        if: needs.plan.outputs.reuse-image != 'true'
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.browser_prepare -- ../.tools/browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Test and finalize the same runtime snapshot
+        if: needs.plan.outputs.reuse-image != 'true'
         # Includes all existing Node/Chromium checks, clean-source verification,
         # complete payload hashes and exactly one final npm pack (also on fork PRs).
         run: python3 ../scripts/validate_runtime_package.py --runtime stable-diffusion-cpp --package dist/package
+      - name: Retrieve admitted original image package
+        if: needs.plan.outputs.reuse-image == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: admitted-source-inputs
+          path: build/admitted-reuse/
+      - name: Revalidate and restore the original image package
+        if: needs.plan.outputs.reuse-image == 'true'
+        working-directory: .
+        run: >-
+          python3 scripts/restore_source_package.py --download build/admitted-reuse
+          --runtime stable-diffusion-cpp --output stable-diffusion-cpp/dist/package
       - uses: actions/upload-artifact@v4
         with:
           name: image-runtime-package
@@ -513,15 +605,90 @@ jobs:
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
+  assemble:
+    name: Assemble, compress and verify the complete source catalog
+    needs: [plan, build, image-build]
+    if: >-
+      always() && !cancelled() && needs.plan.result == 'success' &&
+      needs.build.result == 'success' && needs.image-build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.LCB_SOURCE_COMMIT }}
+          submodules: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: admitted-source-inputs
+          path: build/admitted-reuse/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: llama-runtime-package-*
+          path: build/source-inputs/
+          # Separate packages must never be merged over each other.
+          merge-multiple: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-runtime-package
+          path: build/image-input/
+      - name: Prepare pinned encoder toolchain
+        run: python3 wasm-pack/prepare_ci_tools.py
+      - name: Normalize source input directory names
+        run: |
+          python3 - <<'PYINPUTS'
+          import pathlib, sys
+          sys.path.insert(0, 'llama-cpp/scripts')
+          from source_config import load_sources
+          root=pathlib.Path('build/source-inputs')
+          for name in load_sources(pathlib.Path('llama-cpp'))['sources']:
+              (root/('llama-runtime-package-'+name)).rename(root/name)
+          PYINPUTS
+      - name: Join exact raw packages and verify every compressed alternative
+        run: >-
+          python3 scripts/assemble_source_plan.py --plan build/admitted-reuse/plan.json
+          --inputs build/source-inputs --image build/image-input --output dist/package
+          --tools build/wasm-pack-tools
+      - name: Validate the final runtime-only npm payload
+        run: python3 scripts/package_runtime.py --package dist/package --verify-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-runtime-catalog
+          path: dist/package/
+          if-no-files-found: error
+          include-hidden-files: true
+          compression-level: 1
+          retention-days: 14
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-assemble
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
   publish:
-    needs: [build, image-build]
+    needs: [assemble]
     defaults:
       run:
         working-directory: .
     # Ordinary same-repository PR heads have the same publication trust as
     # source pushes. Fork PRs and Dependabot runs never receive write credentials.
     if: >-
-      github.actor != 'dependabot[bot]' &&
+      always() && !cancelled() && needs.assemble.result == 'success' && github.actor != 'dependabot[bot]' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -533,26 +700,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
-          # Only the llama source overlay is read by consumer provenance.
+          # Reports read only the published artifact-bound provenance.
           submodules: false
           persist-credentials: false
-      - name: Check out the upstream needed for consumer provenance
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --checkout --depth=1 -- llama-cpp/vendor/llama.cpp
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - uses: actions/download-artifact@v4
         with:
-          name: llama-runtime-package
-          path: build/package-inputs/llama-cpp/
-      - uses: actions/download-artifact@v4
-        with:
-          name: image-runtime-package
-          path: build/package-inputs/stable-diffusion-cpp/
-      - name: Assemble both source-bound runtimes
-        # All payload/provenance checks still run. The publisher checks actual
-        # npm pack output for both runtimes and the root before any push.
-        run: python3 scripts/package_runtime.py --defer-npm-pack
+          name: source-runtime-catalog
+          path: dist/package/
       - name: Verify package source before publication
         run: |
           python3 - <<'PYVERIFY'

@@ -21,7 +21,7 @@ class BrowserCache(unittest.TestCase):
         for directory in ('toolchain', 'scripts'):
             shutil.copytree(ROOT / directory, self.root / directory, ignore=shutil.ignore_patterns('__pycache__'))
         for runtime in ('llama-cpp', 'stable-diffusion-cpp'):
-            for part in ('config', 'scripts', 'upstream-patches', 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'):
+            for part in ('config', 'scripts', 'sources', 'upstream-patches', 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'):
                 if (ROOT / runtime / part).is_dir():
                     shutil.copytree(ROOT / runtime / part, self.root / runtime / part, ignore=shutil.ignore_patterns('__pycache__'))
             shutil.copy2(ROOT / runtime / 'CMakeLists.txt', self.root / runtime / 'CMakeLists.txt')
@@ -135,6 +135,18 @@ class BrowserCache(unittest.TestCase):
         for changes in ({'runtime': '../llama-cpp'}, {'profile': '../../x'}, {'variant': 'release'}, {'source': 'HEAD'}):
             with self.assertRaises(ValueError): self.plan(**changes)
         with self.assertRaises(ValueError): write_values(str(self.root/'output'), {'key': 'x\nEVIL=1'})
+
+    def test_stable_nightly_have_distinct_cache_writers_and_selected_pin(self):
+        def track(name):
+            return cache_plan(self.root,'llama-cpp','cpu-wasm32','browser','a'*40,
+                environment=self.env,ccache_version='fixture',source_id=name)
+        stable=track('upstream-stable');nightly=track('upstream-nightly')
+        for key in ('cc-key','cc-prefix','cc-path','em-key'):
+            self.assertNotEqual(stable[key],nightly[key])
+        self.change_json('llama-cpp/sources/upstream-nightly/pin.json','llamaCommit','d'*40)
+        self.assertEqual(stable,track('upstream-stable'))
+        self.assertNotEqual(nightly['em-key'],track('upstream-nightly')['em-key'])
+        self.assertEqual(stable['dawn-key'],nightly['dawn-key'])
 
     def test_common_configuration_cannot_be_overridden_by_runtime(self):
         shared = load_toolchain(self.root)

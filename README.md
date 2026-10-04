@@ -20,7 +20,7 @@ scripts/                    # common setup, caches, assembly, publication, repor
 ## Repository and setup
 
 The source repository is **Browser Inference Core** (`nwtgck/browser-inference-core`).
-The installable package name stays `llama-cpp-browser-core` for existing imports;
+The installable package name stays `llama-cpp-browser-core`;
 publication URLs and install commands use the actual `GITHUB_REPOSITORY` value.
 
 Run runtime-specific commands from their own directories. Root `npm test` runs
@@ -37,53 +37,53 @@ Compiler, Dawn and the Asyncify correction are pinned in
 `llama-cpp/config/toolchain.json`; image pins stay in
 `stable-diffusion-cpp/config/upstreams.json`. Their versions are not coupled.
 
-## Parallel builds and bounded caches
+## Source-aware builds and publication
 
-```text
-host tests ──────────────────┐
-llama compile (10 pairs) ────┴─ llama package + browser checks ──┐
-                                                              ├─ aggregate + publish
-image compile (4 pairs) ─────┬─ image package + browser checks ─┘
-image native checks ────────┘
-```
+`llama-cpp/config/sources.json` registers stable and nightly independently. Nightly
+starts with `cpu-wasm32` and `webgpu-wasm64-jspi`; profile lists can be changed
+without copying the bridge. The manual nightly updater changes only its selected
+vendor/pin and uses the shared candidate-branch safety checks. Approved upstream
+patches remain source-specific, hash-checked build-tree overlays.
 
-Only final aggregation waits for both runtimes. Each side transfers its own
-compiler/Dawn license notices and never borrows the other's build artifact.
-Runner availability can still limit actual parallelism.
+The main workflow resolves one prior artifact commit and admits exact raw-package
+reuse based on build/validation inputs. Unchanged sources retain original build
+provenance; other tracks' upstream pins do not invalidate them. Changed sources
+are compiled and browser-checked normally. The complete catalog, packed data and
+matching decoder are validated before append-only publication. First migration
+or shared build changes require a cold/full build. Intentional push/PR duplicate
+runs and existing publication permissions are preserved.
 
-CI caches the SHA-256-verified Dawn download, Emscripten's system-library cache,
-and strictly partitioned ccache objects. It always verifies the pinned toolchain,
-configures a fresh build tree and links the current runtime. It never restores
-finished runtime artifacts as a shortcut to a successful build. Cache saving is
-restricted to successful default-branch push builds; PR and other branch builds
-only restore through these configured actions. See
-[the cache and toolchain contract](toolchain/README.md) for trust limits,
-invalidation, and the cold-cache path.
+Compiler/Dawn intermediate caches still undergo their existing safety checks;
+source-aware finished-package reuse is a separate, manifest-bound path, never a
+claim that a compiler cache hit proves validation. Ccache paths and keys are also
+source-partitioned. No workflow-level parallel cap is added.
 
-## Runtime package layout (manifest format 3)
+## Runtime package layout (manifest format 4)
 
 ```text
 manifest.json
-llama-cpp-browser-core/manifest.json
-llama-cpp-browser-core/profiles/<profile>/<variant>/core.{mjs,wasm,d.ts}
-llama-cpp-browser-core/api/...
-stable-diffusion-cpp-browser-core/manifest.json
-stable-diffusion-cpp-browser-core/profiles/<profile>/<variant>/core.{mjs,wasm,d.ts}
+runtimes/llama-cpp/sources/<source>/manifest.json
+runtimes/llama-cpp/sources/<source>/profiles/<profile>/<variant>/core.{mjs,wasm,d.ts}
+runtimes/llama-cpp/sources/<source>/api/...
+runtimes/stable-diffusion-cpp/sources/upstream-default/...
+packed/llama-cpp/catalog.json
+packed/llama-cpp/runtime/...
+packed/llama-cpp/data/...
 ```
 
-Each inner manifest keeps runtime-specific provenance and validation. The root
-manifest hashes the complete tree, including both inner manifests, and refuses
-mixed source commits. npm exports preserve existing import paths; direct
-filesystem consumers must use the artifact directory names above. No duplicate
-Wasm payloads are shipped. Publication waits for both complete runtime packages;
-there is no last-writer-wins replacement of one runtime with the other.
+Raw Wasm and matching glue remain distributed. Compressed full/delta alternatives
+are additional producer assets, not instructions to bundle every profile. The
+matching selector returns a subset-closed file plan: no unselected full target
+may become a hidden delta base. Brotli-only selections omit the Zstandard decoder
+Wasm. The consumer owns asset placement/embedding and uses the same selected
+representation in development and release of its distribution.
 
-Naidan can keep its current llama dependency unchanged and install this artifact
-under the separate dependency name `stable-diffusion-cpp-browser-core` using the
-exact install command generated after successful publication. Never put a
-fictional artifact commit into a consumer lockfile. A local `dist/package` may
-also be selected explicitly for development.
+This layout intentionally changes consumer paths. Use the published, immutable
+YAML report to review dependency pins, each source's glue and bindings, the
+selected targets and decoder entry points. Do not invent an artifact commit or
+treat new hashes as proof that a source adapter is compatible.
 
-The image runtime is experimental. Native tests, browser ABI smoke checks and
-compilation are distinct from actual GPU image generation. Consult each profile's
-recorded validation scope; real-model inference is not asserted automatically.
+See [source catalog publication](docs/source-catalog-publication.md),
+[packing and runtime selection](wasm-pack/README.md), and
+[compiler caches](toolchain/README.md) for contracts and limits. Actual GPU model
+inference is distinct from native/synthetic/browser ABI smoke validation.

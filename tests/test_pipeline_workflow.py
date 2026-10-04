@@ -18,7 +18,7 @@ class PipelineWorkflow(unittest.TestCase):
             command = re.search(r'git submodule update[^\n]+', block).group()
             self.assertIn('--recursive --depth=1 -- ', command)
             expected = ('stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source'
-                        if name.startswith('image') else 'llama-cpp/vendor/llama.cpp')
+                        if name.startswith('image') else '"llama-cpp/$VENDOR"' if name in ('compile','build') else 'llama-cpp/vendor/llama.cpp')
             self.assertTrue(command.endswith(expected), command)
             self.assertIn('ref: ${{ env.LCB_SOURCE_COMMIT }}', block)
             self.assertIn('persist-credentials: false', block)
@@ -33,10 +33,14 @@ class PipelineWorkflow(unittest.TestCase):
             final = f'python3 ../scripts/validate_runtime_package.py --runtime {runtime} --package dist/package'
             self.assertIn(final, block)
             before_upload = block[:block.index('- uses: actions/upload-artifact@v4')]
-            self.assertTrue(before_upload.endswith(final + '\n      '))
+            self.assertIn(final, before_upload)
+            self.assertIn('restore_source_package.py', before_upload)
+            self.assertLess(block.index(final), block.index('name: '+('image-runtime-package' if job=='image-build' else 'llama-runtime-package')))
             final_step = before_upload.split('- name: Test and finalize the same runtime snapshot', 1)[1]
             self.assertNotIn('continue-on-error', final_step)
-            self.assertNotIn('if:', final_step)
+            fresh_guard = "if: ${{ !matrix.reuse }}" if job=='build' else "if: needs.plan.outputs.reuse-image != 'true'"
+            self.assertIn(fresh_guard, final_step)
+            self.assertIn('Revalidate and restore', final_step)
 
     def test_existing_node_and_browser_checks_remain_explicit(self):
         source = (ROOT / 'scripts/validate_runtime_package.py').read_text()
@@ -93,9 +97,9 @@ class PipelineWorkflow(unittest.TestCase):
             self.assertIn(b'--verify-only always includes npm packing', result.stderr)
 
     def test_profile_counts_and_job_dependencies_remain(self):
-        self.assertIn('needs: [test, compile]', JOBS['build'])
-        self.assertIn('needs: [image-native, image-compile]', JOBS['image-build'])
-        self.assertIn('needs: [build, image-build]', JOBS['publish'])
+        self.assertIn('needs: [plan, test, compile]', JOBS['build'])
+        self.assertIn('needs: [plan, image-native, image-compile]', JOBS['image-build'])
+        self.assertIn('needs: [assemble]', JOBS['publish'])
         self.assertEqual(len(json.loads((ROOT / 'llama-cpp/config/profiles.json').read_text())), 5)
         self.assertEqual(len(json.loads((ROOT / 'stable-diffusion-cpp/config/profiles.json').read_text())), 3)
         self.assertNotIn('max-parallel:', '\n'.join(line for line in WORKFLOW.splitlines() if not line.strip().startswith('#')))
@@ -141,6 +145,14 @@ class PipelineWorkflow(unittest.TestCase):
         self.assertIn('steps.save-em.outcome', action)
         source = (ROOT / 'scripts/pipeline_metrics.py').read_text()
         self.assertIn('action-completed-not-server-proof', source)
+
+
+class SourceShardPathContract(unittest.TestCase):
+    def test_public_assembler_reads_flat_downloads_not_local_nightly_build_tree(self):
+        text=JOBS['build']
+        self.assertIn('python3 scripts/package_runtime.py --source "$SOURCE_ID" --build-root build --defer-npm-pack',text)
+        self.assertIn('path: llama-cpp/build/',text)
+        self.assertIn('pattern: profile-build-${{ matrix.source }}-*',text)
 
 
 if __name__ == '__main__': unittest.main()

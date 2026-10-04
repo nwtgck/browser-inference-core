@@ -12,3 +12,5 @@
 __pycache__/
 *.pyc
 /.cache/
+/wasm-pack/encoder/native/target/
+/wasm-pack/decoder/target/

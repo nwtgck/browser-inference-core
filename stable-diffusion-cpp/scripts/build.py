@@ -16,6 +16,7 @@ REPO = ROOT.parent
 sys.path.insert(0, str(REPO / 'scripts'))
 from browser_toolchain import load_toolchain
 from patch_emscripten import verify_asyncify_bigint_patch
+from build_identity import image_fingerprint
 
 def git(*args: str, cwd: Path = REPO) -> str:
     return subprocess.check_output(['git', *args], cwd=cwd, text=True).strip()
@@ -75,6 +76,7 @@ def main() -> None:
     after = git('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none').splitlines()
     provenance = {'runtime': 'stable-diffusion-cpp', 'profile': args.profile, 'variant': args.variant,
                   'sourceCommit': source_commit, 'sourceDirty': bool(before or after),
+                  'buildInputFingerprint': image_fingerprint(REPO, args.profile, args.variant),
                   'sourceStatusBeforeBuild': before, 'sourceStatusAfterBuild': after,
                   'upstreams': upstreams, 'configuration': config, 'variantConfiguration': variants[args.variant],
                   'toolchain': toolchain, 'emccVersion': version, 'cmakeCommand': command,

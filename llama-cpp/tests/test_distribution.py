@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
-from package_runtime import VARIANTS, build_package, validate
+from package_runtime import VARIANTS, EMBEDDED_NOTICE_FILES, build_package, validate
 from publish_artifacts import publish
 import publish_artifacts
 
@@ -37,10 +37,14 @@ class Distribution(unittest.TestCase):
             (build/'provenance.json').write_text(json.dumps(data))
         licenses=self.root/'notices'; licenses.mkdir(); (licenses/'LICENSE').write_text('Test-only notice')
         self.licenses=licenses; self.package=self.root/'package'
+        self.upstream=self.root/'upstream-notice-fixture'
+        for relative in EMBEDDED_NOTICE_FILES:
+            path=self.upstream/relative;path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_text('Synthetic embedded notice fixture, not upstream source.\n')
         self.assemble()
     def tearDown(self): self.tmp.cleanup()
     def assemble(self):
-        return build_package(self.root/'build',self.package,['cpu-wasm32'],license_roots=[self.licenses])
+        return build_package(self.root/'build',self.package,['cpu-wasm32'],license_roots=[self.licenses],upstream_source=self.upstream)
     def test_runtime_has_no_build_hooks_or_submodule(self):
         result=validate(self.package)
         self.assertEqual(result['profiles'],['cpu-wasm32'])
@@ -88,7 +92,7 @@ for (const variant of ['browser', 'test']) {
                          'vendor/nlohmann/json.hpp', 'vendor/nlohmann/json_fwd.hpp',
                          'vendor/sheredom/subprocess.h', 'vendor/hash/sha1/sha1.c'):
             with self.subTest(source=relative):
-                original=ROOT/'vendor/llama.cpp'/relative
+                original=self.upstream/relative
                 packaged=self.package/'licenses/embedded'/(relative+'.txt')
                 self.assertEqual(packaged.read_bytes(), original.read_bytes())
     def test_removed_notice_is_rejected_even_if_manifest_is_updated(self):

@@ -75,6 +75,7 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
     manifest=json.loads((directory/'manifest.json').read_text())
     if manifest['formatVersion']!=2: raise ValueError('Unsupported manifest format')
     expected={f['path']:f for f in manifest['files']}
+    if len(expected)!=len(manifest['files']): raise ValueError('Duplicate manifest payload entries')
     required_notices={'licenses/embedded/'+path+'.txt' for path in EMBEDDED_NOTICE_FILES}
     if not required_notices.issubset(expected):
         raise ValueError('Missing embedded third-party license notices')
@@ -96,6 +97,10 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
         for variant, info in profile['variants'].items():
             if info['profile']!=name or info['variant']!=variant or info['variantConfiguration']!=VARIANTS[variant]:
                 raise ValueError(f'Variant provenance mismatch: {name}/{variant}')
+            if 'sourceId' in manifest and info.get('sourceId')!=manifest['sourceId']:
+                raise ValueError('Source track provenance mismatch')
+            if 'sourceRepository' in manifest and info.get('sourceRepository')!=manifest['sourceRepository']:
+                raise ValueError('Source repository provenance mismatch')
             if info['sourceCommit']!=manifest['sourceCommit'] or info['llamaCommit']!=manifest['llamaCommit']:
                 raise ValueError('Mixed source commits in manifest')
             if require_clean and info['sourceDirty']:
@@ -117,8 +122,10 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
             'profiles':list(manifest['profiles'])}
 
 @measured('package.assemble', packageKind='llama')
-def build_package(build_root: Path, destination: Path, profiles: list[str], *, license_roots: list[Path], check_npm_pack: bool = True):
+def build_package(build_root: Path, destination: Path, profiles: list[str], *, license_roots: list[Path], check_npm_pack: bool = True, upstream_source: Path | None = None):
     source=None; upstream=None; schema=None; provenance={}
+    source_id=None; source_repository=None; source_identity_seen=False
+    upstream_source=upstream_source or ROOT/'vendor/llama.cpp'
     with tempfile.TemporaryDirectory(prefix='lcb-package-') as tmp:
         out=Path(tmp).resolve()
         for name in profiles:
@@ -131,6 +138,9 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
                     raise ValueError(f'Variant provenance mismatch: {name}/{variant}')
                 if source is not None and (source!=data['sourceCommit'] or upstream!=data['llamaCommit']):
                     raise ValueError('Mixed source commits in one package')
+                if source_identity_seen and (data.get('sourceId'),data.get('sourceRepository'))!=(source_id,source_repository): raise ValueError('Mixed source tracks')
+                source_identity_seen=True
+                source_id=data.get('sourceId'); source_repository=data.get('sourceRepository')
                 source=data['sourceCommit']; upstream=data['llamaCommit']
                 provenance[name]['variants'][variant]=data
                 generated=build/'generated'
@@ -155,7 +165,7 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
         for i,root in enumerate(license_roots):
             copied+=copy_license_notices(root,licenses/str(i))
         if not copied: raise ValueError('No third-party license notices collected')
-        copy_embedded_notices(ROOT/'vendor/llama.cpp', licenses/'embedded')
+        copy_embedded_notices(upstream_source, licenses/'embedded')
         pkg={'name':RUNTIME_NAME,'version':'0.1.0','private':True,'type':'module','license':'MIT',
              'files':['examples/','profiles/','api/','manifest.json','licenses/','README.md','chat-and-multimodal.md','LICENSE'],
              'exports':{'./examples/runtime':{'types':'./examples/runtime/index.d.ts','import':'./examples/runtime/index.mjs'},
@@ -166,6 +176,8 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
                   'licenseRoots':[p.name for p in license_roots],
                   'files':[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)}
                            for p in sorted(out.rglob('*')) if p.is_file()]}
+        if source_id is not None:
+            manifest['sourceId']=source_id; manifest['sourceRepository']=source_repository
         (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         validate(out,require_clean=False,check_npm_pack=False)
         if destination.exists() or destination.is_symlink():
@@ -182,6 +194,7 @@ def main():
     p.add_argument('--build-root',type=Path,default=ROOT/'build')
     p.add_argument('--output',type=Path,default=ROOT/'dist/package')
     p.add_argument('--profiles',nargs='+')
+    p.add_argument('--source',default='upstream-stable')
     p.add_argument('--license-root',type=Path,action='append')
     p.add_argument('--verify-only',action='store_true')
     p.add_argument('--defer-npm-pack',action='store_true',
@@ -189,8 +202,13 @@ def main():
     a=p.parse_args()
     if a.verify_only and a.defer_npm_pack: p.error('--verify-only always includes npm packing')
     if not a.verify_only:
-        profiles=a.profiles or list(json.loads((ROOT/'config/profiles.json').read_text()))
-        roots=a.license_root or [ROOT/'vendor/llama.cpp',ROOT.parent/'.tools/emsdk/upstream/emscripten',ROOT.parent/'.tools/emdawnwebgpu_pkg']
-        build_package(a.build_root,a.output,profiles,license_roots=roots,check_npm_pack=False)
+        from source_config import get_source
+        entry=get_source(ROOT,a.source)
+        profiles=a.profiles or entry['profiles']
+        if any(name not in entry['profiles'] for name in profiles): p.error('Unavailable source profile')
+        roots=a.license_root or [ROOT/entry['vendorPath'],ROOT.parent/'.tools/emsdk/upstream/emscripten',ROOT.parent/'.tools/emdawnwebgpu_pkg']
+        build_root=a.build_root
+        if a.source!='upstream-stable' and build_root==ROOT/'build': build_root=ROOT/'build/sources'/a.source
+        build_package(build_root,a.output,profiles,license_roots=roots,check_npm_pack=False,upstream_source=ROOT/entry['vendorPath'])
     print(json.dumps(validate(a.output,require_clean=a.verify_only,check_npm_pack=not a.defer_npm_pack),indent=2))
 if __name__=='__main__': main()

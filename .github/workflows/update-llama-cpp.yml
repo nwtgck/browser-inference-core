@@ -1,12 +1,26 @@
-name: Update llama.cpp
+name: Update llama.cpp stable / shared updater
 
 on:
+  workflow_call:
+    inputs:
+      source:
+        type: string
+        required: true
+      target:
+        type: string
+        required: true
+      custom_ref:
+        type: string
+        default: ''
+      allow_non_fast_forward:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       target:
         description: 'Upstream channel (latest is stable; latest-unstable is a released nightly)'
         type: choice
-        options: [latest, latest-unstable, custom]
+        options: [latest, custom]
         default: latest
         required: true
       custom_ref:
@@ -45,6 +59,7 @@ jobs:
       - name: Resolve upstream, push the candidate branch, and show the PR form link
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_ID: ${{ inputs.source || 'upstream-stable' }}
           TARGET: ${{ inputs.target }}
           CUSTOM_REF: ${{ inputs.custom_ref }}
           BASE: ${{ github.ref_name }}
@@ -55,7 +70,7 @@ jobs:
           if [[ "$ALLOW_NON_FAST_FORWARD" == "true" ]]; then
             extra+=(--allow-non-fast-forward)
           fi
-          python3 scripts/update_llama_cpp.py --target "$TARGET" --custom-ref "$CUSTOM_REF" --base "$BASE" "${extra[@]}"
+          python3 scripts/update_llama_cpp.py --source "$SOURCE_ID" --target "$TARGET" --custom-ref "$CUSTOM_REF" --base "$BASE" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
