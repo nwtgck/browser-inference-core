@@ -44,8 +44,9 @@ class MtmdOverlayTests(unittest.TestCase):
     def test_changed_upstream_fails_without_overwriting_a_previous_overlay(self):
         target = prepare(self.source, self.root / "build", self.patch)
         self.file.write_text("before\nchanged upstream\nafter\n")
-        with self.assertRaises(subprocess.CalledProcessError):
-            prepare(self.source, self.root / "build", self.patch)
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            prepare(self.source, self.root / "build", self.patch, capture_output=True)
+        self.assertIn("patch does not apply", caught.exception.stderr)
         self.assertEqual(target.read_text(), "before\npatched\nafter\n")
         self.assertEqual(self.file.read_text(), "before\nchanged upstream\nafter\n")
 

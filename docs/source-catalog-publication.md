@@ -92,12 +92,12 @@ Wasm bypass. The producer keeps raw Wasm without duplicating it in a selected pl
 ## Build-only encoder
 
 `wasm-pack/prepare_ci_tools.py` prepares pinned Rust, wasm-tools, Cargo dependencies
-and Python dependencies on a hosted Linux runner. No encoder/compiler runs during
+on a hosted Linux runner; Python needs no pip-installed dependencies. No encoder/compiler runs during
 consumer installation. See [wasm-pack](../wasm-pack/README.md) for the offline path,
 format caps, selected runtime API and per-representation verification.
 
-The runner-provided libzstd and C++ compiler are not pinned to one binary build.
-The used libzstd version is reported. Cross-machine byte reproducibility of
+The runner-provided libzstd is not pinned to one binary build.
+The used libzstd version is reported; packing itself no longer requires a C++ compiler. Cross-machine byte reproducibility of
 compressed assets therefore is not claimed; reconstructed raw Wasm is exact.
 Packing all same-runtime directions is bounded work inside one job, not a large
 Actions matrix. Timeout and memory are finite; future source growth may require
@@ -112,3 +112,53 @@ nightly C++ tree compiled, or real GPU inference succeeded. Missing vendored
 headers must not be hidden by disabling their existing tests. Actual hosted-runner
 validation, pinned upstream patch compatibility and consumer integration remain
 separate acceptance checks.
+
+
+## Committed source registration and CMake selection
+
+A source is identified by both its registered pin and a `160000` gitlink in the
+**committed** superproject tree. A `.gitmodules` entry, an empty vendor directory,
+a fetched checkout, and a staged-but-uncommitted gitlink are not substitutes.
+The planner and updater share `llama-cpp/scripts/source_git.py`, which reports the
+source, exact tree path, expected pin and observed entry on a mismatch. CI must
+not repair its checkout or copy an observed vendor HEAD into the pin.
+
+A Git patch applied without `--index` ignores submodule commit changes. For a
+previous file-only application of patch 005, first apply the incremental repair
+patch to the already-applied tree, then use the explicit local helper:
+
+```sh
+# Default mode is read-only and checks HEAD, not the index.
+python3 scripts/register_source_gitlinks.py
+
+# Only when committed registration is missing:
+python3 scripts/register_source_gitlinks.py --stage-missing
+git diff --cached --submodule=short
+# Review and commit the code changes plus any newly staged gitlink, then push.
+```
+
+The mutation mode stages only absent entries. It verifies the selected registry,
+staged pins and `.gitmodules` path/URL, rejects populated non-Git or dirty source
+directories, refuses existing mismatching entries and deliberate removals, and
+preflights all candidates before updating the index. It never fetches, commits or
+changes an upstream pin. It is forbidden in GitHub Actions. Correct registrations
+are a no-op. If an existing entry has the wrong commit, review the diagnostic;
+`--stage-missing` deliberately cannot overwrite it. An uninitialized source can
+remain an empty directory: Actions initializes the committed gitlink normally.
+
+The real CMake build and the configure-only overlay harness both include
+`llama-cpp/cmake/SourceConfig.cmake` before preparing copies. It resolves the
+source ID, vendor path, pin and patch-plan dependencies from the same registry.
+Unknown/empty source IDs fail early. An explicit `LCB_LLAMA_SOURCE` remains
+available for native fixtures. Derived defaults are not cached, so a subsequent
+source-ID change cannot silently retain a default from another source. A build
+directory configured by the older implementation may already contain an explicit
+cache entry; pass `-U LCB_LLAMA_SOURCE` or configure a fresh directory to clear it.
+Do not silently discard intentional local overrides.
+
+The vendor-independent regression suite runs real CMake with synthetic old-side
+patch snippets. This checks default/source-switch/overlay wiring without a network
+checkout; it is not evidence that the full pinned upstream compiles. The original
+real-vendor overlay test is retained and prints the full configure diagnostic on
+failure. Expected patch rejection tests capture and assert stderr so their output
+cannot be mistaken for a failed positive test.

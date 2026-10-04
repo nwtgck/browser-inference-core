@@ -211,7 +211,12 @@ def main():
     a=p.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',a.repository):p.error('Invalid repository')
     for name in load_sources(ROOT/'llama-cpp')['sources']:
-        entry=get_source(ROOT/'llama-cpp',name);check_gitlink(ROOT/'llama-cpp',entry);patch_series(ROOT/'llama-cpp',entry)
+        entry = get_source(ROOT / 'llama-cpp', name)
+        try:
+            check_gitlink(ROOT / 'llama-cpp', entry)
+            patch_series(ROOT / 'llama-cpp', entry)
+        except ValueError as error:
+            p.error(str(error))
     with tempfile.TemporaryDirectory(prefix='bic-previous-') as td:
         snapshot=Path(td)/'package'
         receipt=None if a.cold else fetch_snapshot('https://github.com/'+a.repository+'.git',snapshot)

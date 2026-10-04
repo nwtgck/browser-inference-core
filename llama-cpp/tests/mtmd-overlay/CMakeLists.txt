@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(mtmd_overlay_check LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/SourceConfig.cmake")
 # Configure the actual upstream mtmd target; build only its overlay translation
 # unit when checking this fixture, not the language models or runtime artifacts.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)

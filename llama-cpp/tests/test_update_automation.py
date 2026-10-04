@@ -274,8 +274,13 @@ class LocalGitProposal(unittest.TestCase):
         (self.root / 'config/toolchain.json').write_text(json.dumps({'llamaCommit': self.new}))
         self.git('add', '.', cwd=self.root)
         self.git('commit', '-qm', 'Mismatched pins', cwd=self.root)
-        with self.assertRaisesRegex(ValueError, 'disagree'):
+        with self.assertRaisesRegex(ValueError, 'Source gitlink/pin mismatch') as caught:
             self.propose()
+        message = str(caught.exception)
+        self.assertIn(self.new, message)
+        self.assertIn(self.old, message)
+        self.assertIn('config/toolchain.json', message)
+        self.assertIn('actual 160000 commit', message)
 
     def test_rollback_requires_explicit_opt_in(self):
         self.api.relation = 'behind'

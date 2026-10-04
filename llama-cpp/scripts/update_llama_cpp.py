@@ -15,6 +15,7 @@ from urllib.parse import quote, urlencode
 from github_api import ApiError, GitHub, full_sha, git, git_auth_env, repository_name
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 from source_config import get_source, patch_series, DEFAULT_SOURCE
+from source_git import check_gitlink
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = 'ggml-org/llama.cpp'
@@ -102,9 +103,8 @@ def read_pins(root: Path, descriptor=None) -> tuple[str, dict]:
     vendor = descriptor['vendorPath'] if descriptor else 'vendor/llama.cpp'
     toolchain = json.loads((root / pin_file).read_text())
     commit = full_sha(toolchain['llamaCommit'])
-    entry = git('ls-tree', 'HEAD', '--', vendor, cwd=root).stdout.split()
-    if len(entry) != 4 or entry[:3] != ['160000', 'commit', commit]:
-        raise ValueError('Submodule gitlink and toolchain.json disagree')
+    check_gitlink(root, {'id': descriptor['id'] if descriptor else DEFAULT_SOURCE,
+                         'vendorPath': vendor, 'pinFile': pin_file, 'commit': commit})
     return commit, toolchain
 
 

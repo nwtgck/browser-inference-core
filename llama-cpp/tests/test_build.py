@@ -48,8 +48,9 @@ class BuildProvenance(unittest.TestCase):
         toolchain['emscriptenAsyncifyBigIntPatch']['patchedSha256']=hashlib.sha256(patched_runtime).hexdigest()
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root/'scripts').mkdir()
-        shutil.copy2(ROOT/'scripts/build.py',self.root/'scripts/build.py')
-        shutil.copy2(ROOT/'scripts/source_config.py',self.root/'scripts/source_config.py')
+        # Keep the real build entry point and its source-identity dependency together.
+        for name in ('build.py', 'source_config.py', 'source_git.py'):
+            shutil.copy2(ROOT / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copytree(ROOT/'sources/upstream-stable',self.root/'sources/upstream-stable')
         shutil.copytree(ROOT/'upstream-patches-only-as-a-last-resort-with-explicit-user-approval',self.root/'upstream-patches-only-as-a-last-resort-with-explicit-user-approval')
         cfg=json.loads((ROOT/'config/sources.json').read_text())

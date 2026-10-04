@@ -8,7 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import subprocess
+from source_git import check_gitlink
 
 DEFAULT_SOURCE='upstream-stable'
 NAME=re.compile(r'[a-z0-9]+(?:-[a-z0-9]+)*\Z')
@@ -58,10 +58,6 @@ def patch_series(root: Path, source):
         result.append(dict(p))
     if components!={'audio','vision'}: raise ValueError('An accepted exception was silently removed')
     return result
-
-def check_gitlink(root: Path, entry, revision='HEAD'):
-    fields=subprocess.check_output(['git','ls-tree',revision,'--',entry['vendorPath']],cwd=root,text=True).split()
-    if len(fields)!=4 or fields[:3]!=['160000','commit',entry['commit']]: raise ValueError('Source gitlink/pin mismatch')
 
 def matrix(root: Path, selected=None):
     config=load_sources(root); variants=json.loads((root/'config/variants.json').read_text())

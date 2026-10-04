@@ -1,3 +1,6 @@
+if(NOT DEFINED LCB_SOURCE_ID OR LCB_SOURCE_ID STREQUAL "")
+    message(FATAL_ERROR "Include SourceConfig.cmake before configuring an mtmd overlay")
+endif()
 get_filename_component(LCB_MTMD_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 # Patch only a build-tree translation unit: the pinned submodule stays clean,
 # including in concurrent profile builds and artifact provenance checks.
@@ -21,10 +24,4 @@ target_include_directories(mtmd PRIVATE
 # Regenerate the copy when either input changes, not just when CMake files do.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/tools/mtmd/clip.cpp"
-    "${LCB_MTMD_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch"
     "${LCB_MTMD_ROOT}/scripts/prepare_mtmd.py")
-
-# A per-source patch plan is a configure input, not an implicit shared policy.
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_LIST_DIR}/../config/sources.json"
-    "${CMAKE_CURRENT_LIST_DIR}/../sources/${LCB_SOURCE_ID}/patches.json")

@@ -245,8 +245,15 @@ class OverlayProvenance(unittest.TestCase):
 
     def test_audio_overlay_conflict_is_not_hidden_by_a_successful_vision_overlay(self):
         (self.vendor / 'tools/mtmd/mtmd-audio.cpp').write_text('changed upstream\n')
-        with self.assertRaises(subprocess.CalledProcessError):
-            provenance.collect(self.root, self.manifest)
+        # Expected rejection is evidence, not an uncaught runner error. Keep the
+        # native patch operation but capture its diagnostic inside this test.
+        original_prepare = provenance.prepare
+        def captured_prepare(*args, **kwargs):
+            return original_prepare(*args, **kwargs, capture_output=True)
+        with patch.object(provenance, 'prepare', side_effect=captured_prepare):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                provenance.collect(self.root, self.manifest)
+        self.assertIn('patch does not apply', caught.exception.stderr)
 
     def test_unknown_patch_files_are_not_silently_omitted(self):
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/another.patch').write_text('Another fixture patch\n')
@@ -285,8 +292,15 @@ class OverlayProvenance(unittest.TestCase):
             provenance.collect(self.root, self.manifest)
         self.manifest['sourceCommit'] = A
         (self.vendor / 'tools/mtmd/clip.cpp').write_text('changed upstream\n')
-        with self.assertRaises(subprocess.CalledProcessError):
-            provenance.collect(self.root, self.manifest)
+        # Expected rejection is evidence, not an uncaught runner error. Keep the
+        # native patch operation but capture its diagnostic inside this test.
+        original_prepare = provenance.prepare
+        def captured_prepare(*args, **kwargs):
+            return original_prepare(*args, **kwargs, capture_output=True)
+        with patch.object(provenance, 'prepare', side_effect=captured_prepare):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                provenance.collect(self.root, self.manifest)
+        self.assertIn('patch does not apply', caught.exception.stderr)
 
     def test_symlinked_source_files_are_rejected(self):
         source = self.vendor / 'tools/mtmd/clip.cpp'
