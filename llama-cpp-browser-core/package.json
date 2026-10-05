@@ -1,0 +1,30 @@
+{
+  "name": "llama-cpp-browser-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "examples/",
+    "profiles/",
+    "api/",
+    "manifest.json",
+    "licenses/",
+    "README.md",
+    "chat-and-multimodal.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./examples/runtime": {
+      "types": "./examples/runtime/index.d.ts",
+      "import": "./examples/runtime/index.mjs"
+    },
+    "./profiles/*/core.mjs": {
+      "types": "./profiles/*/core.d.ts",
+      "import": "./profiles/*/core.mjs"
+    },
+    "./profiles/*": "./profiles/*",
+    "./api/*": "./api/*",
+    "./manifest.json": "./manifest.json"
+  }
+}
