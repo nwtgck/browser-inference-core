@@ -1,0 +1,3208 @@
+{
+  "formatVersion": 2,
+  "runtime": "stable-diffusion-cpp",
+  "abiVersion": 2,
+  "schemaSha256": "3b359d0184f3a86002f0357d1c527c2f3009a3c25031253baa4ddd104cddd608",
+  "capabilities": {
+    "ggufFileOffsetBits": 64,
+    "callerOwnedRandomAccess": true,
+    "upstreamApi": true,
+    "safetensorsFileOffsetBits": 64,
+    "ggufShards": true
+  },
+  "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+  "upstreams": {
+    "stable-diffusion": {
+      "path": "vendor/stable-diffusion.cpp",
+      "repository": "leejet/stable-diffusion.cpp",
+      "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+    },
+    "ggml": {
+      "path": "vendor/ggml-webgpu-source",
+      "repository": "ggml-org/llama.cpp",
+      "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+      "sourceSubdirectory": "ggml"
+    }
+  },
+  "profiles": {
+    "webgpu-wasm32-asyncify": {
+      "variants": {
+        "browser": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm32-asyncify",
+          "variant": "browser",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "d468993f36142edff13c8c76ee676b4eb64117ab12ae059552a2183de5664062",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": false,
+            "webgpu": true,
+            "jspi": false,
+            "asyncify": true,
+            "pthreads": false,
+            "maximumMemory": 4294967296
+          },
+          "variantConfiguration": {
+            "assertions": 0,
+            "environment": "web,worker"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/browser",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=browser",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/browser/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/browser/prepared/ggml/ggml",
+            "-DSDCB_JSPI=OFF",
+            "-DSDCB_MEMORY64=OFF",
+            "-DSDCB_MAXIMUM_MEMORY=4294967296",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167771,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        },
+        "test": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm32-asyncify",
+          "variant": "test",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "ebd757c854a44d6395ae8bb3a40c7a58880e1fead7baf697150f69261d8debe2",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": false,
+            "webgpu": true,
+            "jspi": false,
+            "asyncify": true,
+            "pthreads": false,
+            "maximumMemory": 4294967296
+          },
+          "variantConfiguration": {
+            "assertions": 1,
+            "environment": "web,worker,node"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/test",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=test",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/test/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-asyncify/test/prepared/ggml/ggml",
+            "-DSDCB_JSPI=OFF",
+            "-DSDCB_MEMORY64=OFF",
+            "-DSDCB_MAXIMUM_MEMORY=4294967296",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167818,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        }
+      }
+    },
+    "webgpu-wasm32-jspi": {
+      "variants": {
+        "browser": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm32-jspi",
+          "variant": "browser",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "3d507ec89ad9c44182c88de4229e5cb62960bcbfbc0b775dd337afc7882463a0",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": false,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 4294967296
+          },
+          "variantConfiguration": {
+            "assertions": 0,
+            "environment": "web,worker"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/browser",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=browser",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/browser/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/browser/prepared/ggml/ggml",
+            "-DSDCB_JSPI=ON",
+            "-DSDCB_MEMORY64=OFF",
+            "-DSDCB_MAXIMUM_MEMORY=4294967296",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167687,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        },
+        "test": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm32-jspi",
+          "variant": "test",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "fb68624a2c38a78f94dcbbb9dfbab51390e2327edc82fee69b1659e5d297a779",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": false,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 4294967296
+          },
+          "variantConfiguration": {
+            "assertions": 1,
+            "environment": "web,worker,node"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/test",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=test",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/test/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm32-jspi/test/prepared/ggml/ggml",
+            "-DSDCB_JSPI=ON",
+            "-DSDCB_MEMORY64=OFF",
+            "-DSDCB_MAXIMUM_MEMORY=4294967296",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167720,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        }
+      }
+    },
+    "webgpu-wasm64-jspi": {
+      "variants": {
+        "browser": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm64-jspi",
+          "variant": "browser",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "68bb32ebeaf8b53c3d072c7fdd4d3995001a463280ceffd59fa10d2c2ac584e7",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": true,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 17179869184
+          },
+          "variantConfiguration": {
+            "assertions": 0,
+            "environment": "web,worker"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/browser",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=browser",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/browser/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/browser/prepared/ggml/ggml",
+            "-DSDCB_JSPI=ON",
+            "-DSDCB_MEMORY64=ON",
+            "-DSDCB_MAXIMUM_MEMORY=17179869184",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167742,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        },
+        "test": {
+          "runtime": "stable-diffusion-cpp",
+          "profile": "webgpu-wasm64-jspi",
+          "variant": "test",
+          "sourceCommit": "0aeaf66eb04685c565b4b0f2cc89bf34ee0ad376",
+          "sourceDirty": false,
+          "buildInputFingerprint": "3ada359cbde1b4ad9dfda8f881f9799cf202c4be8c15c3f047451d207a16cd40",
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "upstreams": {
+            "stable-diffusion": {
+              "path": "vendor/stable-diffusion.cpp",
+              "repository": "leejet/stable-diffusion.cpp",
+              "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+            },
+            "ggml": {
+              "path": "vendor/ggml-webgpu-source",
+              "repository": "ggml-org/llama.cpp",
+              "commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+              "sourceSubdirectory": "ggml"
+            }
+          },
+          "configuration": {
+            "memory64": true,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 17179869184
+          },
+          "variantConfiguration": {
+            "assertions": 1,
+            "environment": "web,worker,node"
+          },
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/test",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DSDCB_VARIANT=test",
+            "-DSDCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/test/prepared/stable-diffusion",
+            "-DSDCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/stable-diffusion-cpp/build/webgpu-wasm64-jspi/test/prepared/ggml/ggml",
+            "-DSDCB_JSPI=ON",
+            "-DSDCB_MEMORY64=ON",
+            "-DSDCB_MAXIMUM_MEMORY=17179869184",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "patches": {
+            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "patches": [
+              {
+                "file": "0001-single-thread-model-reader.patch",
+                "target": "stable-diffusion",
+                "reason": "Execute the model-reader closure inline for single-threaded Emscripten, preserving native/pthread behavior.",
+                "files": [
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
+                    "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+                  }
+                ],
+                "sha256": "f89c5c8fdd731f71eb2421e737a2805c945dd742f3ebfb4bef43e527918e26ea"
+              },
+              {
+                "file": "0002-webgpu-group-normalization.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
+                    "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+                  }
+                ],
+                "sha256": "50a50ca43d962a5755add756c2a96c060d77ce05eff0e17922f83d92dc4a3b19"
+              },
+              {
+                "file": "0003-webgpu-unknown-memory-capacity.patch",
+                "target": "ggml",
+                "reason": "Do not misreport maxBufferSize as total/free GPU memory. Image callers must supply an explicit budget when live capacity is unknown.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "30c099a6af5168b4a5ebabbe22a27838b9fd373bd008e70a73493ff60903537e",
+                    "afterSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a"
+                  }
+                ],
+                "sha256": "17a689662da25a462a70542fcf096c14315b8824e0f6efdf8c17c10e9a1cca94"
+              },
+              {
+                "file": "0004-browser-gguf-64bit-file-offsets.patch",
+                "target": "stable-diffusion",
+                "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
+                    "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+                  },
+                  {
+                    "path": "src/model_io/gguf_io.cpp",
+                    "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
+                    "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+                  },
+                  {
+                    "path": "src/model_io/tensor_storage.h",
+                    "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
+                    "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+                  }
+                ],
+                "sha256": "d70f53c5fcb7eb305a6e7912fcb7b03c35dafaff10cda24691d8f992543277c0"
+              },
+              {
+                "file": "0005-browser-gguf-logical-cursor.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep a 64-bit logical metadata cursor; avoid tellg buffer invalidation and repeated FileReaderSync reads while retaining bounded skips and file checks.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
+                    "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+                  }
+                ],
+                "sha256": "ce64c95fb7edcae2603e108a4fb0f35e0f32d3a3d5121828b38394d0e66b1780"
+              },
+              {
+                "file": "0006-browser-safetensors-and-gguf-shards.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
+                "files": [
+                  {
+                    "path": "src/model_io/gguf_reader_ext.h",
+                    "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
+                    "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+                  },
+                  {
+                    "path": "src/model_io/safetensors_io.cpp",
+                    "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
+                    "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
+                  },
+                  {
+                    "path": "src/model_loader.cpp",
+                    "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
+                    "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+                  }
+                ],
+                "sha256": "1aff9d568160b9385703363485da84e4178367403682025b4830986005f76b02"
+              },
+              {
+                "file": "0007-webgpu-qwen-timestep-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid an in-place Qwen timestep SiLU alias across a BF16 CPU matmul / WebGPU activation boundary. Preserve weights and arithmetic; no profile fallback or dtype conversion.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image.hpp",
+                    "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
+                    "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+                  }
+                ],
+                "sha256": "790eaf137a194bd66b7049cb9e8cce6ef912c91bde2fb19ac238b042ff2c1e85"
+              },
+              {
+                "file": "0008-browser-graph-placement-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Report bounded allocation-time BF16 weight matmul placement through existing logs, without changing graph execution or reading tensor contents.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
+                    "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+                  }
+                ],
+                "sha256": "6e0d9190b7bb88e11e64e1aa7fe44e55a3aa5417722129400b36577418b41b48"
+              },
+              {
+                "file": "0009-webgpu-bf16-parameter-type.patch",
+                "target": "stable-diffusion",
+                "reason": "Convert only original BF16 parameters before WebGPU allocation to caller-selected F32 (default) or F16, preserving source files and other weight types.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
+                    "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
+                    "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
+                    "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
+                    "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
+                    "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+                  },
+                  {
+                    "path": "src/core/backend_fit.h",
+                    "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
+                    "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+                  },
+                  {
+                    "path": "src/core/backend_fit.cpp",
+                    "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
+                    "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+                  }
+                ],
+                "sha256": "cb9a133843355190e19bc42295eceddfab5ccc9ff6562f2aad57316add1d3a7b"
+              },
+              {
+                "file": "0010-iterative-graph-traversal.patch",
+                "target": "ggml",
+                "reason": "Replace recursive graph-parent traversal with a heap-backed DFS stack, preserving order, compute flags and operand use counts for deep image graphs.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml.c",
+                    "beforeSha256": "9d0d2ccf43f7f920594e5d48053efc398f644d75783bc09ebfcf46d8ccc91f67",
+                    "afterSha256": "80d611dc717fb5b2c9bdda7aa16d1b31d4bfd0e815f58ee00475942353e55af2"
+                  }
+                ],
+                "sha256": "c310aa752b31766d62a17ebadc7eb40a32e383101e02d82568614c324a5b5102"
+              },
+              {
+                "file": "0011-webgpu-conv3d-bias-out-of-place.patch",
+                "target": "stable-diffusion",
+                "reason": "Give browser 3D convolution bias additions their own output when CPU convolution and WebGPU addition use different backends, preserving arithmetic and parameter types.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
+                    "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+                  }
+                ],
+                "sha256": "5c8ab246b3f648f0d291cd7e0699d89c93cfa0dd42b3f3e3e8988d570e947cc3"
+              },
+              {
+                "file": "0012-webgpu-single-depth-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Use an equivalent supported 2D direct convolution for a single full-depth 3D window instead of CPU fallback, without changing parameter types or allocating a full im2col volume.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
+                    "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+                  }
+                ],
+                "sha256": "373adc1a1c764afcd65dcdbe320beec7bb50d99764c7c3c8b7a236a9e284c021"
+              },
+              {
+                "file": "0013-passive-context-snapshots.patch",
+                "target": "stable-diffusion",
+                "reason": "Expose idle on-demand runtime, borrowed configuration and separately labelled memory bookkeeping snapshots without adding generation-path instrumentation or GPU synchronization; own the omitted audio-encoder configuration path.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
+                    "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
+                  },
+                  {
+                    "path": "src/model_manager.h",
+                    "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
+                    "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
+                  },
+                  {
+                    "path": "src/model_manager.cpp",
+                    "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
+                    "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+                  },
+                  {
+                    "path": "src/stable-diffusion.cpp",
+                    "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
+                    "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.h",
+                    "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
+                    "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+                  }
+                ],
+                "sha256": "334c351f06a6972855f5ed111abadd961aea2041c77622ef89e308b948dafac2"
+              },
+              {
+                "file": "0014-opt-in-graph-stage-diagnostics.patch",
+                "target": "stable-diffusion",
+                "reason": "Add explicit default-off, bounded graph-stage logs to distinguish preparation, scheduler reserve including sync, weights, allocation, input copy and execution without extra native timing, graph walks or GPU synchronization.",
+                "files": [
+                  {
+                    "path": "include/stable-diffusion.h",
+                    "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
+                    "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
+                  },
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
+                    "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
+                    "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
+                    "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
+                    "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.h",
+                    "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
+                    "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+                  },
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
+                    "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+                  }
+                ],
+                "sha256": "3fa952568ea1f97d9a0fc94c96eb3cde2c49ebc0af7046a58114788b6bd12aab"
+              },
+              {
+                "file": "0015-preserve-measurement-tensor-addresses.patch",
+                "target": "stable-diffusion",
+                "reason": "Preserve external tensor address metadata while measuring scheduler graphs; avoid invalid sentinel alignment in WebGPU GET_ROWS support checks without changing weights or backend policy.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
+                    "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+                  }
+                ],
+                "sha256": "3d11844f7ded4e74366ca52fa6f15ca945e1828c21825040dd24f543dcef878c"
+              },
+              {
+                "file": "0016-webgpu-temporal-pointwise-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower unsupported multi-frame 1x1x1 convolution to supported matrix and contiguous operations without im2col expansion; retain direct, precision, single-frame and rejected-backend paths.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
+                    "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+                  }
+                ],
+                "sha256": "0523183026ba8d4b584668a59d6f2a0db7e7a5ef0d892349bd0d1f59c2d4139f"
+              },
+              {
+                "file": "0017-browser-h3-checked-video-publication.patch",
+                "target": "stable-diffusion",
+                "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
+                "files": [
+                  {
+                    "path": "src/core/util.h",
+                    "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
+                    "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+                  },
+                  {
+                    "path": "src/core/util.cpp",
+                    "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
+                    "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+                  },
+                  {
+                    "path": "src/pipeline/video.cpp",
+                    "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
+                    "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+                  }
+                ],
+                "sha256": "6728a33e917bd7ca92def5c35614a4b22102553d15060ce5656ccfd09ae306be"
+              },
+              {
+                "file": "0018-browser-video-queue-wait-budget.patch",
+                "target": "ggml",
+                "reason": "Allow finite 180-second queue completion for video graphs that exceed 30 seconds; retain independent 30-second map/event deadlines and all wait/callback failure checks.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "661ac0197d0057d15c8ab39a63e5e79d98b6974c167f9f01deac978b7c29cd7a",
+                    "afterSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641"
+                  }
+                ],
+                "sha256": "def95b444ffcfa1138e1338468eea17321afda5643f06d1b9c1e94b61fed9985"
+              },
+              {
+                "file": "0019-webgpu-completion-based-waits.patch",
+                "target": "ggml",
+                "reason": "Wait for submitted work, maps and events without an application wall-clock deadline; keep wait/callback failures and per-recording event ownership.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "ca8f9f4cb5911e960907a5fe2b3fb6395656b3600c71521dfeb40bd9c71b1641",
+                    "afterSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5"
+                  }
+                ],
+                "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              }
+            ],
+            "vendorCheckoutModified": false
+          },
+          "builtAtUnix": 1791167736,
+          "buildCache": {
+            "identity": "77174a42d71ef17af4eee50884110d8705fff7a0b1b6e401f7dd46e314dadce7",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+          }
+        }
+      }
+    }
+  },
+  "experimental": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1064,
+      "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4"
+    },
+    {
+      "path": "README.md",
+      "bytes": 9829,
+      "sha256": "cb6fe7f585ae57bc7d70f3f4105b48b6868d46a55732d482a717069f6c5a8301"
+    },
+    {
+      "path": "api/functions.d.ts",
+      "bytes": 13907,
+      "sha256": "985057757a683c8f6e8e6f00bf4a6a7eef18f28999720ec409d029dd87cb5bd5"
+    },
+    {
+      "path": "api/schema.json",
+      "bytes": 176958,
+      "sha256": "3b359d0184f3a86002f0357d1c527c2f3009a3c25031253baa4ddd104cddd608"
+    },
+    {
+      "path": "api/schema.mjs",
+      "bytes": 111763,
+      "sha256": "5ecca7498fd0ff767b607e819fad105fb90abd5e920ff96a62a5a8b32454ea3a"
+    },
+    {
+      "path": "examples/runtime/README.md",
+      "bytes": 9182,
+      "sha256": "dd89d2e36b18234f2d713744deac8346de80e6c0ffe0361aff371f967a3bab15"
+    },
+    {
+      "path": "examples/runtime/bindings.mjs",
+      "bytes": 8808,
+      "sha256": "0889e9d751ba32f60e15f22255af2d43f53e536a3ab22eedffbf98dc78dcbd1d"
+    },
+    {
+      "path": "examples/runtime/index.d.ts",
+      "bytes": 1580,
+      "sha256": "185fc6331c1ed38aba649f91bce67dfa8d69c01442f8e48984353a07204d14f3"
+    },
+    {
+      "path": "examples/runtime/index.mjs",
+      "bytes": 257,
+      "sha256": "95f98a546ae3cd83b96e319c1ce347706f0db47e0297f713afc2d5d1d3f2888a"
+    },
+    {
+      "path": "examples/runtime/read-only-file.mjs",
+      "bytes": 3627,
+      "sha256": "c3d583c770bbdcc2d7e33601c1d6089747781f68b649a1cb4ec34b72fc351f6b"
+    },
+    {
+      "path": "licenses/embedded/json.hpp.txt",
+      "bytes": 907858,
+      "sha256": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921"
+    },
+    {
+      "path": "licenses/embedded/stb_image.h.txt",
+      "bytes": 284733,
+      "sha256": "38e08c1c5ab8869ae8d605ddaefa85ad3fea24a2964fd63a099c0c0f79c70bcc"
+    },
+    {
+      "path": "licenses/embedded/stb_image_resize.h.txt",
+      "bytes": 113565,
+      "sha256": "8b430895b231a541c234cb7441756e9f4c857ea140dbf3275dfdf12f92b83082"
+    },
+    {
+      "path": "licenses/embedded/stb_image_write.h.txt",
+      "bytes": 72926,
+      "sha256": "683e15c6dfdc2d57b06b9e166ba27665328e0854a9c1130c2ba9958afaf2f8da"
+    },
+    {
+      "path": "licenses/ggml/LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "licenses/stable-diffusion/LICENSE",
+      "bytes": 1062,
+      "sha256": "b53fa08f515cb5a6fff7b9fd8fcd0961a4b80df29d74372d25e1f9171aa042ee"
+    },
+    {
+      "path": "licenses/stable-diffusion/examples/server/frontend/LICENSE",
+      "bytes": 1063,
+      "sha256": "284389c9a1f1feb68465505dbb13f41147687254b2aa62ef5d138a62cfb5bb08"
+    },
+    {
+      "path": "licenses/stable-diffusion/ggml/LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE",
+      "bytes": 11357,
+      "sha256": "178f46f58127373d449565589a32c2b5b60c082934618c17b7ce6890c61ef394"
+    },
+    {
+      "path": "licenses/stable-diffusion/thirdparty/LICENSE.darts_clone.txt",
+      "bytes": 1481,
+      "sha256": "155f59997298ee336602c49f9c1110f268ac394ca2197eb02647a3555935ad52"
+    },
+    {
+      "path": "licenses/stable-diffusion/thirdparty/libwebm/LICENSE.TXT",
+      "bytes": 1496,
+      "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+    },
+    {
+      "path": "licenses/stable-diffusion/thirdparty/libwebp/COPYING",
+      "bytes": 1496,
+      "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+    },
+    {
+      "path": "licenses/stable-diffusion/thirdparty/oniguruma/COPYING",
+      "bytes": 1366,
+      "sha256": "0dff717fb611b9c9bd9776a5df9c4e029030f8dbc023b77f3678cf495495b933"
+    },
+    {
+      "path": "licenses/stable-diffusion/thirdparty/utf8proc/LICENSE.md",
+      "bytes": 5218,
+      "sha256": "767edbcafb23016d7f203aaf2cbdef5690ad58bcede52ee241427dcb816cd644"
+    },
+    {
+      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE",
+      "bytes": 3291,
+      "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
+    },
+    {
+      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE",
+      "bytes": 1561,
+      "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/LICENSE",
+      "bytes": 5093,
+      "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING",
+      "bytes": 1031,
+      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE",
+      "bytes": 1080,
+      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE",
+      "bytes": 1079,
+      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE",
+      "bytes": 1079,
+      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE",
+      "bytes": 1072,
+      "sha256": "1c632a84f7ba5a7b32d9c15e707f419b2393e7ad7de362bd9c837b5e435a197b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE",
+      "bytes": 1080,
+      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/acorn/LICENSE",
+      "bytes": 1099,
+      "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE",
+      "bytes": 1072,
+      "sha256": "3e4463779450389b73c530449c4e7ee29f83cb47343c1f2584c6f49de76584da"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/ansi-styles/license",
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/b4a/LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/bare-events/LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE",
+      "bytes": 1078,
+      "sha256": "14275f5c8139d02054c5259d52a88ccbba662a86af18c30f071c8d082dc6004c"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/camel-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/chalk/license",
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license",
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/clean-css/LICENSE",
+      "bytes": 1062,
+      "sha256": "7b43b9a9057033055cf8a6b4e032f932727e0576db2426303c800d73c2ac733f"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE",
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/clone/LICENSE",
+      "bytes": 1070,
+      "sha256": "3fb0857ef0133928cf72c88dfc464e931486e88778961eedec25585e2321507f"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/color-convert/LICENSE",
+      "bytes": 1087,
+      "sha256": "693866fc419c6f61c8570438ec00659d156ec2b4d4a4d04091711f5f11a365d4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/color-name/LICENSE",
+      "bytes": 1085,
+      "sha256": "c064f7a3e353bc1bc977f3c897941c75ef763f44f41677e0a15370ca0853d6e2"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/dot-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/entities/LICENSE",
+      "bytes": 1260,
+      "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/events-universal/LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE",
+      "bytes": 1079,
+      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/has-flag/license",
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE",
+      "bytes": 1071,
+      "sha256": "20cc01510a65e1d0dfdf4e2b8c81528b84bbc5b8103796a4d9ad5c1e19cb2e5a"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
+      "bytes": 1098,
+      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/lower-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/minimist/LICENSE",
+      "bytes": 1073,
+      "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/no-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/param-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE",
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/relateurl/license",
+      "bytes": 1111,
+      "sha256": "4c97d11c3d10ddede28b756f4d834e660bc49d67d9a8aae16bda5e59efcd479f"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license",
+      "bytes": 696,
+      "sha256": "aff6a0eab5763020fd4b179927f918152be1f9b6bfec360cffda972e6adf73e7"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE",
+      "bytes": 1169,
+      "sha256": "287229fb1c78f51e413ab4c7625bf447356c7c1208417b92e03a1ad6ec9585d6"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md",
+      "bytes": 1079,
+      "sha256": "3a7d3bb198e909ed642bd68bd29a7d7c09a636d27a51ec663d35f00c4760ec42"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE",
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/streamx/LICENSE",
+      "bytes": 1079,
+      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/teex/LICENSE",
+      "bytes": 1079,
+      "sha256": "69b1ce578ad0aa97ce5302c7cb8d507c2fbe5a670712b02f0b4a2b95cae3184a"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/terser/LICENSE",
+      "bytes": 1303,
+      "sha256": "901d0a7fcaccaae9917d165039c0473c354e5da2e0e94140dde67aad9ffb19da"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE",
+      "bytes": 1098,
+      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt",
+      "bytes": 822,
+      "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt",
+      "bytes": 655,
+      "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/vinyl/LICENSE",
+      "bytes": 1155,
+      "sha256": "d21ca3ba63e7c2b9452d3d455fcfac84ab89e3333fa7eb600e33e5e63a439887"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/include/SDL/COPYING",
+      "bytes": 1031,
+      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT",
+      "bytes": 16708,
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT",
+      "bytes": 6196,
+      "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT",
+      "bytes": 16703,
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT",
+      "bytes": 16706,
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT",
+      "bytes": 16706,
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT",
+      "bytes": 15140,
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE",
+      "bytes": 1096,
+      "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT",
+      "bytes": 19741,
+      "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
+      "bytes": 1485,
+      "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/test/sounds/LICENSE.txt",
+      "bytes": 836,
+      "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/third_party/leb128/LICENSE",
+      "bytes": 1065,
+      "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208"
+    },
+    {
+      "path": "licenses/toolchain/emscripten/third_party/terser/LICENSE",
+      "bytes": 1348,
+      "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 517,
+      "sha256": "83871be037311bb1c62a1f9f15b716f5124f283aaa3e112cedb74b6f909a424a"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
+      "bytes": 231403,
+      "sha256": "ac27b9cf91933823cf6ae4388a2ca3e43018abd32f0d940b3cacc06a1141fce3"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
+      "bytes": 43645494,
+      "sha256": "8cbe0edfafb357a183c8291033817525a672f143b2827ec24487ba14a4602160"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
+      "bytes": 453639,
+      "sha256": "8eb17193a9f526c841c3627c514525f5c7993327c11741793c54904d34478086"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
+      "bytes": 43978300,
+      "sha256": "fd3b6dff3f9d14b2478bf5f4e05f25a8126f7f676f6f750f89381ff645ed5d2f"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs",
+      "bytes": 181080,
+      "sha256": "58fb9a09603173159a97a815cabdd85c77466e21cf3810875409a0b101988af4"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
+      "bytes": 37792970,
+      "sha256": "5680d54a424e319ce4ab6157e9cbefd0ae4690c2f28dd7ef31404b27b903d093"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
+      "bytes": 344738,
+      "sha256": "a2875be1143109b331b5a6c4c25fe510a412fecdfd8399347ed4f865b39913f9"
+    },
+    {
+      "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
+      "bytes": 38007322,
+      "sha256": "1f406a8eef891123e4dfc9ffdea936a4ad28ee44bba6c31224e8a93ca32ab528"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/browser/core.mjs",
+      "bytes": 183880,
+      "sha256": "59df47b43bb5c20206d56854f29a54977c42a4c391c541fa1b3deb538aa5aec5"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
+      "bytes": 38097287,
+      "sha256": "7701453e7b9667a89bb320d4bffaf21ce47c50b88a198dc91c466f6e2f6a62a7"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
+      "bytes": 1403,
+      "sha256": "16222528195f6ef52b7cc9d22c0ae4fd7c56c0210eed83df87ec329aa0297823"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
+      "bytes": 348276,
+      "sha256": "fdd9ff8514a9e7f9364dfbef3c465657a499aad6a4296097ba2d60f2ace857d2"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
+      "bytes": 38321831,
+      "sha256": "4e29c55e835ebf116f68ae79180e4dbbe32f018165b85256dbf56535bd152c7d"
+    }
+  ]
+}

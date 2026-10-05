@@ -5,29 +5,16 @@
   "type": "module",
   "license": "MIT",
   "files": [
-    "llama-cpp-browser-core",
-    "stable-diffusion-cpp-browser-core",
+    "runtimes/",
+    "packed/",
     "manifest.json",
     "README.md",
     "LICENSE"
   ],
   "exports": {
-    "./stable-diffusion-cpp/examples/runtime": {
-      "types": "./stable-diffusion-cpp-browser-core/examples/runtime/index.d.ts",
-      "import": "./stable-diffusion-cpp-browser-core/examples/runtime/index.mjs"
-    },
-    "./llama-cpp/*": "./llama-cpp-browser-core/*",
-    "./stable-diffusion-cpp/*": "./stable-diffusion-cpp-browser-core/*",
     "./manifest.json": "./manifest.json",
-    "./api/*": "./llama-cpp-browser-core/api/*",
-    "./profiles/*": "./llama-cpp-browser-core/profiles/*",
-    "./profiles/*/core.mjs": {
-      "types": "./llama-cpp-browser-core/profiles/*/core.d.ts",
-      "import": "./llama-cpp-browser-core/profiles/*/core.mjs"
-    },
-    "./examples/runtime": {
-      "types": "./llama-cpp-browser-core/examples/runtime/index.d.ts",
-      "import": "./llama-cpp-browser-core/examples/runtime/index.mjs"
-    }
+    "./llama-cpp/*": "./runtimes/llama-cpp/sources/*",
+    "./stable-diffusion-cpp/*": "./runtimes/stable-diffusion-cpp/sources/*",
+    "./wasm-pack/*": "./packed/llama-cpp/*"
   }
 }
