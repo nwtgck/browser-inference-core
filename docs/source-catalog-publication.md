@@ -5,6 +5,23 @@ change, not an instruction for consumers to upgrade a dependency without reviewi
 its glue and bindings. Raw Wasm remains available. Compressed data is an optional
 selection; never copy the entire producer package into a consumer bundle.
 
+## Final workflow command contract
+
+After `assemble_source_plan.py` completes, the root verification step uses
+`python3 scripts/package_runtime.py --output dist/package --verify-only`. The
+root package CLI names its package directory `--output` in both assembly and
+verification modes. `--package` belongs to the publication/report/finalizer
+commands, not to this entry point. Do not drop `--verify-only`, add
+`--defer-npm-pack`, or bypass this step to work around an argument error.
+
+`tests/test_root_package_workflow.py` reads the commands from `build.yml` and
+checks them against the actual parsers. It also executes the verification
+command on small v3/v4 fixtures, including packed alternatives and real offline
+`npm pack --dry-run`. Missing inputs, raw corruption, invalid compressed bytes
+even with refreshed inventory hashes, and npm file omissions must fail. The
+verification must not assemble or rewrite its input. These local contract tests
+do not replace runner execution, upstream compilation or real-model tests.
+
 ## Pipeline and trust boundaries
 
 1. `pipeline_plan.py` resolves this repository's `artifacts` ref once, fetches that

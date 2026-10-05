@@ -657,7 +657,7 @@ jobs:
           --inputs build/source-inputs --image build/image-input --output dist/package
           --tools build/wasm-pack-tools
       - name: Validate the final runtime-only npm payload
-        run: python3 scripts/package_runtime.py --package dist/package --verify-only
+        run: python3 scripts/package_runtime.py --output dist/package --verify-only
       - uses: actions/upload-artifact@v4
         with:
           name: source-runtime-catalog
