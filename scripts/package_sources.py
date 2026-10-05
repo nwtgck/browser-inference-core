@@ -34,8 +34,22 @@ def runtime_validator(runtime):
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module.validate
 
-def safe_relative(value):
-    if not isinstance(value,str) or not re.fullmatch(r'[A-Za-z0-9_./-]+',value) or any(p in ('','.','..') for p in value.split('/')):raise ValueError('Unsafe package path')
+def safe_relative(value: object) -> str:
+    """Validate a payload path without conflating it with a source identifier.
+
+    Toolchain notices retain npm scope directories such as
+    licenses/1/node_modules/@jridgewell/gen-mapping/LICENSE. The @ byte is an
+    ordinary filename character here, not a separator or an escape sequence.
+    Keep paths relative and canonical; never decode or normalize unsafe input.
+    Filesystem type, case-collision and hash checks remain separate gates.
+    """
+    if (not isinstance(value, str) or
+            not re.fullmatch(r'[A-Za-z0-9_./@-]+', value) or
+            any(part in ('', '.', '..') for part in value.split('/'))):
+        # repr escapes control characters. Bound the diagnostic as names originate
+        # in an external artifact; do not emit arbitrary multi-line log messages.
+        detail = repr(value)[:256]
+        raise ValueError('Unsafe package path: ' + detail)
     return value
 
 def validate_reuse_inputs(record, runtimes):

@@ -104,6 +104,27 @@ Hosted and embedded distributions can choose different plans, but development an
 release of *the same* distribution should use the same plan/decoder, not a raw
 Wasm bypass. The producer keeps raw Wasm without duplicating it in a selected plan.
 
+## Payload paths and toolchain notices
+
+Artifact payload paths are not source/profile identifiers. Copied license trees
+retain npm scope directories, for example
+`licenses/1/node_modules/@jridgewell/gen-mapping/LICENSE`. The snapshot extractor
+and both format-4 catalog validation paths use the same relative-path check, which
+accepts `@` without renaming or dropping these original notices.
+
+This is not a bypass for arbitrary archive input. Absolute paths, empty/dot/parent
+components, backslashes, colon syntax, encoded separators and control characters
+are rejected. Extraction independently rejects hidden control files, links,
+case-colliding entries and size/count overruns. Format-4 reuse still requires full
+manifest coverage, exact hashes and matching source identities. A safe legacy
+format-3 snapshot is read but not reused; it requests a cold source build.
+
+An `Unsafe package path` error during `fetch_snapshot` is a payload-validation
+failure after source registration, not another request to stage or commit a
+nightly gitlink. Rejected paths are included in bounded, escaped diagnostics.
+Regression coverage collects scoped notices, publishes to a local Git remote,
+fetches a fixed commit, validates npm's file inventory and verifies raw reuse.
+
 ## Build-only encoder
 
 `wasm-pack/prepare_ci_tools.py` prepares pinned Rust, wasm-tools, Cargo dependencies
