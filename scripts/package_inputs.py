@@ -9,6 +9,22 @@ import shutil
 import stat
 
 
+def parse_json(raw: bytes):
+    """Parse identity-bearing metadata without last-key-wins or non-JSON numbers."""
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON key')
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError('Invalid JSON number: ' + value)
+
+    return json.loads(raw, object_pairs_hook=unique, parse_constant=invalid_constant)
+
+
 def regular_path(path: Path, *, directory: bool = False) -> Path:
     # absolute(), unlike resolve(), does not hide a linked input or its parents.
     path = Path(os.path.abspath(path))

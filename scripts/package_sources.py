@@ -20,7 +20,7 @@ import tempfile
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT/'llama-cpp/scripts'))
 from source_config import load_sources,get_source
-from package_inputs import copy_regular_tree,read_regular,tree_identity,file_identity,regular_path
+from package_inputs import copy_regular_tree,read_regular,tree_identity,file_identity,regular_path,parse_json
 
 NAME='llama-cpp-browser-core'
 
@@ -62,9 +62,55 @@ def validate_reuse_inputs(record, runtimes):
             raise ValueError('Unbound or duplicate reused package receipt')
         seen.add((runtime, source))
 
+def browser_targets(source: str, folder: str, inner: dict) -> dict:
+    """Bind each pack identity to the corresponding original browser binary.
+
+    A successful decoder round-trip only proves equality to its own catalog.
+    The source package, not that catalog, defines which binary is stable/nightly.
+    Keep this derivation shared by assembly and validation.
+    """
+    files = {item['path']: item for item in inner['files']}
+    targets = {}
+    for profile in sorted(inner['profiles']):
+        relative = f'profiles/{profile}/browser/core.wasm'
+        if relative not in files:
+            raise ValueError('Missing original browser Wasm: ' + relative)
+        raw = files[relative]
+        targets[source + '--' + profile] = {
+            'identity': {'runtime': 'llama-cpp', 'source': source,
+                         'profile': profile, 'variant': 'browser'},
+            'raw': {'path': folder + '/' + relative,
+                    'bytes': raw['bytes'], 'sha256': raw['sha256']},
+        }
+    return targets
+
+
+def validate_packed_targets(directory: Path, packed: dict, expected: dict, files: dict) -> None:
+    """Check source/profile/variant/path/hash binding before running any decoder."""
+    relative = packed['catalog']
+    if relative not in files:
+        raise ValueError('Unbound or missing packed catalog')
+    raw = read_regular(directory / relative)
+    recorded = files[relative]
+    if len(raw) != recorded['bytes'] or hashlib.sha256(raw).hexdigest() != recorded['sha256']:
+        raise ValueError('Changed packed catalog identity')
+    catalog = parse_json(raw)
+    if (not isinstance(catalog, dict) or catalog.get('formatVersion') != 1 or
+            catalog.get('decoderApiVersion') != packed['decoderApiVersion']):
+        raise ValueError('Unknown packed catalog format')
+    targets = catalog.get('targets')
+    if not isinstance(targets, dict) or set(targets) != set(expected):
+        raise ValueError('Packed target inventory differs from original source packages')
+    for name, original in expected.items():
+        target = targets[name]
+        if (not isinstance(target, dict) or target.get('identity') != original['identity'] or
+                target.get('raw') != original['raw']):
+            raise ValueError('Packed target does not match original source/profile: ' + name)
+
+
 def validate(directory: Path,require_clean=True,*,check_npm_pack=True, verify_packed=True):
     directory=regular_path(directory,directory=True);tree=tree_identity(directory)
-    manifest=json.loads(read_regular(directory/'manifest.json'));pkg=json.loads(read_regular(directory/'package.json'))
+    manifest=parse_json(read_regular(directory/'manifest.json'));pkg=parse_json(read_regular(directory/'package.json'))
     if manifest.get('formatVersion')!=4 or not re.fullmatch(r'[a-f0-9]{40}',manifest.get('sourceCommit','')):raise ValueError('Invalid source catalog manifest')
     if pkg.get('name')!=NAME or any(k in pkg for k in ('scripts','dependencies','devDependencies','optionalDependencies','workspaces','peerDependencies','peerDependenciesMeta','bundleDependencies','bundledDependencies')):raise ValueError('Install-time code/dependencies in runtime package')
     files=manifest.get('files',[]);expected={};actual={name for name,meta in tree.items() if not meta.get('directory')}
@@ -76,6 +122,7 @@ def validate(directory: Path,require_clean=True,*,check_npm_pack=True, verify_pa
     if actual!=set(expected)|{'manifest.json'}:raise ValueError('Package tree coverage mismatch')
     runtimes=manifest.get('runtimes')
     if not isinstance(runtimes,dict) or set(runtimes)!={'llama-cpp','stable-diffusion-cpp'}:raise ValueError('Incomplete runtime collection')
+    expected_targets = {}
     for runtime,group in runtimes.items():
         sources=group.get('sources')
         if not isinstance(sources,dict) or not sources:raise ValueError('No runtime sources')
@@ -84,16 +131,18 @@ def validate(directory: Path,require_clean=True,*,check_npm_pack=True, verify_pa
             folder=f'runtimes/{runtime}/sources/{source}';relative=folder+'/manifest.json'
             if entry.get('manifest')!=relative or entry.get('manifestIdentity')!=identity(directory/relative):raise ValueError('Unbound source manifest')
             runtime_validator(runtime)(directory/folder,require_clean=require_clean,check_npm_pack=check_npm_pack)
-            inner=json.loads(read_regular(directory/relative))
+            inner=parse_json(read_regular(directory/relative))
             if entry.get('buildSourceCommit')!=inner['sourceCommit'] or entry.get('profiles')!=sorted(inner['profiles']):raise ValueError('Source provenance or profile mismatch')
             if runtime=='llama-cpp':
                 if entry.get('upstreamCommit')!=inner['llamaCommit']:raise ValueError('Upstream commit mismatch')
                 if inner.get('sourceId',source)!=source:raise ValueError('Mixed source IDs')
+                expected_targets.update(browser_targets(source, folder, inner))
     if 'reuseInputs' in manifest:
         validate_reuse_inputs(manifest['reuseInputs'], runtimes)
     packed=manifest.get('packedWasm')
     if packed is not None:
         if packed!={'catalog':'packed/llama-cpp/catalog.json','decoderApiVersion':1}:raise ValueError('Unknown packed entry')
+        validate_packed_targets(directory, packed, expected_targets, expected)
         # This also verifies every alternative, not only selected/full targets.
         if verify_packed:
             subprocess.run(['node',str(ROOT/'wasm-pack/verify-pack.mjs'),str(directory/'packed/llama-cpp'),str(directory)],check=True,timeout=600)
@@ -115,7 +164,7 @@ def assemble(inputs: dict, image: Path, output: Path, source_commit: str, *, pac
             runtimes[runtime]={'sources':{}}
             for source,path in sorted(sources.items()):
                 runtime_validator(runtime)(path,check_npm_pack=False)
-                inner=json.loads(read_regular(path/'manifest.json'))
+                inner=parse_json(read_regular(path/'manifest.json'))
                 if runtime=='llama-cpp':
                     entry=get_source(ROOT/'llama-cpp',source)
                     if inner['llamaCommit']!=entry['commit'] or set(inner['profiles'])!=set(entry['profiles']):raise ValueError('Package does not match configured source pin/profiles')
@@ -124,10 +173,7 @@ def assemble(inputs: dict, image: Path, output: Path, source_commit: str, *, pac
                 metadata={'manifest':folder+'/manifest.json','manifestIdentity':identity(out/folder/'manifest.json'),'buildSourceCommit':inner['sourceCommit'],'profiles':sorted(inner['profiles'])}
                 if runtime=='llama-cpp':
                     metadata['upstreamCommit']=inner['llamaCommit']
-                    files={f['path']:f for f in inner['files']}
-                    for profile in sorted(inner['profiles']):
-                        relative=f'profiles/{profile}/browser/core.wasm';f=files[relative];name=source+'--'+profile
-                        pack_spec['targets'][name]={'identity':{'runtime':runtime,'source':source,'profile':profile,'variant':'browser'},'raw':{'path':folder+'/'+relative,'bytes':f['bytes'],'sha256':f['sha256']}}
+                    pack_spec['targets'].update(browser_targets(source, folder, inner))
                 runtimes[runtime]['sources'][source]=metadata
         if packing is not None:
             sys.path.insert(0,str(ROOT/'wasm-pack/encoder'))

@@ -68,3 +68,16 @@ def check_gitlink(root: Path, source: dict, revision: str = 'HEAD') -> None:
         f"{revision}:{path}; expected 160000 commit {expected} "
         f"from {source.get('pinFile', 'source pin')}; actual {description}." + hint
     )
+
+
+def check_index_gitlink(root: Path, source: dict) -> None:
+    """The checkout command consumes the index, not HEAD. Check both before I/O."""
+    repository, path = repository_location(root, source['vendorPath'])
+    actual = git(repository, 'ls-files', '--stage', '-z', '--', path).stdout
+    expected = f"160000 {source['commit']} 0\t{path}\0"
+    if actual != expected:
+        raise ValueError(
+            f"Selected source index differs from committed pin: {source['id']} ({path}). "
+            'Review and commit the staged source change before materializing it; '
+            'no checkout or fetch has been attempted.'
+        )

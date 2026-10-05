@@ -12,6 +12,14 @@ class SourceWorkflows(unittest.TestCase):
         self.assertIn('workflow_call:',shared);self.assertIn('--source "$SOURCE_ID"',shared)
         self.assertNotIn('schedule:',workflow);self.assertNotIn('secrets: inherit',workflow)
         self.assertNotIn('pull_request_target',workflow)
+    def test_updater_only_materializes_the_selected_source(self):
+        text = (ROOT / '.github/workflows/update-llama-cpp.yml').read_text()
+        self.assertIn('submodules: false', text)
+        self.assertNotIn('submodules: recursive', text)
+        self.assertIn('scripts/checkout_source.py --source "$SOURCE_ID"', text)
+        self.assertLess(text.index('scripts/checkout_source.py'), text.index('scripts/update_llama_cpp.py'))
+        self.assertNotIn('stage-missing', text)
+
     def test_candidate_matrix_is_from_registry_not_fixed_profiles(self):
         text=(ROOT/'.github/workflows/build-llama-source.yml').read_text()
         for value in ('matrix(root,[name])', 'check_gitlink(root, source)', 'patch_series(root, source)', 'fromJSON(needs.plan.outputs.matrix)', '--source "$SOURCE_ID"'):
@@ -29,3 +37,13 @@ class SourceWorkflows(unittest.TestCase):
         self.assertIn("profiles = {name: profiles[name] for name in entry['profiles']}",py)
         self.assertIn("'webgpu-wasm32-asyncify' in profiles",py)
         self.assertIn("'nodeAsyncifyPassed': True if",py)
+
+    def test_candidate_builds_share_the_checked_checkout_boundary(self):
+        text = (ROOT / '.github/workflows/build-llama-source.yml').read_text()
+        self.assertEqual(text.count('python3 llama-cpp/scripts/checkout_source.py --source "$SOURCE_ID"'), 2)
+        self.assertNotIn('git submodule update', text)
+        helper = (ROOT / 'llama-cpp/scripts/checkout_source.py').read_text()
+        self.assertIn("'--checkout', '--recursive', '--depth=1'", helper)
+        update = helper.index("subprocess.run(['git'")
+        self.assertLess(helper.index('check_index_gitlink(root, entry)'), update)
+        self.assertLess(helper.index('check_existing_checkout(directory)'), update)

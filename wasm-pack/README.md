@@ -34,7 +34,11 @@ assets are shared between alternatives. Larger selections use safe limited candi
 
 An embedded distribution can select Brotli without any Zstandard loader, decoder
 Wasm or dependency notice. Import `plan.runtime.entry` from the selected files;
-the codec-specific entry delegates to a shared decoder core.
+the codec-specific entry delegates to a shared decoder core. Every offered codec
+must have an exact-case, unconditional entry present in its file closure. A
+Zstandard selection also requires exactly one bounded decoder asset. Selection
+validates the returned plan itself before the consumer emits files; this does not
+add Zstandard assets to a native-codec plan.
 A hosted distribution can select another codec without changing source identity.
 Development and release of the same distribution should select the same plan.
 Do not silently substitute raw Wasm on decode failure or in development.
@@ -65,7 +69,12 @@ manifest and payload together. Requests are serialized per loader; successful
 full outputs are not retained as an unbounded cache. Abort is checked around
 asynchronous operations and synchronous kernels, not cooperatively within every
 prediction or copy loop. The consumer should run these kernels off its main UI
-thread. A failed request does not poison later requests.
+thread. A failed request does not poison later requests. Unknown IDs and already-aborted
+calls fail without waiting for another request. An abort also settles that caller's
+promise promptly while a request is queued or waiting for an adapter. The internal
+serialization gate remains tied to the original work, so an adapter that ignores
+abort cannot cause overlapping decoder allocations. It can still stall subsequent
+work until it settles; cancellation is not forced termination of arbitrary I/O.
 
 Caps: 64 MiB per raw/predicted/output item, 4 MiB for prediction rules, 128 targets,
 4096 requested encoder pairs. Limitations apply explicitly, not by trusting a

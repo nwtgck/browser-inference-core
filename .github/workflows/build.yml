@@ -111,7 +111,7 @@ jobs:
           persist-credentials: false
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- python3 "$GITHUB_WORKSPACE/llama-cpp/scripts/checkout_source.py" --source upstream-stable
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -168,7 +168,7 @@ jobs:
           persist-credentials: false
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- python3 "$GITHUB_WORKSPACE/llama-cpp/scripts/checkout_source.py" --source "$SOURCE_ID"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -291,7 +291,7 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         if: ${{ !matrix.reuse }}
         working-directory: .
-        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- python3 "$GITHUB_WORKSPACE/llama-cpp/scripts/checkout_source.py" --source "$SOURCE_ID"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'

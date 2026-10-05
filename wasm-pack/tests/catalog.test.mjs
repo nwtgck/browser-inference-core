@@ -80,3 +80,50 @@ test('selected codec entry belongs to the emitted file closure', () => {
   assert(plan.files.some(f => f.path === plan.runtime.entry));
   validatePlan(plan);
 });
+
+
+test('every offered codec has an exact, unconditional selected entry', () => {
+  const mutations = [
+    c => { c.runtime.entry = 'runtime/LOADER.mjs'; },
+    c => { c.runtime.files[0].codecs = ['gzip']; },
+    c => { c.runtime.files[0].role = 'delta'; },
+    c => { c.runtime.files[0].codecs = []; },
+    c => { c.runtime.entries = {brotli: c.runtime.entry}; c.runtime.files[0].role = 'prediction'; },
+  ];
+  for (const mutate of mutations) {
+    const c = fixture(); mutate(c);
+    assert.throws(() => validateCatalog(c), /entry|codecs/);
+    assert.throws(() => selectWasmAssets(c, {targets: ['cpu'], codec: 'brotli'}));
+  }
+});
+
+test('non-string requested targets cannot alias an existing identifier', () => {
+  for (const targets of [[['cpu']], [{toString: () => 'cpu'}]]) {
+    assert.throws(() => selectWasmAssets(fixture(), {targets, codec: 'gzip'}), /target|identifier/);
+  }
+});
+
+test('Zstandard requires exactly one usable bounded decoder asset', () => {
+  const catalog = () => {
+    const c = fixture();
+    for (const asset of Object.values(c.assets)) {
+      if (asset.codec === 'brotli') asset.codec = 'zstd';
+    }
+    c.runtime.files[0].codecs = ['gzip', 'zstd'];
+    c.runtime.files.push({path: 'runtime/zstd.wasm.gz', bytes: 10, sha256: hash,
+      decoded: {bytes: 30, sha256: hash}, role: 'zstd', codecs: ['zstd']});
+    return c;
+  };
+  const valid = catalog();
+  const plan = selectWasmAssets(valid, {targets: ['cpu'], codec: 'zstd'});
+  assert.equal(plan.runtime.files.filter(f => f.role === 'zstd').length, 1);
+  for (const mutate of [
+    c => c.runtime.files.pop(),
+    c => c.runtime.files.push({...c.runtime.files[1], path: 'runtime/other.wasm.gz'}),
+    c => { c.runtime.files[1].codecs = ['gzip']; },
+    c => { c.runtime.files[1].decoded.bytes = 0; },
+  ]) {
+    const c = catalog(); mutate(c);
+    assert.throws(() => selectWasmAssets(c, {targets: ['cpu'], codec: 'zstd'}), /decoder/);
+  }
+});

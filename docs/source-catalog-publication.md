@@ -45,6 +45,12 @@ profiles are never silently retained. No ccache hit is accepted as build evidenc
 Compiler caches have distinct source partitions and paths, even if two tracks
 happen to share the same upstream commit. No `max-parallel` cap is introduced.
 
+Fingerprint record version 3 uses repository-relative paths for every input. A
+runtime script such as `llama-cpp/scripts/package_runtime.py` and the root script
+`scripts/package_runtime.py` are independent inputs; neither can overwrite the
+other in the input inventory. Older records are deliberately invalidated once.
+The publication manifest format and original raw Wasm identities are unchanged.
+
 First migration and common build changes need full compilation. With the initial
 configuration this is 14 llama compile jobs plus six image jobs; host/native and
 orchestration work are additional. Four is the usual *nightly compile* count,
@@ -56,8 +62,17 @@ not a promise about the total workflow's runner usage or elapsed time.
 provided profiles and patch plans. Stable keeps its existing vendor path;
 nightly has an independent submodule. Add/remove existing profiles here rather
 than copying bridge/scripts or maintaining a second hard-coded build matrix.
-The updater checks only its selected source and creates a candidate branch;
-a human-created PR remains the handoff after `GITHUB_TOKEN` push.
+The updater validates the committed registration and patch plan before checking
+out only its selected source. It does not recursively fetch unrelated runtime
+submodules. Both update and llama build workflows use `checkout_source.py`.
+It checks the committed registration and the staged gitlink (the latter is what
+`git submodule update` consumes), then rejects a dirty or unrelated populated
+checkout **before** updating it. It explicitly selects `--checkout` rather than
+inheriting a local `update=merge`, `rebase`, `none` or custom-command policy.
+The resulting pinned HEAD and clean state are checked again. The helper neither
+repairs a gitlink nor forces away local edits; it does not rewrite local config. The
+updater creates a candidate branch; a human-created PR remains the handoff after
+`GITHUB_TOKEN` push.
 
 The two accepted llama upstream exceptions remain byte-identical and apply only
 to build-tree copies. If the nightly pin no longer accepts them, stop and review:
@@ -123,19 +138,33 @@ The planner and updater share `llama-cpp/scripts/source_git.py`, which reports t
 source, exact tree path, expected pin and observed entry on a mismatch. CI must
 not repair its checkout or copy an observed vendor HEAD into the pin.
 
-A Git patch applied without `--index` ignores submodule commit changes. For a
-previous file-only application of patch 005, first apply the incremental repair
-patch to the already-applied tree, then use the explicit local helper:
+Git patch application is part of source registration, not just text editing.
+A patch that changes submodule commits must be applied with `git apply --index`.
+Plain `git apply` ignores the gitlink commit change; a later `git add -A` cannot
+recover a commit ID that was never registered. `.gitmodules` alone is insufficient.
+An incremental fix for a missing gitlink must actually contain the `160000`
+addition. A diagnostics/helper-only patch does not repair that missing entry.
 
 ```sh
-# Default mode is read-only and checks HEAD, not the index.
-python3 scripts/register_source_gitlinks.py
-
-# Only when committed registration is missing:
-python3 scripts/register_source_gitlinks.py --stage-missing
+# After applying the appropriate patch with --index:
+python3 scripts/register_source_gitlinks.py --index
 git diff --cached --submodule=short
-# Review and commit the code changes plus any newly staged gitlink, then push.
+# Review and commit. The planner reads HEAD, not the staged index.
+python3 scripts/register_source_gitlinks.py
 ```
+
+`--index` is read-only. It verifies the staged registry/pins and `.gitmodules`
+registration, refuses untracked or unstaged configuration, and checks each
+staged gitlink. Its `commitRequired` result is not a successful HEAD check.
+The default command remains a read-only check of HEAD. The repository's own
+regression suite checks the actual committed source inventory too, not only
+synthetic submodule fixtures.
+
+For a previous file-only application, the explicit local migration helper remains
+available: `python3 scripts/register_source_gitlinks.py --stage-missing` followed
+by review and commit. This is an alternative to a gitlink-bearing repair patch,
+not an extra prerequisite when the patch already staged that same gitlink. A
+missing-gitlink patch is not applied on top of an already registered gitlink.
 
 The mutation mode stages only absent entries. It verifies the selected registry,
 staged pins and `.gitmodules` path/URL, rejects populated non-Git or dirty source
@@ -162,3 +191,21 @@ checkout; it is not evidence that the full pinned upstream compiles. The origina
 real-vendor overlay test is retained and prints the full configure diagnostic on
 failure. Expected patch rejection tests capture and assert stderr so their output
 cannot be mistaken for a failed positive test.
+
+## Packed metadata is bound to original source identities
+
+A catalog's internal round-trip is necessary but insufficient: it could correctly
+reconstruct nightly bytes while labelling them stable. The v4 assembler and
+validator derive the expected packed target map from each validated raw source
+package, using the same function. If packing is present, it must contain exactly
+all original llama browser targets, with the corresponding runtime/source/profile/
+variant, raw path, length and digest. Missing/extra targets or altered coordinates
+are rejected before invoking any decoder, including validation modes that skip
+expensive packed reconstruction. The catalog bytes read for this check must still
+match the root manifest's identity. JSON duplicates and non-JSON numbers are rejected
+rather than interpreted differently by producer and consumer.
+
+This validates producer coverage, not what a consumer must bundle. A consumer can
+still choose any supported subset, independent full alternatives and codec-specific
+entry points. The source-derived target map does not add unused profiles or change
+raw Wasm, approved patches, default profiles, compression recipes or decoder APIs.

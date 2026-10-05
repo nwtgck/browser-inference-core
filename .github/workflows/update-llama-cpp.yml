@@ -54,8 +54,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           persist-credentials: false
+      - name: Check out only the selected registered source
+        env:
+          SOURCE_ID: ${{ inputs.source || 'upstream-stable' }}
+        run: python3 scripts/checkout_source.py --source "$SOURCE_ID"
       - name: Resolve upstream, push the candidate branch, and show the PR form link
         env:
           GH_TOKEN: ${{ github.token }}

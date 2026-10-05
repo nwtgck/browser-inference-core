@@ -15,11 +15,15 @@ class PipelineWorkflow(unittest.TestCase):
         for name in ('test', 'compile', 'build', 'image-native', 'image-compile', 'image-build'):
             block = JOBS[name]
             self.assertIn('submodules: false', block)
-            command = re.search(r'git submodule update[^\n]+', block).group()
-            self.assertIn('--recursive --depth=1 -- ', command)
-            expected = ('stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source'
-                        if name.startswith('image') else '"llama-cpp/$VENDOR"' if name in ('compile','build') else 'llama-cpp/vendor/llama.cpp')
-            self.assertTrue(command.endswith(expected), command)
+            if name.startswith('image'):
+                command = re.search(r'git submodule update[^\n]+', block).group()
+                self.assertIn('--recursive --depth=1 -- ', command)
+                self.assertTrue(command.endswith(
+                    'stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source'))
+            else:
+                self.assertNotIn('git submodule update', block)
+                source = 'upstream-stable' if name == 'test' else '"$SOURCE_ID"'
+                self.assertIn('python3 "$GITHUB_WORKSPACE/llama-cpp/scripts/checkout_source.py" --source ' + source, block)
             self.assertIn('ref: ${{ env.LCB_SOURCE_COMMIT }}', block)
             self.assertIn('persist-credentials: false', block)
 

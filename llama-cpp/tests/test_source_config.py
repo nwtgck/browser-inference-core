@@ -58,6 +58,23 @@ class SourceConfigTests(unittest.TestCase):
         path.write_text('a build or validation recipe change')
         self.assertTrue(all(a!=b for a,b in zip(before,keys())))
 
+    def test_fingerprint_namespaces_do_not_hide_runtime_validator_changes(self):
+        def keys():
+            return [sources.fingerprint(self.root, name, 'cpu-wasm32', 'browser')['sha256']
+                    for name in ('upstream-stable', 'upstream-nightly')]
+        for relative in ('llama-cpp/scripts/package_runtime.py',
+                         'scripts/package_runtime.py',
+                         'llama-cpp/scripts/publish_artifacts.py',
+                         'scripts/publish_artifacts.py'):
+            with self.subTest(relative=relative):
+                before = keys()
+                path = self.repo / relative
+                path.write_text(path.read_text() + '\n# changed validation input\n')
+                self.assertTrue(all(a != b for a, b in zip(before, keys())))
+        inputs = sources.fingerprint(self.root, 'upstream-stable', 'cpu-wasm32', 'browser')['inputs']
+        self.assertIn('llama-cpp/scripts/package_runtime.py', inputs['inputs'])
+        self.assertIn('scripts/package_runtime.py', inputs['inputs'])
+
     def test_patch_identity_must_not_disappear_or_change_silently(self):
         entry=sources.get_source(self.root,'upstream-nightly');plan=sources.patch_series(self.root,entry)
         self.assertEqual({p['component'] for p in plan},{'vision','audio'})

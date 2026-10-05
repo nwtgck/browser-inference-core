@@ -76,13 +76,16 @@ def fingerprint(root: Path, name, profile, variant):
     entry=get_source(root,name)
     profiles=json.loads((root/'config/profiles.json').read_text());variants=json.loads((root/'config/variants.json').read_text())
     if profile not in entry['profiles'] or variant not in variants: raise ValueError('Unavailable source/profile/variant')
+    # Use one repository-relative namespace. Mixing runtime-relative keys with
+    # repository-relative keys hid e.g. llama-cpp/scripts/package_runtime.py
+    # behind scripts/package_runtime.py and could admit stale validation.
     inputs={}
     for folder in ('bridge','cmake','scripts','tests'):
         if (root/folder).is_symlink(): raise ValueError('Linked source build directory')
         for p in sorted((root/folder).rglob('*')):
             if p.is_symlink(): raise ValueError('Linked source build input')
             if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc',):
-                inputs[p.relative_to(root).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
+                inputs[p.relative_to(root.parent).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
     for p in [root/'CMakeLists.txt',*sorted((root.parent/'toolchain').glob('*')), *sorted((root.parent/'scripts').glob('*.py'))]:
         if p.is_symlink(): raise ValueError('Linked shared build input')
         if p.is_file():inputs[str(p.relative_to(root.parent))]=hashlib.sha256(p.read_bytes()).hexdigest()
@@ -90,7 +93,7 @@ def fingerprint(root: Path, name, profile, variant):
                  *sorted((root.parent/'.github/actions').rglob('*.yml'))]:
         if path.is_symlink(): raise ValueError('Linked workflow build input')
         if path.is_file(): inputs[path.relative_to(root.parent).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
-    value={'formatVersion':2,'source':{k:entry[k] for k in ('id','repository','vendorPath','commit')},'profileId':profile,'variantId':variant,'profile':profiles[profile],'variant':variants[variant],'patches':patch_series(root,entry),'inputs':inputs}
+    value={'formatVersion':3,'source':{k:entry[k] for k in ('id','repository','vendorPath','commit')},'profileId':profile,'variantId':variant,'profile':profiles[profile],'variant':variants[variant],'patches':patch_series(root,entry),'inputs':inputs}
     return {'sha256':hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'inputs':value}
 
 if __name__=='__main__':

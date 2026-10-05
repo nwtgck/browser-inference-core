@@ -1,5 +1,7 @@
 """Synthetic metadata tests of reuse admission; no actual compilation is claimed."""
 import json
+import shutil
+import subprocess
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -51,3 +53,27 @@ class BuildPlan(unittest.TestCase):
             with patch.object(planner,'read_regular',return_value=json.dumps(copy).encode()):
                 ok,reason=planner.can_reuse(self.out,entry,entry_config,planner.ROOT/'llama-cpp')
             self.assertFalse(ok);self.assertTrue(reason)
+
+    def test_runtime_validator_change_rebuilds_without_changing_upstream_pins(self):
+        # Copy actual tracked inputs, not a mocked fingerprint. A runtime path and
+        # root path with the same basename must remain two independent inputs.
+        repo = self.fixture.root / 'changed-repo'
+        inventory = subprocess.check_output(['git', 'ls-files', '--stage', '-z'], cwd=planner.ROOT)
+        for row in inventory.split(b'\0'):
+            if not row:
+                continue
+            metadata, name = row.split(b'\t', 1)
+            if metadata.split()[0] not in (b'100644', b'100755'):
+                continue
+            relative = name.decode()
+            destination = repo / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(planner.ROOT / relative, destination)
+        before = planner.plan(self.out, self.digest, root=repo / 'llama-cpp')
+        self.assertEqual(before['compile']['include'], [])
+        validator = repo / 'llama-cpp/scripts/package_runtime.py'
+        validator.write_text(validator.read_text() + '\n# stricter runtime validation\n')
+        after = planner.plan(self.out, self.digest, root=repo / 'llama-cpp')
+        self.assertEqual(len(after['compile']['include']), 14)
+        self.assertEqual(after['reuse'], {})
+        self.assertTrue(all('Build inputs changed' in reason for reason in after['reasons'].values()))

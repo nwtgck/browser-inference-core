@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'llama-cpp/scripts'))
 from source_config import get_source, check_gitlink
 from source_git import committed_entry
-from register_source_gitlinks import stage_missing, index_entries
+from register_source_gitlinks import stage_missing, index_entries, check_index
 
 
 def git(root, *args, input=None):
@@ -223,6 +223,75 @@ class SourceGitlinks(unittest.TestCase):
         check_gitlink(worktree / 'llama-cpp', self.sources[0])
         with self.assertRaisesRegex(ValueError, 'missing'):
             check_gitlink(worktree / 'llama-cpp', self.sources[1])
+
+    def test_gitlink_patch_with_index_needs_no_registration_command(self):
+        source = self.sources[1]
+        path = 'llama-cpp/' + source['vendorPath']
+        delta = (f'diff --git a/{path} b/{path}\nnew file mode 160000\n'
+                 f'index 0000000..{source["commit"][:7]}\n--- /dev/null\n'
+                 f'+++ b/{path}\n@@ -0,0 +1 @@\n+Subproject commit {source["commit"]}\n')
+        git(self.repo, 'apply', '--check', '--index', input=delta)
+        git(self.repo, 'apply', '--index', input=delta)
+        before = self.index_tree()
+        checked = check_index(self.root, [s['id'] for s in self.sources])
+        self.assertEqual(self.index_tree(), before)
+        self.assertEqual([row['commitRequired'] for row in checked], [False, True])
+        with self.assertRaisesRegex(ValueError, 'missing'):
+            check_gitlink(self.root, source)
+        git(self.repo, 'commit', '-qm', 'gitlink included in patch')
+        self.assertTrue(all(not item['commitRequired'] for item in check_index(
+            self.root, [s['id'] for s in self.sources])))
+        check_gitlink(self.root, source)
+
+    def test_index_preflight_refuses_missing_and_wrong_links_without_writing(self):
+        before = self.index_tree()
+        with self.assertRaisesRegex(ValueError, 'index must record.*actual missing'):
+            check_index(self.root, [s['id'] for s in self.sources])
+        self.assertEqual(self.index_tree(), before)
+        self.add_link(self.sources[1], 'f' * 40)
+        before = self.index_tree()
+        with self.assertRaisesRegex(ValueError, 'index must record'):
+            check_index(self.root, [s['id'] for s in self.sources])
+        self.assertEqual(self.index_tree(), before)
+
+    def test_untracked_pin_cannot_define_a_registration(self):
+        registry = self.root / 'config/sources.json'
+        data = json.loads(registry.read_text())
+        data['sources']['upstream-nightly']['pinFile'] = 'sources/upstream-nightly/untracked-pin.json'
+        registry.write_text(json.dumps(data))
+        git(self.repo, 'add', str(registry.relative_to(self.repo)))
+        (self.root / 'sources/upstream-nightly/untracked-pin.json').write_text(
+            json.dumps({'llamaCommit': self.sources[1]['commit']}))
+        before = self.index_tree()
+        for function in (check_index, stage_missing):
+            with self.subTest(function=function.__name__):
+                with self.assertRaisesRegex(ValueError, 'staged regular file'):
+                    function(self.root, [s['id'] for s in self.sources])
+                self.assertEqual(self.index_tree(), before)
+
+    def test_index_check_cli_is_read_only_and_available_in_actions(self):
+        self.add_link(self.sources[1])
+        before = self.index_tree()
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/register_source_gitlinks.py'),
+                                 '--root', str(self.root), '--index'], capture_output=True, text=True,
+                                env={**os.environ, 'GITHUB_ACTIONS': 'true'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report['checkedRevision'], 'index')
+        self.assertTrue(report['valid'])
+        self.assertEqual(self.index_tree(), before)
+        self.assertEqual(committed_entry(self.root, self.sources[1]['vendorPath'])[1], None)
+
+
+class RepositorySourceRegistration(unittest.TestCase):
+    def test_actual_committed_repository_records_every_configured_source(self):
+        # Synthetic fixtures alone did not catch a missing gitlink in a delivered
+        # patch. Require the real checkout's source registry to be satisfiable.
+        from source_config import load_sources
+        root = ROOT / 'llama-cpp'
+        for name in load_sources(root)['sources']:
+            with self.subTest(source=name):
+                check_gitlink(root, get_source(root, name))
 
 
 if __name__ == '__main__':

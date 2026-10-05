@@ -14,7 +14,7 @@ import sys
 import tempfile
 import uuid
 
-from package_inputs import digest, file_identity, read_regular, regular_path, tree_identity
+from package_inputs import digest, file_identity, read_regular, regular_path, tree_identity, parse_json
 from package_runtime import ROOT, RUNTIMES, runtime_module
 from pipeline_metrics import exit_like_child, run_command, span
 # The source registry is build-time code, not an upstream submodule dependency.
@@ -29,18 +29,6 @@ TEST_INPUTS = {
 }
 IMAGE_SCOPE = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
                'test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ')
-
-
-def parse_json(raw: bytes):
-    def unique(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError('Duplicate JSON key')
-            result[key] = value
-        return result
-    return json.loads(raw, object_pairs_hook=unique,
-                      parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid JSON number')))
 
 
 def image_scope(test_webgpu: bool) -> str:

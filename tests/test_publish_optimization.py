@@ -403,7 +403,8 @@ class PublicationWorkflow(unittest.TestCase):
         self.assertLess(publish.index('scripts/publish_artifacts.py'), publish.index('scripts/consumer_metadata.py'))
         self.assertIn("failure() && steps.publish.outputs.commit != ''", publish)
         self.assertEqual(workflow.count('submodules: false'), 9)
-        self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 6)
+        self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 3)
+        self.assertEqual(workflow.count('llama-cpp/scripts/checkout_source.py'), 3)
         self.assertIn('submodules: false', publish)
         self.assertIn('persist-credentials: false', publish)
 

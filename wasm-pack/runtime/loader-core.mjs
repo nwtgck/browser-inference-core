@@ -52,6 +52,7 @@ export async function decompressNative(bytes, codec, expectedBytes, signal) {
 }
 /** No unbounded successful-output cache, network fallback, or shared caller cancellation.
  * Requests are serialized to bound decoder work; a failed request cannot poison the next.
+ * Abort promptly rejects that caller but does not release unfinished work's gate.
  * `decompress` is an optional platform adapter for tests/embedded runtimes. All results
  * are still length/hash checked here. No raw-Wasm fallback is implemented.
  */
@@ -134,10 +135,36 @@ export function createCoreLoader({ plan: input, readAsset, decompress = decompre
         load(id, { signal } = {}) {
             if (typeof id !== 'string')
                 return Promise.reject(TypeError('Target identifier required'));
+            if (!Object.hasOwn(plan.targets, id))
+                return Promise.reject(Error('Unavailable target'));
+            if (signal?.aborted)
+                return Promise.reject(signal.reason);
+            if (signal && (typeof signal.addEventListener !== 'function' ||
+                typeof signal.removeEventListener !== 'function' || typeof signal.throwIfAborted !== 'function'))
+                return Promise.reject(TypeError('AbortSignal required'));
             const work = tail.then(() => execute(id, signal));
-            tail = work.catch(() => {
+            // Keep the gate tied to actual completion, NOT the caller's abort
+            // promise. An adapter may take time to settle even after cancelling.
+            tail = work.catch(() => {});
+            if (!signal)
+                return work;
+            return new Promise((resolve, reject) => {
+                const onAbort = () => {
+                    signal.removeEventListener('abort', onAbort);
+                    reject(signal.reason);
+                };
+                signal.addEventListener('abort', onAbort, { once: true });
+                // Covers abort between the initial check and listener setup.
+                if (signal.aborted)
+                    onAbort();
+                work.then(value => {
+                    signal.removeEventListener('abort', onAbort);
+                    resolve(value);
+                }, error => {
+                    signal.removeEventListener('abort', onAbort);
+                    reject(error);
+                });
             });
-            return work;
         },
     });
 }

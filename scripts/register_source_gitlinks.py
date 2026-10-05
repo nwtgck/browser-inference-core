@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Diagnose source pins, or explicitly stage missing gitlinks after a file-only patch.
 
-Default: read-only checks of HEAD. --stage-missing is a local migration command,
+Default: read-only checks of HEAD. --index checks the staged source entries.
+--stage-missing is a local migration command,
 not an Actions fallback. It never fetches, checks out, updates pins, overwrites an
 existing index entry, commits, or weakens the build planner's HEAD checks.
 """
@@ -75,18 +76,56 @@ def check_existing_directory(repository: Path, path: str, source: dict) -> None:
         raise ValueError('Dirty source checkout: ' + path)
 
 
+def registration_inputs(root: Path, sources: list[dict]) -> Path:
+    """Read registry/pins only if their staged contents match the working files."""
+    repository, _ = repository_location(root, sources[0]['vendorPath'])
+    prefix = root.resolve().relative_to(repository)
+    tracked_inputs = ['.gitmodules', (prefix / 'config/sources.json').as_posix()]
+    tracked_inputs.extend((prefix / source['pinFile']).as_posix() for source in sources)
+    diff = git(repository, 'diff', '--exit-code', '--', *tracked_inputs, check=False)
+    if diff.returncode:
+        raise ValueError('Stage the reviewed registry, pins and .gitmodules before registering gitlinks')
+    # An untracked JSON file is invisible to git diff. It must not define the pin
+    # being checked or registered in place of the committed/staged configuration.
+    for path in tracked_inputs:
+        entries = index_entries(repository, path)
+        if (len(entries) != 1 or entries[0]['path'] != path or
+                entries[0]['stage'] != '0' or entries[0]['mode'] not in ('100644', '100755')):
+            raise ValueError('Source configuration must be a staged regular file: ' + path)
+    return repository
+
+
+def check_index(root: Path, names: list[str]) -> list[dict]:
+    """Validate the next commit's gitlinks without modifying the index or HEAD."""
+    sources = [get_source(root, name) for name in names]
+    repository = registration_inputs(root, sources)
+    result = []
+    for source in sources:
+        patch_series(root, source)
+        _, path = repository_location(root, source['vendorPath'])
+        check_registration(repository, path, source)
+        wanted = {'mode': '160000', 'commit': source['commit'], 'stage': '0', 'path': path}
+        actual = index_entries(repository, path)
+        if actual != [wanted]:
+            raise ValueError(
+                f'{path}: index must record 160000 commit {source["commit"]}; actual {actual or "missing"}. '
+                'Apply a gitlink-bearing patch with git apply --index. '
+                'Do not use --exclude or stage ordinary files as a substitute for this entry.'
+            )
+        _, committed = committed_entry(root, source['vendorPath'])
+        committed_match = (committed is not None and committed['mode'] == '160000' and
+                           committed['type'] == 'commit' and committed['commit'] == source['commit'])
+        result.append({'source': source['id'], 'path': path, 'commit': source['commit'],
+                       'commitRequired': not committed_match})
+    return result
+
+
 def stage_missing(root: Path, names: list[str]) -> list[dict]:
     """Preflight every input before one atomic Git-index update."""
     if os.environ.get('GITHUB_ACTIONS') == 'true':
         raise ValueError('Gitlink registration is local-only; commit the fix before Actions runs')
     sources = [get_source(root, name) for name in names]
-    repository, _ = repository_location(root, sources[0]['vendorPath'])
-    prefix = root.resolve().relative_to(repository)
-    tracked_inputs = ['.gitmodules', str(prefix / 'config/sources.json')]
-    tracked_inputs.extend(str(prefix / source['pinFile']) for source in sources)
-    diff = git(repository, 'diff', '--exit-code', '--', *tracked_inputs, check=False)
-    if diff.returncode:
-        raise ValueError('Stage the reviewed registry, pins and .gitmodules before registering gitlinks')
+    repository = registration_inputs(root, sources)
     pending = []
     for source in sources:
         patch_series(root, source)
@@ -117,13 +156,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=ROOT / 'llama-cpp')
     parser.add_argument('--source', action='append')
-    parser.add_argument('--stage-missing', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--stage-missing', action='store_true')
+    mode.add_argument('--index', action='store_true', help='Read-only pre-commit check; does not register or commit')
     args = parser.parse_args()
     try:
         names = args.source or list(load_sources(args.root)['sources'])
         if not names or len(set(names)) != len(names):
             raise ValueError('Select distinct configured sources')
-        if args.stage_missing:
+        if args.index:
+            checked = check_index(args.root, names)
+            print(json.dumps({'checkedRevision': 'index', 'sources': checked, 'valid': True,
+                              'next': 'Review and commit staged changes, then run this command without --index.'}, indent=2))
+        elif args.stage_missing:
             pending = stage_missing(args.root, names)
             print(json.dumps({'staged': pending, 'next': 'Review git diff --cached and commit. '
                               'HEAD validation remains strict until that commit exists.'}, indent=2))

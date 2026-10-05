@@ -65,3 +65,50 @@ test('empty selection emits nothing and rejects every load',async()=>{
   const l=createWasmLoader({plan:empty,readAsset:async()=>{throw Error('must not fetch');}});
   await assert.rejects(l.load('one'),/Unavailable/);
 });
+
+// A stalled reader must not prevent an independent queued caller from cancelling.
+// Abort does not allow the decoder to run concurrently with unfinished work.
+test('queued and active abort reject promptly without breaking serialization', async () => {
+  const f = await fixture();
+  let release, reads = 0;
+  const loader = createWasmLoader({plan: f.plan, readAsset: async () => {
+    reads++;
+    if (reads === 1) await new Promise(resolve => { release = resolve; });
+    return f.compressed;
+  }});
+  const active = new AbortController(), queued = new AbortController();
+  const first = loader.load('one', {signal: active.signal});
+  const second = loader.load('one', {signal: queued.signal});
+  let firstDone = false, secondDone = false;
+  const checkedFirst = assert.rejects(first, /active cancelled/).then(() => { firstDone = true; });
+  const checkedSecond = assert.rejects(second, /queued cancelled/).then(() => { secondDone = true; });
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  queued.abort(new Error('queued cancelled'));
+  active.abort(new Error('active cancelled'));
+  const third = loader.load('one');
+  await new Promise(resolve => setImmediate(resolve));
+  const settledBeforeRelease = [firstDone, secondDone];
+  assert.equal(reads, 1, 'cancel must not release the serialization gate early');
+  release();
+  await Promise.all([checkedFirst, checkedSecond]);
+  assert.deepEqual(await third, f.raw);
+  assert.equal(reads, 2, 'cancelled queued work must never fetch');
+  assert.deepEqual(settledBeforeRelease, [true, true]);
+});
+
+test('unknown and already-aborted requests fail before a stalled queue', async () => {
+  const f = await fixture(); let release;
+  const loader = createWasmLoader({plan: f.plan, readAsset: async () => {
+    await new Promise(resolve => { release = resolve; }); return f.compressed;
+  }});
+  const pending = loader.load('one');
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  const controller = new AbortController(); controller.abort(new Error('already cancelled'));
+  let unknownDone = false, abortedDone = false;
+  const unknown = assert.rejects(loader.load('unknown'), /Unavailable/).then(() => { unknownDone = true; });
+  const aborted = assert.rejects(loader.load('one', {signal: controller.signal}), /already cancelled/).then(() => { abortedDone = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  const settled = [unknownDone, abortedDone];
+  release(); await pending; await Promise.all([unknown, aborted]);
+  assert.deepEqual(settled, [true, true]);
+});

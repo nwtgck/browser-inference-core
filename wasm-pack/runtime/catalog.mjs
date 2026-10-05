@@ -63,6 +63,7 @@ export function validateCatalog(catalog) {
             throw Error('Unsupported codec');
         identity(a.decoded);
     }
+    const offeredCodecs = new Set();
     const targets = record(c.targets, 'targets');
     const names = Object.keys(targets);
     if (!names.length || names.length > MAX_TARGETS)
@@ -117,6 +118,7 @@ export function validateCatalog(catalog) {
         // must never force an unselected target to become a hidden dictionary.
         const offered = new Set(t.representations.map(r => assets[r.payload].codec));
         for (const codec of offered) {
+            offeredCodecs.add(codec);
             if (!t.representations.some(r => r.kind === 'full' && assets[r.payload].codec === codec))
                 throw Error('Missing independent full');
         }
@@ -131,7 +133,8 @@ export function validateCatalog(catalog) {
         if (runtimePaths.has(f.path.toLowerCase()) || paths.has(f.path.toLowerCase()))
             throw Error('Runtime path collision');
         runtimePaths.add(f.path.toLowerCase());
-        if (!Array.isArray(f.codecs) || f.codecs.some(v => !codecs.has(v)))
+        if (!Array.isArray(f.codecs) || !f.codecs.length ||
+            new Set(f.codecs).size !== f.codecs.length || f.codecs.some(v => !codecs.has(v)))
             throw Error('Invalid runtime codecs');
         if (f.role === 'zstd')
             identity(f.decoded);
@@ -150,6 +153,22 @@ export function validateCatalog(catalog) {
                 throw Error('Missing codec entry');
             }
         }
+    }
+    // Selection must never return an entry omitted by codec/role pruning. Exact
+    // spelling matters on case-sensitive filesystems and hosted URLs.
+    path(c.runtime.entry);
+    if (!c.runtime.files.some(f => f.path === c.runtime.entry))
+        throw Error('Missing exact runtime entry');
+    for (const codec of offeredCodecs) {
+        const entry = c.runtime.entries?.[codec] ?? c.runtime.entry;
+        if (!c.runtime.files.some(f => f.path === entry && f.role === 'always' && f.codecs.includes(codec)))
+            throw Error(`Missing unconditional ${codec} runtime entry`);
+    }
+    if (offeredCodecs.has('zstd')) {
+        const decoders = c.runtime.files.filter(f => f.role === 'zstd');
+        if (decoders.length !== 1 || !decoders[0].codecs.includes('zstd') ||
+            decoders[0].decoded.bytes < 8 || decoders[0].decoded.bytes > 4 * 1024 * 1024)
+            throw Error('Missing or ambiguous Zstandard decoder');
     }
     return c;
 }
@@ -181,6 +200,8 @@ export function selectWasmAssets(catalog, { targets: requested, codec, fullTarge
         throw Error('Unsupported requested codec');
     if (!Array.isArray(requested) || requested.length > MAX_TARGETS || new Set(requested).size !== requested.length)
         throw Error('Invalid requested targets');
+    if (requested.some(k => typeof k !== 'string' || !idPattern.test(k)))
+        throw Error('Invalid requested target identifier');
     const names = [...requested].sort();
     if (names.some(k => !own(c.targets, k)))
         throw Error('Unavailable target');
@@ -233,7 +254,7 @@ export function selectWasmAssets(catalog, { targets: requested, codec, fullTarge
         runtime: { entry: c.runtime.entries?.[codec] ?? c.runtime.entry, files: best.runtime }, files: best.files,
         bytes: best.bytes, rawBytes: names.reduce((n, k) => n + c.targets[k].raw.bytes, 0),
     };
-    return immutable(JSON.parse(JSON.stringify(plan)));
+    return validatePlan(plan);
 }
 /** Validate a pruned, executable plan without reintroducing the catalog's other targets. */
 export function validatePlan(input) {

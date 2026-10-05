@@ -65,7 +65,7 @@ jobs:
           submodules: false
           persist-credentials: false
       - name: Fetch only the pinned source
-        run: git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+        run: python3 llama-cpp/scripts/checkout_source.py --source "$SOURCE_ID"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -112,7 +112,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           submodules: false
           persist-credentials: false
-      - run: git submodule update --init --recursive --depth=1 -- "llama-cpp/$VENDOR"
+      - run: python3 llama-cpp/scripts/checkout_source.py --source "$SOURCE_ID"
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
