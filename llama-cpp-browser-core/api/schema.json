@@ -703,6 +703,29 @@
       ]
     },
     {
+      "name": "ggml_backend_buft_alloc_buffer_n",
+      "export": "_lcb_ggml_backend_buft_alloc_buffer_n",
+      "returnType": "ggml_backend_buffer_t",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "buft",
+          "cType": "ggml_backend_buffer_type_t",
+          "kind": "pointer"
+        },
+        {
+          "name": "tensors",
+          "cType": "struct ggml_tensor **",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_tensors",
+          "cType": "int",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
       "name": "ggml_backend_buft_get_alignment",
       "export": "_lcb_ggml_backend_buft_get_alignment",
       "returnType": "size_t",
@@ -730,6 +753,29 @@
           "name": "tensor",
           "cType": "const struct ggml_tensor *",
           "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "ggml_backend_buft_get_alloc_size_n",
+      "export": "_lcb_ggml_backend_buft_get_alloc_size_n",
+      "returnType": "size_t",
+      "returnKind": "u64",
+      "parameters": [
+        {
+          "name": "buft",
+          "cType": "ggml_backend_buffer_type_t",
+          "kind": "pointer"
+        },
+        {
+          "name": "tensors",
+          "cType": "struct ggml_tensor **",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_tensors",
+          "cType": "int",
+          "kind": "signed"
         }
       ]
     },
@@ -14213,6 +14259,247 @@
       "parameters": []
     },
     {
+      "name": "llama_batch_ext_add",
+      "export": "_lcb_llama_batch_ext_add",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_add_embd",
+      "export": "_lcb_llama_batch_ext_add_embd",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed"
+        },
+        {
+          "name": "embd",
+          "cType": "struct llama_embd",
+          "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_add_seq",
+      "export": "_lcb_llama_batch_ext_add_seq",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_add_token",
+      "export": "_lcb_llama_batch_ext_add_token",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed"
+        },
+        {
+          "name": "id",
+          "cType": "llama_token",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_clear",
+      "export": "_lcb_llama_batch_ext_clear",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_free",
+      "export": "_lcb_llama_batch_ext_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_init",
+      "export": "_lcb_llama_batch_ext_init",
+      "returnType": "struct llama_batch_ext *(struct llama_context *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_embd_state",
+      "export": "_lcb_llama_batch_ext_set_embd_state",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "embd",
+          "cType": "struct llama_embd",
+          "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_embd_token",
+      "export": "_lcb_llama_batch_ext_set_embd_token",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "embd",
+          "cType": "struct llama_embd",
+          "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_output_embd",
+      "export": "_lcb_llama_batch_ext_set_output_embd",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_output_logits",
+      "export": "_lcb_llama_batch_ext_set_output_logits",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_pos",
+      "export": "_lcb_llama_batch_ext_set_pos",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "pos",
+          "cType": "const llama_pos *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "llama_batch_free",
       "export": "_lcb_llama_batch_free",
       "returnType": "void",
@@ -14457,6 +14744,19 @@
           "name": "ftype",
           "cType": "enum llama_ftype",
           "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_get_causal_attn",
+      "export": "_lcb_llama_get_causal_attn",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const struct llama_context *",
+          "kind": "pointer"
         }
       ]
     },
@@ -15913,6 +16213,29 @@
       "returnType": "const char *(void)",
       "returnKind": "pointer",
       "parameters": []
+    },
+    {
+      "name": "llama_process",
+      "export": "_lcb_llama_process",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "type",
+          "cType": "enum llama_process_type",
+          "kind": "signed"
+        },
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        }
+      ]
     },
     {
       "name": "llama_sampler_accept",
@@ -19897,6 +20220,31 @@
       "id": 18
     },
     {
+      "name": "llama_embd",
+      "cType": "struct llama_embd",
+      "fields": [
+        {
+          "name": "data",
+          "cType": "const float *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "n_rows",
+          "cType": "size_t",
+          "kind": "u64",
+          "id": 1
+        },
+        {
+          "name": "n_embd",
+          "cType": "size_t",
+          "kind": "u64",
+          "id": 2
+        }
+      ],
+      "id": 19
+    },
+    {
       "name": "llama_logit_bias",
       "cType": "struct llama_logit_bias",
       "fields": [
@@ -19913,7 +20261,7 @@
           "id": 1
         }
       ],
-      "id": 19
+      "id": 20
     },
     {
       "name": "llama_model_imatrix_data",
@@ -19938,7 +20286,7 @@
           "id": 2
         }
       ],
-      "id": 20
+      "id": 21
     },
     {
       "name": "llama_model_kv_override",
@@ -19981,7 +20329,7 @@
           "id": 5
         }
       ],
-      "id": 21
+      "id": 22
     },
     {
       "name": "llama_model_params",
@@ -20090,7 +20438,7 @@
           "id": 16
         }
       ],
-      "id": 22
+      "id": 23
     },
     {
       "name": "llama_model_quantize_params",
@@ -20187,7 +20535,7 @@
           "id": 14
         }
       ],
-      "id": 23
+      "id": 24
     },
     {
       "name": "llama_model_tensor_buft_override",
@@ -20206,7 +20554,7 @@
           "id": 1
         }
       ],
-      "id": 24
+      "id": 25
     },
     {
       "name": "llama_model_tensor_override",
@@ -20225,7 +20573,7 @@
           "id": 1
         }
       ],
-      "id": 25
+      "id": 26
     },
     {
       "name": "llama_opt_params",
@@ -20268,7 +20616,7 @@
           "id": 5
         }
       ],
-      "id": 26
+      "id": 27
     },
     {
       "name": "llama_perf_context_data",
@@ -20317,7 +20665,7 @@
           "id": 6
         }
       ],
-      "id": 27
+      "id": 28
     },
     {
       "name": "llama_perf_sampler_data",
@@ -20336,7 +20684,7 @@
           "id": 1
         }
       ],
-      "id": 28
+      "id": 29
     },
     {
       "name": "llama_sampler",
@@ -20355,7 +20703,7 @@
           "id": 1
         }
       ],
-      "id": 29
+      "id": 30
     },
     {
       "name": "llama_sampler_chain_params",
@@ -20368,7 +20716,7 @@
           "id": 0
         }
       ],
-      "id": 30
+      "id": 31
     },
     {
       "name": "llama_sampler_data",
@@ -20399,7 +20747,7 @@
           "id": 3
         }
       ],
-      "id": 31
+      "id": 32
     },
     {
       "name": "llama_sampler_i",
@@ -20478,7 +20826,7 @@
           "id": 11
         }
       ],
-      "id": 32
+      "id": 33
     },
     {
       "name": "llama_sampler_seq_config",
@@ -20497,7 +20845,7 @@
           "id": 1
         }
       ],
-      "id": 33
+      "id": 34
     },
     {
       "name": "llama_token_data",
@@ -20522,7 +20870,7 @@
           "id": 2
         }
       ],
-      "id": 34
+      "id": 35
     },
     {
       "name": "llama_token_data_array",
@@ -20553,7 +20901,7 @@
           "id": 3
         }
       ],
-      "id": 35
+      "id": 36
     },
     {
       "name": "mtmd_caps",
@@ -20572,7 +20920,7 @@
           "id": 1
         }
       ],
-      "id": 36
+      "id": 37
     },
     {
       "name": "mtmd_context_params",
@@ -20669,7 +21017,7 @@
           "id": 14
         }
       ],
-      "id": 37
+      "id": 38
     },
     {
       "name": "mtmd_decoder_pos",
@@ -20700,7 +21048,7 @@
           "id": 3
         }
       ],
-      "id": 38
+      "id": 39
     },
     {
       "name": "mtmd_gen_audio_info",
@@ -20725,7 +21073,7 @@
           "id": 2
         }
       ],
-      "id": 39
+      "id": 40
     },
     {
       "name": "mtmd_gen_inp",
@@ -20810,7 +21158,7 @@
           "id": 12
         }
       ],
-      "id": 40
+      "id": 41
     },
     {
       "name": "mtmd_gen_out",
@@ -20877,7 +21225,7 @@
           "id": 9
         }
       ],
-      "id": 41
+      "id": 42
     },
     {
       "name": "mtmd_helper_bitmap_wrapper",
@@ -20896,7 +21244,50 @@
           "id": 1
         }
       ],
-      "id": 42
+      "id": 43
+    },
+    {
+      "name": "mtmd_helper_embd_batch",
+      "cType": "struct mtmd_helper_embd_batch",
+      "fields": [
+        {
+          "name": "n_tokens",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 0
+        },
+        {
+          "name": "embd",
+          "cType": "const float *",
+          "kind": "pointer",
+          "id": 1
+        },
+        {
+          "name": "n_embd",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 2
+        },
+        {
+          "name": "pos",
+          "cType": "const llama_pos *",
+          "kind": "pointer",
+          "id": 3
+        },
+        {
+          "name": "n_pos",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 4
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed",
+          "id": 5
+        }
+      ],
+      "id": 44
     },
     {
       "name": "mtmd_helper_gen_audio_inp",
@@ -20957,7 +21348,7 @@
           "id": 8
         }
       ],
-      "id": 43
+      "id": 45
     },
     {
       "name": "mtmd_helper_init_opt",
@@ -20970,7 +21361,7 @@
           "id": 0
         }
       ],
-      "id": 44
+      "id": 46
     },
     {
       "name": "mtmd_helper_video_info",
@@ -21001,7 +21392,7 @@
           "id": 3
         }
       ],
-      "id": 45
+      "id": 47
     },
     {
       "name": "mtmd_helper_video_init_params",
@@ -21026,7 +21417,7 @@
           "id": 2
         }
       ],
-      "id": 46
+      "id": 48
     },
     {
       "name": "mtmd_input_part",
@@ -21045,7 +21436,7 @@
           "id": 1
         }
       ],
-      "id": 47
+      "id": 49
     },
     {
       "name": "mtmd_input_text",
@@ -21076,7 +21467,7 @@
           "id": 3
         }
       ],
-      "id": 48
+      "id": 50
     }
   ],
   "constants": [
@@ -21481,6 +21872,8 @@
     "LLAMA_POOLING_TYPE_NONE",
     "LLAMA_POOLING_TYPE_RANK",
     "LLAMA_POOLING_TYPE_UNSPECIFIED",
+    "LLAMA_PROCESS_TYPE_DECODE",
+    "LLAMA_PROCESS_TYPE_ENCODE",
     "LLAMA_ROPE_SCALING_TYPE_LINEAR",
     "LLAMA_ROPE_SCALING_TYPE_LONGROPE",
     "LLAMA_ROPE_SCALING_TYPE_MAX_VALUE",

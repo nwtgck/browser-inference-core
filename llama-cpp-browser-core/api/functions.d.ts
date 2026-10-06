@@ -35,8 +35,10 @@ export interface LowLevelFunctions {
   ggml_backend_buffer_reset(arg0: bigint): Promise<void>;
   ggml_backend_buffer_set_usage(arg0: bigint, arg1: number): Promise<void>;
   ggml_backend_buft_alloc_buffer(arg0: bigint, arg1: bigint): Promise<bigint>;
+  ggml_backend_buft_alloc_buffer_n(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   ggml_backend_buft_get_alignment(arg0: bigint): Promise<bigint>;
   ggml_backend_buft_get_alloc_size(arg0: bigint, arg1: bigint): Promise<bigint>;
+  ggml_backend_buft_get_alloc_size_n(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   ggml_backend_buft_get_device(arg0: bigint): Promise<bigint>;
   ggml_backend_buft_get_max_size(arg0: bigint): Promise<bigint>;
   ggml_backend_buft_is_host(arg0: bigint): Promise<number>;
@@ -667,6 +669,18 @@ export interface LowLevelFunctions {
   llama_attach_threadpool(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   llama_backend_free(): Promise<void>;
   llama_backend_init(): Promise<void>;
+  llama_batch_ext_add(arg0: bigint, arg1: number): Promise<number>;
+  llama_batch_ext_add_embd(arg0: bigint, arg1: number, arg2: bigint): Promise<number>;
+  llama_batch_ext_add_seq(arg0: bigint, arg1: number, arg2: number): Promise<number>;
+  llama_batch_ext_add_token(arg0: bigint, arg1: number, arg2: number): Promise<number>;
+  llama_batch_ext_clear(arg0: bigint): Promise<void>;
+  llama_batch_ext_free(arg0: bigint): Promise<void>;
+  llama_batch_ext_init(arg0: bigint): Promise<bigint>;
+  llama_batch_ext_set_embd_state(arg0: bigint, arg1: number, arg2: bigint): Promise<number>;
+  llama_batch_ext_set_embd_token(arg0: bigint, arg1: number, arg2: bigint): Promise<number>;
+  llama_batch_ext_set_output_embd(arg0: bigint, arg1: number, arg2: number): Promise<number>;
+  llama_batch_ext_set_output_logits(arg0: bigint, arg1: number, arg2: number): Promise<number>;
+  llama_batch_ext_set_pos(arg0: bigint, arg1: number, arg2: bigint): Promise<number>;
   llama_batch_free(arg0: bigint): Promise<void>;
   llama_batch_get_one(out: bigint, arg0: bigint, arg1: number): Promise<void>;
   llama_batch_init(out: bigint, arg0: number, arg1: number, arg2: number): Promise<void>;
@@ -680,6 +694,7 @@ export interface LowLevelFunctions {
   llama_flash_attn_type_name(arg0: number): Promise<bigint>;
   llama_free(arg0: bigint): Promise<void>;
   llama_ftype_name(arg0: number): Promise<bigint>;
+  llama_get_causal_attn(arg0: bigint): Promise<number>;
   llama_get_embeddings(arg0: bigint): Promise<bigint>;
   llama_get_embeddings_ith(arg0: bigint, arg1: number): Promise<bigint>;
   llama_get_embeddings_seq(arg0: bigint, arg1: number): Promise<bigint>;
@@ -770,6 +785,7 @@ export interface LowLevelFunctions {
   llama_perf_sampler_reset(arg0: bigint): Promise<void>;
   llama_pooling_type(arg0: bigint): Promise<number>;
   llama_print_system_info(): Promise<bigint>;
+  llama_process(arg0: bigint, arg1: number, arg2: bigint): Promise<number>;
   llama_sampler_accept(arg0: bigint, arg1: number): Promise<void>;
   llama_sampler_apply(arg0: bigint, arg1: bigint): Promise<void>;
   llama_sampler_chain_add(arg0: bigint, arg1: bigint): Promise<void>;
