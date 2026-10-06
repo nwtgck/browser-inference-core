@@ -9,6 +9,8 @@ set(LCB_LLAMA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/llama.cpp" CACHE PATH "
 option(LCB_NATIVE_CHECK "Build a native shared library for boundary tests, not a distribution runtime" OFF)
 option(LCB_MEMORY64 "Use 64-bit WebAssembly memory" OFF)
 option(LCB_WEBGPU "Link the WebGPU backend" OFF)
+# Experimental downstream shader optimization; see docs/moe-direct-slot.md.
+option(LCB_WEBGPU_MOE_DIRECT_SLOT "Use the reviewed direct selected-slot MoE shader" OFF)
 # Compatibility workaround for the pinned backend, not a new BF16 kernel.
 # See docs/webgpu-bf16-projector.md for memory/precision costs and removal criteria.
 option(LCB_WEBGPU_BF16_PROJECTOR "Expand vision BF16 weights to F32 for the pinned WebGPU backend" ON)
@@ -25,6 +27,10 @@ string(JSON LCB_ASSERTIONS GET "${LCB_VARIANTS}" "${LCB_VARIANT}" assertions)
 string(JSON LCB_ENVIRONMENT GET "${LCB_VARIANTS}" "${LCB_VARIANT}" environment)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/config/variants.json")
+
+if(LCB_WEBGPU_MOE_DIRECT_SLOT AND NOT LCB_WEBGPU)
+    message(FATAL_ERROR "MoE direct-slot requires WebGPU")
+endif()
 
 if(LCB_JSPI AND LCB_ASYNCIFY)
     message(FATAL_ERROR "JSPI and Asyncify are mutually exclusive")
@@ -97,6 +103,10 @@ set(GGML_WEBGPU ${LCB_WEBGPU} CACHE BOOL "" FORCE)
 set(GGML_WEBGPU_JSPI ${LCB_JSPI} CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${LCB_LLAMA_SOURCE}" "llama")
+
+if(LCB_WEBGPU_MOE_DIRECT_SLOT)
+    include(cmake/MoeDirectSlotOverlay.cmake)
+endif()
 
 # All browser profiles are single-threaded, including CPU and WebGPU.
 # The overlay retains upstream behavior in native/pthread builds.

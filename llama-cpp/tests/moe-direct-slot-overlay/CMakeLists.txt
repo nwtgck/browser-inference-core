@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.24)
+project(moe_overlay_check LANGUAGES CXX)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# Configure the real backend target without downloading or compiling Dawn.
+# The target is never built by this source/embedding test.
+set(EMSCRIPTEN TRUE)
+set(GGML_WEBGPU_JSPI ON)
+function(ggml_add_backend_library name)
+    add_library(${name} STATIC ${ARGN})
+endfunction()
+add_subdirectory("${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu" webgpu)
+get_target_property(before ggml-webgpu INCLUDE_DIRECTORIES)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/includes-before.txt" "${before}")
+include(../../cmake/MoeDirectSlotOverlay.cmake)
+get_target_property(after ggml-webgpu INCLUDE_DIRECTORIES)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/includes-after.txt" "${after}")

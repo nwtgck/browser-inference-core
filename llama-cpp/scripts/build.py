@@ -59,6 +59,9 @@ def main():
              '-DCMAKE_BUILD_TYPE=Release', '-DLCB_VARIANT='+a.variant,
              '-DLCB_MEMORY64='+('ON' if cfg['memory64'] else 'OFF'),
              '-DLCB_WEBGPU='+('ON' if cfg['webgpu'] else 'OFF'),
+             # The same reviewed WGSL/dispatch contract applies to all WebGPU profiles.
+             # Explicit OFF keeps CPU profiles on the original source path.
+             '-DLCB_WEBGPU_MOE_DIRECT_SLOT='+('ON' if cfg['webgpu'] else 'OFF'),
              # Reset cached comparison overrides and record the workaround in
              # cmakeCommand provenance; CPU artifacts must keep the original loader.
              '-DLCB_WEBGPU_BF16_PROJECTOR='+('ON' if cfg['webgpu'] else 'OFF'),
