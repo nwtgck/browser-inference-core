@@ -22,7 +22,8 @@ class MoeDirectSlotOverlay(unittest.TestCase):
         cls.patch = ROOT / moe.PATCH_DIRECTORY / moe.PATCH_NAME
 
     def test_exact_patch_generated_header_only_changes_intended_shader(self):
-        before = {p: (self.source / p).read_bytes() for p in moe.REVIEWED_INPUTS}
+        revision = moe.verify_reviewed_source(self.source)
+        before = {p: (self.source / p).read_bytes() for p in moe.REVIEWED_REVISIONS[revision]}
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'overlay'
             result = moe.prepare(self.source, output, self.patch)
@@ -49,14 +50,16 @@ class MoeDirectSlotOverlay(unittest.TestCase):
                 moe.prepare(self.source, output, self.patch)
 
     def test_revision_guard_and_changed_patch_fail_closed(self):
-        with patch.object(moe.subprocess, 'check_output', return_value='0' * 40), \
+        with patch.object(moe.subprocess, 'check_output', side_effect=[str(self.source), '0' * 40]), \
              self.assertRaisesRegex(ValueError, 'semantic review'):
             moe.verify_reviewed_source(self.source)
         with tempfile.TemporaryDirectory() as temporary:
             bad = Path(temporary) / 'changed.patch'
             bad.write_bytes(self.patch.read_bytes() + b'\n')
-            with self.assertRaisesRegex(ValueError, 'patch identity'):
+            with patch.object(moe, 'verify_reviewed_source') as verify, \
+                 self.assertRaisesRegex(ValueError, 'patch identity'):
                 moe.prepare(self.source, Path(temporary) / 'output', bad)
+            verify.assert_not_called()
             self.assertFalse((Path(temporary) / 'output').exists())
 
     def test_reviewed_backend_change_fails_before_embedding(self):

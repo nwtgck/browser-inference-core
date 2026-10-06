@@ -118,8 +118,8 @@ def collect(root: Path, manifest: dict) -> dict:
             'patch': {'path': f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}',
                       **file_identity(root / PATCH_DIRECTORY / moe.PATCH_NAME)},
             'compiledCopy': moe_compiled,
-            'reviewedCommit': moe.REVIEWED_COMMIT,
-            'reviewedInputs': moe.REVIEWED_INPUTS,
+            'reviewedCommit': upstream if upstream in moe.REVIEWED_REVISIONS else None,
+            'reviewedInputs': moe.REVIEWED_REVISIONS.get(upstream),
             'application': {
                 'preparationScript': 'scripts/prepare_moe_direct_slot.py',
                 'cmakeHook': 'cmake/MoeDirectSlotOverlay.cmake',

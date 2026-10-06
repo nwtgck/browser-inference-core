@@ -103,7 +103,10 @@ commit with different bytes or invent a future artifact identity.
 - **Integration:** the original patch bytes and upstream embedder generate one
   build-tree shader header. No vendor edits, new public API, model graph changes,
   sampler changes or application policy enter bicore.
-- **Reviewed upstream:** `d81235049384534c167caea52b85a694f6103d14`.
+- **Reviewed upstream inputs:** `d81235049384534c167caea52b85a694f6103d14` and
+  `7fe450e19305b828c199d602c23a8337aaa1f03b`, with separate exact input maps.
+  This is source compatibility, not a claim of identical shader expansions or
+  completed browser/runtime validation for both revisions.
   Dispatch C++, shader, CMake header lookup and embedder identities are guarded.
   The user clarified on 2026-10-06 that this experiment need not be artificially
   restricted to wasm64 JSPI. All WebGPU profiles share this shader contract.

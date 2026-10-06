@@ -213,8 +213,8 @@ class OverlayProvenance(unittest.TestCase):
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
         shaders = self.vendor / provenance.moe.SHADER_DIRECTORY
         shaders.mkdir(parents=True)
-        shutil.copy2(ROOT / 'vendor/llama.cpp' / provenance.moe.SHADER_PATH,
-                     self.vendor / provenance.moe.SHADER_PATH)
+        # Metadata tests use synthetic inputs, independently of vendor availability.
+        (self.vendor / provenance.moe.SHADER_PATH).write_text('Provenance shader fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME)
         for path in ['scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
@@ -284,6 +284,19 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual(item['application']['enabledProfileVariants'], [])
         self.assertEqual(item['patch']['sha256'], provenance.moe.PATCH_SHA256)
         self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+
+    def test_moe_provenance_selects_the_built_upstream_revision(self):
+        for revision, inputs in provenance.moe.REVIEWED_REVISIONS.items():
+            with self.subTest(revision=revision):
+                manifest = copy.deepcopy(self.manifest)
+                manifest['llamaCommit'] = revision
+                with patch.object(provenance, 'git', side_effect=lambda *args, cwd: subprocess.CompletedProcess(
+                        args, 0, stdout=(A if cwd == self.root else revision) + '\n')):
+                    report = provenance.collect(self.root, manifest)
+                item = next(entry for entry in report['sourceOverlays']
+                            if entry['id'] == 'experimental-webgpu-moe-direct-slot')
+                self.assertEqual(item['reviewedCommit'], revision)
+                self.assertEqual(item['reviewedInputs'], inputs)
 
     def test_moe_enabled_provenance_records_actual_prepared_bytes(self):
         variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']

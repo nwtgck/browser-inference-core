@@ -22,7 +22,10 @@ Those profile settings affect host ABI/suspension; they do not select a differen
 MoE vector kernel. This supports the same source-level patch scope, not a claim
 that every profile has been executed or measured.
 
-`prepare_moe_direct_slot.py` checks the reviewed upstream revision, dispatch C++,
+`prepare_moe_direct_slot.py` checks an exact reviewed upstream revision and its
+revision-specific input hashes: `7fe450e19305b828c199d602c23a8337aaa1f03b` or
+`d81235049384534c167caea52b85a694f6103d14`. It verifies the upstream Git root
+is the source directory (never an enclosing repository), then checks dispatch C++,
 shader, shader-library include header, upstream CMake file, embedder and exact patch digest. It copies only the
 shader directory, applies the patch outside vendor, and runs upstream's embedder.
 `MoeDirectSlotOverlay.cmake` prepends the generated header directory to the actual
@@ -55,3 +58,18 @@ patch identity, reviewed inputs and exactly which profile/variants enabled it.
 Return the real artifact commit and `consumer-update.yaml` to prepare Naidan's
 separate dependency/hash adapter update. Do not substitute a source commit for an
 artifact commit or invent generated-runtime hashes before CI has produced them.
+
+## Feature-branch revision compatibility
+
+The supplied feature source `9023d457115b26480d517e730a32366acf274767`
+pins upstream `7fe450e19305b828c199d602c23a8337aaa1f03b`. The previous
+experiment accepted only `d812350...`, causing configure/test failure before
+shader compilation. The patch target `mul_mat_id_vec.wgsl`, dispatch function,
+embedder and WebGPU CMake file match. Shader-library F32/F16 definitions and
+BF16 support differ, so separate whole-file input maps preserve that distinction.
+Included shader templates are not claimed to be identical. The feature's
+upstream pin is unchanged; provenance identifies the selected reviewed revision.
+
+Unit tests of map selection and known d812 results do not establish old-revision
+build, runtime correctness or performance. Validate with a complete pinned
+upstream checkout and the ordinary CI commands, without source overrides.
