@@ -90,3 +90,34 @@ Removing source changes cannot alter an already published artifact. Rebuild,
 validate, and publish the cleaned source; update consumers to that actual new
 artifact through their normal verified update flow. Do not republish an existing
 commit with different bytes or invent a future artifact identity.
+
+## Experimental WebGPU MoE direct selected-slot dispatch
+
+- **Patch:** `ggml-webgpu-moe-direct-slot.patch`.
+- **Scope:** locally authorized experiment, not final production approval. The
+  user authorized experimental upstream patches on 2026-10-06; adoption/commit
+  in their bicore remains their decision.
+- **Purpose:** remove expert-count-sized workgroup arrays, barriers and the
+  expert scan from the single-token `MUL_MAT_ID` vector shader. Index workgroups
+  by selected slot, preserving selected expert IDs and output placement.
+- **Integration:** the original patch bytes and upstream embedder generate one
+  build-tree shader header. No vendor edits, new public API, model graph changes,
+  sampler changes or application policy enter bicore.
+- **Reviewed upstream inputs:** `d81235049384534c167caea52b85a694f6103d14` and
+  `7fe450e19305b828c199d602c23a8337aaa1f03b`, with separate exact input maps.
+  This is source compatibility, not a claim of identical shader expansions or
+  completed browser/runtime validation for both revisions.
+  Dispatch C++, shader, CMake header lookup and embedder identities are guarded.
+  The user clarified on 2026-10-06 that this experiment need not be artificially
+  restricted to wasm64 JSPI. All WebGPU profiles share this shader contract.
+- **Activation:** standard `scripts/build.py` enables every configured WebGPU
+  profile (wasm32 Asyncify/JSPI and wasm64 JSPI), both browser/test variants.
+  CPU profiles pass OFF; direct CMake defaults OFF. Existing CI and source-bound publication are reused.
+- **No-patch alternative:** retain upstream shader and current artifact, or wait
+  for upstream adoption. This is an optional performance experiment.
+- **Validation/costs:** see [the integration design](../docs/moe-direct-slot.md).
+  Updating upstream requires semantic review; compiling or CI smoke tests alone
+  cannot certify target-device model speed or quality.
+- **Removal condition:** upstream supplies this behavior, the experiment is
+  rejected, or its maintenance cost outweighs the verified improvement. Remove
+  this patch, preparation/hook, build flag, tests and provenance entry together.
