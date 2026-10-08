@@ -1,0 +1,38 @@
+{
+  "status": "passed_cpu_mock_only",
+  "compiler": "c++ (Debian 14.2.0-19) 14.2.0",
+  "command": "python llama-cpp/experiments/webgpu-tensor-copy/test_candidate.py /path/to/upstream-d812",
+  "compile_options": [
+    "-std=c++20",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-O0"
+  ],
+  "output": "PASS: hook/fallback/queue scenarios (CPU mock; no WebGPU runtime)",
+  "verified": [
+    "exact upstream input identity",
+    "patch apply --check and isolated apply",
+    "actual copy hook and actual generic fallback extraction",
+    "CPU mock byte correctness, queue ordering, views, lifetime model and fallback cases"
+  ],
+  "not_verified": [
+    "full WebGPU translation unit/Dawn headers",
+    "Wasm/JSPI build",
+    "browser/GPU execution",
+    "model output equivalence",
+    "performance"
+  ],
+  "adoption": "requires owner decision and target validation",
+  "files": {
+    "README.md": "34f3d9f2a34e7f8b89a5052266beac9a9b4b368cd43bf3bccdfe002fdc41701d",
+    "REVIEW.md": "880ea67e5f12e3bdb932f05437cd4cef432676748192292068ed7326034e495b",
+    "ggml-webgpu-same-device-tensor-copy.patch": "a2c1e9f18694c695f7302fa078c02d868de25be454d8f43a155cbef8e8626f8c",
+    "inputs.json": "5d84fbeed367fe141c97d1c6ef9c214bc1fd96a6fb7abb779171f36e858de6f3",
+    "mock-harness.cpp": "75f31f55e27eceb9422a96421cfcec344804fcca12d72afdcf32eea6f3694462",
+    "test_candidate.py": "d7649b8f26603f976d94adc25e52f9b3f008495e2c7622eda90b2493e51827f6"
+  },
+  "independent_review": "No blocking defect found for valid serialized tensors; see REVIEW.md for validation limits.",
+  "repository": "https://github.com/nwtgck/browser-inference-core",
+  "repository_base": "4e04bb9b833b97d9367569fcdd225156039dfb9b"
+}

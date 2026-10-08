@@ -1,0 +1,7 @@
+{
+  "upstream_commit": "d81235049384534c167caea52b85a694f6103d14",
+  "source": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+  "sha256": "a37cb03d2d85b3ecdcd203dd515f35f22b1ca895934b2aab17066d575299ba84",
+  "test_backend_source": "ggml/src/ggml-backend.cpp",
+  "test_backend_sha256": "cdb79f2937aa147084a76f949adc0eb760ad1883e0ccc015bb4e0f599c89bd5f"
+}
