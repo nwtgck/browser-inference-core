@@ -11,6 +11,27 @@ JOBS = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', WORKFLOW.spl
 
 
 class PipelineWorkflow(unittest.TestCase):
+    def test_tensor_copy_is_opt_in_artifact_only_and_webgpu_scoped(self):
+        option = WORKFLOW.split('      webgpu_tensor_copy:', 1)[1].split('      cache_mode:', 1)[0]
+        self.assertIn('type: boolean', option)
+        self.assertIn('default: false', option)
+        self.assertIn('"${{ inputs.webgpu_tensor_copy }}" == "true" && "$PROFILE" == webgpu-*', JOBS['compile'])
+        self.assertIn('extra+=(--webgpu-tensor-copy)', JOBS['compile'])
+        self.assertNotIn('--webgpu-tensor-copy', JOBS['image-compile'])
+        self.assertIn('!inputs.webgpu_tensor_copy &&', JOBS['publish'])
+        self.assertIn('name: webgpu-source-provenance', JOBS['build'])
+        self.assertIn('--manifest dist/package/manifest.json', JOBS['build'])
+
+    def test_parameter_batching_is_independent_opt_in_artifact_only(self):
+        option = WORKFLOW.split('      webgpu_param_upload_batching:', 1)[1].split('      webgpu_tensor_copy:', 1)[0]
+        self.assertIn('default: false', option)
+        self.assertIn('type: boolean', option)
+        self.assertIn('"${{ inputs.webgpu_param_upload_batching }}" == "true" && "$PROFILE" == webgpu-*', JOBS['compile'])
+        self.assertIn('extra+=(--webgpu-param-upload-batching)', JOBS['compile'])
+        self.assertNotIn('--webgpu-param-upload-batching', JOBS['image-compile'])
+        self.assertIn('!inputs.webgpu_param_upload_batching &&', JOBS['publish'])
+        self.assertIn('inputs.webgpu_tensor_copy || inputs.webgpu_param_upload_batching', JOBS['build'])
+
     def test_checkout_keeps_recursive_notices_for_selected_runtime(self):
         for name in ('test', 'compile', 'build', 'image-native', 'image-compile', 'image-build'):
             block = JOBS[name]

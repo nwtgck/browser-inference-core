@@ -217,6 +217,7 @@ class LocalGitProposal(unittest.TestCase):
             path.write_text('Unrelated upstream generation refactor\n')
         result = update.overlay_preflight(self.root)
         self.assertEqual(result['status'], 'passed')
+        self.assertEqual(result['optionalOverlays']['webgpu-tensor-copy']['status'], 'failed')
         self.assertEqual((vendor / 'tools/mtmd/mtmd-helper-gen.cpp').read_text(),
                          'Unrelated upstream generation refactor\n')
 

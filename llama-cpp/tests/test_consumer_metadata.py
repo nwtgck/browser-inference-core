@@ -217,7 +217,13 @@ class OverlayProvenance(unittest.TestCase):
         (self.vendor / provenance.moe.SHADER_PATH).write_text('Provenance shader fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME)
-        for path in ['scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
+        (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME)
+        for path in ['scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
+                     'docs/webgpu-tensor-copy.md', 'scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
                      'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md',
                      'cmake/MtmdAudioOverlay.cmake', 'docs/audio-single-thread.md']:
@@ -226,7 +232,7 @@ class OverlayProvenance(unittest.TestCase):
         for name, enabled in [('cpu-wasm32', False), ('webgpu-wasm64-jspi', True)]:
             self.manifest['profiles'][name] = {'variants': {variant: {
                 'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if enabled else 'OFF'),
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'],
+                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU_TENSOR_COPY=OFF', '-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING=OFF'],
             } for variant in ['browser', 'test']}}
         self.mock_git = patch.object(provenance, 'git', side_effect=lambda *args, cwd: subprocess.CompletedProcess(
             args, 0, stdout=(A if cwd == self.root else B) + '\n'))
@@ -267,7 +273,8 @@ class OverlayProvenance(unittest.TestCase):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
-            'experimental-webgpu-moe-direct-slot'})
+            'experimental-webgpu-moe-direct-slot', 'experimental-webgpu-same-device-tensor-copy',
+            'experimental-webgpu-parameter-upload-batching'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
             self.assertTrue(item['patch']['path'].startswith(provenance.PATCH_DIRECTORY + '/'))
@@ -323,7 +330,7 @@ class OverlayProvenance(unittest.TestCase):
                 variants = {name: copy.deepcopy(template) for name in ('browser', 'test')}
                 for variant in variants.values():
                     variant['cmakeCommand'] = [
-                        'cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF',
+                        'cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF', '-DLCB_WEBGPU_TENSOR_COPY=OFF', '-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING=OFF',
                         '-DLCB_WEBGPU=' + ('ON' if config['webgpu'] else 'OFF'),
                         '-DLCB_WEBGPU_MOE_DIRECT_SLOT=' + ('ON' if config['webgpu'] else 'OFF'),
                     ]
@@ -343,6 +350,82 @@ class OverlayProvenance(unittest.TestCase):
                         original + ['-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'],
                         [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON') for arg in original]):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'MoE'):
+                variant['cmakeCommand'] = command
+                provenance.collect(self.root, self.manifest)
+
+    def test_copy_disabled_inventoried_without_preparation(self):
+        with patch.object(provenance.webgpu_source, 'prepare') as prepare:
+            report = provenance.collect(self.root, self.manifest)
+        prepare.assert_not_called()
+        item = next(e for e in report['sourceOverlays'] if e['id'] == 'experimental-webgpu-same-device-tensor-copy')
+        self.assertIsNone(item['compiledCopy'])
+        self.assertEqual(item['application']['enabledProfileVariants'], [])
+        self.assertEqual(item['patch']['sha256'], provenance.tensor_copy.PATCH_SHA256)
+        self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+
+    def test_copy_enabled_provenance_records_prepared_bytes_and_variants(self):
+        variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+        variant['cmakeCommand'] = [a.replace('TENSOR_COPY=OFF', 'TENSOR_COPY=ON') for a in variant['cmakeCommand']] + ['-DLCB_WEBGPU=ON']
+        prepared = self.root / 'prepared.cpp'; prepared.write_bytes(b'actual prepared fixture')
+        with patch.object(provenance.webgpu_source, 'prepare', return_value=prepared) as prepare:
+            report = provenance.collect(self.root, self.manifest)
+        prepare.assert_called_once()
+        item = next(e for e in report['sourceOverlays'] if e['id'] == 'experimental-webgpu-same-device-tensor-copy')
+        self.assertEqual(item['compiledCopy']['sha256'], provenance.file_identity(prepared)['sha256'])
+        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser'])
+
+    def test_copy_activation_fails_closed(self):
+        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
+        original = variant['cmakeCommand']
+        for command in ([a for a in original if 'TENSOR_COPY' not in a],
+                        original + ['-DLCB_WEBGPU_TENSOR_COPY=OFF'],
+                        [a.replace('TENSOR_COPY=OFF', 'TENSOR_COPY=MAYBE') for a in original],
+                        [a.replace('TENSOR_COPY=OFF', 'TENSOR_COPY=ON') for a in original]):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, '[Tt]ensor-copy'):
+                variant['cmakeCommand'] = command
+                provenance.collect(self.root, self.manifest)
+
+    def test_combined_provenance_distinguishes_all_four_states(self):
+        self.manifest['profiles'] = {}
+        cases = [('webgpu-wasm32-jspi', 'browser', False, False),
+                 ('webgpu-wasm32-jspi', 'test', True, False),
+                 ('webgpu-wasm64-jspi', 'browser', False, True),
+                 ('webgpu-wasm64-jspi', 'test', True, True)]
+        toolchain = provenance.runtime_toolchain(self.root)
+        def prepared(_vendor, output, *, copy, batch, patch_root):
+            output.mkdir(parents=True, exist_ok=True)
+            result = output / 'ggml-webgpu.cpp'
+            result.write_text(f'prepared copy={copy} batch={batch}')
+            return result
+        for profile, variant, copy_on, batch_on in cases:
+            self.manifest['profiles'].setdefault(profile, {'variants': {}})['variants'][variant] = {
+                'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU=ON',
+                    '-DLCB_WEBGPU_BF16_PROJECTOR=OFF', '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF',
+                    '-DLCB_WEBGPU_TENSOR_COPY=' + ('ON' if copy_on else 'OFF'),
+                    '-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING=' + ('ON' if batch_on else 'OFF')]}
+        with patch.object(provenance.webgpu_source, 'prepare', side_effect=prepared) as prepare:
+            report = provenance.collect(self.root, self.manifest)
+        self.assertEqual(prepare.call_count, 3)
+        for suffix, bit in [('same-device-tensor-copy', 0), ('parameter-upload-batching', 1)]:
+            item = next(e for e in report['sourceOverlays'] if e['id'] == 'experimental-webgpu-' + suffix)
+            self.assertIsNone(item['compiledCopy'])
+            self.assertEqual(len(item['compiledCopiesByProfileVariant']), 2)
+            for profile, variant, copy_on, batch_on in cases:
+                if (copy_on, batch_on)[bit]:
+                    identity = item['compiledCopiesByProfileVariant'][profile + '/' + variant]
+                    self.assertEqual(identity['sha256'], hashlib.sha256(f'prepared copy={copy_on} batch={batch_on}'.encode()).hexdigest())
+                    self.assertEqual(identity['tensorCopy'], copy_on)
+                    self.assertEqual(identity['parameterUploadBatching'], batch_on)
+                    self.assertEqual(identity['compileDefinitions'], ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'] if batch_on else [])
+
+    def test_batch_activation_fails_closed(self):
+        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
+        original = variant['cmakeCommand']
+        for command in ([a for a in original if 'PARAM_UPLOAD_BATCHING' not in a],
+                        original + ['-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING=OFF'],
+                        original + ['-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING:BOOL=ON'],
+                        [a.replace('PARAM_UPLOAD_BATCHING=OFF', 'PARAM_UPLOAD_BATCHING=ON') for a in original]):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, '[Pp]arameter-upload'):
                 variant['cmakeCommand'] = command
                 provenance.collect(self.root, self.manifest)
 

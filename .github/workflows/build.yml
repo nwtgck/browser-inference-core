@@ -14,6 +14,14 @@ on:
       - 'artifacts/**'
   workflow_dispatch:
     inputs:
+      webgpu_param_upload_batching:
+        description: 'Experimental parameter upload batching (artifact-only, no publication)'
+        type: boolean
+        default: false
+      webgpu_tensor_copy:
+        description: Experimental same-device copy (artifact-only; no publication)
+        type: boolean
+        default: false
       cache_mode:
         description: Shared cache use (cold also forbids saving)
         type: choice
@@ -144,12 +152,19 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           VARIANT: ${{ matrix.variant }}
         run: |
+          extra=()
+          if [[ "${{ inputs.webgpu_tensor_copy }}" == "true" && "$PROFILE" == webgpu-* ]]; then
+            extra+=(--webgpu-tensor-copy)
+          fi
+          if [[ "${{ inputs.webgpu_param_upload_batching }}" == "true" && "$PROFILE" == webgpu-* ]]; then
+            extra+=(--webgpu-param-upload-batching)
+          fi
           planned_em_cache="$EM_CACHE"
           source ../.tools/emsdk/emsdk_env.sh
           # SDK activation can unset EM_CACHE; reapply the plan afterwards.
           export EM_CACHE="$planned_em_cache"
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" environment
-          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT"
+          python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
       - name: Stage package inputs
         shell: bash
         env:
@@ -266,6 +281,17 @@ jobs:
           path: llama-cpp/dist/package/
           if-no-files-found: error
           include-hidden-files: true
+          retention-days: 14
+      - name: Report experimental source overlays
+        if: inputs.webgpu_tensor_copy || inputs.webgpu_param_upload_batching
+        run: python3 scripts/upstream_provenance.py --manifest dist/package/manifest.json --output build/webgpu-source-provenance.json
+      - name: Upload experimental source overlay report
+        if: inputs.webgpu_tensor_copy || inputs.webgpu_param_upload_batching
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgpu-source-provenance
+          path: llama-cpp/build/webgpu-source-provenance.json
+          if-no-files-found: error
           retention-days: 14
       - name: Report source changes after a failure
         if: failure()
@@ -521,6 +547,7 @@ jobs:
     # Ordinary same-repository PR heads have the same publication trust as
     # source pushes. Fork PRs and Dependabot runs never receive write credentials.
     if: >-
+      !inputs.webgpu_tensor_copy && !inputs.webgpu_param_upload_batching &&
       github.actor != 'dependabot[bot]' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04

@@ -121,3 +121,30 @@ commit with different bytes or invent a future artifact identity.
 - **Removal condition:** upstream supplies this behavior, the experiment is
   rejected, or its maintenance cost outweighs the verified improvement. Remove
   this patch, preparation/hook, build flag, tests and provenance entry together.
+
+## Optional same-device WebGPU tensor copy
+
+- **Patch:** `ggml-webgpu-same-device-tensor-copy.patch`.
+- **Purpose:** eligible buffer copies avoid the generic host read/write fallback.
+- **Scope:** the existing optional copy hook, with same-device/layout, byte-range,
+  resource-identity, alignment and usage checks. No model or checkpoint policy.
+- **Integration:** one checked build-tree WebGPU translation unit, explicitly
+  enabled by `LCB_WEBGPU_TENSOR_COPY`; direct CMake and ordinary builds default OFF.
+- **Inputs and constraints:** reviewed d812 backend/queue and fallback contracts
+  plus pinned Dawn headers. See [design and tests](../docs/webgpu-tensor-copy.md).
+  Optional updater failures are reported without blocking default builds.
+- **No-patch alternative:** retain generic host copies or wait for upstream support.
+- **Validation limits:** mock and header checks do not establish browser/GPU
+  correctness or performance; ON_DEVICE OOM/capability/lifetime work remains.
+- **Removal condition:** upstream provides equivalent behavior or the optional
+  requirement is dropped. Remove the patch, preparation, hook, flags and report
+  entry together. Experimental packages cannot use ordinary publication.
+
+## Optional WebGPU parameter upload batching
+
+- Patch: `ggml-webgpu-batch-param-uploads.patch`, guarded by `GGML_WEBGPU_BATCH_PARAM_UPLOADS`.
+- Integration: `LCB_WEBGPU_PARAM_UPLOAD_BATCHING`, OFF by default, through the shared `WebgpuSourceOverlay.cmake` and `prepare_webgpu_source.py`.
+- Scope: aligned parameter arena uploads at existing submission boundaries; no tensor/weight upload, synchronization or shader change.
+- Composition: d812 single translation unit with optional same-device tensor copy; four exact source states, one target replacement, per-variant provenance.
+- Cost: bounded CPU mirror and padded upload bytes; fewer calls do not establish a speedup.
+- Checks, remaining target validation, alternatives and removal criteria: [parameter upload batching](../docs/webgpu-param-upload-batching.md).

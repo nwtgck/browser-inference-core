@@ -33,7 +33,13 @@ def main():
     p.add_argument('--variant', choices=list(variants), required=True)
     p.add_argument('--fresh', action='store_true', help='Discard this profile/variant build tree before configuration')
     p.add_argument('--jobs',type=int,default=min(os.cpu_count() or 2, 8))
+    p.add_argument('--webgpu-param-upload-batching', action='store_true', help='Opt in to batched parameter uploads (WebGPU only)')
+    p.add_argument('--webgpu-tensor-copy', action='store_true', help='Opt in to experimental same-device GPU copies (WebGPU only)')
     a=p.parse_args(); cfg=profiles[a.profile]
+    if a.webgpu_param_upload_batching and not cfg['webgpu']:
+        p.error('--webgpu-param-upload-batching requires a WebGPU profile')
+    if a.webgpu_tensor_copy and not cfg['webgpu']:
+        p.error('--webgpu-tensor-copy requires a WebGPU profile')
     toolchain=runtime_toolchain(ROOT)
     src=ROOT/'vendor/llama.cpp'
     if not (src/'include/llama.h').exists(): p.error('Run git submodule update --init --recursive')
@@ -59,6 +65,8 @@ def main():
              '-DCMAKE_BUILD_TYPE=Release', '-DLCB_VARIANT='+a.variant,
              '-DLCB_MEMORY64='+('ON' if cfg['memory64'] else 'OFF'),
              '-DLCB_WEBGPU='+('ON' if cfg['webgpu'] else 'OFF'),
+             '-DLCB_WEBGPU_PARAM_UPLOAD_BATCHING='+('ON' if a.webgpu_param_upload_batching else 'OFF'),
+             '-DLCB_WEBGPU_TENSOR_COPY='+('ON' if a.webgpu_tensor_copy else 'OFF'),
              # The same reviewed WGSL/dispatch contract applies to all WebGPU profiles.
              # Explicit OFF keeps CPU profiles on the original source path.
              '-DLCB_WEBGPU_MOE_DIRECT_SLOT='+('ON' if cfg['webgpu'] else 'OFF'),

@@ -13,6 +13,23 @@ import time
 from package_runtime import validate
 
 
+def require_publishable_tensor_copy(manifest: dict) -> None:
+    """Keep opt-in WebGPU source experiments out of the ordinary artifact channel.
+
+    Older provenance predates this option and remains publishable. Once present,
+    exactly one explicit OFF is required; ambiguous/typed overrides fail closed.
+    """
+    for profile in manifest['profiles'].values():
+        for provenance in profile['variants'].values():
+            for name in ('LCB_WEBGPU_TENSOR_COPY', 'LCB_WEBGPU_PARAM_UPLOAD_BATCHING'):
+                options = [option for option in provenance.get('cmakeCommand', [])
+                           if option.startswith('-D' + name)]
+                if options and options != ['-D' + name + '=OFF']:
+                    raise ValueError('Experimental tensor-copy/parameter-upload builds are artifact-only; '
+                                     'publication requires a single explicit OFF option')
+
+
+
 def run(*args,cwd=None,check=True,env=None):
     return subprocess.run(args,cwd=cwd,check=check,text=True,capture_output=True,env=env)
 
@@ -22,6 +39,7 @@ def publish(package: Path, remote: str, branch='artifacts', attempts=20):
     run('git','check-ref-format','--branch',branch)
     validate(package)
     manifest=json.loads((package/'manifest.json').read_text())
+    require_publishable_tensor_copy(manifest)
     source=manifest['sourceCommit']
     with tempfile.TemporaryDirectory(prefix='lcb-publish-') as tmp:
         work=Path(tmp)

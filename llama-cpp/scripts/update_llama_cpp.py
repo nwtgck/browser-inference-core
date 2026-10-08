@@ -14,6 +14,8 @@ from urllib.parse import quote, urlencode
 
 from github_api import ApiError, GitHub, full_sha, git, git_auth_env, repository_name
 from prepare_mtmd import PATCH_DIRECTORY, prepare
+import prepare_webgpu_tensor_copy as tensor_copy
+import prepare_webgpu_source as webgpu_source
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = 'ggml-org/llama.cpp'
@@ -125,7 +127,23 @@ def overlay_preflight(root: Path) -> dict:
             prepare(root / 'vendor/llama.cpp', Path(tmp) / 'vision', root / f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch', capture_output=True)
             prepare(root / 'vendor/llama.cpp', Path(tmp) / 'audio', root / f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch',
                     capture_output=True, filename='mtmd-audio.cpp')
-        return {'status': 'passed', 'scope': 'patch application only; not compilation or inference'}
+            # Optional copy incompatibility must not block unchanged default builds.
+            try:
+                tensor_copy.prepare(root / 'vendor/llama.cpp', Path(tmp) / 'tensor-copy',
+                                    root / PATCH_DIRECTORY / tensor_copy.PATCH_NAME)
+                optional = {'status': 'passed'}
+            except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                optional = {'status': 'failed', 'error': str(error)[:4000]}
+            optional_sources = {}
+            for name, copy_on in [('webgpu-param-upload-batching', False), ('webgpu-copy-and-param-upload-batching', True)]:
+                try:
+                    webgpu_source.prepare(root / 'vendor/llama.cpp', Path(tmp) / name,
+                                          copy=copy_on, batch=True, patch_root=root / PATCH_DIRECTORY)
+                    optional_sources[name] = {'status': 'passed'}
+                except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                    optional_sources[name] = {'status': 'failed', 'error': str(error)[:4000]}
+        return {'status': 'passed', 'scope': 'patch application only; not compilation or inference',
+                'optionalOverlays': {'webgpu-tensor-copy': optional, **optional_sources}}
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         # A failed overlay still leaves a candidate branch for human repair.
         # No automatic PR, build dispatch, patch fuzz, or patch deletion.

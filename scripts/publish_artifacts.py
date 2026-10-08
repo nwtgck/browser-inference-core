@@ -18,6 +18,23 @@ from package_runtime import identity, validate
 from pipeline_metrics import measured, span
 
 
+def require_publishable_tensor_copy(manifest: dict) -> None:
+    """Keep opt-in WebGPU source experiments out of the ordinary artifact channel.
+
+    Older provenance predates this option and remains publishable. Once present,
+    exactly one explicit OFF is required; ambiguous/typed overrides fail closed.
+    """
+    for profile in manifest['profiles'].values():
+        for provenance in profile['variants'].values():
+            for name in ('LCB_WEBGPU_TENSOR_COPY', 'LCB_WEBGPU_PARAM_UPLOAD_BATCHING'):
+                options = [option for option in provenance.get('cmakeCommand', [])
+                           if option.startswith('-D' + name)]
+                if options and options != ['-D' + name + '=OFF']:
+                    raise ValueError('Experimental tensor-copy/parameter-upload builds are artifact-only; '
+                                     'publication requires a single explicit OFF option')
+
+
+
 def run(*args,cwd=None,check=True,env=None):
     phases = {'ls-remote': 'git.remote_head', 'fetch': 'git.fetch_parent',
               'add': 'git.stage', 'write-tree': 'git.write_tree',
@@ -100,6 +117,8 @@ def publish(package: Path, remote: str, branch='artifacts', attempts=20, *, expe
     # the private snapshot below: that is the tree actually committed and pushed.
     with span('publish.input_check'):
         manifest=validate(package,check_npm_pack=False)
+    llama_manifest = package / manifest['runtimes']['llama-cpp']['manifest']
+    require_publishable_tensor_copy(json.loads(llama_manifest.read_text()))
     source=manifest['sourceCommit']
     with tempfile.TemporaryDirectory(prefix='lcb-publish-') as tmp:
         work=Path(tmp)
@@ -114,6 +133,8 @@ def publish(package: Path, remote: str, branch='artifacts', attempts=20, *, expe
         with span('publish.snapshot_validate'):
             if validate(work) != manifest:
                 raise ValueError('Package manifest changed while staging publication')
+        require_publishable_tensor_copy(json.loads(
+            (work / manifest['runtimes']['llama-cpp']['manifest']).read_text()))
         print(f'[publication] stage-and-validate: {time.monotonic()-started:.3f}s',file=sys.stderr)
         git_started=time.monotonic()
         run('git','init','-q',cwd=work)

@@ -1,0 +1,24 @@
+{
+  "upstream_commit": "d81235049384534c167caea52b85a694f6103d14",
+  "source": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+  "sha256": "a37cb03d2d85b3ecdcd203dd515f35f22b1ca895934b2aab17066d575299ba84",
+  "test_backend_source": "ggml/src/ggml-backend.cpp",
+  "test_backend_sha256": "cdb79f2937aa147084a76f949adc0eb760ad1883e0ccc015bb4e0f599c89bd5f",
+  "dawn_release": "v20260908.214631",
+  "dawn_revision": "94c3c9cc0d5fb2e85aebb370fa8d37b71aa34655",
+  "dawn_archive_sha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
+  "dawn_header_sha256": {
+    "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
+    "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
+    "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
+    "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
+  },
+  "ggml_header_sha256": {
+    "ggml/include/ggml.h": "12ee71f99db7db9b353bc02b1fbb57c344ee17c01ac5fb7952b41a637a747ea9",
+    "ggml/include/ggml-backend.h": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+    "ggml/include/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+    "ggml/include/gguf.h": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+    "ggml/src/ggml-backend-impl.h": "4e861c8e23d3d7b0d99d8e0836e68564af58f8597d75d7bbb732857d7a632fa7",
+    "ggml/src/ggml-impl.h": "43564db0238aebb7ed68501e346c194866b5dac218d1d37b26baff9f458c00d3"
+  }
+}

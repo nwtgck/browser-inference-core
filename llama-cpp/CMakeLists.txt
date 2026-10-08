@@ -10,6 +10,8 @@ option(LCB_NATIVE_CHECK "Build a native shared library for boundary tests, not a
 option(LCB_MEMORY64 "Use 64-bit WebAssembly memory" OFF)
 option(LCB_WEBGPU "Link the WebGPU backend" OFF)
 # Experimental downstream shader optimization; see docs/moe-direct-slot.md.
+option(LCB_WEBGPU_PARAM_UPLOAD_BATCHING "Batch experimental WebGPU parameter uploads" OFF)
+option(LCB_WEBGPU_TENSOR_COPY "Enable experimental same-device WebGPU copies" OFF)
 option(LCB_WEBGPU_MOE_DIRECT_SLOT "Use the reviewed direct selected-slot MoE shader" OFF)
 # Compatibility workaround for the pinned backend, not a new BF16 kernel.
 # See docs/webgpu-bf16-projector.md for memory/precision costs and removal criteria.
@@ -27,6 +29,10 @@ string(JSON LCB_ASSERTIONS GET "${LCB_VARIANTS}" "${LCB_VARIANT}" assertions)
 string(JSON LCB_ENVIRONMENT GET "${LCB_VARIANTS}" "${LCB_VARIANT}" environment)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/config/variants.json")
+
+if((LCB_WEBGPU_TENSOR_COPY OR LCB_WEBGPU_PARAM_UPLOAD_BATCHING) AND NOT LCB_WEBGPU)
+    message(FATAL_ERROR "WebGPU source experiments require WebGPU")
+endif()
 
 if(LCB_WEBGPU_MOE_DIRECT_SLOT AND NOT LCB_WEBGPU)
     message(FATAL_ERROR "MoE direct-slot requires WebGPU")
@@ -106,6 +112,10 @@ add_subdirectory("${LCB_LLAMA_SOURCE}" "llama")
 
 if(LCB_WEBGPU_MOE_DIRECT_SLOT)
     include(cmake/MoeDirectSlotOverlay.cmake)
+endif()
+
+if(LCB_WEBGPU_TENSOR_COPY OR LCB_WEBGPU_PARAM_UPLOAD_BATCHING)
+    include(cmake/WebgpuSourceOverlay.cmake)
 endif()
 
 # All browser profiles are single-threaded, including CPU and WebGPU.
