@@ -108,6 +108,10 @@ if(LCB_WEBGPU_MOE_DIRECT_SLOT)
     include(cmake/MoeDirectSlotOverlay.cmake)
 endif()
 
+if(LCB_WEBGPU)
+    include(cmake/WebgpuSourceOverlay.cmake)
+endif()
+
 # All browser profiles are single-threaded, including CPU and WebGPU.
 # The overlay retains upstream behavior in native/pthread builds.
 include(cmake/MtmdAudioOverlay.cmake)

@@ -11,6 +11,14 @@ JOBS = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', WORKFLOW.spl
 
 
 class PipelineWorkflow(unittest.TestCase):
+    def test_ordinary_push_uses_existing_build_and_publication_path(self):
+        self.assertIn('  push:', WORKFLOW)
+        self.assertNotIn('webgpu_tensor_copy', WORKFLOW)
+        self.assertNotIn('webgpu_param_upload_batching', WORKFLOW)
+        self.assertNotIn('experimental source', WORKFLOW)
+        self.assertIn('scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT"', JOBS['compile'])
+        self.assertIn('github.actor', JOBS['publish'])
+
     def test_checkout_keeps_recursive_notices_for_selected_runtime(self):
         for name in ('test', 'compile', 'build', 'image-native', 'image-compile', 'image-build'):
             block = JOBS[name]
