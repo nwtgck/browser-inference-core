@@ -15,6 +15,7 @@ from urllib.parse import quote, urlencode
 from github_api import ApiError, GitHub, full_sha, git, git_auth_env, repository_name
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_webgpu_source as webgpu_source
+import prepare_sampler as sampler
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = 'ggml-org/llama.cpp'
@@ -126,6 +127,8 @@ def overlay_preflight(root: Path) -> dict:
             prepare(root / 'vendor/llama.cpp', Path(tmp) / 'vision', root / f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch', capture_output=True)
             prepare(root / 'vendor/llama.cpp', Path(tmp) / 'audio', root / f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch',
                     capture_output=True, filename='mtmd-audio.cpp')
+            sampler.prepare(root / 'vendor/llama.cpp', Path(tmp) / 'sampler',
+                            root / PATCH_DIRECTORY / sampler.PATCH_NAME)
             webgpu_source.prepare(root / 'vendor/llama.cpp', Path(tmp) / 'webgpu',
                                   patch_root=root / PATCH_DIRECTORY)
         return {'status': 'passed', 'scope': 'patch application only; not compilation or inference'}

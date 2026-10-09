@@ -27,6 +27,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
         self.assertIn('Removal condition', register)
         self.assertFalse((ROOT / 'patches').exists(), 'Do not leave a second generic patch directory')
         self.assertEqual({p.name for p in directory.glob('*.patch')}, {
+            'llama-sampler-single-sync.patch',
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-moe-direct-slot.patch', 'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'llama-model-loader-webgpu-chunked-upload.patch',

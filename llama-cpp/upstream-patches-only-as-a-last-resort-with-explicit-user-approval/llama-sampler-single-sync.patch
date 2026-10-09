@@ -1,0 +1,53 @@
+--- a/src/llama-sampler.cpp
++++ b/src/llama-sampler.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-sampler.h"
++#include "llama-context.h"
+ 
+ #include "llama-impl.h"
+ #include "llama-vocab.h"
+@@ -893,10 +894,14 @@
+ }
+ 
+ llama_token llama_sampler_sample(struct llama_sampler * smpl, struct llama_context * ctx, int32_t idx) {
+-    const llama_token   sampled_token  = llama_get_sampled_token_ith     (ctx, idx);
+-    const float *       sampled_probs  = llama_get_sampled_probs_ith     (ctx, idx);
+-    const float *       sampled_logits = llama_get_sampled_logits_ith    (ctx, idx);
+-    const llama_token * sampled_ids    = llama_get_sampled_candidates_ith(ctx, idx);
++    // Output accessors below only read/reorder host outputs. Synchronize once for
++    // this sample; standalone public getters retain their own synchronization.
++    ctx->synchronize();
++
++    const llama_token   sampled_token  = ctx->get_sampled_token_ith(idx);
++    const float *       sampled_probs  = ctx->get_sampled_probs_ith(idx);
++    const float *       sampled_logits = ctx->get_sampled_logits_ith(idx);
++    const llama_token * sampled_ids    = ctx->get_sampled_candidates_ith(idx);
+ 
+     // If a backend sampler has already sampled a token, return it.
+     if (sampled_token != LLAMA_TOKEN_NULL) {
+@@ -924,19 +929,22 @@
+     auto & cur = *cur_ptr;
+ 
+     if (sampled_probs) {
+-        const uint32_t sampled_probs_count = llama_get_sampled_probs_count_ith(ctx, idx);
++        const uint32_t sampled_probs_count = static_cast<uint32_t>(ctx->get_sampled_probs_count(idx));
+         cur.resize(sampled_probs_count);
+         for (uint32_t i = 0; i < sampled_probs_count; ++i) {
+             cur[i] = llama_token_data{sampled_ids[i], sampled_logits[i], sampled_probs[i]};
+         }
+     } else if (sampled_logits) {
+-        const uint32_t sampled_logits_count = llama_get_sampled_logits_count_ith(ctx, idx);
++        const uint32_t sampled_logits_count = static_cast<uint32_t>(ctx->get_sampled_logits_count(idx));
+         cur.resize(sampled_logits_count);
+         for (llama_token i = 0; i < (int)sampled_logits_count; i++) {
+             cur[i] = llama_token_data{sampled_ids[i], sampled_logits[i], 0.0f};
+         }
+     } else {
+-        const auto * logits = llama_get_logits_ith(ctx, idx);
++        const auto * logits = ctx->get_sampled_logits_ith(idx);
++        if (!logits) {
++            logits = ctx->get_logits_ith(idx);
++        }
+         GGML_ASSERT(logits != nullptr);
+         cur.resize(n_vocab);
+         for (llama_token token_id = 0; token_id < n_vocab; token_id++) {

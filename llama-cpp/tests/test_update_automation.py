@@ -146,6 +146,9 @@ class ProposalApi:
 
 class LocalGitProposal(unittest.TestCase):
     def setUp(self):
+        sampler = patch.object(update.sampler, 'prepare')
+        self.sampler_prepare = sampler.start()
+        self.addCleanup(sampler.stop)
         webgpu = patch.object(update.webgpu_source, 'prepare')
         self.webgpu_prepare = webgpu.start()
         self.addCleanup(webgpu.stop)
@@ -249,6 +252,13 @@ class LocalGitProposal(unittest.TestCase):
         self.assertIn('develop...' + result['branch'], unquote(urlparse(result['compareUrl']).path))
         self.assertNotIn('pullRequest', result)
         self.assertNotIn('pullRequestUrl', result)
+
+    def test_preflight_fails_when_sampler_contract_changes(self):
+        self.sampler_prepare.side_effect = ValueError('Sampler synchronization/output contract needs semantic review')
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('Sampler synchronization/output contract', result['error'])
+        self.sampler_prepare.assert_called_once()
 
     def test_no_op_creates_no_branch_or_remote_operations(self):
         self.target['commit'] = self.old

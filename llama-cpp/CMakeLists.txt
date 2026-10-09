@@ -103,6 +103,7 @@ set(GGML_WEBGPU ${LCB_WEBGPU} CACHE BOOL "" FORCE)
 set(GGML_WEBGPU_JSPI ${LCB_JSPI} CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${LCB_LLAMA_SOURCE}" "llama")
+include(cmake/SamplerOverlay.cmake)
 
 if(LCB_WEBGPU_MOE_DIRECT_SLOT)
     include(cmake/MoeDirectSlotOverlay.cmake)

@@ -15,6 +15,7 @@ from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_moe_direct_slot as moe
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
+import prepare_sampler as sampler
 
 
 def file_identity(path: Path) -> dict:
@@ -38,6 +39,8 @@ def collect(root: Path, manifest: dict) -> dict:
     audio_patch = f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch'
     audio_source = 'tools/mtmd/mtmd-audio.cpp'
     patch_files = sorted(path.relative_to(root).as_posix() for path in (root / PATCH_DIRECTORY).rglob('*.patch'))
+    # The common sampler is classified independently below.
+    patch_files = [path for path in patch_files if path != f'{PATCH_DIRECTORY}/{sampler.PATCH_NAME}']
     enabled = []
     audio_enabled = []
     moe_enabled = []
@@ -75,6 +78,8 @@ def collect(root: Path, manifest: dict) -> dict:
             if options[0].endswith('=ON'):
                 enabled.append(profile + '/' + variant)
     with tempfile.TemporaryDirectory(prefix='lcb-report-overlay-') as temporary:
+        sampled = sampler.prepare(vendor, Path(temporary) / 'sampler', root / PATCH_DIRECTORY / sampler.PATCH_NAME)
+        sampler_identity = file_identity(sampled)
         patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
         patched_identity = file_identity(patched)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
@@ -111,6 +116,22 @@ def collect(root: Path, manifest: dict) -> dict:
         'vendorCheckoutModified': False,
         'inventoryScope': f'Known build-tree overlays plus every *.patch file under {PATCH_DIRECTORY}/; not an exhaustive compiler transformation inventory.',
         'sourceOverlays': [{
+            'id': 'sampler-single-sync',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': sampler.SOURCE_PATH, **file_identity(vendor / sampler.SOURCE_PATH)},
+            'contextSource': {'path': sampler.CONTEXT_PATH, **file_identity(vendor / sampler.CONTEXT_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{sampler.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / sampler.PATCH_NAME)},
+            'compiledCopy': {'logicalUpstreamPath': sampler.SOURCE_PATH, **sampler_identity},
+            'reviewedContextContract': sampler.CONTEXT_CONTRACT_SHA256,
+            'application': {
+                'preparationScript': 'scripts/prepare_sampler.py',
+                'cmakeHook': 'cmake/SamplerOverlay.cmake',
+                'enabledProfileVariants': sorted(profile + '/' + variant
+                    for profile, info in manifest['profiles'].items() for variant in info['variants']),
+            },
+            'behavior': 'One synchronization per native sampler_sample; standalone public getters and sampling decisions retain their contracts. Common CPU/WebGPU path; no measured speed claim.',
+        }, {
             'id': 'webgpu-vision-bf16-projector',
             'kind': 'build-tree-source-overlay',
             'upstreamSource': {'path': upstream_path, **file_identity(vendor / upstream_path)},

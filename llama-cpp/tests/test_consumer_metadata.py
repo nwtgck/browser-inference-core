@@ -241,6 +241,13 @@ class OverlayProvenance(unittest.TestCase):
                 'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if enabled else 'OFF'),
                     '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU=OFF'],
             } for variant in ['browser', 'test']}}
+        for path in (provenance.sampler.SOURCE_PATH, provenance.sampler.CONTEXT_PATH):
+            (self.vendor / path).write_text('Sampler provenance fixture\n')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.sampler.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.sampler.PATCH_NAME)
+        sampler_prepare = patch.object(provenance.sampler, 'prepare', return_value=self.vendor / provenance.sampler.SOURCE_PATH)
+        sampler_prepare.start()
+        self.addCleanup(sampler_prepare.stop)
         self.prepared = self.root / 'prepared.cpp'
         self.prepared.write_bytes(b'combined source fixture')
         (self.prepared.parent / 'llama-model-loader.cpp').write_bytes(b'loader source fixture')
@@ -256,9 +263,19 @@ class OverlayProvenance(unittest.TestCase):
         self.mock_git.start()
         self.addCleanup(self.mock_git.stop)
 
+    def test_sampler_provenance_covers_every_existing_profile_variant(self):
+        report = provenance.collect(self.root, self.manifest)
+        item = next(entry for entry in report['sourceOverlays'] if entry['id'] == 'sampler-single-sync')
+        self.assertEqual(item['application']['enabledProfileVariants'], sorted(
+            profile + '/' + variant for profile, info in self.manifest['profiles'].items()
+            for variant in info['variants']))
+        self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+        self.assertEqual(item['compiledCopy']['sha256'], hashlib.sha256(b'Sampler provenance fixture\n').hexdigest())
+        self.assertEqual(item['reviewedContextContract'], provenance.sampler.CONTEXT_CONTRACT_SHA256)
+
     def test_overlay_hashes_describe_pristine_and_actual_patched_copy(self):
         result = provenance.collect(self.root, self.manifest)
-        overlay = result['sourceOverlays'][0]
+        overlay = next(item for item in result['sourceOverlays'] if item['id'] == 'webgpu-vision-bf16-projector')
         self.assertFalse(result['vendorCheckoutModified'])
         self.assertEqual(overlay['compiledCopy']['sha256'], hashlib.sha256(b'before\npatched\nafter\n').hexdigest())
         self.assertEqual(overlay['upstreamSource']['sha256'], hashlib.sha256(b'before\noriginal\nafter\n').hexdigest())
@@ -289,6 +306,7 @@ class OverlayProvenance(unittest.TestCase):
     def test_retained_overlays_are_independent_and_use_only_the_renamed_directory(self):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
+            'sampler-single-sync',
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
             'experimental-webgpu-moe-direct-slot', 'webgpu-same-device-tensor-copy',
             'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token'})

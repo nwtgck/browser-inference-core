@@ -11,6 +11,27 @@ neither depends on a TTS-generation copy. The current reference pin is v0.5.0,
 `7fe450e19305b828c199d602c23a8337aaa1f03b`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
+## Native sampler single synchronization (candidate for user adoption)
+
+- **Patch:** `llama-sampler-single-sync.patch`, reviewed against d81235049384534c167caea52b85a694f6103d14.
+- **Purpose/scope:** one synchronization inside native `llama_sampler_sample`, then
+  existing host-output accessors in their original order. Common CPU/WebGPU path;
+  standalone public getters, counts/casts, backend sampling, RNG and accept order
+  remain unchanged. This local experiment/patch preparation is authorized; adoption
+  of this additional upstream divergence remains the owner's decision.
+- **Integration:** isolated sampler translation unit on the existing llama target,
+  independent of SSM/WebGPU overlays. No extra profile, option or public API.
+- **No-patch alternative:** retain existing repeated waits or wait for upstream.
+  Related PR30196 concerns common_sampler and does not replace this native path.
+- **Maintenance:** patch application plus relevant sampler/context function guards
+  require semantic review if synchronization, output reordering or accessors change.
+  Unrelated source functions and upstream commit identity are not hash allowlists.
+- **Validation:** preparation/contract tests, native compilation and one local
+  JSPI64 software-WebGPU tiny-model comparison passed (matching logits/tokens).
+  This does not establish browser/hardware coverage or a performance improvement.
+- **Removal condition:** upstream provides equivalent native-sampler behavior, or
+  the owner drops this optimization. Remove its independent overlay/provenance too.
+
 ## Vision BF16 compatibility/performance
 
 - **Patch:** `mtmd-webgpu-bf16.patch`.
