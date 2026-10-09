@@ -37,6 +37,20 @@ UNIMPLEMENTED_PUBLIC_FUNCTIONS = {
         'declared in ggml-cpu.h but not implemented by the pinned upstream',
 }
 
+# Explicit synchronous callback-only metadata surface. Normal generated APIs
+# retain their JSPI/Promise behavior. These public getters inspect registry,
+# operation and buffer metadata; none submits GPU work or reads tensor values.
+# Audit this bounded list against the pinned backends when updating upstream.
+CALLBACK_METADATA_GETTERS = {
+    'ggml_op_desc': ('pointer', ('pointer',)),
+    'ggml_backend_buffer_name': ('pointer', ('pointer',)),
+    'ggml_backend_buffer_is_host': ('boolean', ('pointer',)),
+    'ggml_backend_dev_count': ('u64', ()),
+    'ggml_backend_dev_get': ('pointer', ('u64',)),
+    'ggml_backend_dev_name': ('pointer', ('pointer',)),
+    'ggml_backend_dev_supports_op': ('boolean', ('pointer', 'pointer')),
+}
+
 def walk(node):
     yield node
     for child in node.get('inner', []):
@@ -156,7 +170,11 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
            'uint64_t lcb_malloc(uint64_t size) { return (uint64_t)(uintptr_t)malloc(lcb_checked_pointer(size)); }',
            'void lcb_free(uint64_t ptr) { free((void *)lcb_checked_pointer(ptr)); }',
            'uint32_t lcb_pointer_bytes(void) { return sizeof(void *); }',
-           'uint32_t lcb_abi_version(void) { return 1; }']
+           'uint32_t lcb_abi_version(void) { return 1; }',
+           'uint32_t lcb_callback_metadata_version(void) { return 1; }']
+    missing = CALLBACK_METADATA_GETTERS.keys() - {f['name'] for f in functions}
+    if missing:
+        raise ValueError(f'Callback metadata getters need upstream review: {sorted(missing)}')
     for f in functions:
         args, callargs, guards = [], [], []
         if f['returnKind'] == 'record':
@@ -181,6 +199,14 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
         else: wt=wire_type(rk,rt); statement=f'return ({wt}){call};'
         cpp += [f'{wt} lcb_{f["name"]}({", ".join(args) or "void"}) {{',
                 *['  '+g for g in guards], '  '+statement, '}']
+        if f['name'] in CALLBACK_METADATA_GETTERS:
+            # A separate export avoids depending on WebAssembly.promising()
+            # behavior, or changing the ordinary low-level API's contract.
+            if (rk, tuple(p['kind'] for p in f['parameters'])) != CALLBACK_METADATA_GETTERS[f['name']]:
+                raise ValueError(f'Unexpected callback getter signature: {f["name"]}')
+            cpp += [f'{wt} lcb_callback_{f["name"]}({", ".join(args) or "void"}) {{',
+                    *['  '+g for g in guards], '  '+statement, '}']
+
     for i,r in enumerate(records): r['id']=i
     for name, expr in [('sizeof_record', 'sizeof({ctype})'), ('alignof_record', 'alignof({ctype})')]:
         cpp += [f'uint64_t lcb_{name}(uint32_t record) {{ switch(record) {{']
@@ -198,14 +224,18 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     cpp += ['int64_t lcb_constant(uint32_t id) { switch(id) {']
     cpp += [f'case {i}: return (int64_t)({name});' for i,name in enumerate(constants)]
     cpp += ['default: throw std::out_of_range("constant id"); } }', '}']
-    helper_names = ['malloc','free','pointer_bytes','abi_version','sizeof_record','alignof_record','offsetof_field','sizeof_field','constant','schema_hash']
+    helper_names = ['malloc','free','pointer_bytes','abi_version','sizeof_record','alignof_record','offsetof_field','sizeof_field','constant','schema_hash','callback_metadata_version']
     exports = ['_lcb_'+n for n in helper_names] + [f['export'] for f in functions]
+    exports += ['_lcb_callback_'+name for name in sorted(CALLBACK_METADATA_GETTERS)]
     # Direct exports remain available for expert callers bound to this exact native ABI.
     exports += ['_'+f['name'] for f in functions] + ['_malloc','_free']
     (output/'exports.json').write_text(json.dumps(exports,indent=2)+'\n')
     (output/'jspi-exports.json').write_text(json.dumps([f['export'][1:] for f in functions] + [f['name'] for f in functions],indent=2)+'\n')
     schema={'abiVersion':1,'pointerRepresentation':'bigint-u64','functions':functions,
-            'records':records,'constants':constants,'excluded':excluded}
+            'records':records,'constants':constants,'excluded':excluded,
+            'callbackMetadata': {'version': 1, 'getters': [
+                {'name': name, 'export': '_lcb_callback_'+name}
+                for name in sorted(CALLBACK_METADATA_GETTERS)]}}
     schema_text=json.dumps(schema,indent=2)+'\n'
     schema_hash=hashlib.sha256(schema_text.encode()).hexdigest()
     cpp.insert(-1, f'uint64_t lcb_schema_hash(void) {{ return (uint64_t)(uintptr_t)"{schema_hash}"; }}')

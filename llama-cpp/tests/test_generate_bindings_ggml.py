@@ -35,7 +35,8 @@ class GgmlBindings(unittest.TestCase):
             function('ggml_threadpool_resume', 'void', 'struct ggml_threadpool *'),
         ]}
         with tempfile.TemporaryDirectory(prefix='lcb-unimplemented-binding-') as temp, \
-             patch.object(generate_bindings.subprocess, 'check_output', return_value=json.dumps(ast)):
+             patch.object(generate_bindings.subprocess, 'check_output', return_value=json.dumps(ast)), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
             output = Path(temp)
             schema = generate_bindings.generate(source, output, 'clang')
             self.assertEqual({entry['name'] for entry in schema['functions']},
@@ -104,7 +105,8 @@ class GgmlBindings(unittest.TestCase):
         ]}
         with tempfile.TemporaryDirectory(prefix='lcb-ggml-bindings-') as temp, \
              patch.object(generate_bindings.subprocess, 'check_output',
-                          return_value=json.dumps(ast)):
+                          return_value=json.dumps(ast)), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
             output = Path(temp)
             schema = generate_bindings.generate(source, output, 'clang')
             names = {entry['name'] for entry in schema['functions']}
