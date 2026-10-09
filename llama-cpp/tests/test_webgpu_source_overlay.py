@@ -35,6 +35,49 @@ class WebgpuSourceOverlay(unittest.TestCase):
         self.assertEqual(before, (self.upstream / source.SOURCE_PATH).read_bytes())
         self.assertEqual(loader_before, (self.upstream / source.LOADER_PATH).read_bytes())
 
+    def test_repository_nested_builds_apply_all_patches_without_touching_git_state(self):
+        upstream_before = {name: (self.upstream / name).read_bytes()
+                           for name in (source.SOURCE_PATH, source.LOADER_PATH)}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checkout = root / 'checkout'
+            subprocess.run(['git', 'init', '--quiet', str(checkout)], check=True)
+            (checkout / '.gitignore').write_text('llama-cpp/build/\n')
+            subprocess.run(['git', 'add', '.gitignore'], cwd=checkout, check=True)
+            subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                            'commit', '--quiet', '-m', 'fixture'], cwd=checkout, check=True)
+            worktree = root / 'worktree'
+            subprocess.run(['git', 'worktree', 'add', '--quiet', '--detach', str(worktree)],
+                           cwd=checkout, check=True)
+            self.assertTrue((worktree / '.git').is_file())
+            for parent in (checkout, worktree):
+                (parent / 'keep-untracked.txt').write_text('must remain unchanged')
+                status = subprocess.check_output(['git', 'status', '--porcelain=v1'], cwd=parent)
+                index = subprocess.check_output(['git', 'ls-files', '--stage'], cwd=parent)
+                with self.subTest(worktree=parent == worktree):
+                    build = parent / 'llama-cpp/build/webgpu-wasm32-jspi/test/webgpu-source-overlay'
+                    result = source.prepare(self.upstream, build)
+                    self.assertEqual(copy.digest(result), source.OUTPUT_SHA256)
+                    self.assertEqual(copy.digest(build / 'llama-model-loader.cpp'), source.LOADER_OUTPUT_SHA256)
+                    stamp = result.stat().st_mtime_ns
+                    self.assertEqual(source.prepare(self.upstream, build).stat().st_mtime_ns, stamp)
+                    self.assertEqual(subprocess.check_output(['git', 'status', '--porcelain=v1'], cwd=parent), status)
+                    self.assertEqual(subprocess.check_output(['git', 'ls-files', '--stage'], cwd=parent), index)
+                    self.assertEqual((parent / 'keep-untracked.txt').read_text(), 'must remain unchanged')
+        for name, before in upstream_before.items():
+            self.assertEqual((self.upstream / name).read_bytes(), before)
+
+    def test_patch_environment_does_not_inherit_repository_selectors(self):
+        context = {key: '/enclosing/repository' for key in
+                   ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE')}
+        with patch.dict(os.environ, {**context, 'GIT_CEILING_DIRECTORIES': '/wrong', 'KEEP_ME': 'value'}):
+            env = source.patch_environment(Path('/build/overlay/scratch'))
+            self.assertEqual(env['GIT_CEILING_DIRECTORIES'], '/build/overlay')
+            self.assertEqual(env['KEEP_ME'], 'value')
+            for key in context:
+                self.assertNotIn(key, env)
+                self.assertEqual(os.environ[key], context[key])
+
     def test_patch_result_and_overlap_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); patches = root / 'patches'; patches.mkdir()

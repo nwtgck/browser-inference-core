@@ -2,6 +2,7 @@
 """Compose required WebGPU changes into source-bound translation units."""
 from __future__ import annotations
 import argparse
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -32,6 +33,16 @@ LOADER_INPUTS = {
 }
 
 
+def patch_environment(work: Path) -> dict[str, str]:
+    # --no-index still discovers enclosing repositories and can silently skip
+    # Git-format patch paths when CI's build directory is inside the checkout.
+    env = os.environ.copy()
+    for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'):
+        env.pop(key, None)
+    env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
+    return env
+
+
 def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY) -> Path:
     source, output = source.resolve(), output.resolve()
     if output == source or source in output.parents or output in source.parents:
@@ -55,10 +66,11 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         loader = work / LOADER_PATH
         loader.parent.mkdir(parents=True)
         shutil.copyfile(source / LOADER_PATH, loader)
+        env = patch_environment(work)
         for patch, _ in selected:
             for flags in (['--check'], []):
                 subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(patch.resolve())],
-                               cwd=work, check=True, capture_output=True)
+                               cwd=work, env=env, check=True, capture_output=True)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:
