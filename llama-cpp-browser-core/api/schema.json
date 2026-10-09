@@ -22161,5 +22161,38 @@
       "name": "mtmd_helper_video_read_next",
       "reason": "requires subprocess video support (MTMD_VIDEO=OFF)"
     }
-  ]
+  ],
+  "callbackMetadata": {
+    "version": 1,
+    "getters": [
+      {
+        "name": "ggml_backend_buffer_is_host",
+        "export": "_lcb_callback_ggml_backend_buffer_is_host"
+      },
+      {
+        "name": "ggml_backend_buffer_name",
+        "export": "_lcb_callback_ggml_backend_buffer_name"
+      },
+      {
+        "name": "ggml_backend_dev_count",
+        "export": "_lcb_callback_ggml_backend_dev_count"
+      },
+      {
+        "name": "ggml_backend_dev_get",
+        "export": "_lcb_callback_ggml_backend_dev_get"
+      },
+      {
+        "name": "ggml_backend_dev_name",
+        "export": "_lcb_callback_ggml_backend_dev_name"
+      },
+      {
+        "name": "ggml_backend_dev_supports_op",
+        "export": "_lcb_callback_ggml_backend_dev_supports_op"
+      },
+      {
+        "name": "ggml_op_desc",
+        "export": "_lcb_callback_ggml_op_desc"
+      }
+    ]
+  }
 }

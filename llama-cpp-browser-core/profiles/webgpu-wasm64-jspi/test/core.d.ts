@@ -287,6 +287,7 @@ interface WasmModule {
   _free(_0: BigInt): void;
   _lcb_pointer_bytes(): number;
   _lcb_abi_version(): number;
+  _lcb_callback_metadata_version(): number;
   _lcb_ggml_abs(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _ggml_abs(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_ggml_abs_inplace(_0: BigInt, _1: BigInt): Promise<BigInt>;
@@ -349,8 +350,10 @@ interface WasmModule {
   _ggml_backend_buffer_init_tensor(_0: BigInt, _1: BigInt): Promise<number>;
   _lcb_ggml_backend_buffer_is_host(_0: BigInt): Promise<number>;
   _ggml_backend_buffer_is_host(_0: BigInt): Promise<number>;
+  _lcb_callback_ggml_backend_buffer_is_host(_0: BigInt): number;
   _lcb_ggml_backend_buffer_name(_0: BigInt): Promise<BigInt>;
   _ggml_backend_buffer_name(_0: BigInt): Promise<BigInt>;
+  _lcb_callback_ggml_backend_buffer_name(_0: BigInt): BigInt;
   _lcb_ggml_backend_buffer_reset(_0: BigInt): Promise<void>;
   _ggml_backend_buffer_reset(_0: BigInt): Promise<void>;
   _lcb_ggml_backend_buffer_set_usage(_0: BigInt, _1: number): Promise<void>;
@@ -403,10 +406,12 @@ interface WasmModule {
   _ggml_backend_dev_by_type(_0: number): Promise<BigInt>;
   _lcb_ggml_backend_dev_count(): Promise<BigInt>;
   _ggml_backend_dev_count(): Promise<BigInt>;
+  _lcb_callback_ggml_backend_dev_count(): BigInt;
   _lcb_ggml_backend_dev_description(_0: BigInt): Promise<BigInt>;
   _ggml_backend_dev_description(_0: BigInt): Promise<BigInt>;
   _lcb_ggml_backend_dev_get(_0: BigInt): Promise<BigInt>;
   _ggml_backend_dev_get(_0: BigInt): Promise<BigInt>;
+  _lcb_callback_ggml_backend_dev_get(_0: BigInt): BigInt;
   _lcb_ggml_backend_dev_get_props(_0: BigInt, _1: BigInt): Promise<void>;
   _ggml_backend_dev_get_props(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_ggml_backend_dev_host_buffer_type(_0: BigInt): Promise<BigInt>;
@@ -417,12 +422,14 @@ interface WasmModule {
   _ggml_backend_dev_memory(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_dev_name(_0: BigInt): Promise<BigInt>;
   _ggml_backend_dev_name(_0: BigInt): Promise<BigInt>;
+  _lcb_callback_ggml_backend_dev_name(_0: BigInt): BigInt;
   _lcb_ggml_backend_dev_offload_op(_0: BigInt, _1: BigInt): Promise<number>;
   _ggml_backend_dev_offload_op(_0: BigInt, _1: BigInt): Promise<number>;
   _lcb_ggml_backend_dev_supports_buft(_0: BigInt, _1: BigInt): Promise<number>;
   _ggml_backend_dev_supports_buft(_0: BigInt, _1: BigInt): Promise<number>;
   _lcb_ggml_backend_dev_supports_op(_0: BigInt, _1: BigInt): Promise<number>;
   _ggml_backend_dev_supports_op(_0: BigInt, _1: BigInt): Promise<number>;
+  _lcb_callback_ggml_backend_dev_supports_op(_0: BigInt, _1: BigInt): number;
   _lcb_ggml_backend_dev_type(_0: BigInt): Promise<number>;
   _ggml_backend_dev_type(_0: BigInt): Promise<number>;
   _lcb_ggml_backend_device_register(_0: BigInt): Promise<void>;
@@ -1093,6 +1100,7 @@ interface WasmModule {
   _ggml_numa_init(_0: number): Promise<void>;
   _lcb_ggml_op_desc(_0: BigInt): Promise<BigInt>;
   _ggml_op_desc(_0: BigInt): Promise<BigInt>;
+  _lcb_callback_ggml_op_desc(_0: BigInt): BigInt;
   _lcb_ggml_op_name(_0: number): Promise<BigInt>;
   _ggml_op_name(_0: number): Promise<BigInt>;
   _lcb_ggml_op_symbol(_0: number): Promise<BigInt>;
