@@ -217,7 +217,17 @@ class OverlayProvenance(unittest.TestCase):
         (self.vendor / provenance.moe.SHADER_PATH).write_text('Provenance shader fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME)
-        for path in ['scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
+        (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME)
+        (self.vendor / 'src').mkdir()
+        (self.vendor / provenance.webgpu_source.LOADER_PATH).write_text('Loader provenance fixture\n')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME)
+        for path in ['scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
+                     'docs/webgpu-tensor-copy.md', 'scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
                      'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md',
                      'cmake/MtmdAudioOverlay.cmake', 'docs/audio-single-thread.md']:
@@ -226,8 +236,17 @@ class OverlayProvenance(unittest.TestCase):
         for name, enabled in [('cpu-wasm32', False), ('webgpu-wasm64-jspi', True)]:
             self.manifest['profiles'][name] = {'variants': {variant: {
                 'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if enabled else 'OFF'),
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'],
+                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU=OFF'],
             } for variant in ['browser', 'test']}}
+        self.prepared = self.root / 'prepared.cpp'
+        self.prepared.write_bytes(b'combined source fixture')
+        (self.prepared.parent / 'llama-model-loader.cpp').write_bytes(b'loader source fixture')
+        source_prepare = patch.object(provenance.webgpu_source, 'prepare', return_value=self.prepared)
+        source_prepare.start()
+        self.addCleanup(source_prepare.stop)
+        source_verify = patch.object(provenance.tensor_copy, 'verify_reviewed_source', return_value=B)
+        source_verify.start()
+        self.addCleanup(source_verify.stop)
         self.mock_git = patch.object(provenance, 'git', side_effect=lambda *args, cwd: subprocess.CompletedProcess(
             args, 0, stdout=(A if cwd == self.root else B) + '\n'))
         self.mock_git.start()
@@ -267,7 +286,8 @@ class OverlayProvenance(unittest.TestCase):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
-            'experimental-webgpu-moe-direct-slot'})
+            'experimental-webgpu-moe-direct-slot', 'webgpu-same-device-tensor-copy',
+            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
             self.assertTrue(item['patch']['path'].startswith(provenance.PATCH_DIRECTORY + '/'))
@@ -300,8 +320,8 @@ class OverlayProvenance(unittest.TestCase):
 
     def test_moe_enabled_provenance_records_actual_prepared_bytes(self):
         variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
-        variant['cmakeCommand'] = [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON')
-                                   for arg in variant['cmakeCommand']] + ['-DLCB_WEBGPU=ON']
+        variant['cmakeCommand'] = [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON').replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON')
+                                   for arg in variant['cmakeCommand']]
         shader = self.root / 'shader'; shader.write_bytes(b'prepared shader')
         header = self.root / 'header'; header.write_bytes(b'prepared header')
         with patch.object(provenance.moe, 'prepare', return_value={'shader': shader, 'header': header}) as prepare:
@@ -343,6 +363,51 @@ class OverlayProvenance(unittest.TestCase):
                         original + ['-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'],
                         [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON') for arg in original]):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'MoE'):
+                variant['cmakeCommand'] = command
+                provenance.collect(self.root, self.manifest)
+
+    def test_cpu_inventories_patches_without_preparing_source(self):
+        with patch.object(provenance.webgpu_source, 'prepare') as prepare:
+            report = provenance.collect(self.root, self.manifest)
+        prepare.assert_not_called()
+        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching', 'chunked-model-upload'):
+            item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-' + suffix)
+            self.assertIsNone(item['compiledCopy'])
+            self.assertEqual(item['application']['enabledProfileVariants'], [])
+            self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+
+    def test_webgpu_provenance_records_combined_bytes_for_both_patches(self):
+        for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
+            variant['cmakeCommand'] = [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON') for a in variant['cmakeCommand']]
+        report = provenance.collect(self.root, self.manifest)
+        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching'):
+            item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-' + suffix)
+            self.assertEqual(item['compiledCopy']['sha256'], provenance.file_identity(self.prepared)['sha256'])
+            self.assertEqual(item['compiledCopy']['compileDefinitions'], ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'])
+            self.assertEqual(item['application']['option'], 'LCB_WEBGPU')
+            self.assertEqual(item['application']['enabledProfileVariants'],
+                             ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
+            self.assertEqual(len(item['compiledCopiesByProfileVariant']), 2)
+
+    def test_webgpu_loader_provenance_records_separate_compiled_source(self):
+        for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
+            variant['cmakeCommand'] = [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON') for a in variant['cmakeCommand']]
+        report = provenance.collect(self.root, self.manifest)
+        loader = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-chunked-model-upload')
+        self.assertEqual(loader['compiledCopy']['sha256'],
+                         provenance.file_identity(self.prepared.parent / 'llama-model-loader.cpp')['sha256'])
+        self.assertEqual(loader['application']['enabledProfileVariants'],
+                         ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
+        self.assertNotIn(loader['patch']['path'], report['otherPatchFiles'])
+
+    def test_webgpu_activation_fails_closed(self):
+        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
+        original = variant['cmakeCommand']
+        for command in ([a for a in original if not a.startswith('-DLCB_WEBGPU=')],
+                        original + ['-DLCB_WEBGPU=OFF'],
+                        original + ['-DLCB_WEBGPU:BOOL=ON'],
+                        [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=MAYBE') for a in original]):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'WebGPU'):
                 variant['cmakeCommand'] = command
                 provenance.collect(self.root, self.manifest)
 

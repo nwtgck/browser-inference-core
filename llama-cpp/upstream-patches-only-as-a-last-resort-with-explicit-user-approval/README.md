@@ -121,3 +121,72 @@ commit with different bytes or invent a future artifact identity.
 - **Removal condition:** upstream supplies this behavior, the experiment is
   rejected, or its maintenance cost outweighs the verified improvement. Remove
   this patch, preparation/hook, build flag, tests and provenance entry together.
+
+## Same-device WebGPU tensor copy
+
+- **Patch:** `ggml-webgpu-same-device-tensor-copy.patch`.
+- **Purpose:** eligible buffer copies avoid the generic host read/write fallback.
+- **Scope:** existing optional copy hook with same-device/layout, byte-range,
+  resource-identity, alignment and usage checks. No model or checkpoint policy.
+- **Integration:** shared checked build-tree source for every WebGPU profile;
+  ordinary build and publication paths, without a separate optimization option.
+- **Inputs, tests and limits:** reviewed d812 backend/queue and fallback contracts
+  and pinned Dawn headers. See [design and tests](../docs/webgpu-tensor-copy.md).
+  Mock/header checks do not certify browser/GPU correctness or performance.
+- **No-patch alternative:** generic host copies or upstream support.
+- **Removal:** equivalent upstream behavior or withdrawal of the requirement;
+  remove patch, preparation, hook, tests and provenance entry together.
+
+## WebGPU parameter upload batching
+
+- **Patch:** `ggml-webgpu-batch-param-uploads.patch`.
+- **Scope:** aligned parameter uploads at existing submission boundaries; no
+  tensor/weight upload, synchronization or shader changes.
+- **Integration:** composed with tensor copy in the shared build-tree translation
+  unit for every WebGPU profile. CPU profiles remain unchanged.
+- **Cost:** bounded CPU mirror and padded upload bytes. Fewer calls alone are not
+  a speedup claim. Source, patch and combined-output identities are checked.
+- **Tests, alternatives and removal:** [parameter upload batching](../docs/webgpu-param-upload-batching.md).
+
+## Bounded synchronous WebGPU model upload
+
+- **Patch:** `llama-model-loader-webgpu-chunked-upload.patch`.
+- **Scope:** only the existing non-mmap/non-host synchronous fallback for the
+  default WebGPU buffer uses bounded reads. In this source tree, the normal build
+  enables this path in every WebGPU profile; CPU profiles retain the upstream
+  loader.
+- **Approval policy:** the user decides whether adoption justifies the continuing
+  upstream-maintenance cost; normal build routing does not grant that approval.
+- **Why a patch:** the current loader allocates one read vector per whole tensor;
+  backend offset uploads already work, but no upstream loader setting bounds it.
+  No-patch alternatives are retaining that allocation or waiting for upstream.
+- **Integration:** reuse ordinary WebGPU source preparation and its CMake hook to
+  replace only `src/llama-model-loader.cpp` on `llama`. No additional options,
+  variants, workflow inputs or publication gates. CPU builds stay upstream.
+- **Reviewed inputs:** d81235049384534c167caea52b85a694f6103d14; exact loader,
+  file-reader and target-layout identities augment existing backend/API guards.
+  Copies are isolated; upstream sources are never rewritten. Updater preflight
+  and provenance use the same preparation. Input drift requires semantic review.
+- **Behavior:** retain at most 8 MiB of explicit read-vector storage, complete
+  quantization blocks and four-byte intermediate upload alignment. A loader-local
+  helper carries a provisional 32 MiB charged upload budget across tensors. Each
+  chunk, including a smaller aligned or tail chunk, reserves its actual payload
+  plus 24 bytes before `tensor_set`; exceeding the
+  remaining budget drains the actual destination device first. Device handoff,
+  final partial batches, callback cancellation and ordinary C++ exceptions drain
+  pending work, and the helper releases its backend through RAII. No global
+  tensor-set, inference or WEIGHTS-buffer waits are added. Other buffer types and
+  backends retain their existing upload behavior and optional validation.
+- **Validation/limits:** focused deterministic CPU queue tests extract the actual
+  generated helper, checking pre-write waits, cross-tensor/device accounting,
+  auxiliary charges, overflow, cleanup and initialization failure. The complete
+  generated loader passes native syntax checking against pinned upstream headers;
+  actual overlay/target/provenance contracts remain tested. These are not full
+  Wasm builds or browser/GPU tests. The 32 MiB bound covers charged loader uploads,
+  not total Wasm, process, driver or GPU memory. Existing completion/device-loss
+  behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
+  OOM/device-loss recovery is not claimed. See
+  [bounded WebGPU model uploads](../docs/webgpu-model-upload-budget.md).
+- **Removal:** equivalent upstream support, withdrawal of the requirement, or costs
+  exceeding measured benefit; remove this patch and its entries in the shared
+  preparation, hook, tests and provenance without disturbing other overlays.

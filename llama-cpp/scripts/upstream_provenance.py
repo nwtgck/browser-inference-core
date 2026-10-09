@@ -13,6 +13,8 @@ import tempfile
 from github_api import full_sha, git
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_moe_direct_slot as moe
+import prepare_webgpu_tensor_copy as tensor_copy
+import prepare_webgpu_source as webgpu_source
 
 
 def file_identity(path: Path) -> dict:
@@ -39,9 +41,19 @@ def collect(root: Path, manifest: dict) -> dict:
     enabled = []
     audio_enabled = []
     moe_enabled = []
+    copy_enabled = []
+    batch_enabled = []
     toolchain = runtime_toolchain(root)
     for profile, info in manifest['profiles'].items():
         for variant, provenance in info['variants'].items():
+            webgpu_options = [option for option in provenance['cmakeCommand']
+                              if option.startswith('-DLCB_WEBGPU=') or option.startswith('-DLCB_WEBGPU:')]
+            if webgpu_options not in (['-DLCB_WEBGPU=ON'], ['-DLCB_WEBGPU=OFF']):
+                raise ValueError('Unknown WebGPU activation in compiled provenance')
+            webgpu_enabled = webgpu_options == ['-DLCB_WEBGPU=ON']
+            if webgpu_enabled:
+                copy_enabled.append(profile + '/' + variant)
+                batch_enabled.append(profile + '/' + variant)
             audio_enabled.append(profile + '/' + variant)
             moe_options = [option for option in provenance['cmakeCommand']
                            if option.startswith('-DLCB_WEBGPU_MOE_DIRECT_SLOT=')]
@@ -67,6 +79,21 @@ def collect(root: Path, manifest: dict) -> dict:
         patched_identity = file_identity(patched)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
         audio_identity = file_identity(audio)
+        webgpu_compiled = None
+        loader_compiled = None
+        if copy_enabled:
+            prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
+                                             patch_root=root / PATCH_DIRECTORY)
+            webgpu_compiled = {
+                'logicalUpstreamPath': webgpu_source.SOURCE_PATH, **file_identity(prepared),
+                'tensorCopy': True, 'parameterUploadBatching': True,
+                'compileDefinitions': ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'],
+            }
+            loader_compiled = {
+                'logicalUpstreamPath': webgpu_source.LOADER_PATH,
+                **file_identity(prepared.parent / 'llama-model-loader.cpp'),
+            }
+        webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
         moe_compiled = None
         if moe_enabled:
             outputs = moe.prepare(vendor, Path(temporary) / 'moe', root / PATCH_DIRECTORY / moe.PATCH_NAME)
@@ -130,9 +157,67 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
                                  'docs/moe-direct-slot.md']},
             'behavior': 'Single-token MoE vector dispatch indexes selected slots directly in all WebGPU profiles; CPU, routing, multi-token kernels and public interfaces are unchanged.',
+        }, {
+            'id': 'webgpu-same-device-tensor-copy',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': tensor_copy.SOURCE_PATH, **file_identity(vendor / tensor_copy.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / tensor_copy.PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedCommit': tensor_copy.verify_reviewed_source(vendor) if copy_enabled else None,
+            'reviewedInputs': next(iter(tensor_copy.REVIEWED_REVISIONS.values())),
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': tensor_copy.DAWN_HEADERS},
+            'application': {
+                'preparationScript': 'scripts/prepare_webgpu_source.py',
+                'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                'option': 'LCB_WEBGPU',
+                'enabledProfileVariants': sorted(copy_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_tensor_copy.py', 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake',
+                                 'docs/webgpu-tensor-copy.md']},
+            'behavior': 'Eligible same-device aligned copies use the existing optional buffer hook and common GPU queue. Unsupported cases retain generic fallback. No checkpoint policy or capability API change.',
+        }, {
+            'id': 'webgpu-parameter-upload-batching',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SOURCE_PATH, **file_identity(vendor / webgpu_source.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / webgpu_source.PARAM_PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedInputs': next(iter(tensor_copy.REVIEWED_REVISIONS.values())),
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': tensor_copy.DAWN_HEADERS},
+            'application': {
+                'preparationScript': 'scripts/prepare_webgpu_source.py',
+                'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                'option': 'LCB_WEBGPU',
+                'enabledProfileVariants': sorted(batch_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake',
+                                 'docs/webgpu-param-upload-batching.md']},
+            'behavior': 'Coalesce parameter writes only at existing graph submission boundaries. Slot padding increases transferred bytes; no measured performance claim. Both patches compose into one translation unit.',
+        }, {
+            'id': 'webgpu-chunked-model-upload',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.LOADER_PATH, **file_identity(vendor / webgpu_source.LOADER_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / webgpu_source.LOADER_PATCH_NAME)},
+            'compiledCopy': loader_compiled,
+            'reviewedInputs': webgpu_source.LOADER_INPUTS,
+            'application': {
+                'preparationScript': 'scripts/prepare_webgpu_source.py',
+                'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                'option': 'LCB_WEBGPU',
+                'enabledProfileVariants': sorted(copy_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Bound the synchronous default-WebGPU-buffer tensor read vector to 8 MiB and charged outstanding model uploads to a provisional 32 MiB per load_all_data call, including 24 bytes per upload for auxiliary parameters. Synchronize the actual destination device before exceeding the budget, on device handoff and on scope exit. Other backends retain whole-tensor uploads. This is not a browser RAM limit or graceful device-loss recovery; target-device model-load throughput effects are unmeasured.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}')},
+                            for path in patch_files if path not in (patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',
@@ -142,3 +227,19 @@ def collect(root: Path, manifest: dict) -> dict:
             },
         },
     }
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--manifest', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    report = collect(root, json.loads(args.manifest.read_text()))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2) + '\n')
+
+
+if __name__ == '__main__':
+    main()

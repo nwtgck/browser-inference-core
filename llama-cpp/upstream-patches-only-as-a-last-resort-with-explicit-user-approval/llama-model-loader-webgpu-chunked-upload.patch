@@ -1,0 +1,124 @@
+diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
+--- a/src/llama-model-loader.cpp
++++ b/src/llama-model-loader.cpp
+@@ -1490,6 +1490,59 @@
+     return data;
+ }
+ 
++// Loader-local queue budget: these are charged upload bytes, not a browser RAM limit.
++// The existing WebGPU synchronize path yields through the configured Wasm runtime.
++struct llama_webgpu_load_uploads {
++    static constexpr size_t budget = 32 * MiB;
++    static constexpr size_t overhead = 24; // up to two 12-byte head/tail parameter uploads
++    ggml_backend_dev_t device = nullptr;
++    ggml_backend_t backend = nullptr;
++    size_t pending = 0;
++
++    llama_webgpu_load_uploads() = default;
++    llama_webgpu_load_uploads(const llama_webgpu_load_uploads &) = delete;
++    llama_webgpu_load_uploads & operator=(const llama_webgpu_load_uploads &) = delete;
++
++    void drain() {
++        if (pending != 0) {
++            ggml_backend_synchronize(backend);
++            pending = 0;
++        }
++    }
++
++    void reserve(ggml_backend_dev_t destination, size_t size) {
++        if (size > budget - overhead) {
++            throw std::runtime_error("WebGPU model upload exceeds loader budget");
++        }
++        if (device != destination) {
++            // One budget across all tensors/devices: retire the old queue first.
++            drain();
++            ggml_backend_free(backend);
++            backend = nullptr;
++            device = nullptr;
++            backend = ggml_backend_dev_init(destination, nullptr);
++            if (!backend) {
++                throw std::runtime_error("failed to initialize WebGPU model upload synchronizer");
++            }
++            device = destination;
++        }
++        const size_t charge = size + overhead;
++        if (charge > budget - pending) {
++            drain();
++        }
++        // Reserve before tensor_set so ordinary exceptions also drain partial work.
++        pending += charge;
++    }
++
++    ~llama_webgpu_load_uploads() {
++        // Final partial batches, callback cancellation and ordinary C++ exceptions.
++        // Upstream device-loss/abort behavior is unchanged; completion is not proof
++        // of successful uploads and cancellation cannot interrupt this wait.
++        drain();
++        ggml_backend_free(backend);
++    }
++};
++
+ bool llama_model_loader::load_all_data(
+         struct ggml_context * ctx,
+         llama_buf_map & bufs,
+@@ -1620,6 +1673,8 @@
+             return staged_a && ggml_nbytes(a) > ggml_nbytes(b);
+         });
+     }
++
++    llama_webgpu_load_uploads webgpu_uploads;
+ 
+     for (struct ggml_tensor * cur : tensors) {
+         const auto * weight = get_weight(ggml_get_name(cur));
+@@ -1734,13 +1789,35 @@
+                         buffer_idx %= n_buffers;
+                     }
+                 } else {
+-                    // scoped to one tensor so only one staging buffer is alive at a time
+-                    std::vector<no_init<uint8_t>> read_buf(n_size);
+-                    file->seek(weight->offs, SEEK_SET);
+-                    file->read_raw(read_buf.data(), n_size);
+-                    ggml_backend_tensor_set(cur, read_buf.data(), 0, n_size);
+-                    if (check_tensors && !ggml_validate_row_data(cur->type, read_buf.data(), n_size)) {
+-                        throw std::runtime_error(format("tensor '%s' has invalid data", ggml_get_name(cur)));
++                    auto * buft = ggml_backend_buffer_get_type(cur->buffer);
++                    auto * dev = ggml_backend_buft_get_device(buft);
++                    auto * reg = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
++                    const bool chunked = reg && strcmp(ggml_backend_reg_name(reg), "WebGPU") == 0 &&
++                                         buft == ggml_backend_dev_buffer_type(dev);
++                    size_t chunk_size = n_size;
++                    if (chunked) {
++                        // Keep complete quantization blocks and four-byte upload boundaries.
++                        const size_t chunk_alignment = 4 * ggml_type_size(cur->type);
++                        chunk_size = std::min(n_size, (8 * MiB / chunk_alignment) * chunk_alignment);
++                        if (weight->offs > file->size() || n_size > file->size() - weight->offs) {
++                            throw std::runtime_error(format("tensor '%s' extends beyond the file", ggml_get_name(cur)));
++                        }
++                    }
++                    // Some non-host backends require a complete tensor in one call.
++                    std::vector<no_init<uint8_t>> read_buf(chunk_size);
++                    for (size_t offset = 0; offset < n_size; ) {
++                        const size_t read_size = std::min(chunk_size, n_size - offset);
++                        // Direct I/O reads can advance past the requested data to an aligned boundary.
++                        file->seek(weight->offs + offset, SEEK_SET);
++                        file->read_raw(read_buf.data(), read_size);
++                        if (chunked) {
++                            webgpu_uploads.reserve(dev, read_size);
++                        }
++                        ggml_backend_tensor_set(cur, read_buf.data(), offset, read_size);
++                        if (check_tensors && !ggml_validate_row_data(cur->type, read_buf.data(), read_size)) {
++                            throw std::runtime_error(format("tensor '%s' has invalid data", ggml_get_name(cur)));
++                        }
++                        offset += read_size;
+                     }
+                 }
+             }
+@@ -1748,6 +1825,8 @@
+ 
+         size_done += n_size;
+     }
++
++    webgpu_uploads.drain();
+ 
+     // free temporary resources used for async uploads
+     for (auto * event : events) {

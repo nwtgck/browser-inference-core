@@ -146,6 +146,9 @@ class ProposalApi:
 
 class LocalGitProposal(unittest.TestCase):
     def setUp(self):
+        webgpu = patch.object(update.webgpu_source, 'prepare')
+        self.webgpu_prepare = webgpu.start()
+        self.addCleanup(webgpu.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
@@ -198,6 +201,13 @@ class LocalGitProposal(unittest.TestCase):
     def restore_base(self):
         self.git('checkout', '--detach', self.base, cwd=self.root)
         self.git('submodule', 'update', '--init', cwd=self.root)
+
+    def test_preflight_fails_when_required_webgpu_overlay_is_incompatible(self):
+        self.webgpu_prepare.side_effect = ValueError('WebGPU source changed')
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('WebGPU source changed', result['error'])
+        self.assertEqual(self.webgpu_prepare.call_args.kwargs['patch_root'], self.root / update.PATCH_DIRECTORY)
 
     def test_preflight_also_fails_closed_on_audio_patch_conflicts(self):
         audio = self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-audio.cpp'
