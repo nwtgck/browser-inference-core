@@ -190,3 +190,14 @@ commit with different bytes or invent a future artifact identity.
 - **Removal:** equivalent upstream support, withdrawal of the requirement, or costs
   exceeding measured benefit; remove this patch and its entries in the shared
   preparation, hook, tests and provenance without disturbing other overlays.
+
+
+## Single-token WebGPU SSM convolution
+
+- **Patch:** `ggml-webgpu-ssm-conv-single-token.patch`.
+- **Scope:** select one token lane for SSM_CONV when output tokens per sequence equal one; retain eight lanes otherwise. Channel block size, scalar/length-four arithmetic, upstream WGSL source-file bytes and bounds checks remain unchanged. The preprocessed shader workgroup size changes for single-token input. Include the selected width in the existing pipeline cache key, equality/hash and dispatch decisions.
+- **Integration:** the ordinary `LCB_WEBGPU` source preparation emits a checked `ggml-webgpu-shader-lib.hpp` beside its existing WebGPU source copy. It does not emit `ggml-wgsl-shaders.hpp`; the existing MoE BEFORE include or upstream generated header remains authoritative. No new workflow, profile, variant or feature switch.
+- **Reviewed inputs:** pinned `d81235049384534c167caea52b85a694f6103d14` host WebGPU source/header and `ssm_conv.wgsl`; strict patch/output identities fail closed on unknown inputs. Existing copy, parameter-upload, model-loader and BF16/audio output identities are unchanged.
+- **Evidence and limits:** isolated shader correctness and tiny LFM full-runtime tests pass on software WebGPU adapters, including both pipeline creation orders and full/partial checkpoint restoration. Those tests do not establish production model quality, physical GPU occupancy or a Mac throughput improvement. Other MoE operators are not modified.
+- **No-patch alternative:** retain the existing eight-token launch for decode. The change removes inactive logical token lanes; it does not guarantee a performance improvement.
+- **Removal condition:** remove this preparation/header patch when upstream selects an equivalent single-token workgroup and the same supported profiles pass correctness and device validation, or when the owner drops the optimization.

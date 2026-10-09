@@ -81,6 +81,7 @@ def collect(root: Path, manifest: dict) -> dict:
         audio_identity = file_identity(audio)
         webgpu_compiled = None
         loader_compiled = None
+        ssm_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -92,6 +93,10 @@ def collect(root: Path, manifest: dict) -> dict:
             loader_compiled = {
                 'logicalUpstreamPath': webgpu_source.LOADER_PATH,
                 **file_identity(prepared.parent / 'llama-model-loader.cpp'),
+            }
+            ssm_compiled = {
+                'logicalUpstreamPath': webgpu_source.SSM_HEADER_PATH,
+                **file_identity(prepared.parent / 'ggml-webgpu-shader-lib.hpp'),
             }
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
         moe_compiled = None
@@ -215,9 +220,28 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Bound the synchronous default-WebGPU-buffer tensor read vector to 8 MiB and charged outstanding model uploads to a provisional 32 MiB per load_all_data call, including 24 bytes per upload for auxiliary parameters. Synchronize the actual destination device before exceeding the budget, on device handoff and on scope exit. Other backends retain whole-tensor uploads. This is not a browser RAM limit or graceful device-loss recovery; target-device model-load throughput effects are unmeasured.',
+        }, {
+            'id': 'webgpu-ssm-conv-single-token',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SSM_HEADER_PATH, **file_identity(vendor / webgpu_source.SSM_HEADER_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / webgpu_source.SSM_PATCH_NAME)},
+            'compiledCopy': ssm_compiled,
+            'compiledCopiesByProfileVariant': {variant: ssm_compiled for variant in copy_enabled},
+            'reviewedInputs': {**next(iter(tensor_copy.REVIEWED_REVISIONS.values())),
+                               webgpu_source.SSM_SHADER_PATH: webgpu_source.SSM_SHADER_SHA256},
+            'application': {
+                'preparationScript': 'scripts/prepare_webgpu_source.py',
+                'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                'option': 'LCB_WEBGPU',
+                'enabledProfileVariants': sorted(copy_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Use one token lane only for single-token SSM_CONV, retaining eight lanes otherwise. Cache key, shader define and dispatch decisions share the selected width; arithmetic and MoE embedded shaders remain unchanged. Software-adapter correctness is not a Mac performance claim.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}')},
+                            for path in patch_files if path not in (patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

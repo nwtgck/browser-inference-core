@@ -29,7 +29,8 @@ class UpstreamPatchPolicy(unittest.TestCase):
         self.assertEqual({p.name for p in directory.glob('*.patch')}, {
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-moe-direct-slot.patch', 'ggml-webgpu-same-device-tensor-copy.patch',
-            'ggml-webgpu-batch-param-uploads.patch', 'llama-model-loader-webgpu-chunked-upload.patch'})
+            'ggml-webgpu-batch-param-uploads.patch', 'llama-model-loader-webgpu-chunked-upload.patch',
+            'ggml-webgpu-ssm-conv-single-token.patch'})
         for patch in directory.glob('*.patch'):
             self.assertIn(patch.name, register)
         # Source-rewriting and toolchain exceptions are covered too, not only .patch.

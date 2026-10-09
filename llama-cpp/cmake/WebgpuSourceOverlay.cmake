@@ -24,6 +24,8 @@ list(REMOVE_ITEM LCB_SOURCE_SOURCES "ggml-webgpu.cpp")
 list(APPEND LCB_SOURCE_SOURCES "${LCB_SOURCE_OVERLAY}/ggml-webgpu.cpp")
 set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
+# The prepared shader-library header is a sibling of the source above; its
+# embedded WGSL include still resolves through the existing MoE BEFORE path.
 # Keep sibling headers available after relocating the TU. Append, so the MoE
 # BEFORE include retains priority over upstream generated shader headers.
 target_include_directories(ggml-webgpu PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
@@ -64,6 +66,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/src/llama-mmap.h"
     "${LCB_LLAMA_SOURCE}/src/CMakeLists.txt"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/llama-model-loader-webgpu-chunked-upload.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-ssm-conv-single-token.patch"
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_source.py"
     "${LCB_SOURCE_ROOT}/scripts/prepare_moe_direct_slot.py"
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_tensor_copy.py"

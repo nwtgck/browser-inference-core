@@ -203,11 +203,13 @@ class LocalGitProposal(unittest.TestCase):
         self.git('submodule', 'update', '--init', cwd=self.root)
 
     def test_preflight_fails_when_required_webgpu_overlay_is_incompatible(self):
-        self.webgpu_prepare.side_effect = ValueError('WebGPU source changed')
-        result = update.overlay_preflight(self.root)
-        self.assertEqual(result['status'], 'failed')
-        self.assertIn('WebGPU source changed', result['error'])
-        self.assertEqual(self.webgpu_prepare.call_args.kwargs['patch_root'], self.root / update.PATCH_DIRECTORY)
+        for message in ('WebGPU source changed', 'SSM convolution needs semantic review: upstream shader changed'):
+            with self.subTest(message=message):
+                self.webgpu_prepare.side_effect = ValueError(message)
+                result = update.overlay_preflight(self.root)
+                self.assertEqual(result['status'], 'failed')
+                self.assertIn(message, result['error'])
+                self.assertEqual(self.webgpu_prepare.call_args.kwargs['patch_root'], self.root / update.PATCH_DIRECTORY)
 
     def test_preflight_also_fails_closed_on_audio_patch_conflicts(self):
         audio = self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-audio.cpp'

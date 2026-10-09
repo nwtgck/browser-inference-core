@@ -27,10 +27,13 @@ class WebgpuSourceOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = source.prepare(self.upstream, Path(tmp))
             self.assertEqual(copy.digest(result), source.OUTPUT_SHA256)
+            self.assertEqual(copy.digest(result.parent / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'llama-model-loader.cpp'), source.LOADER_OUTPUT_SHA256)
+            header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
             loader_stamp = (result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns
             self.assertEqual(source.prepare(self.upstream, Path(tmp)).stat().st_mtime_ns, stamp)
+            self.assertEqual((result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns, header_stamp)
             self.assertEqual((result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns, loader_stamp)
         self.assertEqual(before, (self.upstream / source.SOURCE_PATH).read_bytes())
         self.assertEqual(loader_before, (self.upstream / source.LOADER_PATH).read_bytes())
@@ -81,7 +84,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
     def test_patch_result_and_overlap_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); patches = root / 'patches'; patches.mkdir()
-            for name in [copy.PATCH_NAME, source.PARAM_PATCH_NAME, source.LOADER_PATCH_NAME]:
+            for name in [copy.PATCH_NAME, source.PARAM_PATCH_NAME, source.LOADER_PATCH_NAME, source.SSM_PATCH_NAME]:
                 shutil.copyfile(ROOT / copy.PATCH_DIRECTORY / name, patches / name)
             (patches / source.PARAM_PATCH_NAME).write_bytes(b'wrong')
             with self.assertRaisesRegex(ValueError, 'patch identity'):
@@ -100,7 +103,8 @@ class WebgpuSourceOverlay(unittest.TestCase):
         before = (self.upstream / source.SOURCE_PATH).read_bytes()
         loader_before = (self.upstream / source.LOADER_PATH).read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
-            build = Path(tmp) / 'build'
+            subprocess.run(['git', 'init', '--quiet', tmp], check=True)
+            build = Path(tmp) / 'llama-cpp/build/overlay-check'
             for moe in (False, True, False):
                 command = ['cmake', '-S', str(ROOT / 'tests/webgpu-tensor-copy'), '-B', str(build),
                            '-DLCB_LLAMA_SOURCE=' + str(self.upstream), '-DEMDAWNWEBGPU_DIR=' + dawn,
@@ -112,6 +116,8 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertEqual(Path(compiled[0]['file']), build / 'webgpu-source-overlay/ggml-webgpu.cpp')
                 self.assertEqual(copy.digest(Path(compiled[0]['file'])), source.OUTPUT_SHA256)
                 self.assertIn('GGML_WEBGPU_BATCH_PARAM_UPLOADS', compiled[0]['command'])
+                self.assertEqual(copy.digest(build / 'webgpu-source-overlay/ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
+                self.assertFalse((build / 'webgpu-source-overlay/ggml-wgsl-shaders.hpp').exists())
                 loaders = [entry for entry in entries if Path(entry['file']).name == 'llama-model-loader.cpp']
                 self.assertEqual(len(loaders), 1)
                 self.assertEqual(Path(loaders[0]['file']), build / 'webgpu-source-overlay/llama-model-loader.cpp')
@@ -137,6 +143,19 @@ class WebgpuSourceOverlay(unittest.TestCase):
             with patch.object(source, 'LOADER_OUTPUT_SHA256', '0' * 64), self.assertRaisesRegex(ValueError, 'loader source identity'):
                 source.prepare(self.upstream, root / 'out')
             self.assertFalse((root / 'out/llama-model-loader.cpp').exists())
+
+    def test_ssm_shader_patch_and_header_fail_closed_before_publishing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'out'
+            for name, message in [('SSM_SHADER_SHA256', 'upstream shader'),
+                                  ('SSM_PATCH_SHA256', 'patch identity'),
+                                  ('SSM_HEADER_OUTPUT_SHA256', 'header identity')]:
+                with self.subTest(guard=name), patch.object(source, name, '0' * 64):
+                    with self.assertRaisesRegex(ValueError, message):
+                        source.prepare(self.upstream, output)
+                self.assertFalse((output / 'ggml-webgpu.cpp').exists())
+                self.assertFalse((output / 'llama-model-loader.cpp').exists())
+                self.assertFalse((output / 'ggml-webgpu-shader-lib.hpp').exists())
 
     def test_webgpu_is_the_only_source_overlay_build_switch(self):
         text = (ROOT / 'CMakeLists.txt').read_text()

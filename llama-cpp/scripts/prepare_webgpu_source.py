@@ -15,6 +15,12 @@ PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
 OUTPUT_SHA256 = 'd1fd96c0113ac2ffd60c6175fbe9ab8115a0a58d5c17bfd209a5a64f288a1f56'
+SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
+SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
+SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
+SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
+SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
+SSM_HEADER_OUTPUT_SHA256 = '82ae3f5fd15ae83378a494312f6272b6b4128dbab205381b91ad09ce95ff4671'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -48,12 +54,16 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
     if output == source or source in output.parents or output in source.parents:
         raise ValueError('WebGPU overlay must be outside the upstream source tree')
     tensor_copy.verify_reviewed_source(source)
+    # The existing reviewed inputs pin the host dispatch and shader-library header.
+    if tensor_copy.digest(source / SSM_SHADER_PATH) != SSM_SHADER_SHA256:
+        raise ValueError('SSM convolution needs semantic review: upstream shader changed')
     for relative, expected in LOADER_INPUTS.items():
         if tensor_copy.digest(source / relative) != expected:
             raise ValueError('Chunked loader needs semantic review: upstream input changed: ' + relative)
     selected = [(patch_root / tensor_copy.PATCH_NAME, tensor_copy.PATCH_SHA256),
                 (patch_root / PARAM_PATCH_NAME, PARAM_PATCH_SHA256),
-                (patch_root / LOADER_PATCH_NAME, LOADER_PATCH_SHA256)]
+                (patch_root / LOADER_PATCH_NAME, LOADER_PATCH_SHA256),
+                (patch_root / SSM_PATCH_NAME, SSM_PATCH_SHA256)]
     for patch, expected in selected:
         if tensor_copy.digest(patch) != expected:
             raise ValueError('WebGPU patch identity changed: ' + patch.name)
@@ -66,6 +76,8 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         loader = work / LOADER_PATH
         loader.parent.mkdir(parents=True)
         shutil.copyfile(source / LOADER_PATH, loader)
+        header = work / SSM_HEADER_PATH
+        shutil.copyfile(source / SSM_HEADER_PATH, header)
         env = patch_environment(work)
         for patch, _ in selected:
             for flags in (['--check'], []):
@@ -75,6 +87,13 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:
             raise ValueError('Unexpected chunked loader source identity')
+        if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
+            raise ValueError('Unexpected SSM convolution header identity')
+        # Do not emit an embedded WGSL header here: preserve the MoE BEFORE
+        # include (or upstream generated header) selected by this sibling.
+        header_result = output / header.name
+        if not header_result.exists() or header_result.read_bytes() != header.read_bytes():
+            header.replace(header_result)
         loader_result = output / loader.name
         if not loader_result.exists() or loader_result.read_bytes() != loader.read_bytes():
             loader.replace(loader_result)

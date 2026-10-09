@@ -222,6 +222,9 @@ class OverlayProvenance(unittest.TestCase):
                      self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME)
+        (self.vendor / provenance.webgpu_source.SSM_HEADER_PATH).write_text('SSM header provenance fixture\n')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.SSM_PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.SSM_PATCH_NAME)
         (self.vendor / 'src').mkdir()
         (self.vendor / provenance.webgpu_source.LOADER_PATH).write_text('Loader provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME,
@@ -241,6 +244,7 @@ class OverlayProvenance(unittest.TestCase):
         self.prepared = self.root / 'prepared.cpp'
         self.prepared.write_bytes(b'combined source fixture')
         (self.prepared.parent / 'llama-model-loader.cpp').write_bytes(b'loader source fixture')
+        (self.prepared.parent / 'ggml-webgpu-shader-lib.hpp').write_bytes(b'SSM header source fixture')
         source_prepare = patch.object(provenance.webgpu_source, 'prepare', return_value=self.prepared)
         source_prepare.start()
         self.addCleanup(source_prepare.stop)
@@ -287,7 +291,7 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
             'experimental-webgpu-moe-direct-slot', 'webgpu-same-device-tensor-copy',
-            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload'})
+            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
             self.assertTrue(item['patch']['path'].startswith(provenance.PATCH_DIRECTORY + '/'))
@@ -370,7 +374,7 @@ class OverlayProvenance(unittest.TestCase):
         with patch.object(provenance.webgpu_source, 'prepare') as prepare:
             report = provenance.collect(self.root, self.manifest)
         prepare.assert_not_called()
-        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching', 'chunked-model-upload'):
+        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching', 'chunked-model-upload', 'ssm-conv-single-token'):
             item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-' + suffix)
             self.assertIsNone(item['compiledCopy'])
             self.assertEqual(item['application']['enabledProfileVariants'], [])
@@ -399,6 +403,20 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual(loader['application']['enabledProfileVariants'],
                          ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
         self.assertNotIn(loader['patch']['path'], report['otherPatchFiles'])
+
+    def test_webgpu_ssm_header_provenance_preserves_independent_cpp_identity(self):
+        for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
+            variant['cmakeCommand'] = [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON') for a in variant['cmakeCommand']]
+        report = provenance.collect(self.root, self.manifest)
+        item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-ssm-conv-single-token')
+        self.assertEqual(item['compiledCopy']['sha256'], provenance.file_identity(self.prepared.parent / 'ggml-webgpu-shader-lib.hpp')['sha256'])
+        self.assertEqual(item['compiledCopy']['logicalUpstreamPath'], provenance.webgpu_source.SSM_HEADER_PATH)
+        self.assertEqual(item['reviewedInputs'][provenance.webgpu_source.SSM_SHADER_PATH], provenance.webgpu_source.SSM_SHADER_SHA256)
+        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
+        self.assertEqual(len(item['compiledCopiesByProfileVariant']), 2)
+        self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+        original = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-parameter-upload-batching')
+        self.assertEqual(original['compiledCopy']['sha256'], provenance.file_identity(self.prepared)['sha256'])
 
     def test_webgpu_activation_fails_closed(self):
         variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']

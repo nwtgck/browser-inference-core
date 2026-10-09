@@ -1,0 +1,41 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -343,9 +343,10 @@
+ struct ggml_webgpu_ssm_conv_pipeline_key {
+     int type;
+     int vectorized;
++    uint32_t tokens_per_wg;
+ 
+     bool operator==(const ggml_webgpu_ssm_conv_pipeline_key & other) const {
+-        return type == other.type && vectorized == other.vectorized;
++        return type == other.type && vectorized == other.vectorized && tokens_per_wg == other.tokens_per_wg;
+     }
+ };
+ 
+@@ -440,6 +441,7 @@
+         size_t seed = 0;
+         ggml_webgpu_hash_combine(seed, key.type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
++        ggml_webgpu_hash_combine(seed, key.tokens_per_wg);
+         return seed;
+     }
+ };
+@@ -1781,6 +1783,9 @@
+         ggml_webgpu_ssm_conv_pipeline_key key = {};
+         key.type                              = context.dst->type;
+         key.vectorized                        = context.src1->ne[0] == 4;
++        // Single-token decode needs no lanes for additional tokens. Keep the
++        // selected workgroup shape in the cache key and dispatch decisions.
++        key.tokens_per_wg                     = context.dst->ne[1] == 1 ? 1u : 8u;
+ 
+         auto it = ssm_conv_pipelines.find(key);
+         if (it != ssm_conv_pipelines.end()) {
+@@ -1804,7 +1809,7 @@
+         }
+ 
+         constexpr uint32_t block_size    = 32u;
+-        constexpr uint32_t tokens_per_wg = 8u;
++        const uint32_t     tokens_per_wg = key.tokens_per_wg;
+ 
+         defines.push_back("BLOCK_SIZE=" + std::to_string(block_size) + "u");
+         defines.push_back("TOKENS_PER_WG=" + std::to_string(tokens_per_wg) + "u");
