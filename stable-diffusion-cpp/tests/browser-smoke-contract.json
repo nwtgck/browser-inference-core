@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "scopePrefix": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on ",
+  "scopeSuffix": ", plus deep graph construction/selection; no trained-model image generation",
+  "sharedProbes": [
+    "timestep",
+    "bf16Weights"
+  ],
+  "testOnlyProbes": [
+    "conv3dBias",
+    "webgpuPerformance"
+  ]
+}

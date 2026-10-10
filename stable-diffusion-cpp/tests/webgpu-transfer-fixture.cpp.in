@@ -2,6 +2,7 @@
 #include "ggml.h"
 #include "ggml-backend-impl.h"
 #include "core/runner_cache.h"
+#include "core/ggml_graph_cut.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -152,6 +153,51 @@ int main() {
         f.global->queue.finish();counters={};check(cache.capture(graph)==GGML_STATUS_SUCCESS);
         check(counters.reads==0&&counters.writes==0&&counters.submissions==8&&counters.copies==8&&counters.waits==1);
         cache.graph_end(true);for(int i=0;i<8;++i)check(cache.get(std::to_string(i))!=nullptr);++checked;
+    }
+    // A staged output in another segment and a previously captured output must
+    // not create completion callbacks or drain unrelated queued work.
+    for (bool already_pending : {false, true}) {
+        Ctx ctx;
+        sd::RunnerCache cache(&f.backend);
+        auto present = ggml_new_tensor_1d(ctx.p, GGML_TYPE_F32, 16);
+        auto absent = ggml_new_tensor_1d(ctx.p, GGML_TYPE_F32, 16);
+        auto graph = ggml_new_graph_custom(ctx.p, 32, false);
+        ggml_build_forward_expand(graph, present);
+        Buf buffer{ggml_backend_alloc_ctx_tensors(ctx.p, &f.backend)};
+        cache.stage("output", already_pending ? present : absent);
+        if (already_pending) check(cache.capture(graph) == GGML_STATUS_SUCCESS);
+        bool unrelated_work_completed = false;
+        f.global->queue.pending.push_back([&] { unrelated_work_completed = true; });
+        counters = {};
+        check(cache.capture(graph) == GGML_STATUS_SUCCESS);
+        check(counters.waits == 0 && counters.submissions == 0 && counters.copies == 0);
+        check(!unrelated_work_completed);
+        cache.graph_end(true);
+        check((cache.get("output") != nullptr) == already_pending);
+        f.global->queue.finish();
+        ++checked;
+    }
+    // A cut with no future consumer (including an empty output list) does not
+    // own any pending copy. It must not synchronize unrelated computation.
+    for (bool has_output : {false, true}) {
+        Ctx ctx;
+        sd::GraphCutTensorCache cache(&f.backend);
+        auto input = ggml_new_tensor_1d(ctx.p, GGML_TYPE_F32, 16);
+        auto output = ggml_cont(ctx.p, input);
+        sd::ggml_graph_cut::mark_graph_cut(output, "queue-probe", "unused-output");
+        check(sd::ggml_graph_cut::is_graph_cut_tensor(output));
+        auto graph = ggml_new_graph_custom(ctx.p, 32, false);
+        ggml_build_forward_expand(graph, output);
+        sd::ggml_graph_cut::Segment segment;
+        if (has_output) segment.output_node_indices.push_back(0);
+        bool unrelated_work_completed = false;
+        f.global->queue.pending.push_back([&] { unrelated_work_completed = true; });
+        counters = {};
+        check(cache.capture(graph, segment, "empty-cut") == GGML_STATUS_SUCCESS);
+        check(counters.waits == 0 && counters.submissions == 0 && counters.copies == 0);
+        check(!unrelated_work_completed);
+        f.global->queue.finish();
+        ++checked;
     }
     // Allocation must finish before ANY async submission, including failures
     // after several destinations were successfully allocated. A queued-copy

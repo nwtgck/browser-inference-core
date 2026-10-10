@@ -308,6 +308,9 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
       - name: Test exact patch preparation and host code
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase test.image_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s tests -p 'test_*.py'

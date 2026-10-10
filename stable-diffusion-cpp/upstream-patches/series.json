@@ -460,6 +460,30 @@
           "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
         }
       ]
+    },
+    {
+      "file": "0026-webgpu-batch-parameter-uploads.patch",
+      "target": "ggml",
+      "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+          "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+        }
+      ]
+    },
+    {
+      "file": "0027-skip-empty-cache-completion.patch",
+      "target": "stable-diffusion",
+      "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+      "files": [
+        {
+          "path": "src/core/runner_cache.cpp",
+          "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+          "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+        }
+      ]
     }
   ]
 }

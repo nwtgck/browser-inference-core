@@ -1,0 +1,15 @@
+diff --git a/src/core/runner_cache.cpp b/src/core/runner_cache.cpp
+--- a/src/core/runner_cache.cpp
++++ b/src/core/runner_cache.cpp
+@@ -102,6 +102,11 @@
+     };
+ 
+     static void copy_cache_batch(ggml_backend_t backend, std::vector<CacheCopy>& copies) {
++        // No destinations and no work were submitted by this capture. Segment
++        // completion is owned by the caller, not by an unrelated empty cache.
++        if (copies.empty()) {
++            return;
++        }
+         // Allocate ALL entries before submitting any copy. An allocation failure
+         // cannot strand queued work on destinations that have been destroyed.
+         // Retain every destination until the existing capture boundary completes,

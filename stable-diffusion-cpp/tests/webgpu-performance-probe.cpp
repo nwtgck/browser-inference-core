@@ -99,6 +99,43 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
     close(result, read(cache.get("output")));
     return result;
 }
+// Independent outputs keep every parameterized dispatch observable: unlike a
+// long normalization chain, a later operation cannot cancel an earlier mistake.
+// SET nodes also stop elementwise fusion from hiding submission-boundary tests.
+std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
+    auto params = context();
+    auto computation = context();
+    constexpr int width = 64, rows = 4;
+    auto input = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, width, rows);
+    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
+    require(parameters != nullptr, "parameter batch input allocation");
+    auto output = ggml_new_tensor_2d(computation.get(), GGML_TYPE_F32, width, rows * branches);
+    for (int i = 0; i < branches; ++i) {
+        auto part = ggml_scale_bias(computation.get(), input,
+                                    0.5f + float(i + 1) / 257.f, float(i % 17 - 8) / 32.f);
+        output = ggml_set_inplace(computation.get(), output, part,
+                                  output->nb[1], output->nb[2], output->nb[3],
+                                  size_t(i) * rows * output->nb[1]);
+    }
+    auto graph = image_test::graph(computation.get(), output);
+    require(count(graph, GGML_OP_SCALE) == branches && count(graph, GGML_OP_SET) == branches,
+            "parameter batch graph lost an observable dispatch");
+    for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
+        auto node = ggml_graph_node(graph, i);
+        require(!is_compute(node) || ggml_backend_supports_op(backend, node),
+                "backend rejected parameter batch node");
+    }
+    auto allocation = allocate(backend, graph);
+    std::vector<float> result;
+    for (unsigned seed : {3u, 11u}) {
+        write(input, values(width * rows, seed, 64));
+        compute(backend, graph);
+        auto current = read(output);
+        result.insert(result.end(), current.begin(), current.end());
+    }
+    return result;
+}
+
 } // namespace
 
 extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
@@ -116,6 +153,11 @@ extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
             auto expected = run_graph(reference.get(), false, false, GGML_TYPE_F32, sink, masked);
             auto actual = run_graph(backend.get(), false, true, GGML_TYPE_F32, sink, masked);
             close(expected, actual, 2e-4f, 2e-3f);
+        }
+        for (int branches : {1, 32, 33, 97}) {
+            auto expected = run_parameter_batches(reference.get(), branches);
+            auto actual = run_parameter_batches(backend.get(), branches);
+            close(expected, actual, 2e-5f, 2e-4f);
         }
         return 1;
     } catch (const std::exception& error) {

@@ -63,6 +63,10 @@ if(EMSCRIPTEN)
 endif()
 add_subdirectory("${SDCB_SOURCE}" upstream)
 target_compile_definitions(stable-diffusion PRIVATE SD_BROWSER_WEBGPU=1)
+if(EMSCRIPTEN)
+    # This image-only prepared backend keeps the original queue submission cadence.
+    target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS=1)
+endif()
 if(EMSCRIPTEN AND NOT SDCB_JSPI)
     # Fix the selected backend's typo without modifying the vendor checkout.
     get_target_property(opts ggml-webgpu INTERFACE_LINK_OPTIONS)
@@ -166,6 +170,9 @@ if(SDCB_NATIVE_CHECK)
     endif()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
     if(UNIX)
+        add_test(NAME webgpu-param-upload-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-param-upload/check_uploads.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-completion-wait-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-wait-probe.py"
             --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu.cpp" --cxx "${CMAKE_CXX_COMPILER}")

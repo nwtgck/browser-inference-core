@@ -28,6 +28,8 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/link-inputs.txt"
     CONTENT "$<TARGET_PROPERTY:core,LINK_DEPENDS>")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sources.txt"
     CONTENT "$<TARGET_PROPERTY:core,SOURCES>")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-defines.txt"
+    CONTENT "$<TARGET_PROPERTY:ggml-webgpu,COMPILE_DEFINITIONS>")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-options.txt"
     CONTENT "$<TARGET_PROPERTY:ggml-webgpu,INTERFACE_LINK_OPTIONS>")
 ''')
@@ -39,7 +41,7 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-options.txt"
         (sd/'stub.cpp').write_text('// No compilation\n')
         (sd/'CMakeLists.txt').write_text('''
 add_library(stable-diffusion STATIC stub.cpp)
-add_library(ggml-webgpu INTERFACE)
+add_library(ggml-webgpu STATIC stub.cpp)
 set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")
 ''')
         output = root/'out'
@@ -54,6 +56,7 @@ set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")
     def assert_probe_boundary(self, root, data, variant):
         # Inspect CMake's evaluated target, not just a spelling of target_sources.
         # Both source files and generated exports must obey the variant boundary.
+        self.assertEqual(data['backend-defines'].split(';').count('GGML_WEBGPU_BATCH_PARAM_UPLOADS=1'), 1)
         count = 1 if variant == 'test' else 0
         sources = data['sources'].split(';')
         for probe in ('tests/wasm-probes.cpp', 'tests/qwen-timestep-probe.cpp', 'tests/bf16-weights-probe.cpp',

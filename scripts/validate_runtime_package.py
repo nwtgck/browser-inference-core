@@ -23,10 +23,9 @@ TEST_INPUTS = {
                   'tests/chat-surface.mjs', 'scripts/make_test_model.py',
                   'vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja'),
     'stable-diffusion-cpp': ('tests/browser-smoke.mjs', 'tests/gguf-fixture.mjs',
-                             'tests/model-io-fixtures.mjs'),
+                             'tests/model-io-fixtures.mjs', 'tests/browser-smoke-contract.mjs',
+                             'tests/browser-smoke-contract.json'),
 }
-IMAGE_SCOPE = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
-               'test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ')
 
 
 def parse_json(raw: bytes):
@@ -41,9 +40,38 @@ def parse_json(raw: bytes):
                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid JSON number')))
 
 
+def image_contract() -> dict:
+    path = ROOT / 'stable-diffusion-cpp/tests/browser-smoke-contract.json'
+    contract = parse_json(read_regular(path))
+    if (not isinstance(contract, dict) or type(contract.get('schemaVersion')) is not int or
+            contract['schemaVersion'] != 1 or
+            not isinstance(contract.get('scopePrefix'), str) or
+            not isinstance(contract.get('scopeSuffix'), str) or
+            contract.get('sharedProbes') != ['timestep', 'bf16Weights'] or
+            contract.get('testOnlyProbes') != ['conv3dBias', 'webgpuPerformance']):
+        raise ValueError('Invalid image smoke contract')
+    return contract
+
+
 def image_scope(test_webgpu: bool) -> str:
-    return (IMAGE_SCOPE + ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
-            ', plus deep graph construction/selection; no trained-model image generation')
+    contract = image_contract()
+    return (contract['scopePrefix'] + ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
+            contract['scopeSuffix'])
+
+
+def checked_image_probes(result: dict, variant: str, *, test_webgpu: bool) -> None:
+    contract = image_contract()
+    expected = ['CPU', 'WebGPU'] if test_webgpu else ['CPU']
+    for key in contract['sharedProbes'] + contract['testOnlyProbes']:
+        value = result.get(key)
+        if variant == 'browser':
+            valid = value == [] if key in contract['sharedProbes'] else key not in result
+        else:
+            valid = (isinstance(value, list) and len(value) == len(expected) and
+                     all(isinstance(item, dict) and item.get('backend') == backend and
+                         item.get('passed') is True for item, backend in zip(value, expected)))
+        if not valid:
+            raise ValueError('Wrong image ' + key + ' evidence')
 
 
 def checked_results(runtime: str, profiles: dict, variants: dict, results: object,
@@ -73,16 +101,7 @@ def checked_results(runtime: str, profiles: dict, variants: dict, results: objec
             if ((pair[1] == 'test' and result.get('graphWalk') is not True) or
                     (pair[1] == 'browser' and 'graphWalk' in result)):
                 raise ValueError('Wrong image graph walk evidence')
-            if pair[1] == 'test':
-                expected_backends = ['CPU', 'WebGPU'] if test_webgpu else ['CPU']
-                convolution = result.get('conv3dBias')
-                if (not isinstance(convolution, list) or len(convolution) != len(expected_backends) or
-                        any(not isinstance(item, dict) or item.get('backend') != backend or
-                            item.get('passed') is not True
-                            for item, backend in zip(convolution, expected_backends))):
-                    raise ValueError('Wrong image 3D convolution bias evidence')
-            elif 'conv3dBias' in result:
-                raise ValueError('Wrong image 3D convolution bias evidence')
+            checked_image_probes(result, pair[1], test_webgpu=test_webgpu)
     return results
 
 
@@ -96,6 +115,12 @@ def add_validation(manifest: dict, runtime: str, results: list[dict]) -> dict:
             validation[scope] = result
         else:
             validation['browserSmokeScope'] = result['scope']
+            # Persist exactly the verified evidence, not only a prose summary.
+            contract = image_contract()
+            keys = ['graphWalk', *contract['sharedProbes'], *contract['testOnlyProbes']]
+            validation['browserSmokeEvidence'] = {
+                key: copy.deepcopy(result[key]) for key in keys if key in result
+            }
     return updated
 
 

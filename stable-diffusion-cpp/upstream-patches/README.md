@@ -314,3 +314,21 @@ patch, relax input hashes, or substitute a different upstream revision.
     execution trace or timing. No tensor names/data, new waits or reads are added.
     Disabled diagnostics add only the gate check. Remove when upstream provides an
     equivalent opt-in, name-free compute-placement summary with these semantics.
+
+
+26. WebGPU parameter upload batching: the image backend stages per-kernel uniform
+    bytes in the existing aligned slot arena and flushes once before each existing
+    command submission. Submission, throttling, profile/compute-pass boundaries,
+    parameter bindings and slot reuse are preserved. The 74-slot default mirror is
+    18,944 bytes at 256-byte alignment; padding trades more small transfer bytes
+    for fewer API calls. Prepared-source tests exercise the live arena, dispatch
+    builder and graph loop with an ordered queue double, not GPU measurements.
+    CMake explicitly enables the definition on the image-only WebGPU target.
+    Remove when upstream provides equivalent bounded staging and queue ordering.
+
+27. Empty cache capture: return without a queue completion callback when no new
+    runner/graph-cut outputs need saving. Segment execution and cleanup retain
+    their own waits; non-empty and partially submitted captures preserve their
+    completion/ownership rules. Tests include outputs in other segments, already
+    pending entries, no future cut consumer, normal saves and failures. Remove
+    when upstream avoids equivalent empty waits with these lifetime guarantees.

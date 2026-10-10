@@ -7,6 +7,7 @@ import path from 'node:path';
 import { makeFixture } from './gguf-fixture.mjs';
 import { makeModelIoFixtures } from './model-io-fixtures.mjs';
 import { pathToFileURL } from 'node:url';
+import { imageSmokeScope } from './browser-smoke-contract.mjs';
 const root = path.resolve(process.argv[2] ?? 'dist/package');
 const testWebGpu = process.env.SDCB_TEST_WEBGPU === '1';
 const { chromium } = await import(pathToFileURL(path.resolve('../.tools/browser/node_modules/playwright/index.mjs')).href);
@@ -31,8 +32,8 @@ try {
   for (const profile of Object.keys(profiles)) {
     for (const variant of ['browser', 'test']) {
       try {
-        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu }) => {
-          const run = async ({ origin, base, variant, profile, testWebGpu }) => {
+        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu, scope }) => {
+          const run = async ({ origin, base, variant, profile, testWebGpu, scope }) => {
             const { attachCore, schema, mountReadOnlyFile } = await import(origin + '/examples/runtime/index.mjs');
             const create = (await import(base + 'core.mjs')).default;
             const response = await fetch(base + 'core.wasm');
@@ -241,8 +242,7 @@ try {
               }
             }
             return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias, webgpuPerformance,
-              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on ' +
-                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + ', plus deep graph construction/selection; no trained-model image generation' };
+              scope };
           };
           const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -253,12 +253,12 @@ try {
               timer = setTimeout(() => reject(Error(`Worker smoke timed out: ${profile}/${variant}`)), 120000);
               worker.onerror = event => reject(Error(event.message));
               worker.onmessage = ({ data }) => data.error ? reject(Error(data.error)) : resolve({ profile, variant, ...data.result });
-              worker.postMessage({ origin: location.origin, base: `${location.origin}/profiles/${profile}/${variant}/`, variant, profile, testWebGpu });
+              worker.postMessage({ origin: location.origin, base: `${location.origin}/profiles/${profile}/${variant}/`, variant, profile, testWebGpu, scope });
             });
           } finally {
             clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(url);
           }
-        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu });
+        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu, scope: imageSmokeScope(testWebGpu) });
         console.log(JSON.stringify(result, null, 2));
         results.push(result);
         // The pipeline wrapper finalizes its tested package snapshot, not build/.

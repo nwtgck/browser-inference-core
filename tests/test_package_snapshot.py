@@ -107,15 +107,20 @@ class ImageSmokeResults(unittest.TestCase):
         self.variants = json.loads((runtime / 'config/variants.json').read_text())
 
     def results(self, test_webgpu):
-        # Match the producer's emitted contract independently of image_scope().
-        scope = ('real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; '
-                 'test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ' +
-                 ('CPU and WebGPU' if test_webgpu else 'CPU (no GPU inference)') +
-                 ', plus deep graph construction/selection; no trained-model image generation')
+        # Invoke the same JS scope function used by the actual smoke producer.
+        # A second hand-maintained scope literal hid the 004 producer/consumer drift.
+        module = (ROOT / 'stable-diffusion-cpp/tests/browser-smoke-contract.mjs').as_uri()
+        script = f"import {{ imageSmokeScope }} from {json.dumps(module)};" + \
+                 f"console.log(JSON.stringify(imageSmokeScope({json.dumps(test_webgpu)})));"
+        scope = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], text=True))
+        backends = ['CPU', 'WebGPU'] if test_webgpu else ['CPU']
         return [{'profile': profile, 'variant': variant, 'passed': True, 'scope': scope,
+                 'timestep': [{'backend': backend, 'passed': True} for backend in backends] if variant == 'test' else [],
+                 'bf16Weights': [{'backend': backend, 'passed': True} for backend in backends] if variant == 'test' else [],
                  **({'graphWalk': True, 'conv3dBias': [
-                     {'backend': backend, 'passed': True}
-                     for backend in (['CPU', 'WebGPU'] if test_webgpu else ['CPU'])
+                     {'backend': backend, 'passed': True} for backend in backends
+                 ], 'webgpuPerformance': [
+                     {'backend': backend, 'passed': True} for backend in backends
                  ]} if variant == 'test' else {})}
                 for profile in self.profiles for variant in self.variants]
 
@@ -168,29 +173,103 @@ class ImageSmokeResults(unittest.TestCase):
                 results = self.results(test_webgpu)
                 result = next(item for item in results if item['variant'] == 'test')
                 result['conv3dBias'] = value
-                with self.subTest(test_webgpu=test_webgpu, value=value), self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+                with self.subTest(test_webgpu=test_webgpu, value=value), self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
                     self.check(results, test_webgpu)
             results = self.results(test_webgpu)
             result = next(item for item in results if item['variant'] == 'test')
             result.pop('conv3dBias')
-            with self.subTest(test_webgpu=test_webgpu, missing=True), self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+            with self.subTest(test_webgpu=test_webgpu, missing=True), self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
                 self.check(results, test_webgpu)
         results = self.results(True)
         result = next(item for item in results if item['variant'] == 'test')
         result['conv3dBias'] = [{'backend': 'CPU', 'passed': True}]
-        with self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+        with self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
             self.check(results, True)
 
     def test_rejects_convolution_probe_in_browser_variants_and_old_scope(self):
         results = self.results(False)
         result = next(item for item in results if item['variant'] == 'browser')
         result['conv3dBias'] = None
-        with self.assertRaisesRegex(ValueError, 'convolution bias evidence'):
+        with self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
             self.check(results, False)
         results = self.results(False)
         results[0]['scope'] = results[0]['scope'].replace(' and 3D convolution bias', '')
         with self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
             self.check(results, False)
+
+    def test_contract_cannot_drop_probes_or_use_an_unknown_schema(self):
+        contract = snapshot.image_contract()
+        variants = []
+        for version in [None, True, 0, 2, '1']:
+            variants.append({**contract, 'schemaVersion': version})
+        variants.extend([{**contract, 'testOnlyProbes': ['conv3dBias']},
+                         {**contract, 'sharedProbes': []},
+                         {**contract, 'scopePrefix': None}])
+        for invalid in variants:
+            with self.subTest(contract=invalid), patch.object(snapshot, 'read_regular', return_value=json.dumps(invalid).encode()):
+                with self.assertRaisesRegex(ValueError, 'Invalid image smoke contract'):
+                    snapshot.image_contract()
+
+    def test_requires_all_probe_results_on_every_profile_and_backend(self):
+        keys = ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']
+        for gpu in (False, True):
+            template = self.results(gpu)
+            for index, item in enumerate(template):
+                if item['variant'] != 'test':
+                    continue
+                for key in keys:
+                    valid = item[key]
+                    invalid = [None, [], 'passed', [{'backend': 'CPU', 'passed': 1}],
+                               valid + valid, list(reversed(valid)) if gpu else [{'backend': 'WebGPU', 'passed': True}],
+                               [{'backend': entry['backend'], 'passed': False} for entry in valid]]
+                    if gpu:
+                        invalid.extend([valid[:1], valid[1:]])
+                    for value in invalid:
+                        results = copy.deepcopy(template)
+                        results[index][key] = value
+                        with self.subTest(gpu=gpu, profile=item['profile'], key=key, value=value):
+                            with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                                self.check(results, gpu)
+                    results = copy.deepcopy(template)
+                    results[index].pop(key)
+                    with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                        self.check(results, gpu)
+
+    def test_browser_probe_evidence_cannot_claim_unexecuted_arithmetic(self):
+        for gpu in (False, True):
+            template = self.results(gpu)
+            for index, item in enumerate(template):
+                if item['variant'] != 'browser':
+                    continue
+                for key in ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']:
+                    for value in [None, [{'backend': 'CPU', 'passed': True}]]:
+                        results = copy.deepcopy(template)
+                        results[index][key] = value
+                        with self.subTest(gpu=gpu, profile=item['profile'], key=key):
+                            with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                                self.check(results, gpu)
+                    if key in ['timestep', 'bf16Weights']:
+                        results = copy.deepcopy(template)
+                        results[index].pop(key)
+                        with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                            self.check(results, gpu)
+
+    def test_verified_probe_evidence_is_preserved_without_aliasing(self):
+        results = self.results(True)
+        self.check(results, True)
+        manifest = {'profiles': {profile: {'variants': {variant: {'validation': {
+            'realModelInference': False}} for variant in self.variants}} for profile in self.profiles}}
+        updated = snapshot.add_validation(manifest, 'stable-diffusion-cpp', results)
+        for result in results:
+            validation = updated['profiles'][result['profile']]['variants'][result['variant']]['validation']
+            self.assertIs(validation['realModelInference'], False)
+            expected = {key: result[key] for key in ['graphWalk', 'timestep', 'bf16Weights',
+                        'conv3dBias', 'webgpuPerformance'] if key in result}
+            self.assertEqual(validation['browserSmokeEvidence'], expected)
+            if result['variant'] == 'test':
+                result['webgpuPerformance'][0]['passed'] = False
+                self.assertIs(validation['browserSmokeEvidence']['webgpuPerformance'][0]['passed'], True)
+        self.assertNotIn('browserSmokeEvidence', next(iter(manifest['profiles'].values()))['variants']['test']['validation'])
 
 
 class RuntimeSnapshot(unittest.TestCase):
@@ -206,7 +285,10 @@ class RuntimeSnapshot(unittest.TestCase):
                 shutil.copy2(ROOT / runtime / 'config' / name, rr / 'config' / name)
             for name in snapshot.TEST_INPUTS[runtime]:
                 p = rr / name; p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text('Synthetic test-input identity fixture, NOT executable smoke code.\n')
+                if name == 'tests/browser-smoke-contract.json':
+                    shutil.copy2(ROOT / runtime / name, p)
+                else:
+                    p.write_text('Synthetic test-input identity fixture, NOT executable smoke code.\n')
         # Expand the root's intentionally tiny llama fixture to all configured profiles.
         llama = self.fixture.inputs / 'llama-cpp'
         manifest = json.loads((llama / 'manifest.json').read_text())
@@ -242,7 +324,10 @@ class RuntimeSnapshot(unittest.TestCase):
                     item['scope'] = snapshot.image_scope(False)
                     if variant == 'test':
                         item['graphWalk'] = True
-                        item['conv3dBias'] = [{'backend': 'CPU', 'passed': True}]
+                        for key in ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']:
+                            item[key] = [{'backend': 'CPU', 'passed': True}]
+                    else:
+                        item.update(timestep=[], bf16Weights=[])
                 elif profile.startswith('cpu-'): item['syntheticModel'] = True
                 else: item.update(mockedAdapter=True, suspension=True)
                 result.append(item)
@@ -284,6 +369,31 @@ class RuntimeSnapshot(unittest.TestCase):
                 self.assertTrue(any(p == 'test.node_asyncify' for p, _ in self.commands))
             for info in final['profiles'].values():
                 for data in info['variants'].values(): self.assertIs(data['validation']['realModelInference'], False)
+
+    def test_missing_performance_evidence_blocks_pack_and_clears_stale_receipt(self):
+        self.receipt().write_text('stale success')
+        def remove(envelope):
+            next(item for item in envelope['results'] if item['variant'] == 'test').pop('webgpuPerformance')
+        self.result_mutator = remove
+        original = subprocess.check_output
+        with patch('subprocess.check_output', wraps=original) as calls:
+            with self.assertRaisesRegex(ValueError, 'webgpuPerformance evidence'):
+                self.validate()
+        self.assertFalse(any(call.args[0][:2] == ['npm', 'pack'] for call in calls.call_args_list))
+        self.assertFalse(self.receipt().exists())
+
+    def test_shared_smoke_contract_is_part_of_the_source_bound_test_identity(self):
+        identity = snapshot.test_identity(self.repo / self.runtime, self.runtime)
+        for name in ['tests/browser-smoke-contract.mjs', 'tests/browser-smoke-contract.json']:
+            self.assertIn(name, identity)
+        def mutate(phase):
+            if phase == 'test.chromium_smoke':
+                path = self.repo / self.runtime / 'tests/browser-smoke-contract.json'
+                path.write_text(path.read_text().replace('no trained-model', 'xx trained-model'))
+        self.after_command = mutate
+        with self.assertRaisesRegex(ValueError, 'Test implementation or fixture changed'):
+            self.validate()
+        self.assertFalse(self.receipt().exists())
 
     def test_owned_temporary_directory_resolves_system_alias_before_use(self):
         actual = self.root / 'temporary-root'; actual.mkdir()
