@@ -171,7 +171,7 @@ try {
                 const beforeDisabled = stages().length;
                 module._sdc_test_callbacks();
                 if (stages().length !== beforeDisabled) throw Error('Disabled graph diagnostics still emitted');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -185,6 +185,7 @@ try {
             const timestep = [];
             const bf16Weights = [];
             const conv3dBias = variant === 'test' ? [] : undefined;
+            const webgpuPerformance = variant === 'test' ? [] : undefined;
             const graphWalk = variant === 'test' ? module._sdc_test_graph_walk() === 1 : undefined;
             if (graphWalk === false) throw Error('Deep graph construction/compute propagation failed');
             if (variant === 'test') {
@@ -227,6 +228,11 @@ try {
                     [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
                   if (convolution !== 1) throw Error(`Synthetic 3D convolution bias ${name} failed: ${convolution}`);
                   conv3dBias.push({ backend: name, passed: true });
+                  const performance = await module.ccall('sdc_test_webgpu_performance', 'number',
+                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
+                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
+                  if (performance !== 1) throw Error(`Bounded graph/copy ${name} failed: ${performance}`);
+                  webgpuPerformance.push({ backend: name, passed: true });
                 } finally {
                   await core.api.sd_set_log_callback(0n, 0n);
                   module.removeFunction(placementLog);
@@ -234,8 +240,8 @@ try {
                 }
               }
             }
-            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias,
-              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ' +
+            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias, webgpuPerformance,
+              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on ' +
                 (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + ', plus deep graph construction/selection; no trained-model image generation' };
           };
           const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;

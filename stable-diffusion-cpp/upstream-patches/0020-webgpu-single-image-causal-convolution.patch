@@ -1,0 +1,51 @@
+diff --git a/src/model/vae/wan_vae.hpp b/src/model/vae/wan_vae.hpp
+index 8d14cf9..911a728 100644
+--- a/src/model/vae/wan_vae.hpp
++++ b/src/model/vae/wan_vae.hpp
+@@ -76,6 +76,46 @@ namespace WAN {
+             int lp2 = 2 * std::get<0>(padding);
+             int rp2 = 0;
+ 
++#ifdef SD_BROWSER_WEBGPU
++            // Only the last temporal slice contributes to a single image with zero
++            // history. Both circular flags also wrap time in ggml_ext_pad_ext;
++            // preserve that path as well as video/history and explicit 3D modes.
++            if (ctx->backend != nullptr && cache_x == nullptr && !ctx->conv3d_direct_enabled &&
++                !(ctx->circular_x_enabled && ctx->circular_y_enabled) &&
++                in_channels > 0 && out_channels > 0 && x->ne[2] == 1 && x->ne[3] == in_channels &&
++                w->ne[2] == 3 && w->ne[3] % in_channels == 0 && w->ne[3] / in_channels == out_channels &&
++                lp2 == 2 && std::get<0>(stride) == 1 && std::get<0>(dilation) == 1 &&
++                x->type == GGML_TYPE_F32 && (w->type == GGML_TYPE_F16 || w->type == GGML_TYPE_F32) &&
++                ggml_is_contiguous(w)) {
++                auto spatial = ggml_ext_pad_ext(ctx->ggml_ctx, ctx->backend, x,
++                                                 lp0, rp0, lp1, rp1, 0, 0, 0, 0,
++                                                 ctx->circular_x_enabled, ctx->circular_y_enabled);
++                spatial = ggml_ext_cont(ctx->ggml_ctx, spatial);
++                auto input = ggml_reshape_4d(ctx->ggml_ctx, spatial,
++                                              spatial->ne[0], spatial->ne[1], in_channels, 1);
++                auto slice = ggml_view_4d(ctx->ggml_ctx, w, w->ne[0], w->ne[1], in_channels, out_channels,
++                                           w->nb[1], w->nb[3], w->nb[3] * in_channels, 2 * w->nb[2]);
++                // The CPU direct kernel also requires contiguous weights. Packing
++                // preserves their type; a strided view alone is not a valid fallback.
++                auto kernel = ggml_cont(ctx->ggml_ctx, slice);
++                auto conv = ggml_conv_2d_direct(ctx->ggml_ctx, kernel, input,
++                                                 std::get<2>(stride), std::get<1>(stride), 0, 0,
++                                                 std::get<2>(dilation), std::get<1>(dilation));
++                auto output = ggml_reshape_4d(ctx->ggml_ctx, conv, conv->ne[0], conv->ne[1], 1, out_channels);
++                if (b != nullptr) {
++                    // Keep the browser's mixed-backend out-of-place bias rule.
++                    output = ggml_add(ctx->ggml_ctx, output,
++                                      ggml_reshape_4d(ctx->ggml_ctx, b, 1, 1, 1, out_channels));
++                }
++                if (ggml_backend_supports_op(ctx->backend, spatial) &&
++                    ggml_backend_supports_op(ctx->backend, kernel) &&
++                    ggml_backend_supports_op(ctx->backend, conv) &&
++                    ggml_backend_supports_op(ctx->backend, output)) {
++                    return output;
++                }
++            }
++#endif
++
+             if (cache_x != nullptr && lp2 > 0) {
+                 x = ggml_concat(ctx->ggml_ctx, cache_x, x, 2);
+                 lp2 -= (int)cache_x->ne[2];

@@ -1,0 +1,56 @@
+diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
+--- a/src/core/compute_workspace.cpp
++++ b/src/core/compute_workspace.cpp
+@@ -5,6 +5,7 @@
+ #include <cstring>
+ #include <exception>
+ #include <map>
++#include <sstream>
+ #include <unordered_map>
+ #include <unordered_set>
+ 
+@@ -88,6 +89,44 @@
+                 LOG_DEBUG("browser-placement-v1 nodes=%d cpu=%zu webgpu=%zu other=%zu bf16=%zu inspected=%zu cpu_bf16=%zu webgpu_bf16=%zu other_bf16=%zu cpu_unsupported_bf16=%zu webgpu_weights=%zu host_weights=%zu other_weights=%zu webgpu_cpu_bf16=%zu webgpu_cpu_bf16_use_bytes=%llu",
+                           ggml_graph_n_nodes(graph), cpu, webgpu, other, seen, inspected, cpu_bf16, webgpu_bf16, other_bf16,
+                           unsupported, gpu_weights, host_weights, other_weights, gpu_cpu, static_cast<unsigned long long>(gpu_cpu_bytes));
++                if (sd_graph_diagnostics_epoch() == 0) return;
++                // Opt-in scheduled COMPUTE placement, excluding metadata-only
++                // nodes. No tensor names, tensor reads, eval callbacks or waits.
++                // A rejected predicate is inspected after scheduler rewriting;
++                // it is not a recorded cause or a measurement of transferred bytes.
++                std::array<size_t, GGML_OP_COUNT> cpu_ops{};
++                size_t compute_cpu = 0, compute_webgpu = 0, compute_other = 0;
++                size_t rejected = 0, largest_operand = 0;
++                const bool preferred_webgpu = browser_device_is_webgpu(ggml_backend_get_device(preferred));
++                for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
++                    auto node = ggml_graph_node(graph, i);
++                    if (node->op == GGML_OP_NONE || node->op == GGML_OP_VIEW || node->op == GGML_OP_RESHAPE ||
++                        node->op == GGML_OP_PERMUTE || node->op == GGML_OP_TRANSPOSE) continue;
++                    auto backend = assigned(node);
++                    if (sd_backend_is_cpu(backend)) {
++                        ++compute_cpu;
++                        ++cpu_ops[node->op];
++                        if (preferred_webgpu && !ggml_backend_supports_op(preferred, node)) ++rejected;
++                        for (auto input : node->src) {
++                            if (input != nullptr) largest_operand = std::max(largest_operand, ggml_nbytes(input));
++                        }
++                    } else if (backend != nullptr && browser_device_is_webgpu(ggml_backend_get_device(backend))) {
++                        ++compute_webgpu;
++                    } else {
++                        ++compute_other;
++                    }
++                }
++                std::ostringstream operations;
++                bool first = true;
++                for (size_t op = 0; op < cpu_ops.size(); ++op) {
++                    if (cpu_ops[op] == 0) continue;
++                    if (!first) operations << ',';
++                    operations << ggml_op_name(static_cast<ggml_op>(op)) << ':' << cpu_ops[op];
++                    first = false;
++                }
++                if (first) operations << '-';
++                LOG_DEBUG("browser-placement-ops-v1 cpu=%zu webgpu=%zu other=%zu cpu_rejected_now=%zu largest_cpu_operand_bytes=%zu cpu_ops=%s",
++                          compute_cpu, compute_webgpu, compute_other, rejected, largest_operand, operations.str().c_str());
+             }
+         };
+     }

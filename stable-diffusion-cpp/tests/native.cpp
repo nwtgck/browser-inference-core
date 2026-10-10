@@ -13,6 +13,7 @@ extern "C" int sdc_test_qwen_timestep(const char*);
 extern "C" int sdc_test_bf16_weights(const char*);
 extern "C" int sdc_test_graph_walk();
 extern "C" int sdc_test_conv3d_bias(const char*);
+extern "C" int sdc_test_webgpu_performance(const char*);
 extern "C" uint32_t sdc_model_io_capabilities();
 extern "C" uint64_t sdc_test_safetensors_offset(const char*);
 extern "C" uint32_t sdc_test_safetensors_value(const char*);
@@ -28,8 +29,10 @@ extern "C" void sdc_sd_set_log_callback(uint64_t, uint64_t);
 extern "C" void sdc_sd_set_progress_callback(uint64_t, uint64_t);
 static int logs_seen=0, progress_seen=0;
 static std::string placement_message;
+static std::vector<std::string> placement_ops_messages;
 static void log_callback(sd_log_level_t, const char* message, void* data) {
     if (std::string(message).find("native callback probe") != std::string::npos && uintptr_t(data)==17) ++logs_seen;
+    if (std::string(message).find("browser-placement-ops-v1 ") != std::string::npos) placement_ops_messages.push_back(message);
     if (std::string(message).find("browser-placement-v1 ") != std::string::npos) placement_message = message;
 }
 static void progress_callback(int step, int steps, float seconds, void* data) {
@@ -130,6 +133,16 @@ int main() {
         check(placement_message.find("probe") == std::string::npos, "Placement diagnostics omit tensor names");
         check(sdc_test_bf16_weights("CPU")==1,"CPU loading retains BF16, F16 and quantized parameter types");
         check(sdc_test_conv3d_bias("CPU")==1,"3D convolution bias placement and numerical parity");
+        check(sdc_test_webgpu_performance("CPU")==1,"Bounded graph arithmetic and cache ownership");
+        check(placement_ops_messages.empty(),"Per-operation diagnostics default off");
+        sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)),17);
+        sd_set_graph_diagnostics(true);
+        check(sdc_test_qwen_timestep("CPU")==1,"Opt-in operation placement graph");
+        check(placement_ops_messages.size()==1 && placement_ops_messages[0].find("MUL_MAT:2")!=std::string::npos &&
+              placement_ops_messages[0].find("probe")==std::string::npos,"Bounded, name-free compute placement histogram");
+        sd_set_graph_diagnostics(false);
+        check(sdc_test_qwen_timestep("CPU")==1 && placement_ops_messages.size()==1,"Disabled operation diagnostics emit nothing");
+        sdc_sd_set_log_callback(0,0);
         model_io_checks();
         sd_ctx_params_t context{};sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
         sd_ctx_params_t reference{};sd_ctx_params_init(&reference);

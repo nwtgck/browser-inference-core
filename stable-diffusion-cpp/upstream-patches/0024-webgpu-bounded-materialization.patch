@@ -1,0 +1,260 @@
+diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -424,6 +424,65 @@
+     return result;
+ }
+ 
++#ifdef SD_BROWSER_WEBGPU
++// Keep im2col + GEMM on WebGPU when a full spatial expansion exceeds binding
++// limits. This is not VAE image tiling: every output uses its original halo and
++// the same F16 expansion/matmul ordering as ggml_conv_2d. Small/CPU/direct paths
++// are unchanged. Every introduced materialized node must be accepted.
++static ggml_tensor* browser_bounded_conv_2d(ggml_context* ctx, ggml_backend_t backend,
++                                            ggml_tensor* x, ggml_tensor* w,
++                                            int s0, int s1, int p0, int p1, int d0, int d1) {
++    if (!sd_backend_is(backend, "WebGPU") || x->type != GGML_TYPE_F32 ||
++        (w->type != GGML_TYPE_F16 && w->type != GGML_TYPE_F32) ||
++        !ggml_is_contiguous(x) || !ggml_is_contiguous(w) ||
++        s0 <= 0 || s1 <= 0 || d0 <= 0 || d1 <= 0 || p0 < 0 || p1 < 0) {
++        return nullptr;
++    }
++    auto full = ggml_im2col(ctx, w, x, s0, s1, p0, p1, d0, d1, true, GGML_TYPE_F16);
++    if (ggml_backend_supports_op(backend, full) || full->ne[2] <= 1) {
++        return nullptr;
++    }
++    const int64_t ow = full->ne[1], oh = full->ne[2];
++    auto padded = p1 == 0 ? x : ggml_pad_ext(ctx, x, 0, 0, p1, p1, 0, 0, 0, 0);
++    if (padded != x && !ggml_backend_supports_op(backend, padded)) {
++        return nullptr;
++    }
++    const int64_t kernel_rows = (w->ne[1] - 1) * d1 + 1;
++    auto weight = ggml_reshape_2d(ctx, w, w->ne[0] * w->ne[1] * w->ne[2], w->ne[3]);
++    // Bound graph metadata and dispatch count, even on a very small adapter.
++    constexpr int64_t max_stripes = 64;
++    for (int64_t rows = oh / 2; rows > 0 && 1 + (oh - 1) / rows <= max_stripes; rows /= 2) {
++        auto output = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, ow, oh, w->ne[3], x->ne[3]);
++        bool supported = true;
++        for (int64_t begin = 0; begin < oh; begin += rows) {
++            const int64_t count = std::min(rows, oh - begin);
++            const int64_t input_rows = (count - 1) * s1 + kernel_rows;
++            auto input = ggml_view_4d(ctx, padded, padded->ne[0], input_rows, padded->ne[2], padded->ne[3],
++                                       padded->nb[1], padded->nb[2], padded->nb[3], begin * s1 * padded->nb[1]);
++            auto col = ggml_im2col(ctx, w, input, s0, s1, p0, 0, d0, d1, true, GGML_TYPE_F16);
++            auto product = ggml_mul_mat(ctx, ggml_reshape_2d(ctx, col, col->ne[0], ow * count * x->ne[3]), weight);
++            auto shaped = ggml_reshape_4d(ctx, product, ow, count, x->ne[3], w->ne[3]);
++            auto chunk = ggml_cont(ctx, ggml_permute(ctx, shaped, 0, 1, 3, 2));
++            // Chained SET nodes serialize ownership of one final output; no
++            // full-output copy/concatenation is repeated for each stripe.
++            auto merged = ggml_set_inplace(ctx, output, chunk, output->nb[1], output->nb[2], output->nb[3],
++                                            begin * output->nb[1]);
++            if (!ggml_backend_supports_op(backend, col) || !ggml_backend_supports_op(backend, product) ||
++                !ggml_backend_supports_op(backend, chunk) || !ggml_backend_supports_op(backend, merged)) {
++                supported = false;
++                break;
++            }
++            output = merged;
++        }
++        if (supported) {
++            ggml_set_name(output, "browser.bounded_conv_2d");
++            return output;
++        }
++    }
++    return nullptr;
++}
++#endif
++
+ ggml_tensor* ggml_ext_conv_2d(ggml_context* ctx,
+                               ggml_tensor* x,
+                               ggml_tensor* w,
+@@ -437,7 +496,8 @@
+                               bool direct,
+                               bool circular_x,
+                               bool circular_y,
+-                              float scale) {
++                              float scale,
++                              ggml_backend_t backend) {
+     if (scale != 1.f) {
+         x = ggml_ext_scale(ctx, x, scale);
+     }
+@@ -454,7 +514,13 @@
+     if (direct) {
+         x = ggml_conv_2d_direct(ctx, w, x, s0, s1, p0, p1, d0, d1);
+     } else {
+-        x = ggml_conv_2d(ctx, w, x, s0, s1, p0, p1, d0, d1);
++        ggml_tensor* bounded = nullptr;
++#ifdef SD_BROWSER_WEBGPU
++        bounded = browser_bounded_conv_2d(ctx, backend, x, w, s0, s1, p0, p1, d0, d1);
++#else
++        (void)backend;
++#endif
++        x = bounded != nullptr ? bounded : ggml_conv_2d(ctx, w, x, s0, s1, p0, p1, d0, d1);
+     }
+     if (scale != 1.f) {
+         x = ggml_ext_scale(ctx, x, 1.f / scale);
+@@ -685,6 +751,66 @@
+     }
+ }
+ 
++#ifdef SD_BROWSER_WEBGPU
++// Split queries, never keys: each row retains its complete softmax denominator,
++// mask and optional sink. This preserves manual attention (including precision)
++// instead of silently enabling Flash Attention when its setting is disabled.
++static ggml_tensor* browser_bounded_attention(ggml_context* ctx, ggml_backend_t backend,
++                                               ggml_tensor* q, ggml_tensor* k, ggml_tensor* v,
++                                               ggml_tensor* mask, ggml_tensor* sinks, float scale) {
++    if (!sd_backend_is(backend, "WebGPU") || q->type != GGML_TYPE_F32 || q->ne[1] <= 1 ||
++        (k->type != GGML_TYPE_F32 && k->type != GGML_TYPE_F16) ||
++        (v->type != GGML_TYPE_F32 && v->type != GGML_TYPE_F16) ||
++        (mask != nullptr && mask->ne[1] != 1 && mask->ne[1] != q->ne[1])) {
++        return nullptr;
++    }
++    auto full = ggml_mul_mat(ctx, k, q);
++    if (ggml_backend_supports_op(backend, full)) {
++        return nullptr;
++    }
++    const int64_t queries = q->ne[1];
++    constexpr int64_t max_chunks = 64;
++    for (int64_t rows = queries / 2; rows > 0 && 1 + (queries - 1) / rows <= max_chunks; rows /= 2) {
++        auto output = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, v->ne[1], queries, full->ne[2], full->ne[3]);
++        bool supported = true;
++        for (int64_t begin = 0; begin < queries; begin += rows) {
++            const int64_t count = std::min(rows, queries - begin);
++            auto query = ggml_view_4d(ctx, q, q->ne[0], count, q->ne[2], q->ne[3],
++                                        q->nb[1], q->nb[2], q->nb[3], begin * q->nb[1]);
++            auto scores = ggml_mul_mat(ctx, k, query);
++            ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
++            auto scaled = ggml_scale_inplace(ctx, scores, scale);
++            auto logits = scaled;
++            if (mask != nullptr) {
++                auto chunk_mask = mask->ne[1] == 1 ? mask :
++                    ggml_view_4d(ctx, mask, mask->ne[0], count, mask->ne[2], mask->ne[3],
++                                 mask->nb[1], mask->nb[2], mask->nb[3], begin * mask->nb[1]);
++                logits = ggml_add_inplace(ctx, scaled, chunk_mask);
++            }
++            auto probabilities = sinks != nullptr ? ggml_soft_max(ctx, logits) : ggml_soft_max_inplace(ctx, logits);
++            if (sinks != nullptr) {
++                ggml_soft_max_add_sinks(probabilities, sinks);
++            }
++            auto chunk = ggml_mul_mat(ctx, v, probabilities);
++            auto merged = ggml_set_inplace(ctx, output, chunk, output->nb[1], output->nb[2], output->nb[3],
++                                            begin * output->nb[1]);
++            if (!ggml_backend_supports_op(backend, scores) || !ggml_backend_supports_op(backend, scaled) ||
++                !ggml_backend_supports_op(backend, logits) || !ggml_backend_supports_op(backend, probabilities) ||
++                !ggml_backend_supports_op(backend, chunk) || !ggml_backend_supports_op(backend, merged)) {
++                supported = false;
++                break;
++            }
++            output = merged;
++        }
++        if (supported) {
++            ggml_set_name(output, "browser.bounded_attention");
++            return output;
++        }
++    }
++    return nullptr;
++}
++#endif
++
+ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
+                                     ggml_backend_t backend,
+                                     ggml_tensor* q,
+@@ -852,22 +978,27 @@
+         v = ggml_ext_cont(ctx, ggml_permute(ctx, v, 1, 2, 0, 3));  // [N, n_kv_head, d_head, L_k]
+         v = ggml_reshape_3d(ctx, v, L_k, d_head, n_kv_head * N);   // [N * n_kv_head, d_head, L_k]
+ 
+-        auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
+-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+-        kq = ggml_scale_inplace(ctx, kq, scale);
+-        if (mask) {
+-            kq = ggml_add_inplace(ctx, kq, mask);
+-        }
+-        if (sinks != nullptr) {
+-            // A sink-bearing fallback may be placed separately from its input.
+-            // Do not retain an in-place output on a different backend's storage.
+-            kq = ggml_soft_max(ctx, kq);
+-            ggml_soft_max_add_sinks(kq, sinks);
+-        } else {
+-            kq = ggml_soft_max_inplace(ctx, kq);
+-        }
+-
+-        kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
++#ifdef SD_BROWSER_WEBGPU
++        kqv = browser_bounded_attention(ctx, backend, q, k, v, mask, sinks, scale);
++#endif
++        if (kqv == nullptr) {
++            auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
++            ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
++            kq = ggml_scale_inplace(ctx, kq, scale);
++            if (mask) {
++                kq = ggml_add_inplace(ctx, kq, mask);
++            }
++            if (sinks != nullptr) {
++                // A sink-bearing fallback may be placed separately from its input.
++                // Do not retain an in-place output on a different backend's storage.
++                kq = ggml_soft_max(ctx, kq);
++                ggml_soft_max_add_sinks(kq, sinks);
++            } else {
++                kq = ggml_soft_max_inplace(ctx, kq);
++            }
++
++            kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
++        }
+ 
+         kqv = ggml_reshape_4d(ctx, kqv, d_head, L_q, n_head, N);  // [N, n_head, L_q, d_head]
+         kqv = ggml_permute(ctx, kqv, 0, 2, 1, 3);                 // [N, L_q, n_head, d_head]
+diff --git a/src/core/ggml_extend.h b/src/core/ggml_extend.h
+--- a/src/core/ggml_extend.h
++++ b/src/core/ggml_extend.h
+@@ -132,7 +132,8 @@
+                               bool direct     = false,
+                               bool circular_x = false,
+                               bool circular_y = false,
+-                              float scale     = 1.f);
++                              float scale     = 1.f,
++                              ggml_backend_t backend = nullptr);
+ 
+ // w: [OC，IC, KD, 1 * 1]
+ // x: [N, IC, IH, IW]
+diff --git a/src/model/common/ggml_block.hpp b/src/model/common/ggml_block.hpp
+--- a/src/model/common/ggml_block.hpp
++++ b/src/model/common/ggml_block.hpp
+@@ -507,7 +507,7 @@
+                                 ctx->conv2d_direct_enabled,
+                                 ctx->circular_x_enabled,
+                                 ctx->circular_y_enabled,
+-                                scale);
++                                scale, ctx->backend);
+     }
+ };
+ 
+@@ -590,7 +590,7 @@
+                                     ctx->conv2d_direct_enabled,
+                                     ctx->circular_x_enabled,
+                                     ctx->circular_y_enabled,
+-                                    scale);
++                                    scale, ctx->backend);
+         }
+ 
+         if (groups == in_channels && groups == out_channels) {
+@@ -659,7 +659,7 @@
+                                                  ctx->conv2d_direct_enabled,
+                                                  ctx->circular_x_enabled,
+                                                  ctx->circular_y_enabled,
+-                                                 scale);
++                                                 scale, ctx->backend);
+             }
+         }
+ 
+diff --git a/src/model/vae/wan_vae.hpp b/src/model/vae/wan_vae.hpp
+--- a/src/model/vae/wan_vae.hpp
++++ b/src/model/vae/wan_vae.hpp
+@@ -133,7 +133,7 @@
+                 x2              = ggml_ext_conv_2d(ctx->ggml_ctx, x2, w2, b,
+                                                    std::get<2>(stride), std::get<1>(stride), 0, 0,
+                                                    std::get<2>(dilation), std::get<1>(dilation),
+-                                                   ctx->conv2d_direct_enabled);
++                                                   ctx->conv2d_direct_enabled, false, false, 1.f, ctx->backend);
+                 return ggml_reshape_4d(ctx->ggml_ctx, x2, x2->ne[0], x2->ne[1], 1, out_channels);
+             }
+             return ggml_ext_conv_3d(ctx->ggml_ctx, ctx->backend, x, w, b, in_channels,
