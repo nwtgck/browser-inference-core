@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+  "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -449,11 +449,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559432,
+          "builtAtUnix": 1791670317,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -462,14 +616,18 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "timestep": [],
+              "bf16Weights": []
+            }
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -529,7 +687,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -887,11 +1045,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559478,
+          "builtAtUnix": 1791670373,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -900,7 +1212,34 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "graphWalk": true,
+              "timestep": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "bf16Weights": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "conv3dBias": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "webgpuPerformance": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ]
+            }
           }
         }
       }
@@ -911,7 +1250,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -971,7 +1310,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1329,11 +1668,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559319,
+          "builtAtUnix": 1791670301,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1342,14 +1835,18 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "timestep": [],
+              "bf16Weights": []
+            }
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1409,7 +1906,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1767,11 +2264,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559369,
+          "builtAtUnix": 1791670259,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1780,7 +2431,34 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "graphWalk": true,
+              "timestep": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "bf16Weights": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "conv3dBias": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "webgpuPerformance": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ]
+            }
           }
         }
       }
@@ -1791,7 +2469,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1851,7 +2529,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2209,11 +2887,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559312,
+          "builtAtUnix": 1791670353,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2222,14 +3054,18 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "timestep": [],
+              "bf16Weights": []
+            }
           }
         },
         "test": {
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "c73c9014ef5cf13d922b79b77c102945a870402c",
+          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2289,7 +3125,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "691cca9a0fe6106c0c1a822e382e02db571be7c7d243f0c730c4c091815becfc",
+            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2647,11 +3483,165 @@
                   }
                 ],
                 "sha256": "8bdab2c5b5b0017917a475b1714d61e29dd80681918d14aa9e308a03f349c2cc"
+              },
+              {
+                "file": "0020-webgpu-single-image-causal-convolution.patch",
+                "target": "stable-diffusion",
+                "reason": "Lower zero-history single-image causal convolution to a packed temporal slice only when the selected backend supports the candidate; preserve circular/history/video fallbacks.",
+                "files": [
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
+                    "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+                  }
+                ],
+                "sha256": "3140354ca4e0402770094150e2ed23b8d21f8fe6a3d1c8084a155f61667a9a07"
+              },
+              {
+                "file": "0021-browser-anima-conditioning.patch",
+                "target": "stable-diffusion",
+                "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
+                    "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
+                    "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.cpp",
+                    "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
+                    "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
+                  },
+                  {
+                    "path": "src/core/ggml_runner.h",
+                    "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
+                    "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+                  },
+                  {
+                    "path": "src/model/diffusion/anima.hpp",
+                    "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
+                    "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+                  },
+                  {
+                    "path": "src/model/diffusion/model.hpp",
+                    "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
+                    "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+                  },
+                  {
+                    "path": "src/pipeline/diffusion_engine.cpp",
+                    "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
+                    "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+                  },
+                  {
+                    "path": "src/pipeline/model_builders.cpp",
+                    "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
+                    "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+                  }
+                ],
+                "sha256": "e7b3885848787bc4d50467af70042576e0252a65d1d0c38164a92923e771c7cf"
+              },
+              {
+                "file": "0022-webgpu-device-tensor-copy.patch",
+                "target": "ggml",
+                "reason": "Copy compatible same-device tensor ranges directly on the WebGPU queue; preserve synchronous and asynchronous contracts and retain fallback for unsupported ranges.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "3f41a643c9c8252ab7f76e6500fbabb25b39023ae784f1a6ac6cfb324f97d0c5",
+                    "afterSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a"
+                  }
+                ],
+                "sha256": "92403e86028fa33834178b9cce5747745fcfbfa1ea65a2db9af6a058662ee1b2"
+              },
+              {
+                "file": "0023-webgpu-cache-capture-batches.patch",
+                "target": "stable-diffusion",
+                "reason": "Allocate cache destinations before queuing same-device copies, then complete once before publishing ownership; preserve host/strided fallbacks and failure lifetimes.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
+                    "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+                  }
+                ],
+                "sha256": "6115667241721bce845894d40a265992961a39ce21760491aa4ace8dcd8932e0"
+              },
+              {
+                "file": "0024-webgpu-bounded-materialization.patch",
+                "target": "stable-diffusion",
+                "reason": "Bound rejected convolution expansions and manual attention scores using existing WebGPU operations; require every introduced compute node to be supported, retaining precision, masks, sinks and original fallbacks.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
+                    "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
+                  },
+                  {
+                    "path": "src/core/ggml_extend.h",
+                    "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
+                    "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
+                  },
+                  {
+                    "path": "src/model/common/ggml_block.hpp",
+                    "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
+                    "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
+                  },
+                  {
+                    "path": "src/model/vae/wan_vae.hpp",
+                    "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
+                    "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+                  }
+                ],
+                "sha256": "5a97037607ba2f8cc5095625930ffb9085e1843c572d0510097012ca463a0613"
+              },
+              {
+                "file": "0025-webgpu-opt-in-operation-placement.patch",
+                "target": "stable-diffusion",
+                "reason": "Report an opt-in compute-operation placement histogram and current rejection counts without tensor names, readbacks, extra synchronization or execution-time claims.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
+                    "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+                  }
+                ],
+                "sha256": "e967d09c0f049dc462433b6a51cd1253350f61a4addc98ee81b7a36ffdcca796"
+              },
+              {
+                "file": "0026-webgpu-batch-parameter-uploads.patch",
+                "target": "ggml",
+                "reason": "Stage aligned per-kernel uniform parameters in a bounded host mirror and flush once before each existing WebGPU command submission; retain queue order, throttling, graph boundaries, bindings and slot lifetimes. Remove when the pinned upstream provides equivalent batching.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "4247b663672c7c2acd8e6fec60eaf08575a6400b7a618e174fba48af5902c01a",
+                    "afterSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00"
+                  }
+                ],
+                "sha256": "ec50da5901046572c0f6d1fb868e74bbc5b5820620baa5603d28c56ac1af5bf0"
+              },
+              {
+                "file": "0027-skip-empty-cache-completion.patch",
+                "target": "stable-diffusion",
+                "reason": "Avoid a queue completion registration when a runner or graph-cut cache has no new outputs; retain waits for every non-empty capture and exceptional copy exit. Segment computation keeps its own completion boundary.",
+                "files": [
+                  {
+                    "path": "src/core/runner_cache.cpp",
+                    "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
+                    "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+                  }
+                ],
+                "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791559287,
+          "builtAtUnix": 1791670290,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2660,7 +3650,34 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation"
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeEvidence": {
+              "graphWalk": true,
+              "timestep": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "bf16Weights": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "conv3dBias": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ],
+              "webgpuPerformance": [
+                {
+                  "backend": "CPU",
+                  "passed": true
+                }
+              ]
+            }
           }
         }
       }
@@ -3115,13 +4132,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
-      "bytes": 231403,
-      "sha256": "ac27b9cf91933823cf6ae4388a2ca3e43018abd32f0d940b3cacc06a1141fce3"
+      "bytes": 231725,
+      "sha256": "4b1d21c748ae7560b20fe6260c54dd700506d1289b3c61bd7d20c3e2d63304ad"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43645494,
-      "sha256": "1aea5a19ca8011804ab81df58cf8b177a0af119a6362a6ffd79e76b3ba7f7737"
+      "bytes": 43670093,
+      "sha256": "f19dd852cdf4e4bd6c0cf43fa9526b47a2053dabf8b0d84ead7761f36a212712"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -3130,13 +4147,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 453639,
-      "sha256": "8eb17193a9f526c841c3627c514525f5c7993327c11741793c54904d34478086"
+      "bytes": 454553,
+      "sha256": "4e965f900d9b08fbce2cd2327897286830373fff2b1965b0c25c21c9dc79a0f4"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 43978300,
-      "sha256": "5b8555c552609d9ee9d6a460319fc5f3e681609d50e6583d35c5666f41254c9f"
+      "bytes": 44039173,
+      "sha256": "cc69e1f046d589cc8a9b42ededad68797cc3614f250232742d8f8dd43a4d9993"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -3150,8 +4167,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37792970,
-      "sha256": "6b6c95c9f7d406ac2af9bada45070f018620615b4917e5a09ded456b22d7b610"
+      "bytes": 37803563,
+      "sha256": "d51f5343804a2dfb9e63ca9327022cd148859a5112274faf8bb4ddae9c57b825"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -3160,13 +4177,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 344738,
-      "sha256": "a2875be1143109b331b5a6c4c25fe510a412fecdfd8399347ed4f865b39913f9"
+      "bytes": 345179,
+      "sha256": "1ef01ea2b2232b6175441c720fdd6ab1a8c1e32b3678aecf3e16b1ddd9ff671b"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38007322,
-      "sha256": "31d8b42f944bcbd00ecc3ab8ee6cd81de4225d7482866e2f9b0edf057d84ed0c"
+      "bytes": 38031995,
+      "sha256": "55d3fef2afd87112117dd8b38b8f127d63bdc699dadcd1f01a2098597beeb504"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -3180,8 +4197,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38097287,
-      "sha256": "75e38c31a68c5807c6cfb87a5e4a1bbc579a3313d845006f020a6beb28e9ae55"
+      "bytes": 38108668,
+      "sha256": "57d48256ded4a1456e3cd175a686a3831bd4636c5aa72c628a311039c811391b"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -3190,13 +4207,13 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 348276,
-      "sha256": "fdd9ff8514a9e7f9364dfbef3c465657a499aad6a4296097ba2d60f2ace857d2"
+      "bytes": 348717,
+      "sha256": "a537cd247e2311d30b1d583d5922b24597cde42cab1b3bbbba5d20a9fd0fa56a"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38321831,
-      "sha256": "41a5c2f9c4dcbbd154a9c7da9b48d206b8c1670d6bc635659e58d7482cbf5412"
+      "bytes": 38348504,
+      "sha256": "b1edfa37f6cee4fdedee2862e75c49bf704aa552044a8e7e4fc3867f86f1c100"
     }
   ]
 }
