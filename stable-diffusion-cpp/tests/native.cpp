@@ -140,6 +140,10 @@ int main() {
         check(sdc_test_qwen_timestep("CPU")==1,"Opt-in operation placement graph");
         check(placement_ops_messages.size()==1 && placement_ops_messages[0].find("MUL_MAT:2")!=std::string::npos &&
               placement_ops_messages[0].find("probe")==std::string::npos,"Bounded, name-free compute placement histogram");
+        check(placement_ops_messages[0].find("webgpu_ops=-") != std::string::npos &&
+              placement_ops_messages[0].find("largest_webgpu_output_bytes=0") != std::string::npos &&
+              placement_ops_messages[0].find("webgpu_silu=0 webgpu_tanh=0 webgpu_swiglu=0") != std::string::npos,
+              "Empty WebGPU work census is explicit on CPU");
         sd_set_graph_diagnostics(false);
         check(sdc_test_qwen_timestep("CPU")==1 && placement_ops_messages.size()==1,"Disabled operation diagnostics emit nothing");
         sdc_sd_set_log_callback(0,0);

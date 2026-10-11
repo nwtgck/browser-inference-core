@@ -525,6 +525,30 @@
           "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
         }
       ]
+    },
+    {
+      "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+      "target": "stable-diffusion",
+      "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+      "files": [
+        {
+          "path": "src/model/diffusion/qwen_image_2_1.hpp",
+          "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+          "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+        }
+      ]
+    },
+    {
+      "file": "0032-webgpu-compute-operation-details.patch",
+      "target": "stable-diffusion",
+      "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+      "files": [
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+          "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+        }
+      ]
     }
   ]
 }

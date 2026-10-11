@@ -6,7 +6,7 @@ test('image smoke scope distinguishes optional WebGPU execution without model cl
   assert.ok(imageSmokeScope(false).includes('CPU (no GPU inference)'));
   assert.ok(imageSmokeScope(true).includes('CPU and WebGPU'));
   for (const enabled of [false, true]) {
-    assert.ok(imageSmokeScope(enabled).includes('bounded convolution/attention, softmax/RoPE and cache-copy'));
+    assert.ok(imageSmokeScope(enabled).includes('bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy'));
     assert.ok(imageSmokeScope(enabled).endsWith('no trained-model image generation'));
   }
 });

@@ -4,6 +4,7 @@
 #include "core/ggml_extend.h"
 #include "core/runner_cache.h"
 #include "model/common/rope.hpp"
+#include "model/diffusion/qwen_image_2_1.hpp"
 #include "ggml-backend-impl.h"
 #include <cstdio>
 
@@ -191,6 +192,64 @@ std::vector<float> run_shared_rope(ggml_backend_t backend, bool shared) {
     return result;
 }
 
+// Qwen elementwise probes use real requested-backend allocation and execution.
+// The construction wrapper only selects the browser branch for the CPU test.
+std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, bool packed, int prefix) {
+    using Block = Qwen::QwenImage21TransformerBlock;
+    auto params = context(), computation = context();
+    constexpr int width = 64, tokens = 9, inner = 96;
+    auto input = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, width, tokens);
+    auto packed_input = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, 2 * inner, tokens);
+    auto gate = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, inner, tokens);
+    auto up = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, inner, tokens);
+    std::vector<ggml_tensor*> modulation;
+    for (int i = 0; i < 4; ++i) modulation.push_back(ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, width, 2));
+    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
+    require(parameters != nullptr, "Qwen elementwise parameter allocation");
+    ConstructionBudget construction(backend);
+    GGMLRunnerContext ctx; ctx.ggml_ctx = computation.get(); ctx.backend = &construction.backend;
+    auto prepared = optimized ? Block::prepare_modulation(&ctx, modulation, prefix == 0) : std::nullopt;
+    require(!optimized || bool(prepared), "Qwen modulation support on requested backend");
+    ggml_tensor* output = nullptr;
+    for (int i = 0; i < 4; ++i) {
+        auto part = prepared ? Block::modulate_prepared(computation.get(), input, prepared->target[i], prepared->prefix[i], prefix) :
+                               Block::modulate(computation.get(), input, modulation[i], prefix, i % 2 == 1);
+        part = ggml_reshape_1d(computation.get(), part, ggml_nelements(part));
+        output = output ? ggml_concat(computation.get(), output, part, 0) : part;
+    }
+    ggml_tensor* activated = optimized ? Block::try_webgpu_swiglu(&ctx, packed ? packed_input : gate, packed ? nullptr : up) : nullptr;
+    require(!optimized || activated != nullptr, "Qwen GLU support on requested backend");
+    if (!activated) {
+        if (packed) {
+            auto parts = ggml_ext_chunk(computation.get(), packed_input, 2, 0);
+            activated = ggml_mul(computation.get(), parts[1], ggml_silu(computation.get(), parts[0]));
+        } else {
+            activated = ggml_mul(computation.get(), up, ggml_silu(computation.get(), gate));
+        }
+    }
+    output = ggml_concat(computation.get(), output,
+                         ggml_reshape_1d(computation.get(), activated, ggml_nelements(activated)), 0);
+    auto g = image_test::graph(computation.get(), output);
+    require(count(g, GGML_OP_GLU) == int(optimized), "Qwen GLU was not selected");
+    for (int i = 0; i < ggml_graph_n_nodes(g); ++i) {
+        auto n = ggml_graph_node(g, i);
+        require(!is_compute(n) || ggml_backend_supports_op(backend, n), "requested backend rejected Qwen probe node");
+    }
+    auto allocation = allocate(backend, g);
+    std::vector<float> result;
+    for (unsigned seed : {5u, 23u}) {
+        auto original = values(ggml_nelements(input), seed, 16); write(input, original);
+        write(packed_input, values(ggml_nelements(packed_input), seed + 2, 3));
+        write(gate, values(ggml_nelements(gate), seed + 3, 3));
+        write(up, values(ggml_nelements(up), seed + 4, 5));
+        for (int i = 0; i < 4; ++i) write(modulation[i], values(ggml_nelements(modulation[i]), seed + i, 8));
+        compute(backend, g);
+        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+        close(original, read(input));
+    }
+    return result;
+}
+
 } // namespace
 
 extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
@@ -208,6 +267,11 @@ extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
             auto expected = run_graph(reference.get(), false, false, GGML_TYPE_F32, sink, masked);
             auto actual = run_graph(backend.get(), false, true, GGML_TYPE_F32, sink, masked);
             close(expected, actual, 2e-4f, 2e-3f);
+        }
+        for (bool packed : {false, true}) for (int prefix : {0, 3}) {
+            auto expected = run_qwen_elementwise(reference.get(), false, packed, prefix);
+            auto actual = run_qwen_elementwise(backend.get(), true, packed, prefix);
+            close(expected, actual, 3e-5f, 3e-4f);
         }
         for (int branches : {1, 32, 33, 97}) {
             auto expected = run_parameter_batches(reference.get(), branches);

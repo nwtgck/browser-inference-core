@@ -351,3 +351,26 @@ patch, relax input hashes, or substitute a different upstream revision.
     Frozen-reference arithmetic, modified inputs, 32-layer graph counts and
     graph-cut planning are covered. Remove when upstream shares equivalent
     producers while retaining segment/input lifetimes.
+
+31. Qwen Image 2.1 graph-local work reduction. The preferred WebGPU backend must
+    accept each prepared modulation row and existing F32 SwiGLU operation. Share
+    the four target/prefix modulation producers across layers, borrow only
+    contiguous read-only input spans, and use packed or separate-projection GLU
+    without materializing a separate SiLU output. Unsupported/F16/strided
+    constructor cases retain the original path; multiplication outputs remain
+    out-of-place. This is not a persistent timestep cache. The context creation
+    argument `qwen_image_2_1_webgpu_work=false` disables all three new choices for
+    same-artifact comparisons without disabling the 008 RoPE/softmax fixes.
+    Native tests compare against the frozen 008 block/model, change input values
+    in the same storage, verify fallbacks, and execute graph cuts with independent
+    per-segment allocations and cache ownership. The existing optional WebGPU
+    smoke probe now executes small modulation/GLU graphs too. Remove when pinned
+    upstream has equivalent guarded graph-local producers and fused activation.
+
+32. WebGPU operation details in the existing opt-in allocation diagnostic. Append
+    an operation histogram, SiLU/tanh/SwiGLU subtype counts, and largest logical
+    node output. No tensor names/contents, driver timestamp queries, backend
+    synchronization, or new per-step logging policy. Assigned nodes are not
+    physical shader dispatch counts and output size is not peak/live GPU memory.
+    Keep the old CPU fields and default-off behavior for consumers. Remove when
+    equivalent upstream placement detail is available.

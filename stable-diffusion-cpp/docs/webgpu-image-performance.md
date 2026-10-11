@@ -209,3 +209,43 @@ the host, not GPU-internal reads/writes, live residency or physical memory use.
 
 The tested host/native suites do not replace rebuilding the pinned Emscripten
 profiles, actual WebGPU validation, or cooled/warm full-model measurements.
+
+## Qwen Image 2.1: remove repeated elementwise work (0031–0032)
+
+The 008 shared rotary matrix fix did not remove layer-local modulation work or
+intermediate MLP activations. Qwen's four modulation matrices depend on the
+current timestep, not on the layer. For an accepted WebGPU graph, prepare their
+scale/tanh rows once and reuse those producers across layers. Prefix reuse needs
+only target rows; an initial full-context graph also prepares the prefix rows.
+Every new graph evaluates its current inputs. No pointer-identity or cross-run
+modulation cache is introduced, and layer/graph-cut marker ownership is unchanged.
+
+Modulation uses out-of-place MUL. Read-only contiguous target/prefix spans can
+therefore be borrowed directly; noncontiguous spans retain explicit compaction.
+This is a local alias argument, not permission to delete all CONT operators.
+
+The MLP uses the pinned backend's existing F32 SwiGLU for compatible packed or
+separate gate/up projections. Guard the GGML constructor's layout/type/shape
+preconditions before building a candidate and ask the preferred backend to accept
+it. Unsupported inputs keep separate SiLU and MUL. No shader/precision override,
+weight conversion, quantization, image-size, step-count, or Flash setting changes.
+
+For controlled comparisons, the context-creation model argument
+`qwen_image_2_1_webgpu_work=false` preserves the previous three graph choices.
+It does not disable earlier RoPE/softmax/transport patches. Creating a new context
+is required to change this flag; never mutate it while a graph is active. A false
+setting is tested against frozen 008 output bit-for-bit on CPU. Same-artifact
+experiments must still account for run order and cannot infer thermal state from
+timing alone.
+
+`webgpu-qwen-work-test` uses real model methods with synthetic weights, frozen
+008 references, repeated input/timestep values in the same storage, negative
+admission/type/layout cases, and real graph-cut binding/cache execution on CPU.
+The optional model-free WebGPU smoke adds requested-backend elementwise checks.
+Policy replay and CPU execution are not GPU speed or trained-image validation.
+
+When existing graph diagnostics are enabled, `browser-placement-ops-v1` additionally
+includes `webgpu_ops`, `largest_webgpu_output_bytes`, `webgpu_silu`, `webgpu_tanh`,
+and `webgpu_swiglu`. These are allocation metadata; backend fusion can mean fewer
+actual dispatches. A sum of logical outputs across layers is neither peak VRAM nor
+measured GPU memory traffic. The diagnostic does not change wait or submit policy.

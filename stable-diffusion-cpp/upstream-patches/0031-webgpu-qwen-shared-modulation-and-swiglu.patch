@@ -1,0 +1,185 @@
+diff --git a/src/model/diffusion/qwen_image_2_1.hpp b/src/model/diffusion/qwen_image_2_1.hpp
+--- a/src/model/diffusion/qwen_image_2_1.hpp
++++ b/src/model/diffusion/qwen_image_2_1.hpp
+@@ -3,4 +3,5 @@
+ 
+ #include "model/diffusion/qwen_image.hpp"
++#include <array>
+ #include <optional>
+ 
+@@ -244,4 +245,81 @@
+         }
+ 
++        // These are graph-local producers, not a persistent/value-based cache.
++        // All layers consume the same timestep modulation; a new graph evaluates
++        // it again, including when the input storage is reused with new values.
++        struct PreparedModulation {
++            std::array<ggml_tensor*, 4> target{};
++            std::array<ggml_tensor*, 4> prefix{};
++        };
++
++        static std::optional<PreparedModulation> prepare_modulation(
++            GGMLRunnerContext* ctx, const std::vector<ggml_tensor*>& params, bool target_only) {
++#ifdef SD_BROWSER_WEBGPU
++            if (sd_backend_is(ctx->backend, "WebGPU") && params.size() == 4) {
++                PreparedModulation result;
++                for (size_t i = 0; i < params.size(); ++i) {
++                    if (params[i]->type != GGML_TYPE_F32 || params[i]->ne[1] != 2) {
++                        return std::nullopt;
++                    }
++                    auto rows = ggml_ext_chunk(ctx->ggml_ctx, params[i], 2, 1);
++                    for (int row = 0; row < (target_only ? 1 : 2); ++row) {
++                        auto value = (i == 1 || i == 3) ? ggml_tanh(ctx->ggml_ctx, rows[row]) :
++                            ggml_scale_bias(ctx->ggml_ctx, rows[row], 1.f, 1.f);
++                        if (!ggml_backend_supports_op(ctx->backend, rows[row]) ||
++                            !ggml_backend_supports_op(ctx->backend, value)) {
++                            return std::nullopt;
++                        }
++                        (row == 0 ? result.target : result.prefix)[i] = value;
++                    }
++                }
++                return result;
++            }
++#endif
++            return std::nullopt;
++        }
++
++        static ggml_tensor* modulate_prepared(ggml_context* ctx, ggml_tensor* x,
++                                             ggml_tensor* target_row, ggml_tensor* prefix_row,
++                                             int64_t prefix_length) {
++            // Multiplication owns a new output; these slices are read-only, not
++            // an in-place alias barrier. Borrow contiguous spans (including the
++            // full target on prefix reuse); keep compaction for strided spans.
++            auto apply = [&](int64_t begin, int64_t end, ggml_tensor* row) {
++                auto part = begin == 0 && end == x->ne[1] ? x :
++                    ggml_ext_slice(ctx, x, 1, begin, end, false);
++                if (!ggml_is_contiguous(part)) {
++                    part = ggml_cont(ctx, part);
++                }
++                return ggml_mul(ctx, part, row);
++            };
++            auto target = apply(prefix_length, x->ne[1], target_row);
++            if (prefix_length == 0) {
++                return target;
++            }
++            GGML_ASSERT(prefix_row != nullptr);
++            auto prefix = apply(0, prefix_length, prefix_row);
++            return ggml_concat(ctx, prefix, target, 1);
++        }
++
++        // Select the existing fused kernel only when its layout/type contract
++        // and the real preferred backend allow it. A null 'up' means packed
++        // [gate, up] columns; separate projections pass both operands explicitly.
++        static ggml_tensor* try_webgpu_swiglu(GGMLRunnerContext* ctx,
++                                              ggml_tensor* gate, ggml_tensor* up = nullptr) {
++#ifdef SD_BROWSER_WEBGPU
++            if (sd_backend_is(ctx->backend, "WebGPU") && gate->type == GGML_TYPE_F32 &&
++                ggml_is_contiguous_1(gate) &&
++                (up != nullptr ? (up->type == gate->type && ggml_are_same_shape(gate, up) &&
++                                  ggml_is_contiguous_1(up)) : (gate->ne[0] % 2 == 0))) {
++                auto result = up != nullptr ? ggml_swiglu_split(ctx->ggml_ctx, gate, up) :
++                                             ggml_swiglu(ctx->ggml_ctx, gate);
++                if (ggml_backend_supports_op(ctx->backend, result)) {
++                    return result;
++                }
++            }
++#endif
++            return nullptr;
++        }
++
+         static ggml_tensor* modulate(ggml_context* ctx, ggml_tensor* x, ggml_tensor* params, int64_t prefix_length, bool gate = false) {
+             auto rows  = ggml_ext_chunk(ctx, params, 2, 1);
+@@ -258,26 +336,37 @@
+         }
+ 
+-        ggml_tensor* forward(GGMLRunnerContext* ctx, ggml_tensor* x, const std::vector<ggml_tensor*>& modulation, ggml_tensor* pe, const QwenImage21Layout& layout, const std::vector<ggml_tensor*>& masks, const QwenImage21PrefixCache& cache, const Rope::PreparedMatrix* prepared_pe = nullptr) {
++        ggml_tensor* forward(GGMLRunnerContext* ctx, ggml_tensor* x, const std::vector<ggml_tensor*>& modulation, ggml_tensor* pe, const QwenImage21Layout& layout, const std::vector<ggml_tensor*>& masks, const QwenImage21PrefixCache& cache, const Rope::PreparedMatrix* prepared_pe = nullptr, const PreparedModulation* prepared_modulation = nullptr, bool fuse_mlp = true) {
+             const int64_t prefix_length = cache.mode == QwenImage21PrefixCache::Mode::REUSE ? 0 : layout.prefix_length;
++            auto apply_modulation = [&](ggml_tensor* value, size_t index, bool gate = false) {
++                return prepared_modulation != nullptr ?
++                    modulate_prepared(ctx->ggml_ctx, value, prepared_modulation->target[index],
++                                      prepared_modulation->prefix[index], prefix_length) :
++                    modulate(ctx->ggml_ctx, value, modulation[index], prefix_length, gate);
++            };
+             auto h                      = std::dynamic_pointer_cast<LayerNorm>(blocks["img_norm1"])->forward(ctx, x);
+-            h                           = modulate(ctx->ggml_ctx, h, modulation[0], prefix_length);
++            h                           = apply_modulation(h, 0);
+             h                           = std::dynamic_pointer_cast<QwenImage21Attention>(blocks["attn"])->forward(ctx, h, pe, layout.segments, masks, cache, prepared_pe);
+-            x                           = ggml_add(ctx->ggml_ctx, x, modulate(ctx->ggml_ctx, h, modulation[1], prefix_length, true));
++            x                           = ggml_add(ctx->ggml_ctx, x, apply_modulation(h, 1, true));
+             h                           = std::dynamic_pointer_cast<LayerNorm>(blocks["img_norm2"])->forward(ctx, x);
+-            h                           = modulate(ctx->ggml_ctx, h, modulation[2], prefix_length);
+-            ggml_tensor* gate;
++            h                           = apply_modulation(h, 2);
++            ggml_tensor* gate = nullptr;
++            ggml_tensor* activated = nullptr;
+             auto fused = blocks.find("img_mlp.gate_up");
+             if (fused != blocks.end()) {
+                 auto gate_up = std::dynamic_pointer_cast<Linear>(fused->second)->forward(ctx, h);
+-                auto parts   = ggml_ext_chunk(ctx->ggml_ctx, gate_up, 2, 0);
+-                gate         = parts[0];
+-                h            = parts[1];
++                activated = fuse_mlp ? try_webgpu_swiglu(ctx, gate_up) : nullptr;
++                if (activated == nullptr) {
++                    auto parts = ggml_ext_chunk(ctx->ggml_ctx, gate_up, 2, 0);
++                    gate = parts[0];
++                    h = parts[1];
++                }
+             } else {
+                 gate = std::dynamic_pointer_cast<Linear>(blocks["img_mlp.gate_layer"])->forward(ctx, h);
+                 h    = std::dynamic_pointer_cast<Linear>(blocks["img_mlp.proj"])->forward(ctx, h);
+-            }
+-            h = ggml_mul(ctx->ggml_ctx, h, ggml_silu(ctx->ggml_ctx, gate));
++                activated = fuse_mlp ? try_webgpu_swiglu(ctx, gate, h) : nullptr;
++            }
++            h = activated != nullptr ? activated : ggml_mul(ctx->ggml_ctx, h, ggml_silu(ctx->ggml_ctx, gate));
+             h = std::dynamic_pointer_cast<Linear>(blocks["img_mlp.out"])->forward(ctx, h);
+-            return ggml_add(ctx->ggml_ctx, x, modulate(ctx->ggml_ctx, h, modulation[3], prefix_length, true));
++            return ggml_add(ctx->ggml_ctx, x, apply_modulation(h, 3, true));
+         }
+     };
+@@ -285,6 +374,9 @@
+     class QwenImage21Model : public GGMLBlock {
+         QwenImage21Config config;
++        bool webgpu_work_enabled = true;
+ 
+     public:
++        void set_webgpu_work_enabled(bool enabled) { webgpu_work_enabled = enabled; }
++
+         QwenImage21Model(const QwenImage21Config& config)
+             : config(config) {
+@@ -334,4 +426,6 @@
+             }
+ #endif
++            auto prepared_modulation = webgpu_work_enabled ? QwenImage21TransformerBlock::prepare_modulation(
++                ctx, mod, cache.mode == QwenImage21PrefixCache::Mode::REUSE) : std::nullopt;
+             for (int i = 0; i < config.num_layers; ++i) {
+                 const std::string layer = "transformer_blocks." + std::to_string(i);
+@@ -340,5 +434,7 @@
+                 layer_cache.cut_group   = "qwen_image_2_1." + layer;
+                 auto block              = std::dynamic_pointer_cast<QwenImage21TransformerBlock>(blocks[layer]);
+-                joint                   = block->forward(ctx, joint, mod, pe, layout, masks, layer_cache, prepared_pe ? &*prepared_pe : nullptr);
++                joint                   = block->forward(ctx, joint, mod, pe, layout, masks, layer_cache,
++                                         prepared_pe ? &*prepared_pe : nullptr,
++                                         prepared_modulation ? &*prepared_modulation : nullptr, webgpu_work_enabled);
+                 sd::ggml_graph_cut::mark_graph_cut(joint, layer_cache.cut_group, "joint");
+             }
+@@ -361,4 +457,5 @@
+         bool prefix_cache_enabled  = true;
+         bool prefix_cache_disabled = false;
++        bool webgpu_work_enabled    = true;
+ 
+         QwenImage21Runner(ggml_backend_t backend, const String2TensorStorage& weights, const std::string& prefix, std::shared_ptr<RunnerWeightManager> weight_manager = nullptr, const char* model_args = nullptr)
+@@ -370,5 +467,11 @@
+                     LOG_WARN("ignoring invalid Qwen Image 2.1 model arg '%s=%s'", key.c_str(), value.c_str());
+                 }
+-            }
++                if (key == "qwen_image_2_1_webgpu_work" && !parse_strict_bool(value, webgpu_work_enabled)) {
++                    LOG_WARN("ignoring invalid Qwen Image 2.1 model arg '%s=%s'", key.c_str(), value.c_str());
++                }
++            }
++            // Context-creation setting: changing it requires a new context, not
++            // mutation of an active graph or its prefix cache.
++            model.set_webgpu_work_enabled(webgpu_work_enabled);
+             model.init(params_ctx, weights, prefix);
+         }
