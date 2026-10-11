@@ -3,6 +3,7 @@
 #include "image-performance-test-utils.h"
 #include "core/ggml_extend.h"
 #include "core/runner_cache.h"
+#include "model/common/rope.hpp"
 #include "ggml-backend-impl.h"
 #include <cstdio>
 
@@ -136,6 +137,60 @@ std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
     return result;
 }
 
+// Exercise the production softmax shader around private-cache boundaries.
+// The requested backend must execute the operator, never an implicit fallback.
+std::vector<float> run_softmax_rows(ggml_backend_t backend, int width, bool inplace, bool masked, bool sink) {
+    auto params = context(), computation = context();
+    auto input = ggml_new_tensor_3d(params.get(), GGML_TYPE_F32, width, 3, 2);
+    auto mask = masked ? ggml_new_tensor_2d(params.get(), GGML_TYPE_F16, width, 3) : nullptr;
+    auto sinks = sink ? ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, 2) : nullptr;
+    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
+    require(parameters != nullptr, "softmax parameter allocation");
+    if (mask) write(mask, values(ggml_nelements(mask), 7, 16));
+    if (sinks) write(sinks, {std::log(435.f), std::log(17.f)});
+    auto output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, .0883883476f, 0.f) :
+                            ggml_soft_max_ext(computation.get(), input, mask, .0883883476f, 0.f);
+    if (sinks) ggml_soft_max_add_sinks(output, sinks);
+    require(ggml_backend_supports_op(backend, output), "backend rejected softmax cache probe");
+    auto graph = image_test::graph(computation.get(), output);
+    auto allocation = allocate(backend, graph);
+    std::vector<float> result;
+    for (unsigned seed : {3u, 23u}) {
+        write(input, values(ggml_nelements(input), seed, 8));
+        compute(backend, graph);
+        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+    }
+    return result;
+}
+
+std::vector<float> run_shared_rope(ggml_backend_t backend, bool shared) {
+    auto params = context(), computation = context();
+    auto input = ggml_new_tensor_4d(params.get(), GGML_TYPE_F32, 32, 2, 17, 1);
+    auto pe = ggml_new_tensor_4d(params.get(), GGML_TYPE_F32, 2, 2, 16, 17);
+    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
+    require(parameters != nullptr, "RoPE parameter allocation");
+    const auto prepared = Rope::prepare_matrix(computation.get(), pe);
+    auto apply = [&](ggml_tensor* x) { return shared ? Rope::apply_rope_prepared(computation.get(), x, prepared) :
+                                                     Rope::apply_rope(computation.get(), x, pe); };
+    auto a = apply(input);
+    auto b = apply(ggml_scale(computation.get(), input, .75f));
+    auto output = ggml_concat(computation.get(), a, b, 1);
+    auto graph = image_test::graph(computation.get(), output);
+    for (int i=0; i<ggml_graph_n_nodes(graph); ++i) {
+        auto node = ggml_graph_node(graph, i);
+        require(!is_compute(node) || ggml_backend_supports_op(backend, node), "backend rejected shared RoPE");
+    }
+    auto allocation = allocate(backend, graph);
+    std::vector<float> result;
+    for (unsigned seed : {5u, 31u}) {
+        write(input, values(ggml_nelements(input), seed, 16));
+        write(pe, values(ggml_nelements(pe), seed+7, 8));
+        compute(backend, graph);
+        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+    }
+    return result;
+}
+
 } // namespace
 
 extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
@@ -159,6 +214,14 @@ extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
             auto actual = run_parameter_batches(backend.get(), branches);
             close(expected, actual, 2e-5f, 2e-4f);
         }
+        for (int width : {17, 257, 4095, 4096, 4097, 16385}) {
+            for (bool inplace : {false, true}) for (bool masked : {false, true}) for (bool sink : {false, true}) {
+                auto expected = run_softmax_rows(reference.get(), width, inplace, masked, sink);
+                auto actual = run_softmax_rows(backend.get(), width, inplace, masked, sink);
+                close(expected, actual, 3e-6f, 3e-4f);
+            }
+        }
+        close(run_shared_rope(reference.get(), false), run_shared_rope(backend.get(), true), 2e-5f, 2e-4f);
         return 1;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "WebGPU performance arithmetic/copy probe: %s\n", error.what());

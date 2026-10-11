@@ -484,6 +484,47 @@
           "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
         }
       ]
+    },
+    {
+      "file": "0028-webgpu-softmax-private-cache.patch",
+      "target": "ggml",
+      "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+          "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+          "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+        }
+      ]
+    },
+    {
+      "file": "0029-webgpu-attention-softmax-scale.patch",
+      "target": "stable-diffusion",
+      "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+      "files": [
+        {
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+          "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+        }
+      ]
+    },
+    {
+      "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+      "target": "stable-diffusion",
+      "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+      "files": [
+        {
+          "path": "src/model/common/rope.hpp",
+          "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+          "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+        },
+        {
+          "path": "src/model/diffusion/qwen_image_2_1.hpp",
+          "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+          "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+        }
+      ]
     }
   ]
 }

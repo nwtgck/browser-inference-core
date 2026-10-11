@@ -332,3 +332,22 @@ patch, relax input hashes, or substitute a different upstream revision.
     completion/ownership rules. Tests include outputs in other segments, already
     pending entries, no future cut consumer, normal saves and failures. Remove
     when upstream avoids equivalent empty waits with these lifetime guarantees.
+
+
+28. WebGPU softmax private-cache indexing: use each invocation's loop index for
+    its existing sixteen-element cache, and branch before cache/storage reads.
+    Preserve reduction order, masks, sinks and spill layout. Checked source-loop
+    CPU regressions and a real-backend test-variant probe cover boundaries;
+    GPU compiler/resource behavior still needs real device validation. Remove
+    when pinned upstream provides the same cache and bounds semantics.
+29. Browser manual-attention scale fusion: use the existing softmax parameter
+    only for a supported unmasked F32 candidate. Keep multiplication after score
+    accumulation, not in Q; retain original masked/CPU/rejected paths and sink
+    ownership. Tests inspect the scale parameter, graph order and fallback, and
+    compare numerical results. Remove when upstream admits this same fusion.
+30. Qwen Image 2.1 graph-local rotary matrix sharing: prepare the common position
+    permutation once and pass its row views to Q/K consumers. No persistent
+    value cache, cross-generation reuse, dtype change or Flash setting change.
+    Frozen-reference arithmetic, modified inputs, 32-layer graph counts and
+    graph-cut planning are covered. Remove when upstream shares equivalent
+    producers while retaining segment/input lifetimes.

@@ -137,7 +137,7 @@ if(SDCB_NATIVE_CHECK)
     target_include_directories(browser-boundary-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
     target_link_libraries(browser-boundary-test PRIVATE core stable-diffusion)
     enable_testing()
-    foreach(name image-causal anima-attention anima-context)
+    foreach(name image-causal anima-attention anima-context webgpu-rope webgpu-attention-softmax)
         add_executable(${name}-test tests/${name}-test.cpp)
         target_compile_definitions(${name}-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
         target_include_directories(${name}-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
@@ -170,6 +170,10 @@ if(SDCB_NATIVE_CHECK)
     endif()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
     if(UNIX)
+        add_test(NAME webgpu-softmax-cache-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-softmax-cache/check_cache.py"
+            --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl"
+            --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-param-upload-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-param-upload/check_uploads.py"
             --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")

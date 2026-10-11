@@ -1,7 +1,7 @@
 # WebGPU image performance: bounded work and cache transport
 
 This unit extends the Anima changes in `anima-image-performance.md` and applies
-only to the image runtime. It uses patches 0022–0027 over the pinned SD and GGML
+only to the image runtime. It uses patches 0022–0030 over the pinned SD and GGML
 sources; vendor commits, the llama runtime and application presets are unchanged.
 
 ## Separate execution placement from transport
@@ -138,3 +138,74 @@ Full-model WebGPU validation must still cover trained weights, device limits,
 GPU memory pressure, graph cuts, cache-enabled/disabled runs, cancellation/device
 loss, repeated generations and image differences. Do not extrapolate CPU timings
 or synthetic admission results to end-to-end generation speed.
+
+
+## Reuse each invocation's softmax cache (0028)
+
+The pinned shader owns sixteen private floats **per invocation**, not sixteen
+floats for the whole row. Index by the lane's loop iteration, rather than its
+strided global column. All three passes use the same index. Explicit branches
+replace `select(storage_read, cache_read, condition)`: selecting a result does
+not guard evaluation of the other argument or its out-of-range cache index.
+
+A row of at most `16 * WG_SIZE` columns now retains its logits and exponentials
+in private values through the reductions. Larger rows spill only the remainder
+through the existing intermediate output. The workgroup size, sixteen-float
+budget, barriers, reductions, mask/sink rules and output layout are unchanged.
+Private storage can still be spilled by a real shader compiler; host-model
+access counts are not hardware counters or a measured speedup.
+
+`webgpu-softmax-cache-contract` extracts the three actual prepared shader lane
+loops into a checked CPU model. It covers workgroup/cache boundaries, source and
+output guards, masks, sinks, in-place and out-of-place paths, numerical output,
+and logical storage accesses. It is deliberately not advertised as a WGSL
+compiler or a GPU test. The test-only real-backend probe additionally exercises
+softmax rows up to 16,385 columns, including masked and sink-bearing variants.
+
+## Fuse unmasked score scaling without rescaling queries (0029)
+
+For a supported WebGPU F32 unmasked manual-attention softmax, use its existing
+scale parameter. The multiplication still occurs **after** F32 score
+accumulation. Neither Q/K values nor matmul input precision are changed. Scaling
+queries instead would alter rounding and potentially mixed-precision conversion;
+that earlier experimental approach is not used.
+
+Masked paths retain the original explicit scale and broadcast addition. A
+backend rejection retains the old path. Sink-bearing softmax remains
+out-of-place, and sink attachment precedes admission. Bounded attention uses the
+same helper per chunk. This removes a separate score-buffer read/write pass;
+it does not enable Flash Attention or approximate the denominator.
+
+`webgpu-attention-softmax` compares the production builder to its unmodified CPU
+path for F16/F32 inputs, head dimensions, batches, masks, sinks, bounded cases and
+injected rejection. The argument named `kv_scale` is a Flash overflow control,
+not a requested softmax temperature; tests inspect the actual `1/sqrt(head)`
+softmax parameter and ensure that the input is still the accumulated score.
+
+## Share the Qwen position-matrix preparation within a graph (0030)
+
+Qwen Image 2.1 has separate Q and K rotation consumers in each transformer layer.
+Previously every consumer built another `cont(permute(pe))`. The WebGPU model
+builder now prepares its two matrix-row views once and explicitly passes that
+representation to its layers. Other callers retain the original wrapper. A
+32-layer monolithic graph has one preparation instead of sixty-four, with no
+position values, tensor precision, rotary layout or model weights changed.
+
+This is **graph-local shared computation**, not a persistent pointer-keyed value
+cache. The position producer is rerun when graph inputs change. With graph cuts,
+a segment may recompute it; do not claim one upload for an entire segmented run.
+The existing planner's dependency and ownership rules remain responsible for
+segment lifetime. Native regression tests check the original frozen rotation
+against the shared builder bit-for-bit, change the same input storage between
+executions, and construct valid 2/32-layer cut plans with prefix reuse both off
+and on. The optional real-backend probe covers shared rotation arithmetic too.
+
+The supplied 512/1024 benchmark logs have respectively 67,373,064 and 269,486,088
+storage-upload bytes in steady sampling windows. Those values exactly match the
+shape-based attribution `64 * position_matrix_bytes + latent_bytes + 2056` in the
+recorded target-only prefix-reuse case. This is supporting evidence, **not a
+post-patch measurement**. `queue.writeBuffer` bytes describe uploads requested by
+the host, not GPU-internal reads/writes, live residency or physical memory use.
+
+The tested host/native suites do not replace rebuilding the pinned Emscripten
+profiles, actual WebGPU validation, or cooled/warm full-model measurements.
