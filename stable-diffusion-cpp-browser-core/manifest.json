@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+  "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -647,11 +647,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695841,
+          "builtAtUnix": 1791705114,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -660,7 +686,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -671,7 +697,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -731,7 +757,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1287,11 +1313,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695936,
+          "builtAtUnix": 1791705112,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1300,7 +1352,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -1338,7 +1390,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1398,7 +1450,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1954,11 +2006,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695729,
+          "builtAtUnix": 1791704904,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1967,7 +2045,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -1978,7 +2056,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2038,7 +2116,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2594,11 +2672,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695829,
+          "builtAtUnix": 1791705007,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2607,7 +2711,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -2645,7 +2749,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2705,7 +2809,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -3261,11 +3365,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695830,
+          "builtAtUnix": 1791705028,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -3274,7 +3404,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -3285,7 +3415,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
+          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -3345,7 +3475,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
+            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -3901,11 +4031,37 @@
                   }
                 ],
                 "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
+              },
+              {
+                "file": "0031-webgpu-qwen-shared-modulation-and-swiglu.patch",
+                "target": "stable-diffusion",
+                "reason": "Share graph-local Qwen Image 2.1 modulation, borrow read-only contiguous spans and select already-supported F32 SwiGLU; preserve 008 CPU/unsupported paths, graph-cut lifetimes and an immutable context A/B opt-out. Remove when upstream supplies equivalent guarded work reduction.",
+                "files": [
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
+                    "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+                  }
+                ],
+                "sha256": "f4fef6d8d1ef581de1b5fea397665692aa8fac45454cec7b23afda1c20807a72"
+              },
+              {
+                "file": "0032-webgpu-compute-operation-details.patch",
+                "target": "stable-diffusion",
+                "reason": "Extend existing opt-in placement logs with bounded WebGPU operation/subtype counts and largest logical output; no readback, timestamps, tensor names, new synchronization or GPU-time/VRAM claims. Remove when upstream supplies equivalent allocation metadata.",
+                "files": [
+                  {
+                    "path": "src/core/compute_workspace.cpp",
+                    "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
+                    "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+                  }
+                ],
+                "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791695789,
+          "builtAtUnix": 1791704971,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -3914,7 +4070,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -4397,12 +4553,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 231725,
-      "sha256": "42540b7b235ef508752bf941252c7c1eee3b667adf833748e027e4b3117cc032"
+      "sha256": "a7087d479aec2d0e727ab21acc5052012f9e693b5fa8c5d29215a660207df350"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43672702,
-      "sha256": "d5ef4a972e2ea07adabb80422ba018721afe4f71a4432506c69c7849dc776925"
+      "bytes": 43679308,
+      "sha256": "fc8a326fb99c516751a5b55fa721df9a8b88bb0e944741ec0acbc8408746b2ea"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -4412,12 +4568,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
       "bytes": 455021,
-      "sha256": "bcf6a9fcb0f923475cc55d86cbf4760d12d3855b908a9c8094919cb77deeaef4"
+      "sha256": "d189d3952ce1eb54a7413bccf0f464d37c1bfce7159ad3f08efe6bfd423707f9"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 44062053,
-      "sha256": "30dc6483751628b967fffbfe8a5e9eef23739836a928f08375eac31358e03ffe"
+      "bytes": 44091901,
+      "sha256": "9ad86dfd47b7413f623c42444ef9664818e150ab5b6b6e5f79b790b52276b9ec"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -4431,8 +4587,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37804991,
-      "sha256": "128383b8fc223c3016a8239ba9fd3f1855bfcd0cdd57ea0a31825294a83f72cb"
+      "bytes": 37807575,
+      "sha256": "7734c48a94edf098b0d90b217d17f8de14bc65e33416aabce6f9fea705057a86"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -4446,8 +4602,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38039788,
-      "sha256": "f283ceb6769d9ae217145865c9f0a3a554eceb8b9b65ed95c49a920ebcb5667e"
+      "bytes": 38051065,
+      "sha256": "528595c8d459d7b42a416bb45a3df53fb9398d84029e4f4ce5e700c1c9334a1d"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -4461,8 +4617,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38110128,
-      "sha256": "4632536285288c6af2f99c1951c4718d08d1a64078a4a31e5e4433deff652f0c"
+      "bytes": 38112823,
+      "sha256": "a666725ba56b8e56a67faa3bcced31d83465baa0c644c75a85a66cbe36dceb01"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -4476,8 +4632,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38357390,
-      "sha256": "3b8c3e76da9417c2dc7a0ae17b7cfeb9ea3e7d47d407af554a4b1ddc35b9eddb"
+      "bytes": 38369751,
+      "sha256": "391aed178a578edbe09b9797030cbe5ad41821f7807aa903e43bb34a48c7622c"
     }
   ]
 }
