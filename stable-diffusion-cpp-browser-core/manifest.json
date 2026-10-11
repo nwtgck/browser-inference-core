@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+  "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -603,11 +603,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670317,
+          "builtAtUnix": 1791695841,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -616,7 +660,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -627,7 +671,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -687,7 +731,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1199,11 +1243,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670373,
+          "builtAtUnix": 1791695936,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1212,7 +1300,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -1250,7 +1338,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1310,7 +1398,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1822,11 +1910,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670301,
+          "builtAtUnix": 1791695729,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1835,7 +1967,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -1846,7 +1978,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1906,7 +2038,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2418,11 +2550,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670259,
+          "builtAtUnix": 1791695829,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2431,7 +2607,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -2469,7 +2645,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2529,7 +2705,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -3041,11 +3217,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670353,
+          "builtAtUnix": 1791695830,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -3054,7 +3274,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -3065,7 +3285,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+          "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -3125,7 +3345,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "4e7c4047d628765c32927691e89daf6f09808106bdeab960462c74899bd7995a",
+            "inventorySha256": "6aaa77fe0cc965d1012e45d102e274831adcdd590ea1e288faf7f44f9f9b0746",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -3637,11 +3857,55 @@
                   }
                 ],
                 "sha256": "aebf81d86c2f4c42103d53bf322809aaeded0217f7e1b3dc00baa9099cba8b81"
+              },
+              {
+                "file": "0028-webgpu-softmax-private-cache.patch",
+                "target": "ggml",
+                "reason": "Index the softmax private cache by lane iteration, use guarded storage/cache loads instead of eager select, and retain the same per-lane sum/reduction/precision. Remove when pinned upstream supplies equivalent bounds-safe cache use.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5708ae5b5a293dc7adac21835b799a5e5339ede99c53aaa0256bb3501077414f",
+                    "afterSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78"
+                  }
+                ],
+                "sha256": "370b6c88f1bdd91ed830caa6228f138a13cc0e40cdc0616da773a4b5ff40f592"
+              },
+              {
+                "file": "0029-webgpu-attention-softmax-scale.patch",
+                "target": "stable-diffusion",
+                "reason": "Fuse unmasked manual attention scaling into an admitted WebGPU softmax AFTER F32 score accumulation, without changing Q/K, masks, sinks, CPU behavior or Flash settings. Remove when upstream avoids the score-scale pass with equivalent admission and numerical contracts.",
+                "files": [
+                  {
+                    "path": "src/core/ggml_extend.cpp",
+                    "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
+                    "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+                  }
+                ],
+                "sha256": "9e34cb87e463fd824405d2b02c4d6f4ec498f54d4e3fa97d160aed9e1720804f"
+              },
+              {
+                "file": "0030-webgpu-qwen-shared-rope-matrix.patch",
+                "target": "stable-diffusion",
+                "reason": "Share one graph-local position-matrix preparation across Qwen 2.1 WebGPU Q/K consumers. No persistent pointer-keyed cache or new numerical operation. Remove when upstream shares or fuses the equivalent RoPE position work with graph-cut-safe ownership.",
+                "files": [
+                  {
+                    "path": "src/model/common/rope.hpp",
+                    "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
+                    "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+                  },
+                  {
+                    "path": "src/model/diffusion/qwen_image_2_1.hpp",
+                    "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
+                    "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+                  }
+                ],
+                "sha256": "a30a242a7f24c81bdb3bd2e8de4b5b0cec4388597ea4c808748696074936843c"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791670290,
+          "builtAtUnix": 1791695789,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -3650,7 +3914,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -4133,12 +4397,12 @@
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 231725,
-      "sha256": "4b1d21c748ae7560b20fe6260c54dd700506d1289b3c61bd7d20c3e2d63304ad"
+      "sha256": "42540b7b235ef508752bf941252c7c1eee3b667adf833748e027e4b3117cc032"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43670093,
-      "sha256": "f19dd852cdf4e4bd6c0cf43fa9526b47a2053dabf8b0d84ead7761f36a212712"
+      "bytes": 43672702,
+      "sha256": "d5ef4a972e2ea07adabb80422ba018721afe4f71a4432506c69c7849dc776925"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -4147,13 +4411,13 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 454553,
-      "sha256": "4e965f900d9b08fbce2cd2327897286830373fff2b1965b0c25c21c9dc79a0f4"
+      "bytes": 455021,
+      "sha256": "bcf6a9fcb0f923475cc55d86cbf4760d12d3855b908a9c8094919cb77deeaef4"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 44039173,
-      "sha256": "cc69e1f046d589cc8a9b42ededad68797cc3614f250232742d8f8dd43a4d9993"
+      "bytes": 44062053,
+      "sha256": "30dc6483751628b967fffbfe8a5e9eef23739836a928f08375eac31358e03ffe"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -4167,8 +4431,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37803563,
-      "sha256": "d51f5343804a2dfb9e63ca9327022cd148859a5112274faf8bb4ddae9c57b825"
+      "bytes": 37804991,
+      "sha256": "128383b8fc223c3016a8239ba9fd3f1855bfcd0cdd57ea0a31825294a83f72cb"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -4182,8 +4446,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38031995,
-      "sha256": "55d3fef2afd87112117dd8b38b8f127d63bdc699dadcd1f01a2098597beeb504"
+      "bytes": 38039788,
+      "sha256": "f283ceb6769d9ae217145865c9f0a3a554eceb8b9b65ed95c49a920ebcb5667e"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -4197,8 +4461,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38108668,
-      "sha256": "57d48256ded4a1456e3cd175a686a3831bd4636c5aa72c628a311039c811391b"
+      "bytes": 38110128,
+      "sha256": "4632536285288c6af2f99c1951c4718d08d1a64078a4a31e5e4433deff652f0c"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -4212,8 +4476,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38348504,
-      "sha256": "b1edfa37f6cee4fdedee2862e75c49bf704aa552044a8e7e4fc3867f86f1c100"
+      "bytes": 38357390,
+      "sha256": "3b8c3e76da9417c2dc7a0ae17b7cfeb9ea3e7d47d407af554a4b1ddc35b9eddb"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "formatVersion": 3,
-  "sourceCommit": "d3e40f8471a5ce472f4f2e8d6e85375af42380f0",
+  "sourceCommit": "d6ab61da6bc60cda855acbf2698e24bac45d20ac",
   "runtimes": {
     "llama-cpp": {
       "manifest": "llama-cpp-browser-core/manifest.json",
@@ -480,7 +480,7 @@
     {
       "path": "llama-cpp-browser-core/manifest.json",
       "bytes": 53547,
-      "sha256": "cf284cf806ad5582d4ad72c4ae5d4150b90a104deac316fe802fb407f520af5f"
+      "sha256": "a79aa20327fbf726592fab6e5ad5a279f3aa26c301d18714282d5ca12198966c"
     },
     {
       "path": "llama-cpp-browser-core/package.json",
@@ -1079,8 +1079,8 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/manifest.json",
-      "bytes": 233606,
-      "sha256": "84d0cfb0d5dfdbd2ee53d00d04d716fd512c42c435d3ce18b674f4a454e52c6c"
+      "bytes": 251300,
+      "sha256": "db3b48cf8d0718b44470456eeb8a27e6486f49751acc094c9d96f1a02a34dbe7"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/package.json",
@@ -1095,12 +1095,12 @@
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.mjs",
       "bytes": 231725,
-      "sha256": "4b1d21c748ae7560b20fe6260c54dd700506d1289b3c61bd7d20c3e2d63304ad"
+      "sha256": "42540b7b235ef508752bf941252c7c1eee3b667adf833748e027e4b3117cc032"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43670093,
-      "sha256": "f19dd852cdf4e4bd6c0cf43fa9526b47a2053dabf8b0d84ead7761f36a212712"
+      "bytes": 43672702,
+      "sha256": "d5ef4a972e2ea07adabb80422ba018721afe4f71a4432506c69c7849dc776925"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -1109,13 +1109,13 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 454553,
-      "sha256": "4e965f900d9b08fbce2cd2327897286830373fff2b1965b0c25c21c9dc79a0f4"
+      "bytes": 455021,
+      "sha256": "bcf6a9fcb0f923475cc55d86cbf4760d12d3855b908a9c8094919cb77deeaef4"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 44039173,
-      "sha256": "cc69e1f046d589cc8a9b42ededad68797cc3614f250232742d8f8dd43a4d9993"
+      "bytes": 44062053,
+      "sha256": "30dc6483751628b967fffbfe8a5e9eef23739836a928f08375eac31358e03ffe"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -1129,8 +1129,8 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37803563,
-      "sha256": "d51f5343804a2dfb9e63ca9327022cd148859a5112274faf8bb4ddae9c57b825"
+      "bytes": 37804991,
+      "sha256": "128383b8fc223c3016a8239ba9fd3f1855bfcd0cdd57ea0a31825294a83f72cb"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -1144,8 +1144,8 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38031995,
-      "sha256": "55d3fef2afd87112117dd8b38b8f127d63bdc699dadcd1f01a2098597beeb504"
+      "bytes": 38039788,
+      "sha256": "f283ceb6769d9ae217145865c9f0a3a554eceb8b9b65ed95c49a920ebcb5667e"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -1159,8 +1159,8 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38108668,
-      "sha256": "57d48256ded4a1456e3cd175a686a3831bd4636c5aa72c628a311039c811391b"
+      "bytes": 38110128,
+      "sha256": "4632536285288c6af2f99c1951c4718d08d1a64078a4a31e5e4433deff652f0c"
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -1174,8 +1174,8 @@
     },
     {
       "path": "stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38348504,
-      "sha256": "b1edfa37f6cee4fdedee2862e75c49bf704aa552044a8e7e4fc3867f86f1c100"
+      "bytes": 38357390,
+      "sha256": "3b8c3e76da9417c2dc7a0ae17b7cfeb9ea3e7d47d407af554a4b1ddc35b9eddb"
     }
   ]
 }
