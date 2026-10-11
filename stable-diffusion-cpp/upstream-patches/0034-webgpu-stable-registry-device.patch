@@ -1,0 +1,212 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4168,21 +4168,37 @@
+     options.nextInChain                   = &adapterTogglesDesc;
+ #endif
+ 
+-    instance.WaitAny(
++    struct request_result {
++        wgpu::RequestAdapterStatus status = wgpu::RequestAdapterStatus::Error;
++        wgpu::Adapter adapter;
++        std::string message;
++    };
++    // AllowSpontaneous callbacks can outlive a failed WaitAny. Never retain a
++    // reference to the caller's stack or publish a late result into the registry.
++    auto result = std::make_shared<request_result>();
++    const wgpu::WaitStatus wait_status = instance.WaitAny(
+         instance.RequestAdapter(
+             &options, wgpu::CallbackMode::AllowSpontaneous,
+-            [&adapter](wgpu::RequestAdapterStatus status, wgpu::Adapter _adapter, wgpu::StringView message) {
+-                if (status != wgpu::RequestAdapterStatus::Success) {
+-                    GGML_LOG_ERROR("ggml_webgpu: Failed to get an adapter: %s\n", std::string(message).c_str());
+-                    return;
+-                }
+-                adapter = std::move(_adapter);
++            [result](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
++                result->status = status;
++                result->adapter = std::move(adapter);
++                result->message = std::string(message);
+             }),
+         UINT64_MAX);
++    if (wait_status != wgpu::WaitStatus::Success) {
++        GGML_LOG_ERROR("ggml_webgpu: Adapter request wait failed: %d\n", static_cast<int>(wait_status));
++        return;
++    }
++    if (result->status != wgpu::RequestAdapterStatus::Success) {
++        GGML_LOG_ERROR("ggml_webgpu: Failed to get an adapter: %s\n", result->message.c_str());
++        return;
++    }
++    adapter = std::move(result->adapter);
+ }
+ 
+ static void create_webgpu_device(ggml_backend_webgpu_reg_context * ctx) {
+-    ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, ctx->webgpu_global_ctx->adapter);
++    // Registry admission already owns the selected adapter. Re-requesting it
++    // can select a different adapter and repeats an asynchronous browser call.
+     GGML_ASSERT(ctx->webgpu_global_ctx->adapter != nullptr);
+ 
+     ctx->webgpu_global_ctx->adapter.GetLimits(&ctx->webgpu_global_ctx->capabilities.limits);
+@@ -4285,18 +4301,29 @@
+     dev_desc.nextInChain = &deviceTogglesDesc;
+ #endif
+ 
+-    ctx->webgpu_global_ctx->instance.WaitAny(
++    struct request_result {
++        wgpu::RequestDeviceStatus status = wgpu::RequestDeviceStatus::Error;
++        wgpu::Device device;
++        std::string message;
++    };
++    auto result = std::make_shared<request_result>();
++    const wgpu::WaitStatus wait_status = ctx->webgpu_global_ctx->instance.WaitAny(
+         ctx->webgpu_global_ctx->adapter.RequestDevice(
+             &dev_desc, wgpu::CallbackMode::AllowSpontaneous,
+-            [ctx](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+-                if (status != wgpu::RequestDeviceStatus::Success) {
+-                    GGML_LOG_ERROR("ggml_webgpu: Failed to get a device: %s\n", std::string(message).c_str());
+-                    return;
+-                }
+-                ctx->webgpu_global_ctx->device = std::move(device);
++            [result](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
++                result->status = status;
++                result->device = std::move(device);
++                result->message = std::string(message);
+             }),
+         UINT64_MAX);
+-    GGML_ASSERT(ctx->webgpu_global_ctx->device != nullptr);
++    if (wait_status != wgpu::WaitStatus::Success) {
++        GGML_ABORT("ggml_webgpu: Device request wait failed: %d\n", static_cast<int>(wait_status));
++    }
++    if (result->status != wgpu::RequestDeviceStatus::Success) {
++        GGML_ABORT("ggml_webgpu: Failed to get a device: %s\n", result->message.c_str());
++    }
++    GGML_ASSERT(result->device != nullptr);
++    ctx->webgpu_global_ctx->device = std::move(result->device);
+     GGML_LOG_INFO("ggml_webgpu: completion-wait-policy-v1 queue=completion map=completion event=completion\n");
+ 
+     ggml_webgpu_init_memset_pipeline(ctx->webgpu_global_ctx);
+@@ -4868,12 +4895,18 @@
+ 
+     ggml_backend_webgpu_reg_context * reg_ctx = static_cast<ggml_backend_webgpu_reg_context *>(reg->context);
+ 
+-    create_webgpu_device(reg_ctx);
+-
+-    static ggml_backend_webgpu_device_context device_ctx;
+-    device_ctx.device_name            = GGML_WEBGPU_NAME;
+-    device_ctx.device_desc            = GGML_WEBGPU_NAME;
+-    device_ctx.webgpu_global_ctx      = reg_ctx->webgpu_global_ctx;
++    GGML_ASSERT(reg_ctx->device_count == 1);
++    // Local-static initialization is once-only and waits for completion before
++    // another caller can observe the device context. Never overwrite a live
++    // device/queue while existing backend buffers still reference this context.
++    static ggml_backend_webgpu_device_context device_ctx = [reg_ctx]() {
++        create_webgpu_device(reg_ctx);
++        ggml_backend_webgpu_device_context result;
++        result.device_name       = GGML_WEBGPU_NAME;
++        result.device_desc       = GGML_WEBGPU_NAME;
++        result.webgpu_global_ctx  = reg_ctx->webgpu_global_ctx;
++        return result;
++    }();
+     // See GGML Backend Device Interface section
+     static ggml_backend_device device = {
+         /* .iface   = */ ggml_backend_webgpu_device_i,
+@@ -4897,57 +4930,53 @@
+ ggml_backend_reg_t ggml_backend_webgpu_reg() {
+     WEBGPU_LOG_DEBUG("ggml_backend_webgpu_reg()");
+ 
+-    // Intentionally leak the global registry context to avoid crashing inside
+-    // Dawn/Vulkan static teardown during process exit.
+-    static ggml_backend_webgpu_reg_context * ctx = new ggml_backend_webgpu_reg_context();
++    // Intentionally keep the registry/Instance alive through static teardown.
++    // Initialize discovery once; repeated queries must not reset device_count
++    // or replace handles owned by live devices and buffers. Initial failure is
++    // reported as zero devices, not an implicit retry or CPU substitution.
++    static ggml_backend_webgpu_reg_context * ctx = []() {
++        auto * ctx = new ggml_backend_webgpu_reg_context();
++        ctx->name         = GGML_WEBGPU_NAME;
++        ctx->device_count = 0;
++        wgpu::InstanceDescriptor               instance_descriptor{};
++        std::vector<wgpu::InstanceFeatureName> instance_features = { wgpu::InstanceFeatureName::TimedWaitAny };
++        instance_descriptor.requiredFeatures                     = instance_features.data();
++        instance_descriptor.requiredFeatureCount                 = instance_features.size();
++
++#ifndef __EMSCRIPTEN__
++        const char * const          instanceEnabledToggles[] = { "allow_unsafe_apis" };
++        wgpu::DawnTogglesDescriptor instanceTogglesDesc;
++        instanceTogglesDesc.enabledToggles     = instanceEnabledToggles;
++        instanceTogglesDesc.enabledToggleCount = 1;
++        instance_descriptor.nextInChain        = &instanceTogglesDesc;
++#endif
++
++        wgpu::Instance inst              = wgpu::CreateInstance(&instance_descriptor);
++        ctx->webgpu_global_ctx           = webgpu_global_context(new webgpu_global_context_struct());
++        ctx->webgpu_global_ctx->instance = std::move(inst);
++
++        // Probe for adapter support
++        wgpu::Adapter adapter;
++        if (ctx->webgpu_global_ctx->instance != nullptr) {
++            ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, adapter);
++        }
++
++        // WebGPU backend requires f16 support and, on native, implicit device synchronization.
++        if (adapter != nullptr && adapter.HasFeature(wgpu::FeatureName::ShaderF16)
++#ifndef __EMSCRIPTEN__
++            && adapter.HasFeature(wgpu::FeatureName::ImplicitDeviceSynchronization)
++#endif
++        ) {
++            ctx->webgpu_global_ctx->adapter = std::move(adapter);
++            ctx->device_count = 1;
++        }
++        return ctx;
++    }();
+ 
+     static ggml_backend_reg reg = {
+         /* .api_version = */ GGML_BACKEND_API_VERSION,
+         /* .iface       = */ ggml_backend_webgpu_reg_i,
+         /* .context     = */ ctx,
+     };
+-
+-    ctx->name         = GGML_WEBGPU_NAME;
+-    ctx->device_count = 0;
+-
+-    // Keep one Dawn/WebGPU instance alive for the lifetime of the static backend
+-    // registry. Recreating it on repeated registry lookups can invalidate
+-    // adapter/device references that are still held by the backend/device layer.
+-    if (ctx->webgpu_global_ctx != nullptr && ctx->webgpu_global_ctx->instance != nullptr) {
+-        return &reg;
+-    }
+-
+-    wgpu::InstanceDescriptor               instance_descriptor{};
+-    std::vector<wgpu::InstanceFeatureName> instance_features = { wgpu::InstanceFeatureName::TimedWaitAny };
+-    instance_descriptor.requiredFeatures                     = instance_features.data();
+-    instance_descriptor.requiredFeatureCount                 = instance_features.size();
+-
+-#ifndef __EMSCRIPTEN__
+-    const char * const          instanceEnabledToggles[] = { "allow_unsafe_apis" };
+-    wgpu::DawnTogglesDescriptor instanceTogglesDesc;
+-    instanceTogglesDesc.enabledToggles     = instanceEnabledToggles;
+-    instanceTogglesDesc.enabledToggleCount = 1;
+-    instance_descriptor.nextInChain        = &instanceTogglesDesc;
+-#endif
+-
+-    wgpu::Instance inst              = wgpu::CreateInstance(&instance_descriptor);
+-    ctx->webgpu_global_ctx           = webgpu_global_context(new webgpu_global_context_struct());
+-    ctx->webgpu_global_ctx->instance = std::move(inst);
+-
+-    // Probe for adapter support
+-    wgpu::Adapter adapter;
+-    if (ctx->webgpu_global_ctx->instance != nullptr) {
+-        ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, adapter);
+-    }
+-
+-    // WebGPU backend requires f16 support and, on native, implicit device synchronization.
+-    if (adapter != nullptr && adapter.HasFeature(wgpu::FeatureName::ShaderF16)
+-#ifndef __EMSCRIPTEN__
+-        && adapter.HasFeature(wgpu::FeatureName::ImplicitDeviceSynchronization)
+-#endif
+-    ) {
+-        ctx->device_count = 1;
+-    }
+-
+     return &reg;
+ }

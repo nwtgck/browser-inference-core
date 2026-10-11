@@ -137,8 +137,17 @@ class ImageSmokeResults(unittest.TestCase):
     def test_rejects_old_scope_and_wrong_backend_scope(self):
         for test_webgpu in (False, True):
             results = self.results(test_webgpu)
-            results[0]['scope'] = results[0]['scope'].replace(', plus deep graph construction/selection', '')
+            current_scope = results[0]['scope']
+            results[0]['scope'] = current_scope.replace('deep graph construction/selection', '')
+            self.assertNotEqual(results[0]['scope'], current_scope, 'negative fixture did not change the scope')
             with self.subTest(old_scope=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(results, test_webgpu)
+            # This is intentionally old evidence, not a second producer for the
+            # positive case: 009 did not cover large rows or live registry queries.
+            results[0]['scope'] = current_scope.split(', plus ', 1)[0] + \
+                ', plus deep graph construction/selection; no trained-model image generation'
+            self.assertNotEqual(results[0]['scope'], current_scope)
+            with self.subTest(pre_011_evidence=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
                 self.check(results, test_webgpu)
             with self.subTest(wrong_backend=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
                 self.check(self.results(not test_webgpu), test_webgpu)

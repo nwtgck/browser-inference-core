@@ -374,3 +374,28 @@ patch, relax input hashes, or substitute a different upstream revision.
     physical shader dispatch counts and output size is not peak/live GPU memory.
     Keep the old CPU fields and default-off behavior for consumers. Remove when
     equivalent upstream placement detail is available.
+
+33. Linear WebGPU workgroup grids for row normalization, fused RMS normalization
+    and multiplication, softmax, and GLU. The existing mathematical loops,
+    specialization choices and bindings are preserved. Use an overflow-checked
+    two-dimensional grid and uniform padding-row guards so a large logical
+    domain does not need application-side shader rewriting and repeated dispatch.
+    Row count is appended to the uniform record; GLU guards the group before
+    multiplying by workgroup size. Small grids are unchanged. Prepared-source
+    builder/coordinate tests cover limits, tails, uniform layout and u32 edges;
+    the optional real-backend probe exercises more than 65,535 rows. These CPU
+    contracts are not a WGSL compilation or measured GPU speedup. Remove when
+    pinned upstream provides equivalent bounded grids and coordinate contracts.
+
+34. Stable registry and device ownership. Initialize discovery once, retain the
+    admitted adapter, and publish a device context once after request completion.
+    Repeated registry lookups no longer reset device_count, and repeated device
+    queries no longer replace live device/queue handles. Adapter/device callback
+    results have independent shared ownership, with checked WaitAny/status paths;
+    a callback after a failed wait cannot access a dead stack or publish a late
+    result into the registry. No automatic retry, device-loss recovery or CPU
+    substitution is introduced. Executable prepared-function contracts include
+    repeated/concurrent queries, held buffers, feature/creation failures, missing
+    and late callbacks; optional WebGPU smoke queries the live registry with
+    buffers allocated. Remove when the pinned backend has equivalent discovery,
+    publication, callback and handle-lifetime guarantees.

@@ -7,9 +7,31 @@
 #include "model/diffusion/qwen_image_2_1.hpp"
 #include "ggml-backend-impl.h"
 #include <cstdio>
+#ifdef __EMSCRIPTEN__
+#include "ggml-webgpu.h"
+#endif
 
 namespace {
 using namespace image_test;
+
+// Query the real registry while parameter/graph buffers are still alive.
+// This is meaningful only on the optional real WebGPU path, not CPU smoke.
+void verify_live_registry(ggml_backend_t backend) {
+#ifdef __EMSCRIPTEN__
+    if (!ggml_backend_is_cpu(backend)) {
+        auto device = ggml_backend_get_device(backend);
+        auto reg = ggml_backend_dev_backend_reg(device);
+        require(reg != nullptr, "backend has no registry");
+        for (int i = 0; i < 3; ++i) {
+            require(ggml_backend_webgpu_reg() == reg, "registry changed across lookup");
+            require(ggml_backend_reg_dev_count(reg) == 1, "registry lost its device count");
+            require(ggml_backend_reg_dev_get(reg, 0) == device, "registry replaced the device");
+        }
+    }
+#else
+    (void) backend;
+#endif
+}
 
 // Force the bounded branch with small tensors, then use the real backend for
 // every allocation, operation support check, shader dispatch and copy. This
@@ -131,6 +153,7 @@ std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
     std::vector<float> result;
     for (unsigned seed : {3u, 11u}) {
         write(input, values(width * rows, seed, 64));
+        verify_live_registry(backend);
         compute(backend, graph);
         auto current = read(output);
         result.insert(result.end(), current.begin(), current.end());
@@ -250,6 +273,48 @@ std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, 
     return result;
 }
 
+// Cross the WebGPU per-axis group limit with small rows, not model weights.
+// 257*257 = 66049 rows covers a padding group and different logical heads.
+std::vector<float> run_large_rows(ggml_backend_t backend, int kind, bool inplace) {
+    auto params = context(), computation = context();
+    auto input = ggml_new_tensor_3d(params.get(), GGML_TYPE_F32, 8, 257, 257);
+    auto mul = ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, 8);
+    auto mask = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, 8, 257);
+    auto sinks = ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, 257);
+    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
+    require(parameters != nullptr, "large-row parameters");
+    write(mul, values(8, 11, 16));
+    write(mask, values(8 * 257, 7, 8));
+    write(sinks, values(257, 19, 8));
+    ggml_tensor* output;
+    if (kind == 0) {
+        output = inplace ? ggml_norm_inplace(computation.get(), input, 1e-5f) :
+                           ggml_norm(computation.get(), input, 1e-5f);
+    } else if (kind == 1 || kind == 2) {
+        output = inplace ? ggml_rms_norm_inplace(computation.get(), input, 1e-5f) :
+                           ggml_rms_norm(computation.get(), input, 1e-5f);
+        if (kind == 2) output = ggml_mul(computation.get(), output, mul);
+    } else {
+        output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, 0.125f, 0.f) :
+                           ggml_soft_max_ext(computation.get(), input, mask, 0.125f, 0.f);
+        ggml_soft_max_add_sinks(output, sinks);
+    }
+    auto g = image_test::graph(computation.get(), output);
+    for (int i = 0; i < ggml_graph_n_nodes(g); ++i) {
+        auto node = ggml_graph_node(g, i);
+        require(!is_compute(node) || ggml_backend_supports_op(backend, node), "large-row backend rejection");
+    }
+    auto allocation = allocate(backend, g);
+    std::vector<float> result;
+    for (unsigned seed : {3u, 31u}) {
+        write(input, values(ggml_nelements(input), seed, 4));
+        verify_live_registry(backend);
+        compute(backend, g);
+        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+    }
+    return result;
+}
+
 } // namespace
 
 extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
@@ -286,6 +351,10 @@ extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
             }
         }
         close(run_shared_rope(reference.get(), false), run_shared_rope(backend.get(), true), 2e-5f, 2e-4f);
+        for (int kind = 0; kind < 4; ++kind) for (bool inplace : {false, true}) {
+            close(run_large_rows(reference.get(), kind, inplace),
+                  run_large_rows(backend.get(), kind, inplace), 3e-5f, 3e-4f);
+        }
         return 1;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "WebGPU performance arithmetic/copy probe: %s\n", error.what());

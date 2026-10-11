@@ -171,6 +171,12 @@ if(SDCB_NATIVE_CHECK)
     endif()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
     if(UNIX)
+        add_test(NAME webgpu-dispatch-grid-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-dispatch-grid/check_grid.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
+        add_test(NAME webgpu-registry-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-registry/check_registry.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-softmax-cache-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-softmax-cache/check_cache.py"
             --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl"

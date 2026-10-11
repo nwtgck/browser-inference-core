@@ -249,3 +249,68 @@ includes `webgpu_ops`, `largest_webgpu_output_bytes`, `webgpu_silu`, `webgpu_tan
 and `webgpu_swiglu`. These are allocation metadata; backend fusion can mean fewer
 actual dispatches. A sum of logical outputs across layers is neither peak VRAM nor
 measured GPU memory traffic. The diagnostic does not change wait or submit policy.
+
+## Keep large linear dispatches native (patch 0033)
+
+A supported tensor shape can require more workgroups than one dispatch axis
+allows. This is distinct from storage-buffer limits or total memory capacity.
+Row normalization (including its multiply fusion), softmax, and GLU previously
+sent their linear domain in X alone. Large image shapes consequently relied on
+an application wrapper to transform shaders and split dispatch calls.
+
+These four builders now use a tight two-dimensional grid, preserving a one-axis
+shape for small domains. The row shaders compute `x + y * num_workgroups.x` and
+return for padding rows before storage access or barriers. Workgroup ID, dispatch
+size and the uniform row count are uniform within each workgroup. GLU additionally
+checks the group before multiplying by its workgroup size, then checks the final
+partial group per invocation. Host ceil-division uses uint64_t and caps each axis
+at 65,535 so the flattened index cannot wrap u32. Other kernels and their existing
+grid helpers are unchanged.
+
+At an axis limit of 65,535, a logical 131,072-row operation can be encoded as
+43,691 by 3 groups in a single dispatch instead of three application-side calls;
+one padding group is inactive. A 65,536-row operation uses 32,768 by 2 groups.
+This reduces dispatch splitting, not matrix-multiplication work, storage traffic
+inside a kernel or shader arithmetic precision. The distribution across axes can
+have device-dependent scheduling effects: end-to-end performance is unmeasured.
+No Flash setting, tile policy, workgroup size, memory budget or wait is changed.
+
+`webgpu-dispatch-grid-contract` compiles the actual prepared builders/helper and
+translates only the actual shader coordinate/guard expressions into checked CPU
+code. It checks uniform record lengths, bindings and lane/row coverage, including
+large integer domains and fused-operation overlap branches. Small domains are
+exhaustively checked; huge domains use deterministic samples and boundary probes.
+It does not compile WGSL or emulate floating-point shader execution. The existing
+requested-backend probe also runs NORM, RMS_NORM, RMS_NORM+MUL and masked/sink
+softmax at 66,049 rows, with separate/in-place destinations and changed inputs.
+CPU CI runs its CPU path. Only the explicit WebGPU smoke mode exercises shaders.
+
+## Stable registry/handle ownership (patch 0034)
+
+Repeatedly retrieving a registry must not reset its discovered device count.
+Retrieving a device must not request a different adapter or replace the shared
+Device/Queue while tensors still own buffers from the original device. Discovery
+and device publication are now separate once-only local-static initializations.
+The admitted adapter is reused; the device is published after its queue and shared
+buffers are ready. The existing deliberate registry lifetime through teardown is
+preserved. A failed discovery remains unavailable and a lost device stays lost;
+this is not an automatic browser reset, adapter retry or device-loss recovery.
+
+Adapter and device request callbacks capture independently owned result records.
+WaitAny failures do not inspect or publish potentially unfinished callback data.
+A late callback may finish its own record but cannot reference a returned stack
+or mutate the shared device. Callback status and non-null handles are checked
+before successful publication. The existing completion-based wait policy remains.
+
+`webgpu-registry-contract` extracts the four actual registry/device functions and
+adapter request helper. Its API double covers browser/native feature branches,
+concurrent and reordered lookups, already allocated buffer/queue ownership,
+creation failures, delayed callbacks, failed waits and lost devices. It is neither
+Dawn nor a browser. The WebGPU-only runtime probe additionally performs repeated
+registry/device lookups while real test buffers are live; the CPU probe does not
+pretend to check GPU registry state.
+
+The shared smoke description records the new large-row coverage and explicitly
+qualifies live-registry checks as WebGPU-only. Publication negative tests require
+the current source-bound description and verify that removing required scope text
+actually changes the fixture; old probe evidence cannot validate a new artifact.

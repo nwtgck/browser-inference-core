@@ -549,6 +549,50 @@
           "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
         }
       ]
+    },
+    {
+      "file": "0033-webgpu-linear-dispatch-grid.patch",
+      "target": "ggml",
+      "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+          "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+          "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+          "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+          "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+          "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+          "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+          "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+          "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+          "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+        }
+      ]
+    },
+    {
+      "file": "0034-webgpu-stable-registry-device.patch",
+      "target": "ggml",
+      "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+          "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+        }
+      ]
     }
   ]
 }
