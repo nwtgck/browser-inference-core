@@ -10,7 +10,7 @@
     "safetensorsFileOffsetBits": 64,
     "ggufShards": true
   },
-  "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+  "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
   "upstreams": {
     "stable-diffusion": {
       "path": "vendor/stable-diffusion.cpp",
@@ -31,7 +31,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -91,7 +91,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -673,11 +673,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791705114,
+          "builtAtUnix": 1791716861,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -686,7 +732,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -697,7 +743,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -757,7 +803,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -1339,11 +1385,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791705112,
+          "builtAtUnix": 1791716858,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -1352,7 +1444,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -1390,7 +1482,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -1450,7 +1542,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2032,11 +2124,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791704904,
+          "builtAtUnix": 1791716776,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2045,7 +2183,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -2056,7 +2194,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2116,7 +2254,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -2698,11 +2836,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791705007,
+          "builtAtUnix": 1791716772,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -2711,7 +2895,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -2749,7 +2933,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -2809,7 +2993,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -3391,11 +3575,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791705028,
+          "builtAtUnix": 1791716815,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -3404,7 +3634,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -3415,7 +3645,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "ed955f2fac6a2b6e200f306d23282f1ed8964fd3",
+          "sourceCommit": "3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -3475,7 +3705,7 @@
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
           "patches": {
-            "inventorySha256": "00c2c2403c8aa254dfd728c38eaea073c57bb6fb890048565239856d217fcd51",
+            "inventorySha256": "9094a89bde300f50db99959a44899fabe5c8067726e9106a2c3b6eeafd607daf",
             "patches": [
               {
                 "file": "0001-single-thread-model-reader.patch",
@@ -4057,11 +4287,57 @@
                   }
                 ],
                 "sha256": "36244e396dc2fce101d1de9b64da96632fde80c6e78d49f9c1dad5283dde9f73"
+              },
+              {
+                "file": "0033-webgpu-linear-dispatch-grid.patch",
+                "target": "ggml",
+                "reason": "Dispatch row normalization, fused RMS multiply, softmax and GLU in a checked 2D grid; discard padding uniformly before barriers and bound linear arithmetic without JS shader rewriting. Remove when pinned WebGPU supports equivalent bounded dispatches.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "7ac4a6589ceb9bd5d8bcac43bccb4ee6b2ac0b10f5d7061098915c404b83fa00",
+                    "afterSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl",
+                    "beforeSha256": "9486da47199786b1aec8fe7cdfa5a3fb9ec5f7d431cef704ca759e1b7f19ca76",
+                    "afterSha256": "4d3d736745e5bca5db08f378b00ce1c6bd4aef24b46444c9a2c02f01490bf3e7"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl",
+                    "beforeSha256": "80ef74b82d1245e5b1ec04d69220b64eaf999e14ea7d6125b75c8c7d4ae5c81e",
+                    "afterSha256": "d8a2646fbf92197d608f09c6820a0b1b7919902b97a701e12afaac1130627813"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl",
+                    "beforeSha256": "5a11ad09ade7f88ad82f7b19d93d3d58d2e5327a5f9e998fce12b531405daa78",
+                    "afterSha256": "6adae4c27c663098186e0d9e019d10bed9dfb871d36a7c27040505f4f509a774"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl",
+                    "beforeSha256": "e9718b46d05928f29bd1f8e4d45d012db20c9cdbc0e78c4c7c1e27c3b4f765ee",
+                    "afterSha256": "c74386f5cf27cb90a45062730fdf1b613f04acdd335cd4973ef9f4ffeab61287"
+                  }
+                ],
+                "sha256": "2527b110f4ea2aec9b52364c0aa281dc0f2a948c73457dc989a62c23b2bd5907"
+              },
+              {
+                "file": "0034-webgpu-stable-registry-device.patch",
+                "target": "ggml",
+                "reason": "Preserve once-only registry/device identity across lookup and own adapter/device callback results through wait failures. Never reset live counts, re-request admitted adapters, replace queues beneath buffers, retry automatically or publish late failed requests. Remove when upstream provides equivalent lifetime contracts.",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "68416b29f1c99e19e0476a0bf6e28c400025ae03dade8a0e733c5c6865c3f0c0",
+                    "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
+                  }
+                ],
+                "sha256": "488d5e239a37980b31632df645d22cc05ff80ddb434ae1458eba3e096dc55c40"
               }
             ],
             "vendorCheckoutModified": false
           },
-          "builtAtUnix": 1791704971,
+          "builtAtUnix": 1791716828,
           "buildCache": {
             "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
@@ -4070,7 +4346,7 @@
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus deep graph construction/selection; no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
             "browserSmokeEvidence": {
               "graphWalk": true,
               "timestep": [
@@ -4557,8 +4833,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 43679308,
-      "sha256": "fc8a326fb99c516751a5b55fa721df9a8b88bb0e944741ec0acbc8408746b2ea"
+      "bytes": 43684790,
+      "sha256": "cda154b211a3b751021c17205411f9f1c9518c78309bfbca36db8ad53bef0af8"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
@@ -4572,8 +4848,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 44091901,
-      "sha256": "9ad86dfd47b7413f623c42444ef9664818e150ab5b6b6e5f79b790b52276b9ec"
+      "bytes": 44112220,
+      "sha256": "77f6d67806646b37fde0146b9ced49fdab28fe8b6f034a6c85d0b996bfc37507"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
@@ -4587,8 +4863,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 37807575,
-      "sha256": "7734c48a94edf098b0d90b217d17f8de14bc65e33416aabce6f9fea705057a86"
+      "bytes": 37810788,
+      "sha256": "5b6e368acf28a72152f7075c25700addf2c18cd410cf9573339ff1d9ec076bce"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
@@ -4602,8 +4878,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 38051065,
-      "sha256": "528595c8d459d7b42a416bb45a3df53fb9398d84029e4f4ce5e700c1c9334a1d"
+      "bytes": 38059385,
+      "sha256": "0fa7022b0504f5790887d42a9a9cc16a88217bf44756f4ec3af764decab52acd"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
@@ -4617,8 +4893,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 38112823,
-      "sha256": "a666725ba56b8e56a67faa3bcced31d83465baa0c644c75a85a66cbe36dceb01"
+      "bytes": 38116229,
+      "sha256": "51642e2862538047ddcea8941bf497c95e7f792956bf90cbc772393d2c8b7b7e"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
@@ -4632,8 +4908,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 38369751,
-      "sha256": "391aed178a578edbe09b9797030cbe5ad41821f7807aa903e43bb34a48c7622c"
+      "bytes": 38378695,
+      "sha256": "f9a49f567408dc42eafde0abb95acc8697ece7dd37975940bfee1ee2c0309e56"
     }
   ]
 }
