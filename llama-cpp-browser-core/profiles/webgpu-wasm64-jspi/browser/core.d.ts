@@ -284,8 +284,6 @@ interface WasmModule {
   _lcb_pointer_bytes(): number;
   _lcb_abi_version(): number;
   _lcb_callback_metadata_version(): number;
-  _lcb_file_backed_rows_version(): number;
-  _lcb_model_file_backed_shard(_0: BigInt): number;
   _lcb_ggml_abs(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _ggml_abs(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_ggml_abs_inplace(_0: BigInt, _1: BigInt): Promise<BigInt>;
