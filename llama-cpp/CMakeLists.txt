@@ -8,6 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(LCB_LLAMA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/llama.cpp" CACHE PATH "Pinned llama.cpp checkout")
 option(LCB_NATIVE_CHECK "Build a native shared library for boundary tests, not a distribution runtime" OFF)
 option(LCB_MEMORY64 "Use 64-bit WebAssembly memory" OFF)
+# Explicit lazy_mode=ON opts Qwen4Exp into bounded file-backed PLE rows.
+option(LCB_FILE_BACKED_PLE "Build the reviewed Qwen4Exp file-backed rows extension" ${LCB_MEMORY64})
+option(LCB_QSA_ALL_POOLS "Skip QSA ranking when every pool is selected" ON)
 option(LCB_WEBGPU "Link the WebGPU backend" OFF)
 # Experimental downstream shader optimization; see docs/moe-direct-slot.md.
 option(LCB_WEBGPU_MOE_DIRECT_SLOT "Use the reviewed direct selected-slot MoE shader" OFF)
@@ -112,6 +115,14 @@ if(LCB_WEBGPU)
     include(cmake/WebgpuSourceOverlay.cmake)
 endif()
 
+if(LCB_FILE_BACKED_PLE)
+    include(cmake/FileBackedRowsOverlay.cmake)
+endif()
+
+if(LCB_QSA_ALL_POOLS)
+    include(cmake/QsaSelectionOverlay.cmake)
+endif()
+
 # All browser profiles are single-threaded, including CPU and WebGPU.
 # The overlay retains upstream behavior in native/pthread builds.
 include(cmake/MtmdAudioOverlay.cmake)
@@ -158,3 +169,7 @@ endif()
 target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${LCB_LLAMA_SOURCE}"
     "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/ggml/include")
 target_link_libraries(core PRIVATE llama-common mtmd llama)
+
+if(LCB_FILE_BACKED_PLE)
+    target_compile_definitions(core PRIVATE LCB_FILE_BACKED_PLE)
+endif()

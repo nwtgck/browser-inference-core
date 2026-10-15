@@ -149,6 +149,9 @@ class LocalGitProposal(unittest.TestCase):
         webgpu = patch.object(update.webgpu_source, 'prepare')
         self.webgpu_prepare = webgpu.start()
         self.addCleanup(webgpu.stop)
+        qsa = patch.object(update.qsa, 'preflight')
+        self.qsa_preflight = qsa.start()
+        self.addCleanup(qsa.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
@@ -210,6 +213,16 @@ class LocalGitProposal(unittest.TestCase):
                 self.assertEqual(result['status'], 'failed')
                 self.assertIn(message, result['error'])
                 self.assertEqual(self.webgpu_prepare.call_args.kwargs['patch_root'], self.root / update.PATCH_DIRECTORY)
+
+    def test_preflight_covers_both_qsa_source_variants_and_propagates_drift(self):
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'passed')
+        self.qsa_preflight.assert_called_once()
+        self.assertEqual(self.qsa_preflight.call_args.args[0], self.root / 'vendor/llama.cpp')
+        self.qsa_preflight.side_effect = ValueError('QSA selection needs upstream semantic review')
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('QSA selection', result['error'])
 
     def test_preflight_also_fails_closed_on_audio_patch_conflicts(self):
         audio = self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-audio.cpp'

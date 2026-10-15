@@ -26,7 +26,12 @@ def decode_report(content: bytes, repository: str, run: dict) -> str:
         entries = archive.infolist()
         if len(entries) != len(REPORT_FILES) or {item.filename for item in entries} != REPORT_FILES:
             raise ValueError('Unexpected or duplicate files in report archive')
-        if any(item.file_size > 60000 or stat.S_ISLNK(item.external_attr >> 16) for item in entries):
+        # YAML is download-only metadata: never read or decompress it here. Its
+        # size is independent of the bounded JSON/Markdown actually consumed by
+        # the notifier; the downloaded archive still has a total byte limit.
+        if any(stat.S_ISLNK(item.external_attr >> 16)
+               or (item.filename != 'consumer-update.yaml' and item.file_size > 60000)
+               for item in entries):
             raise ValueError('Unsafe report archive entry')
         envelope = json.loads(archive.read('report.json'))
         if not isinstance(envelope, dict):

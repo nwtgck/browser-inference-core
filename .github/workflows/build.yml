@@ -89,6 +89,51 @@ jobs:
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
+  qsa-native:
+    name: Compare QSA all-pools native graphs
+    if: >-
+      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
+      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      BIC_METRICS_RUNTIME: llama-cpp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.LCB_SOURCE_COMMIT }}
+          submodules: false
+          persist-credentials: false
+      - name: Check out only this runtime's pinned upstreams
+        working-directory: .
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
+      - name: Verify the checked-out source identity
+        run: test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+      - name: Compare separate reference and optimized native builds
+        run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.qsa_regression -- python3 tests/qsa-selection/run.py --source "$PWD/vendor/llama.cpp" --work "$PWD/build/qsa-regression" --jobs 2
+      - name: Upload native comparison traces and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsa-native-${{ github.run_attempt }}
+          path: llama-cpp/build/qsa-regression/qsa-results/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 1
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        run: python3 "$GITHUB_WORKSPACE/scripts/summarize_pipeline_metrics.py" --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-qsa-native
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          retention-days: 14
+          compression-level: 1
   compile:
     name: Build llama.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
     if: >-
@@ -223,7 +268,7 @@ jobs:
           retention-days: 14
   build:
     name: Package and validate llama.cpp
-    needs: [test, compile]
+    needs: [test, qsa-native, compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:

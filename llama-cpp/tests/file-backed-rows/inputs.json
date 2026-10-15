@@ -1,0 +1,12 @@
+{
+  "src/models/models.h": "4709336bcdc1bcdac34b770ca91eb37c53bd2317363fe4ea8cae28bdf15b4062",
+  "src/models/qwen4exp.cpp": "76652b83f1c2dfce27fdbe68089e4d3b1081100c4748eba15f27f4f04ee1bdda",
+  "src/llama-model.cpp": "c29d7f29c3e760f90855755748edc56fcdf62f0628b0c572f06ffb4c377db5f5",
+  "src/llama-model-loader.cpp": "301f8250eef5b34d14617c7c9bf5c14bb60519d199751f4d829502a5107f0593",
+  "src/llama-model-loader.h": "687dac85ea01c1fb0db19a4e53286144e29f351233c411e88932b99553538422",
+  "src/llama-mmap.cpp": "ed859abec87282d5dd13a08b03b93b4ff3efb3f852f289d5347904b0c1cc017d",
+  "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
+  "src/CMakeLists.txt": "6602fed62f13557db0888ccf2fc69b5c49a01f1eea56a9a0c866e8e60084d5d2",
+  "ggml/include/ggml.h": "12ee71f99db7db9b353bc02b1fbb57c344ee17c01ac5fb7952b41a637a747ea9",
+  "src/llama.cpp": "8058a140d444b67bf64a1ce393d241dfd60080f4b117130c6f82e637e2109233"
+}

@@ -36,7 +36,8 @@ def payload(head=A):
 _DEFAULT_ENVELOPE = object()
 
 
-def archive_for(workflow_run, changes=None, extras=None, body=None, envelope=_DEFAULT_ENVELOPE):
+def archive_for(workflow_run, changes=None, extras=None, body=None, envelope=_DEFAULT_ENVELOPE,
+                yaml_body='fixture: true\n'):
     body = body if body is not None else payload(workflow_run['head_sha'])
     encoded = body.encode('utf-8')
     fields = {'schemaVersion': 1, 'repository': REPO, 'sourceCommit': workflow_run['head_sha'],
@@ -49,7 +50,7 @@ def archive_for(workflow_run, changes=None, extras=None, body=None, envelope=_DE
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('report.json', json.dumps(envelope))
         archive.writestr('consumer-update.md', encoded)
-        archive.writestr('consumer-update.yaml', 'fixture: true\n')
+        archive.writestr('consumer-update.yaml', yaml_body)
         for name, data in (extras or {}).items():
             archive.writestr(name, data)
     return output.getvalue()
@@ -122,6 +123,17 @@ class ReportDecoder(unittest.TestCase):
         value = run()
         self.assertEqual(comments.decode_report(archive_for(value), REPO, value), payload())
 
+    def test_large_download_only_yaml_is_not_read_by_the_notifier(self):
+        value = run()
+        content = archive_for(value, yaml_body='fixture: ' + 'x' * 1000000 + '\n')
+        self.assertLess(len(content), comments.MAX_ARCHIVE)
+        original_read = zipfile.ZipFile.read
+        def read(archive, name, *args, **kwargs):
+            self.assertNotEqual(name, 'consumer-update.yaml')
+            return original_read(archive, name, *args, **kwargs)
+        with patch.object(zipfile.ZipFile, 'read', read):
+            self.assertEqual(comments.decode_report(content, REPO, value), payload())
+
     def test_identity_mismatch_is_rejected(self):
         for change in [{'repository': 'fork/core'}, {'sourceCommit': B}, {'runId': 124},
                        {'runAttempt': 2}, {'schemaVersion': 2}, {'artifactCommit': 'moving-branch'},
@@ -162,6 +174,8 @@ class ReportDecoder(unittest.TestCase):
     def test_zip_bomb_and_oversized_body_are_rejected(self):
         with self.assertRaises(ValueError):
             comments.decode_report(archive_for(run(), body='x' * 1000000), REPO, run())
+        with self.assertRaises(ValueError):
+            comments.decode_report(archive_for(run(), changes={'padding': 'x' * 1000000}), REPO, run())
         with self.assertRaises(ValueError):
             comments.decode_report(b'0' * (comments.MAX_ARCHIVE + 1), REPO, run())
 

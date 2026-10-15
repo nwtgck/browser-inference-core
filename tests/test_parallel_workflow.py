@@ -23,14 +23,31 @@ def dependencies(body):
 class ParallelWorkflow(unittest.TestCase):
     def test_only_final_publication_joins_llama_and_image(self):
         graph = jobs(BUILD)
-        self.assertEqual(set(graph), {'test','compile','build','image-native','image-compile','image-build','publish'})
+        self.assertEqual(set(graph), {'test','qsa-native','compile','build','image-native','image-compile','image-build','publish'})
         self.assertEqual(dependencies(graph['compile']), set())
+        self.assertEqual(dependencies(graph['qsa-native']), set())
         self.assertEqual(dependencies(graph['image-compile']), set())
         self.assertEqual(dependencies(graph['image-native']), set())
-        self.assertEqual(dependencies(graph['build']), {'test','compile'})
+        self.assertEqual(dependencies(graph['build']), {'test','qsa-native','compile'})
         self.assertEqual(dependencies(graph['image-build']), {'image-native','image-compile'})
         self.assertEqual(dependencies(graph['publish']), {'build','image-build'})
         self.assertNotIn('max-parallel:', re.sub(r'#.*', '', BUILD))
+
+    def test_qsa_parity_is_a_required_gate_with_failure_logs(self):
+        graph = jobs(BUILD)
+        job = graph['qsa-native']
+        execution = job.split('- name: Compare separate reference and optimized native builds', 1)[1].split('- name: Upload native comparison traces and logs', 1)[0]
+        self.assertIn('tests/qsa-selection/run.py', execution)
+        self.assertIn('--jobs 2', execution)
+        self.assertNotIn('continue-on-error:', execution)
+        self.assertNotIn('if:', execution)
+        self.assertNotIn('|| true', execution)
+        self.assertIn('qsa-native', dependencies(graph['build']))
+        upload = job.split('- name: Upload native comparison traces and logs', 1)[1].split('- name:', 1)[0]
+        self.assertIn('if: always()', upload)
+        self.assertIn('path: llama-cpp/build/qsa-regression/qsa-results/', upload)
+        self.assertNotIn('path: llama-cpp/build/\n', upload)
+        self.assertNotIn('browser-cache', job)
 
     def test_image_package_has_no_llama_source_or_artifact_dependency(self):
         graph = jobs(BUILD)
