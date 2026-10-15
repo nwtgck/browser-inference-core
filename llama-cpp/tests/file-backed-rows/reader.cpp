@@ -5,10 +5,32 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <fcntl.h>
 #include <iostream>
+#include <future>
 #include <memory>
 #include <string>
+
+// Inject optional cache-allocation failures by allocation size, on this thread
+// only. Production allocation and test setup remain untouched outside the scope.
+static thread_local size_t fail_allocation_bytes = 0;
+static thread_local size_t allocation_failures = 0;
+void * operator new(size_t size) {
+    if (size && size == fail_allocation_bytes) {
+        ++allocation_failures;
+        throw std::bad_alloc();
+    }
+    if (void * result = std::malloc(size ? size : 1)) return result;
+    throw std::bad_alloc();
+}
+void operator delete(void * pointer) noexcept { std::free(pointer); }
+void operator delete(void * pointer, size_t) noexcept { std::free(pointer); }
+struct allocation_fault {
+    explicit allocation_fault(size_t bytes) { fail_allocation_bytes = bytes; allocation_failures = 0; }
+    ~allocation_fault() { fail_allocation_bytes = 0; }
+};
 
 // The wrapper can force partial reads, interruptions and a later hard failure.
 // Its lifetime is scoped to one synchronous test; production code is unchanged.
@@ -119,7 +141,7 @@ static void positioned_read_failures() {
     const uint64_t bytes = offset + sizeof(data);
     check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate fault fixture");
     write_at(file.fd(), offset, data.data(), sizeof(data));
-    lcb_file_backed_rows reader(file.fd(), 1, bytes, offset, GGML_TYPE_F32, columns, rows);
+    lcb_file_backed_rows reader(file.fd(), 1, bytes, offset, GGML_TYPE_F32, columns, rows, 0);
     const std::array<int32_t, 5> indices{2, 0, 2, 1, 0};
     std::vector<float> expected, output;
     reader.gather(indices.data(), indices.size(), expected);
@@ -158,6 +180,156 @@ static void positioned_read_failures() {
         check(faults.calls == 0 && output.empty(), "empty gather performed I/O");
     }
 }
+static void persistent_cache() {
+    constexpr int64_t columns = 160, rows = 32;
+    for (const auto type : {GGML_TYPE_F32, GGML_TYPE_F16, GGML_TYPE_IQ4_NL}) {
+        const size_t row_bytes = ggml_row_size(type, columns);
+        const auto * traits = ggml_get_type_traits(type);
+        std::vector<float> floats(columns * rows);
+        for (size_t i = 0; i < floats.size(); ++i) floats[i] = std::sin(float(i) * .15f);
+        std::vector<uint64_t> packed((row_bytes * rows + 7) / 8);
+        if (type == GGML_TYPE_F32) std::memcpy(packed.data(), floats.data(), floats.size() * sizeof(float));
+        else traits->from_float_ref(floats.data(), packed.data(), floats.size());
+        const uint64_t offset = (uint64_t(1) << 32) + 83;
+        temporary_file file;
+        const uint64_t bytes = offset + row_bytes * rows;
+        check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate cache fixture");
+        write_at(file.fd(), offset, packed.data(), row_bytes * rows);
+        lcb_file_backed_rows baseline(file.fd(), 1, bytes, offset, type, columns, rows, 0);
+        // Exactly one four-way set, independent of the format's row stride.
+        const size_t budget = 4 * (((row_bytes + 7) / 8) * 8 + 8);
+        lcb_file_backed_rows cached(file.fd(), 1, bytes, offset, type, columns, rows, budget);
+        check(cached.cache_bytes() == 0, "empty cache was allocated eagerly");
+        const std::array<int32_t, 5> indices{2, 0, 2, 1, 0};
+        std::vector<float> expected, output;
+        baseline.gather(indices.data(), indices.size(), expected);
+        {
+            pread_faults faults;
+            cached.gather(indices.data(), indices.size(), output);
+            check(faults.calls == 3, "cold cache must read each distinct row exactly once");
+            check(output == expected, "cold cache changed dequantization/order");
+            cached.gather(indices.data(), indices.size(), output);
+            check(faults.calls == 3, "a later gather reread warm rows");
+            check(output == expected && cached.cache_bytes() <= budget, "cache budget/output");
+            {
+                allocation_fault fault(((row_bytes + 7) / 8) * 8);
+                cached.gather(indices.data(), indices.size(), output);
+                check(allocation_failures == 0 && output == expected, "warm gather allocated packed scratch");
+            }
+            const int32_t other = 3;
+            cached.gather(&other, 1, output);
+            check(faults.calls == 4, "a new row must not alias a cached row");
+            // Touch 0, then replace the least-recently-used row (1) with 4.
+            const int32_t recent = 0, inserted = 4, evicted = 1;
+            cached.gather(&recent, 1, output);
+            cached.gather(&inserted, 1, output);
+            const auto before = faults.calls;
+            cached.gather(&recent, 1, output);
+            check(faults.calls == before, "recently used row was evicted");
+            cached.gather(&evicted, 1, output);
+            check(faults.calls == before + 1, "cache did not evict the old row");
+        }
+        // A partial miss cannot corrupt the victim row or create a false hit.
+        for (const bool eof : {false, true}) {
+            const int32_t miss = eof ? 7 : 6;
+            {
+                pread_faults faults;
+                faults.max_bytes = 17; faults.fail_call = 2; faults.eof = eof;
+                rejects([&] { cached.gather(&miss, 1, output); });
+                check(faults.calls == 2, "failed miss continued reading");
+            }
+            std::vector<float> correct;
+            baseline.gather(&miss, 1, correct);
+            {
+                pread_faults faults;
+                cached.gather(&miss, 1, output);
+                check(faults.calls == 1 && output == correct, "failed miss was published into cache");
+                cached.gather(&miss, 1, output);
+                check(faults.calls == 1 && output == correct, "retried row was not cached");
+            }
+        }
+        // A different model/descriptor has a different cache even for equal IDs.
+        lcb_file_backed_rows independent(file.fd(), 1, bytes, offset, type, columns, rows, budget);
+        {
+            pread_faults faults;
+            independent.gather(indices.data(), indices.size(), output);
+            check(faults.calls == 3 && output == expected, "model caches shared identities");
+            const std::array<int32_t, 2> invalid{0, int32_t(rows)};
+            const auto before = faults.calls;
+            rejects([&] { independent.gather(invalid.data(), invalid.size(), output); });
+            check(faults.calls == before, "invalid gather entered the cache/reader");
+        }
+        check(baseline.cache_bytes() == 0, "disabled cache allocated storage");
+        // Two native contexts may use the same immutable model concurrently.
+        std::array<std::future<bool>, 4> tasks;
+        for (auto & task : tasks) task = std::async(std::launch::async, [&] {
+            std::vector<float> concurrent;
+            for (int i = 0; i < 100; ++i) {
+                cached.gather(indices.data(), indices.size(), concurrent);
+                if (concurrent != expected) return false;
+            }
+            return true;
+        });
+        for (auto & task : tasks) check(task.get(), "concurrent gathers changed row bytes");
+        check(cached.cache_bytes() <= budget, "cache grew after eviction/concurrency");
+    }
+}
+
+static void cache_resource_bounds() {
+    constexpr int64_t columns = 160, rows = 320001536;
+    const size_t row_bytes = ggml_row_size(GGML_TYPE_IQ4_NL, columns);
+    temporary_file file;
+    const uint64_t bytes = uint64_t(rows) * row_bytes;
+    check(ftruncate(file.fd(), off_t(bytes)) == 0, "sparse full-size cache fixture");
+    const std::array<int32_t, 2> indices{0, int32_t(rows - 1)};
+    std::vector<float> expected, output;
+    lcb_file_backed_rows baseline(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 0);
+    baseline.gather(indices.data(), indices.size(), expected);
+    lcb_file_backed_rows cached(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows,
+                               std::numeric_limits<size_t>::max());
+    cached.gather(indices.data(), indices.size(), output);
+    // 90 packed bytes round to 96, plus 8 metadata bytes, 65,536 slots.
+    check(output == expected && cached.cache_bytes() == 65536 * 104, "full geometry cache budget");
+    check(cached.cache_bytes() <= lcb_file_backed_rows::max_cache_bytes, "untrusted budget escaped cap");
+    check(ftruncate(file.fd(), off_t(bytes - 1)) == 0, "truncate a warm cache");
+    rejects([&] { cached.gather(indices.data(), indices.size(), output); });
+    check(ftruncate(file.fd(), off_t(bytes)) == 0, "restore file after truncation");
+    {
+        pread_faults faults;
+        cached.gather(indices.data(), indices.size(), output);
+        check(faults.calls == 2 && output == expected, "stale cached entries survived size failure");
+    }
+    {
+        lcb_file_backed_rows huge_row(file.fd(), 1, bytes, 0, GGML_TYPE_F32,
+                                     lcb_file_backed_rows::max_staging_bytes / sizeof(float), 1);
+        allocation_fault fault(lcb_file_backed_rows::max_staging_bytes);
+        huge_row.gather(nullptr, 0, output);
+        check(allocation_failures == 0 && output.empty() && huge_row.cache_bytes() == 0,
+              "empty gather allocated row scratch or cache");
+    }
+    // A budget too small for one four-way set must keep the uncached path.
+    lcb_file_backed_rows tiny(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 415);
+    {
+        pread_faults faults;
+        tiny.gather(indices.data(), indices.size(), output);
+        tiny.gather(indices.data(), indices.size(), output);
+        check(faults.calls == 4 && tiny.cache_bytes() == 0 && output == expected, "tiny cache budget");
+    }
+    // Fail either metadata or packed-payload allocation. A complete gather
+    // must still succeed, with no partial cache and no recurring retry storm.
+    for (size_t allocation : {size_t(32), size_t(384)}) {
+        lcb_file_backed_rows fallback(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 416);
+        std::vector<float> one;
+        baseline.gather(indices.data(), 1, one);
+        allocation_fault fault(allocation);
+        pread_faults reads;
+        fallback.gather(indices.data(), 1, output);
+        fallback.gather(indices.data(), 1, output);
+        check(allocation_failures == 1, "optional allocation was not attempted exactly once");
+        check(reads.calls == 2 && output == one && fallback.cache_bytes() == 0, "allocation fallback");
+    }
+}
+
 int main() {
     try {
         // IQ4_NL / 160 columns is the actual Unsloth PLE row format.
@@ -166,6 +338,8 @@ int main() {
             compare_rows(type, 160, (uint64_t(1) << 32) + 71);
         }
         positioned_read_failures();
+        persistent_cache();
+        cache_resource_bounds();
         temporary_file f;
         check(ftruncate(f.fd(), 4096) == 0, "truncate fixture");
         rejects([&] { lcb_file_backed_rows r(-1, 0, 4096, 0, GGML_TYPE_F32, 32, 1); });
@@ -184,6 +358,6 @@ int main() {
         check(ftruncate(f.fd(), 7) == 0, "truncate after load");
         int32_t index = 0; std::vector<float> output;
         rejects([&] { reader.gather(&index, 1, output); });
-        std::cout << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs, truncation, partial reads, EINTR, hard failures and deduplication\n";
+        std::cout << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs, truncation, partial reads, EINTR, hard failures, deduplication, bounded persistent cache, LRU eviction and concurrent contexts\n";
     } catch (const std::exception & e) { std::cerr << e.what() << '\n'; return 1; }
 }

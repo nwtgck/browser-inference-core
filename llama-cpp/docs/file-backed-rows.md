@@ -110,3 +110,40 @@ The reader fixture compares actual ggml get_rows output at offsets above 4 GiB.
 These checks do not establish browser WebGPU behavior, target-device speed,
 memory usage for the full 90 GB model, or uninterrupted same-context recovery
 following device loss. Those are separate artifact and hardware acceptance gates.
+
+## Bounded packed-row reuse
+
+The model-owned reader now retains quantized rows across gathers. The cache is
+four-way set associative, uses per-set least-recently-used replacement, and
+compares the complete row ID on every hit. It does not change n-gram hashing,
+row order, dequantization, or the logits/sampling algorithm. Different models
+never share cache entries. Context replacement and state restore may reuse
+immutable model rows without restoring any token-dependent cache state.
+
+Payload **and** entry metadata together are capped at 8 MiB per reader. Allocation
+is lazy and scales down for small tables. For the 160-column IQ4_NL table this
+selects 65,536 slots: a 96-byte aligned packed row and 8-byte entry, totaling
+6.5 MiB. Rows stay quantized rather than retaining 640-byte dequantized vectors.
+There is no full-table allocation, unbounded growth, or asynchronous prefetch.
+Scratch is allocated only after a miss; a fully warm or empty gather has no
+packed staging allocation. The existing 64 MiB output-staging limit remains.
+
+An optional cache allocation failure leaves the uncached reader operational and
+is not retried on every token. Misses read into separate scratch and publish an
+entry only after the complete read succeeds. A failed miss cannot corrupt the
+victim. The model cache is protected by a mutex for native callers using multiple
+contexts; browser calls stay on the existing serialized worker lane.
+
+Each nonempty gather checks the retained descriptor's size. A size change or an
+inaccessible descriptor invalidates all entries and fails that gather. On the
+browser mount this is metadata-only, not an extra source-data read. The backing
+model is still required to be immutable: same-size in-place mutation is not
+supported, just as already-loaded resident weights do not follow file changes.
+
+This is a locality optimization, not a universal speedup. Repeated text, prefix
+reevaluation and retry can save source reads. An all-new stream still reads each
+row and adds hashing, cache insertion and one metadata query per gather. Native
+reader microbenchmarks must report that cold-path cost separately; they do not
+establish a browser/model tokens-per-second improvement. The constructor's
+optional cache budget (zero disables it) is available to native regression
+harnesses; it is not a new exported runtime API.
