@@ -1,0 +1,114 @@
+diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
+index 9702c1d..84d0ea4 100644
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -752,6 +752,25 @@ ggml_tensor* ggml_ext_cast_f32(ggml_context* ctx, ggml_backend_t backend, ggml_t
+ }
+ 
+ #ifdef SD_BROWSER_WEBGPU
++// Keep the multiplication AFTER the F32 score accumulation. Moving it to Q
++// would change rounding (and mixed-precision matmul input conversion). The
++// existing WebGPU softmax scale consumes the score directly instead of writing
++// a separately scaled score buffer. Masked paths retain their exact broadcast
++// addition; the fused candidate is admitted only for the unmasked case.
++static ggml_tensor* browser_attention_soft_max(ggml_context* ctx, ggml_backend_t backend,
++                                                ggml_tensor* scores, ggml_tensor* mask,
++                                                ggml_tensor* sinks, float scale) {
++    if (!sd_backend_is(backend, "WebGPU") || scores->type != GGML_TYPE_F32 || mask != nullptr) {
++        return nullptr;
++    }
++    auto result = sinks != nullptr ? ggml_soft_max_ext(ctx, scores, nullptr, scale, 0.f) :
++                                    ggml_soft_max_ext_inplace(ctx, scores, nullptr, scale, 0.f);
++    if (sinks != nullptr) {
++        ggml_soft_max_add_sinks(result, sinks);
++    }
++    return ggml_backend_supports_op(backend, result) ? result : nullptr;
++}
++
+ // Split queries, never keys: each row retains its complete softmax denominator,
+ // mask and optional sink. This preserves manual attention (including precision)
+ // instead of silently enabling Flash Attention when its setting is disabled.
+@@ -779,23 +798,30 @@ static ggml_tensor* browser_bounded_attention(ggml_context* ctx, ggml_backend_t
+                                         q->nb[1], q->nb[2], q->nb[3], begin * q->nb[1]);
+             auto scores = ggml_mul_mat(ctx, k, query);
+             ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+-            auto scaled = ggml_scale_inplace(ctx, scores, scale);
+-            auto logits = scaled;
+-            if (mask != nullptr) {
+-                auto chunk_mask = mask->ne[1] == 1 ? mask :
+-                    ggml_view_4d(ctx, mask, mask->ne[0], count, mask->ne[2], mask->ne[3],
+-                                 mask->nb[1], mask->nb[2], mask->nb[3], begin * mask->nb[1]);
+-                logits = ggml_add_inplace(ctx, scaled, chunk_mask);
+-            }
+-            auto probabilities = sinks != nullptr ? ggml_soft_max(ctx, logits) : ggml_soft_max_inplace(ctx, logits);
+-            if (sinks != nullptr) {
+-                ggml_soft_max_add_sinks(probabilities, sinks);
++            auto probabilities = browser_attention_soft_max(ctx, backend, scores, mask, sinks, scale);
++            ggml_tensor* scaled = nullptr;
++            ggml_tensor* logits = nullptr;
++            if (probabilities == nullptr) {
++                scaled = ggml_scale_inplace(ctx, scores, scale);
++                logits = scaled;
++                if (mask != nullptr) {
++                    auto chunk_mask = mask->ne[1] == 1 ? mask :
++                        ggml_view_4d(ctx, mask, mask->ne[0], count, mask->ne[2], mask->ne[3],
++                                     mask->nb[1], mask->nb[2], mask->nb[3], begin * mask->nb[1]);
++                    logits = ggml_add_inplace(ctx, scaled, chunk_mask);
++                }
++                probabilities = sinks != nullptr ? ggml_soft_max(ctx, logits) : ggml_soft_max_inplace(ctx, logits);
++                if (sinks != nullptr) {
++                    ggml_soft_max_add_sinks(probabilities, sinks);
++                }
+             }
+             auto chunk = ggml_mul_mat(ctx, v, probabilities);
+             auto merged = ggml_set_inplace(ctx, output, chunk, output->nb[1], output->nb[2], output->nb[3],
+                                             begin * output->nb[1]);
+-            if (!ggml_backend_supports_op(backend, scores) || !ggml_backend_supports_op(backend, scaled) ||
+-                !ggml_backend_supports_op(backend, logits) || !ggml_backend_supports_op(backend, probabilities) ||
++            if (!ggml_backend_supports_op(backend, scores) ||
++                (scaled != nullptr && !ggml_backend_supports_op(backend, scaled)) ||
++                (logits != nullptr && !ggml_backend_supports_op(backend, logits)) ||
++                !ggml_backend_supports_op(backend, probabilities) ||
+                 !ggml_backend_supports_op(backend, chunk) || !ggml_backend_supports_op(backend, merged)) {
+                 supported = false;
+                 break;
+@@ -984,20 +1010,27 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
+         if (kqv == nullptr) {
+             auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
+             ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+-            kq = ggml_scale_inplace(ctx, kq, scale);
+-            if (mask) {
+-                kq = ggml_add_inplace(ctx, kq, mask);
+-            }
+-            if (sinks != nullptr) {
+-                // A sink-bearing fallback may be placed separately from its input.
+-                // Do not retain an in-place output on a different backend's storage.
+-                kq = ggml_soft_max(ctx, kq);
+-                ggml_soft_max_add_sinks(kq, sinks);
+-            } else {
+-                kq = ggml_soft_max_inplace(ctx, kq);
++            ggml_tensor* probabilities = nullptr;
++#ifdef SD_BROWSER_WEBGPU
++            probabilities = browser_attention_soft_max(ctx, backend, kq, mask, sinks, scale);
++#endif
++            if (probabilities == nullptr) {
++                kq = ggml_scale_inplace(ctx, kq, scale);
++                if (mask) {
++                    kq = ggml_add_inplace(ctx, kq, mask);
++                }
++                if (sinks != nullptr) {
++                    // A sink-bearing fallback may be placed separately from its input.
++                    // Do not retain an in-place output on a different backend's storage.
++                    kq = ggml_soft_max(ctx, kq);
++                    ggml_soft_max_add_sinks(kq, sinks);
++                } else {
++                    kq = ggml_soft_max_inplace(ctx, kq);
++                }
++                probabilities = kq;
+             }
+ 
+-            kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
++            kqv = ggml_mul_mat(ctx, v, probabilities);  // [N * n_head, L_q, d_head]
+         }
+ 
+         kqv = ggml_reshape_4d(ctx, kqv, d_head, L_q, n_head, N);  // [N, n_head, L_q, d_head]

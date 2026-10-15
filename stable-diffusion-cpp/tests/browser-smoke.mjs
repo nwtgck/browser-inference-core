@@ -7,6 +7,7 @@ import path from 'node:path';
 import { makeFixture } from './gguf-fixture.mjs';
 import { makeModelIoFixtures } from './model-io-fixtures.mjs';
 import { pathToFileURL } from 'node:url';
+import { imageSmokeScope } from './browser-smoke-contract.mjs';
 const root = path.resolve(process.argv[2] ?? 'dist/package');
 const testWebGpu = process.env.SDCB_TEST_WEBGPU === '1';
 const { chromium } = await import(pathToFileURL(path.resolve('../.tools/browser/node_modules/playwright/index.mjs')).href);
@@ -31,8 +32,8 @@ try {
   for (const profile of Object.keys(profiles)) {
     for (const variant of ['browser', 'test']) {
       try {
-        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu }) => {
-          const run = async ({ origin, base, variant, profile, testWebGpu }) => {
+        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu, scope }) => {
+          const run = async ({ origin, base, variant, profile, testWebGpu, scope }) => {
             const { attachCore, schema, mountReadOnlyFile } = await import(origin + '/examples/runtime/index.mjs');
             const create = (await import(base + 'core.mjs')).default;
             const response = await fetch(base + 'core.wasm');
@@ -171,7 +172,7 @@ try {
                 const beforeDisabled = stages().length;
                 module._sdc_test_callbacks();
                 if (stages().length !== beforeDisabled) throw Error('Disabled graph diagnostics still emitted');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -185,6 +186,7 @@ try {
             const timestep = [];
             const bf16Weights = [];
             const conv3dBias = variant === 'test' ? [] : undefined;
+            const webgpuPerformance = variant === 'test' ? [] : undefined;
             const graphWalk = variant === 'test' ? module._sdc_test_graph_walk() === 1 : undefined;
             if (graphWalk === false) throw Error('Deep graph construction/compute propagation failed');
             if (variant === 'test') {
@@ -227,6 +229,11 @@ try {
                     [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
                   if (convolution !== 1) throw Error(`Synthetic 3D convolution bias ${name} failed: ${convolution}`);
                   conv3dBias.push({ backend: name, passed: true });
+                  const performance = await module.ccall('sdc_test_webgpu_performance', 'number',
+                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
+                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
+                  if (performance !== 1) throw Error(`Bounded graph/copy ${name} failed: ${performance}`);
+                  webgpuPerformance.push({ backend: name, passed: true });
                 } finally {
                   await core.api.sd_set_log_callback(0n, 0n);
                   module.removeFunction(placementLog);
@@ -234,9 +241,8 @@ try {
                 }
               }
             }
-            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias,
-              scope: 'real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias graph arithmetic on ' +
-                (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + ', plus deep graph construction/selection; no trained-model image generation' };
+            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias, webgpuPerformance,
+              scope };
           };
           const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -247,12 +253,12 @@ try {
               timer = setTimeout(() => reject(Error(`Worker smoke timed out: ${profile}/${variant}`)), 120000);
               worker.onerror = event => reject(Error(event.message));
               worker.onmessage = ({ data }) => data.error ? reject(Error(data.error)) : resolve({ profile, variant, ...data.result });
-              worker.postMessage({ origin: location.origin, base: `${location.origin}/profiles/${profile}/${variant}/`, variant, profile, testWebGpu });
+              worker.postMessage({ origin: location.origin, base: `${location.origin}/profiles/${profile}/${variant}/`, variant, profile, testWebGpu, scope });
             });
           } finally {
             clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(url);
           }
-        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu });
+        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu, scope: imageSmokeScope(testWebGpu) });
         console.log(JSON.stringify(result, null, 2));
         results.push(result);
         // The pipeline wrapper finalizes its tested package snapshot, not build/.

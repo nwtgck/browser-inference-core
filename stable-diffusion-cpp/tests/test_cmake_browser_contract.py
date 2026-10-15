@@ -16,7 +16,7 @@ class BrowserLinkContract(unittest.TestCase):
         root = Path(temp.name)
         (root/'bridge').mkdir(); (root/'config').mkdir()
         (root/'scripts').mkdir(); (root/'tests').mkdir()
-        for path in ('config/variants.json','bridge/core.d.ts','scripts/generate_bindings.py','tests/wasm-probes.cpp','tests/qwen-timestep-probe.cpp','tests/bf16-weights-probe.cpp','tests/graph-walk-probe.cpp','tests/conv3d-bias-probe.cpp'):
+        for path in ('config/variants.json','bridge/core.d.ts','scripts/generate_bindings.py','tests/wasm-probes.cpp','tests/qwen-timestep-probe.cpp','tests/bf16-weights-probe.cpp','tests/graph-walk-probe.cpp','tests/conv3d-bias-probe.cpp', 'tests/webgpu-performance-probe.cpp'):
             shutil.copy2(ROOT/path,root/path)
         (root/'bridge/browser.cpp').write_text('// Fixture, never compiled\n')
         (root/'CMakeLists.txt').write_text((ROOT/'CMakeLists.txt').read_text()+'''
@@ -28,6 +28,8 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/link-inputs.txt"
     CONTENT "$<TARGET_PROPERTY:core,LINK_DEPENDS>")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sources.txt"
     CONTENT "$<TARGET_PROPERTY:core,SOURCES>")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-defines.txt"
+    CONTENT "$<TARGET_PROPERTY:ggml-webgpu,COMPILE_DEFINITIONS>")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-options.txt"
     CONTENT "$<TARGET_PROPERTY:ggml-webgpu,INTERFACE_LINK_OPTIONS>")
 ''')
@@ -39,7 +41,7 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/backend-options.txt"
         (sd/'stub.cpp').write_text('// No compilation\n')
         (sd/'CMakeLists.txt').write_text('''
 add_library(stable-diffusion STATIC stub.cpp)
-add_library(ggml-webgpu INTERFACE)
+add_library(ggml-webgpu STATIC stub.cpp)
 set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")
 ''')
         output = root/'out'
@@ -54,21 +56,23 @@ set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")
     def assert_probe_boundary(self, root, data, variant):
         # Inspect CMake's evaluated target, not just a spelling of target_sources.
         # Both source files and generated exports must obey the variant boundary.
+        self.assertEqual(data['backend-defines'].split(';').count('GGML_WEBGPU_BATCH_PARAM_UPLOADS=1'), 1)
         count = 1 if variant == 'test' else 0
         sources = data['sources'].split(';')
         for probe in ('tests/wasm-probes.cpp', 'tests/qwen-timestep-probe.cpp', 'tests/bf16-weights-probe.cpp',
-                      'tests/graph-walk-probe.cpp', 'tests/conv3d-bias-probe.cpp'):
+                      'tests/graph-walk-probe.cpp', 'tests/conv3d-bias-probe.cpp', 'tests/webgpu-performance-probe.cpp'):
             self.assertEqual(sources.count(probe), count, probe)
         entries = json.loads((root/'out/generated/exports.json').read_text())
         for probe in ('_sdc_test_gguf_offset', '_sdc_test_gguf_value',
                       '_sdc_test_callbacks', '_sdc_test_safetensors_offset',
                       '_sdc_test_safetensors_value', '_sdc_test_model_tensor_count',
-                      '_sdc_test_qwen_timestep', '_sdc_test_bf16_weights', '_sdc_test_graph_walk', '_sdc_test_conv3d_bias'):
+                      '_sdc_test_qwen_timestep', '_sdc_test_bf16_weights', '_sdc_test_graph_walk', '_sdc_test_conv3d_bias', '_sdc_test_webgpu_performance'):
             self.assertEqual(entries.count(probe), count, probe)
         suspending = json.loads((root/'out/generated/jspi-exports.json').read_text())
         self.assertEqual(suspending.count('sdc_test_qwen_timestep'), count)
         self.assertEqual(suspending.count('sdc_test_bf16_weights'), count)
         self.assertEqual(suspending.count('sdc_test_conv3d_bias'), count)
+        self.assertEqual(suspending.count('sdc_test_webgpu_performance'), count)
 
     def test_browser_variants_have_no_test_hook_and_keep_both_suspension_modes(self):
         for jspi in (True,False):

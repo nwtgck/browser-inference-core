@@ -1,0 +1,226 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -40,6 +40,17 @@
+ static inline void compute_2d_workgroups(uint32_t total_wg, uint32_t max_per_dim, uint32_t & wg_x, uint32_t & wg_y) {
+     wg_y = std::max(1u, CEIL_DIV(total_wg, max_per_dim));
+     wg_x = CEIL_DIV(total_wg, wg_y);
++}
++
++// Keep the flattened workgroup index in u32 even on adapters advertising a
++// larger per-axis limit. This helper is only for kernels with a linear domain;
++// the shader discards padding before reading data or entering a barrier.
++static void ggml_webgpu_linear_workgroups(uint64_t total, uint32_t max_per_dim,
++                                          uint32_t & wg_x, uint32_t & wg_y) {
++    const uint32_t limit = std::min(max_per_dim, uint32_t(65535));
++    GGML_ASSERT(limit > 0 && total > 0 && total <= uint64_t(limit) * limit);
++    wg_y = uint32_t(1 + (total - 1) / limit);
++    wg_x = uint32_t(1 + (total - 1) / wg_y);
+ }
+ 
+ static inline uint32_t ggml_webgpu_u32_from_f32(float value) {
+@@ -2658,7 +2669,8 @@
+         (uint32_t) dst->ne[0],
+         (uint32_t) dst->ne[1],
+         (uint32_t) dst->ne[2],
+-        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(rn_dst, 0))  // epsilon, treated as f32 in the shader
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(rn_dst, 0)),  // epsilon, treated as f32 in the shader
++        (uint32_t) ggml_nrows(dst)
+     };
+ 
+     std::vector<wgpu::BindGroupEntry> entries;
+@@ -2697,7 +2709,11 @@
+         entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, dst));
+     }
+ 
+-    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, ggml_nrows(dst));
++    uint32_t wg_x, wg_y;
++    ggml_webgpu_linear_workgroups(ggml_nrows(dst),
++                                  ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension,
++                                  wg_x, wg_y);
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_row_norm(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+@@ -2713,7 +2729,8 @@
+         (uint32_t) src->ne[0],
+         (uint32_t) src->ne[1],
+         (uint32_t) src->ne[2],
+-        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(dst, 0))  // epsilon, treated as f32 in the shader
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(dst, 0)),  // epsilon, treated as f32 in the shader
++        (uint32_t) ggml_nrows(src)
+     };
+ 
+     ggml_webgpu_shader_lib_context shader_lib_ctx = {};
+@@ -2728,7 +2745,11 @@
+     if (!decisions->inplace) {
+         entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, dst));
+     }
+-    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, ggml_nrows(src));
++    uint32_t wg_x, wg_y;
++    ggml_webgpu_linear_workgroups(ggml_nrows(src),
++                                  ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension,
++                                  wg_x, wg_y);
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_rope(webgpu_context & ctx,
+@@ -2891,8 +2912,13 @@
+     }
+     entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, dst_binding, dst));
+ 
+-    uint32_t wg_x = CEIL_DIV(ggml_nelements(dst), decisions->wg_size);
+-    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x);
++    const uint64_t elements = ggml_nelements(dst);
++    GGML_ASSERT(elements > 0 && elements <= UINT32_MAX && decisions->wg_size > 0);
++    uint32_t wg_x, wg_y;
++    ggml_webgpu_linear_workgroups(1 + (elements - 1) / decisions->wg_size,
++                                  ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension,
++                                  wg_x, wg_y);
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_scale(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+@@ -2982,7 +3008,8 @@
+         ggml_webgpu_u32_from_f32(max_bias),
+         ggml_webgpu_u32_from_f32(n_head_log2),
+         ggml_webgpu_u32_from_f32(m0),
+-        ggml_webgpu_u32_from_f32(m1)
++        ggml_webgpu_u32_from_f32(m1),
++        (uint32_t) ggml_nrows(dst)
+     };
+ 
+     std::vector<wgpu::BindGroupEntry> entries     = { ggml_webgpu_make_bind_group_entry(
+@@ -3003,7 +3030,11 @@
+         entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, binding_num, dst));
+     }
+ 
+-    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, ggml_nrows(dst));
++    uint32_t wg_x, wg_y;
++    ggml_webgpu_linear_workgroups(ggml_nrows(dst),
++                                  ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension,
++                                  wg_x, wg_y);
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_argmax(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -32,7 +32,8 @@
+     ne1: u32,
+     ne2: u32,
+ 
+-    eps: f32
++    eps: f32,
++    nrows: u32,
+ };
+ 
+ @group(0) @binding(0)
+@@ -53,10 +54,15 @@
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+-        @builtin(local_invocation_id) lid: vec3<u32>) {
++        @builtin(local_invocation_id) lid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
+ 
+-    // one thread per row
+-    var i = wid.x;
++    // One workgroup per row. This guard is uniform within the workgroup and
++    // precedes every storage access and barrier (including padding groups).
++    var i = wid.x + wid.y * num_wg.x;
++    if (i >= params.nrows) {
++        return;
++    }
+     let i3 = i / (params.ne2 * params.ne1);
+     i = i % (params.ne2 * params.ne1);
+     let i2 = i / params.ne1;
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl
+@@ -89,17 +89,23 @@
+     ne1: u32,
+     ne2: u32,
+ 
+-    eps: f32
++    eps: f32,
++    nrows: u32,
+ };
+ 
+ var<workgroup> scratch: array<f32, WG_SIZE>;
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+-        @builtin(local_invocation_id) lid: vec3<u32>) {
++        @builtin(local_invocation_id) lid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
+ 
+-    // one thread per row
+-    var i = wid.x;
++    // One workgroup per row. This guard is uniform within the workgroup and
++    // precedes every storage access and barrier (including padding groups).
++    var i = wid.x + wid.y * num_wg.x;
++    if (i >= params.nrows) {
++        return;
++    }
+     let i3 = i / (params.ne2 * params.ne1);
+     i = i % (params.ne2 * params.ne1);
+     let i2 = i / params.ne1;
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
+@@ -40,6 +40,7 @@
+     n_head_log2: f32,
+     m0: f32,
+     m1: f32,
++    nrows: u32,
+ };
+ 
+ #define SRC_BINDING 0
+@@ -124,9 +125,15 @@
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+-        @builtin(local_invocation_id) lid: vec3<u32>) {
+-
+-    var i = wid.x;
++        @builtin(local_invocation_id) lid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
++
++    // One workgroup per row. This guard is uniform within the workgroup and
++    // precedes every storage access and barrier (including padding groups).
++    var i = wid.x + wid.y * num_wg.x;
++    if (i >= params.nrows) {
++        return;
++    }
+     let i3 = i / (params.ne2 * params.ne1);
+     i = i % (params.ne2 * params.ne1);
+     let i2 = i / params.ne1;
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/glu.wgsl
+@@ -157,12 +157,19 @@
+ #endif
+ 
+ @compute @workgroup_size(WG_SIZE)
+-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+-    if (gid.x >= params.ne) {
++fn main(@builtin(workgroup_id) wid: vec3<u32>,
++        @builtin(local_invocation_id) lid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let group = wid.x + wid.y * num_wg.x;
++    // Check the group before multiplying by WG_SIZE so padding cannot wrap
++    // a u32 element index. Empty inputs are not dispatched by the host.
++    if (params.ne == 0u || group > (params.ne - 1u) / WG_SIZE) {
+         return;
+     }
+-
+-    var i = gid.x;
++    var i = group * WG_SIZE + lid.x;
++    if (i >= params.ne) {
++        return;
++    }
+     let i3 = i / (params.ne2 * params.ne1 * params.ne0);
+     i = i % (params.ne2 * params.ne1 * params.ne0);
+     let i2 = i / (params.ne1 * params.ne0);

@@ -63,6 +63,10 @@ if(EMSCRIPTEN)
 endif()
 add_subdirectory("${SDCB_SOURCE}" upstream)
 target_compile_definitions(stable-diffusion PRIVATE SD_BROWSER_WEBGPU=1)
+if(EMSCRIPTEN)
+    # This image-only prepared backend keeps the original queue submission cadence.
+    target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS=1)
+endif()
 if(EMSCRIPTEN AND NOT SDCB_JSPI)
     # Fix the selected backend's typo without modifying the vendor checkout.
     get_target_property(opts ggml-webgpu INTERFACE_LINK_OPTIONS)
@@ -87,10 +91,11 @@ else()
         target_sources(core PRIVATE tests/bf16-weights-probe.cpp)
         target_sources(core PRIVATE tests/graph-walk-probe.cpp)
         target_sources(core PRIVATE tests/conv3d-bias-probe.cpp)
+        target_sources(core PRIVATE tests/webgpu-performance-probe.cpp)
         target_include_directories(core PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
         target_compile_definitions(core PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
         file(READ "${SDCB_GENERATED}/exports.json" SDCB_EXPORTS)
-        foreach(probe sdc_test_gguf_offset sdc_test_gguf_value sdc_test_callbacks sdc_test_safetensors_offset sdc_test_safetensors_value sdc_test_model_tensor_count sdc_test_qwen_timestep sdc_test_bf16_weights sdc_test_graph_walk sdc_test_conv3d_bias)
+        foreach(probe sdc_test_gguf_offset sdc_test_gguf_value sdc_test_callbacks sdc_test_safetensors_offset sdc_test_safetensors_value sdc_test_model_tensor_count sdc_test_qwen_timestep sdc_test_bf16_weights sdc_test_graph_walk sdc_test_conv3d_bias sdc_test_webgpu_performance)
             string(JSON length LENGTH "${SDCB_EXPORTS}")
             string(JSON SDCB_EXPORTS SET "${SDCB_EXPORTS}" ${length} "\"_${probe}\"")
         endforeach()
@@ -103,6 +108,8 @@ else()
         string(JSON SDCB_JSPI_EXPORTS SET "${SDCB_JSPI_EXPORTS}" ${length} "\"sdc_test_bf16_weights\"")
         string(JSON length LENGTH "${SDCB_JSPI_EXPORTS}")
         string(JSON SDCB_JSPI_EXPORTS SET "${SDCB_JSPI_EXPORTS}" ${length} "\"sdc_test_conv3d_bias\"")
+        string(JSON length LENGTH "${SDCB_JSPI_EXPORTS}")
+        string(JSON SDCB_JSPI_EXPORTS SET "${SDCB_JSPI_EXPORTS}" ${length} "\"sdc_test_webgpu_performance\"")
         file(WRITE "${SDCB_GENERATED}/jspi-exports.json" "${SDCB_JSPI_EXPORTS}")
     endif()
     set_property(TARGET core APPEND PROPERTY LINK_DEPENDS
@@ -125,13 +132,58 @@ endif()
 target_include_directories(core PRIVATE "${SDCB_SOURCE}/include" "${SDCB_SOURCE}/thirdparty" "${SDCB_GGML_SOURCE}/include")
 target_link_libraries(core PRIVATE stable-diffusion)
 if(SDCB_NATIVE_CHECK)
-    add_executable(browser-boundary-test tests/native.cpp tests/wasm-probes.cpp tests/qwen-timestep-probe.cpp tests/bf16-weights-probe.cpp tests/graph-walk-probe.cpp tests/conv3d-bias-probe.cpp)
+    add_executable(browser-boundary-test tests/native.cpp tests/wasm-probes.cpp tests/qwen-timestep-probe.cpp tests/bf16-weights-probe.cpp tests/graph-walk-probe.cpp tests/conv3d-bias-probe.cpp tests/webgpu-performance-probe.cpp)
     target_compile_definitions(browser-boundary-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
     target_include_directories(browser-boundary-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
     target_link_libraries(browser-boundary-test PRIVATE core stable-diffusion)
     enable_testing()
+    foreach(name image-causal anima-attention anima-context webgpu-rope webgpu-attention-softmax)
+        add_executable(${name}-test tests/${name}-test.cpp)
+        target_compile_definitions(${name}-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+        target_include_directories(${name}-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+        target_link_libraries(${name}-test PRIVATE stable-diffusion)
+        add_test(NAME ${name} COMMAND ${name}-test)
+    endforeach()
+    set(SDCB_WEBGPU_SOURCE "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu.cpp")
+    foreach(fixture policy transfer)
+        add_custom_command(OUTPUT "${SDCB_GENERATED}/webgpu-${fixture}-fixture.cpp"
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-${fixture}-fixture.py"
+                --source "${SDCB_WEBGPU_SOURCE}" --output "${SDCB_GENERATED}/webgpu-${fixture}-fixture.cpp"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-${fixture}-fixture.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-wait-probe.py" "${SDCB_WEBGPU_SOURCE}"
+                "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-transfer-fixture.cpp.in"
+            VERBATIM)
+    endforeach()
+    add_executable(webgpu-bounded-test tests/webgpu-bounded-test.cpp "${SDCB_GENERATED}/webgpu-policy-fixture.cpp")
+    add_executable(webgpu-qwen-work-test tests/webgpu-qwen-work-test.cpp "${SDCB_GENERATED}/webgpu-policy-fixture.cpp")
+    add_executable(webgpu-transfer-test "${SDCB_GENERATED}/webgpu-transfer-fixture.cpp")
+    foreach(name webgpu-bounded webgpu-transfer webgpu-qwen-work)
+        target_compile_definitions(${name}-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+        target_include_directories(${name}-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+            "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+        target_link_libraries(${name}-test PRIVATE stable-diffusion)
+        add_test(NAME ${name} COMMAND ${name}-test)
+    endforeach()
+    if(UNIX AND NOT APPLE)
+        target_compile_definitions(anima-context-test PRIVATE SDCB_TEST_WRAP_CACHE_ALLOC=1)
+        target_link_options(anima-context-test PRIVATE -Wl,--wrap=ggml_backend_alloc_ctx_tensors)
+    endif()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
     if(UNIX)
+        add_test(NAME webgpu-dispatch-grid-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-dispatch-grid/check_grid.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
+        add_test(NAME webgpu-registry-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-registry/check_registry.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
+        add_test(NAME webgpu-softmax-cache-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-softmax-cache/check_cache.py"
+            --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl"
+            --cxx "${CMAKE_CXX_COMPILER}")
+        add_test(NAME webgpu-param-upload-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-param-upload/check_uploads.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-completion-wait-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-wait-probe.py"
             --source "${SDCB_GGML_SOURCE}/src/ggml-webgpu/ggml-webgpu.cpp" --cxx "${CMAKE_CXX_COMPILER}")

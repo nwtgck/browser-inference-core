@@ -1,0 +1,55 @@
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
+index 1c29a92..0c3f84f 100644
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/soft_max.wgsl
+@@ -149,8 +149,10 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+         }
+         let val = src[i_src0_row + col] * params.scale + slope * mask_val(i_src1_row + col);
+         max_val = max(max_val, val);
+-        if (col < CACHE_SIZE) {
+-            cache[col] = val;
++        // Each invocation owns a strided set of columns. Index its private
++        // cache by the iteration, not by the global column in the row.
++        if (j < CACHE_SIZE) {
++            cache[j] = val;
+         }
+         col += WG_SIZE;
+     }
+@@ -174,12 +176,18 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+         if (col >= params.ne0) {
+             break;
+         }
+-        let val = select(src[i_src0_row + col] * params.scale + slope * mask_val(i_src1_row + col),
+-                         cache[col], col < CACHE_SIZE);
++        // select() evaluates both values. Use control flow so cache hits do
++        // not read storage, and a spill never indexes outside the cache.
++        var val: f32;
++        if (j < CACHE_SIZE) {
++            val = cache[j];
++        } else {
++            val = src[i_src0_row + col] * params.scale + slope * mask_val(i_src1_row + col);
++        }
+         let ex = exp(val - row_max);
+         sum += ex;
+-        if (col < CACHE_SIZE) {
+-            cache[col] = ex;
++        if (j < CACHE_SIZE) {
++            cache[j] = ex;
+         } else {
+             update(i_dst_row + col, ex);
+         }
+@@ -204,7 +212,13 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+         if (col >= params.ne0) {
+             break;
+         }
+-        update(i_dst_row + col, select(inter_value(i_dst_row + col), cache[col], col < CACHE_SIZE) * sum_recip);
++        var ex: f32;
++        if (j < CACHE_SIZE) {
++            ex = cache[j];
++        } else {
++            ex = inter_value(i_dst_row + col);
++        }
++        update(i_dst_row + col, ex * sum_recip);
+         col += WG_SIZE;
+     }
+ }

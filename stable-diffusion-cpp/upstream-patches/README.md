@@ -239,3 +239,163 @@ patch, relax input hashes, or substitute a different upstream revision.
     probe covers long completions, errors and callback lifetimes; it does not
     execute GPU work. The patch is removable when the pinned upstream implements
     equivalent completion-based waits and failure/ownership checks.
+
+20. Single-image causal convolution: when the input has one frame, no saved
+    history and the temporal kernel is three with the standard causal zero pad,
+    pack only the last temporal slice and use an existing direct 2D convolution.
+    Check the selected backend's support before selecting the candidate. Preserve
+    history/video, multiple batches, unsupported types, explicit 3D direct mode,
+    temporal stride/dilation changes and both circular flags. Spatial padding
+    continues through the existing helper, including its supported fallback.
+    Keep a separate bias output; no weight precision or global copy policy changes.
+    `image-causal-test` compares 62 synthetic CPU conditions, each with two inputs,
+    against the legacy path. This is not trained-model/WebGPU speed validation.
+    Remove when upstream has an equivalent guarded lowering passing these tests.
+
+21. Anima conditioning: separate adapter/weighting/trimming from image-dependent
+    computation. Preserve structural zero-padding mass with explicit optional
+    F32 attention sinks, attached before capability selection; ordinary and flash
+    paths retain the same mathematical denominator. Use RunnerCache only with
+    bounded immutable condition IDs owned by one sampling call. Enabled extensions,
+    arbitrary weight adapters and nondefault numeric scales do not get reuse.
+    Cache hits materialize a graph-local copy so graph-cut metadata cannot rename
+    or modify persistent input tensors. Allocation failure clears and disables
+    caching for that sample, then retries uncached once; other failures are not
+    retried. Independent model arguments can disable caching or compaction.
+    The actual Anima layer and a small actual AnimaRunner are tested with synthetic
+    weights, including ownership, metadata, condition isolation and injected cache
+    allocation failure. No application package pin or generated asset is changed.
+    Remove when upstream supplies equivalent sink semantics, explicit condition
+    identity, memory accounting and lifecycle/fallback contracts with regressions.
+
+22. Same-device WebGPU tensor copies: implement the buffer's synchronous copy
+    callback and the backend's asynchronous copy callback using the existing
+    device queue. Accept only equal-type/equal-layout ranges on the same device,
+    different GPU buffers, four-byte-aligned offsets/sizes and checked bounds.
+    Refuse before encoding otherwise, preserving GGML's generic fallback. Never
+    round a partial F16 tail over a neighboring tensor. The synchronous callback
+    waits for completion; the asynchronous callback does not. This is an SD-only
+    prepared GGML change, not a change to the separately built llama runtime.
+    Extracted-source API doubles check range, ownership and queue contracts; they
+    are not a WebGPU compiler, device execution or speed measurement. Remove when
+    upstream has equivalent callbacks passing these contracts and real GPU tests.
+
+23. Cache capture batching: allocate all destinations before any asynchronous
+    submission, retain all owners through completion, and publish only afterward.
+    Contiguous same-WebGPU-device copies share one completion boundary per capture.
+    Other devices and strided spans retain their previous copy paths. Standalone
+    CachedTensor::copy stays synchronous; source tensor metadata is never mutated.
+    This benefits enabled Qwen prefix/graph-cut caches as well as Anima conditioning,
+    but does not enable an application-disabled cache. Allocation/submission failure
+    tests verify no stranded destination lifetime. This does not merge submissions:
+    eight tensors still make eight queue submissions, followed by one explicit wait.
+    Remove when upstream capture has equivalent completion and ownership semantics.
+
+24. Backend-admitted bounded materialization: when WebGPU rejects the full F16
+    convolution expansion or manual attention score matrix, try at most 64 output
+    row/query chunks. Admit the alternative only if every introduced compute node
+    is supported. Convolution preserves the full input halo and baseline F16
+    expansion/matmul; attention retains all keys, masks, sinks and F32 score
+    accumulation. Chained SET writes own one final output without concatenation.
+    CPU, small accepted graphs, explicit direct convolutions and unsupported
+    candidates retain the original path. Flash Attention is not enabled silently.
+    This is not a guarantee of peak memory or device residency: allocation,
+    scheduler cuts and runtime limits still matter. Native tests replay the pinned
+    WebGPU capability predicate and compare real CPU arithmetic; optional browser
+    smoke exercises small bounded graphs on the requested real backend. Remove
+    when upstream provides an equivalent backend-aware bounded implementation.
+
+25. Opt-in compute placement: with the existing graph diagnostics enabled, emit
+    browser-placement-ops-v1 alongside the unchanged browser-placement-v1 record.
+    Exclude metadata-only nodes and count assigned CPU/WebGPU/other operations,
+    CPU operation kinds, current CPU-node rejection by the preferred WebGPU backend,
+    and the largest logical CPU operand. The check occurs after scheduler source
+    rewriting; it is not a historical rejection cause, transferred bytes, a GPU
+    execution trace or timing. No tensor names/data, new waits or reads are added.
+    Disabled diagnostics add only the gate check. Remove when upstream provides an
+    equivalent opt-in, name-free compute-placement summary with these semantics.
+
+
+26. WebGPU parameter upload batching: the image backend stages per-kernel uniform
+    bytes in the existing aligned slot arena and flushes once before each existing
+    command submission. Submission, throttling, profile/compute-pass boundaries,
+    parameter bindings and slot reuse are preserved. The 74-slot default mirror is
+    18,944 bytes at 256-byte alignment; padding trades more small transfer bytes
+    for fewer API calls. Prepared-source tests exercise the live arena, dispatch
+    builder and graph loop with an ordered queue double, not GPU measurements.
+    CMake explicitly enables the definition on the image-only WebGPU target.
+    Remove when upstream provides equivalent bounded staging and queue ordering.
+
+27. Empty cache capture: return without a queue completion callback when no new
+    runner/graph-cut outputs need saving. Segment execution and cleanup retain
+    their own waits; non-empty and partially submitted captures preserve their
+    completion/ownership rules. Tests include outputs in other segments, already
+    pending entries, no future cut consumer, normal saves and failures. Remove
+    when upstream avoids equivalent empty waits with these lifetime guarantees.
+
+
+28. WebGPU softmax private-cache indexing: use each invocation's loop index for
+    its existing sixteen-element cache, and branch before cache/storage reads.
+    Preserve reduction order, masks, sinks and spill layout. Checked source-loop
+    CPU regressions and a real-backend test-variant probe cover boundaries;
+    GPU compiler/resource behavior still needs real device validation. Remove
+    when pinned upstream provides the same cache and bounds semantics.
+29. Browser manual-attention scale fusion: use the existing softmax parameter
+    only for a supported unmasked F32 candidate. Keep multiplication after score
+    accumulation, not in Q; retain original masked/CPU/rejected paths and sink
+    ownership. Tests inspect the scale parameter, graph order and fallback, and
+    compare numerical results. Remove when upstream admits this same fusion.
+30. Qwen Image 2.1 graph-local rotary matrix sharing: prepare the common position
+    permutation once and pass its row views to Q/K consumers. No persistent
+    value cache, cross-generation reuse, dtype change or Flash setting change.
+    Frozen-reference arithmetic, modified inputs, 32-layer graph counts and
+    graph-cut planning are covered. Remove when upstream shares equivalent
+    producers while retaining segment/input lifetimes.
+
+31. Qwen Image 2.1 graph-local work reduction. The preferred WebGPU backend must
+    accept each prepared modulation row and existing F32 SwiGLU operation. Share
+    the four target/prefix modulation producers across layers, borrow only
+    contiguous read-only input spans, and use packed or separate-projection GLU
+    without materializing a separate SiLU output. Unsupported/F16/strided
+    constructor cases retain the original path; multiplication outputs remain
+    out-of-place. This is not a persistent timestep cache. The context creation
+    argument `qwen_image_2_1_webgpu_work=false` disables all three new choices for
+    same-artifact comparisons without disabling the 008 RoPE/softmax fixes.
+    Native tests compare against the frozen 008 block/model, change input values
+    in the same storage, verify fallbacks, and execute graph cuts with independent
+    per-segment allocations and cache ownership. The existing optional WebGPU
+    smoke probe now executes small modulation/GLU graphs too. Remove when pinned
+    upstream has equivalent guarded graph-local producers and fused activation.
+
+32. WebGPU operation details in the existing opt-in allocation diagnostic. Append
+    an operation histogram, SiLU/tanh/SwiGLU subtype counts, and largest logical
+    node output. No tensor names/contents, driver timestamp queries, backend
+    synchronization, or new per-step logging policy. Assigned nodes are not
+    physical shader dispatch counts and output size is not peak/live GPU memory.
+    Keep the old CPU fields and default-off behavior for consumers. Remove when
+    equivalent upstream placement detail is available.
+
+33. Linear WebGPU workgroup grids for row normalization, fused RMS normalization
+    and multiplication, softmax, and GLU. The existing mathematical loops,
+    specialization choices and bindings are preserved. Use an overflow-checked
+    two-dimensional grid and uniform padding-row guards so a large logical
+    domain does not need application-side shader rewriting and repeated dispatch.
+    Row count is appended to the uniform record; GLU guards the group before
+    multiplying by workgroup size. Small grids are unchanged. Prepared-source
+    builder/coordinate tests cover limits, tails, uniform layout and u32 edges;
+    the optional real-backend probe exercises more than 65,535 rows. These CPU
+    contracts are not a WGSL compilation or measured GPU speedup. Remove when
+    pinned upstream provides equivalent bounded grids and coordinate contracts.
+
+34. Stable registry and device ownership. Initialize discovery once, retain the
+    admitted adapter, and publish a device context once after request completion.
+    Repeated registry lookups no longer reset device_count, and repeated device
+    queries no longer replace live device/queue handles. Adapter/device callback
+    results have independent shared ownership, with checked WaitAny/status paths;
+    a callback after a failed wait cannot access a dead stack or publish a late
+    result into the registry. No automatic retry, device-loss recovery or CPU
+    substitution is introduced. Executable prepared-function contracts include
+    repeated/concurrent queries, held buffers, feature/creation failures, missing
+    and late callbacks; optional WebGPU smoke queries the live registry with
+    buffers allocated. Remove when the pinned backend has equivalent discovery,
+    publication, callback and handle-lifetime guarantees.

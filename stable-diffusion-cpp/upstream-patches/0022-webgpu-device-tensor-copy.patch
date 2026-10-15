@@ -1,0 +1,111 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -3631,6 +3631,29 @@
+     ggml_backend_webgpu_wait_queue(backend_ctx->webgpu_ctx->global_ctx);
+ }
+ 
++// Buffer implementation is below the backend vtable. Copies between buffers
++// on this device share its queue; the async callback must not add a queue wait.
++static bool ggml_backend_webgpu_copy_tensor(const ggml_tensor * src, ggml_tensor * dst, bool wait);
++
++static bool ggml_backend_webgpu_cpy_tensor_async(ggml_backend_t backend_src,
++                                                  ggml_backend_t backend_dst,
++                                                  const ggml_tensor * src,
++                                                  ggml_tensor * dst) {
++    if (backend_src == nullptr || backend_dst == nullptr ||
++        backend_src->iface.get_name != ggml_backend_webgpu_name ||
++        backend_dst->iface.get_name != ggml_backend_webgpu_name) {
++        return false;
++    }
++    auto src_buffer = src->view_src != nullptr ? src->view_src->buffer : src->buffer;
++    auto dst_buffer = dst->view_src != nullptr ? dst->view_src->buffer : dst->buffer;
++    if (src_buffer == nullptr || dst_buffer == nullptr ||
++        ggml_backend_get_device(backend_src) != ggml_backend_buft_get_device(ggml_backend_buffer_get_type(src_buffer)) ||
++        ggml_backend_get_device(backend_dst) != ggml_backend_buft_get_device(ggml_backend_buffer_get_type(dst_buffer))) {
++        return false;
++    }
++    return ggml_backend_webgpu_copy_tensor(src, dst, false);
++}
++
+ static ggml_backend_i ggml_backend_webgpu_i = {
+     /* .get_name                = */ ggml_backend_webgpu_name,
+     /* .free                    = */ ggml_backend_webgpu_free,
+@@ -3638,7 +3661,7 @@
+     /* .get_tensor_async        = */ NULL,
+     /* .set_tensor_2d_async     = */ NULL,
+     /* .get_tensor_2d_async     = */ NULL,
+-    /* .cpy_tensor_async        = */ NULL,
++    /* .cpy_tensor_async        = */ ggml_backend_webgpu_cpy_tensor_async,
+     /* .synchronize             = */ ggml_backend_webgpu_synchronize,
+     /* .graph_plan_create       = */ NULL,
+     /* .graph_plan_free         = */ NULL,
+@@ -3787,6 +3810,59 @@
+     WEBGPU_CPU_PROFILE_TOTAL_END(get_tensor, buf_ctx->global_ctx);
+ }
+ 
++// Never stage a same-device aligned copy through MapRead/host memory. Refuse
++// unsupported ranges before encoding anything, so GGML can retain its fallback.
++static bool ggml_backend_webgpu_copy_tensor(const ggml_tensor * src, ggml_tensor * dst, bool wait) {
++    auto src_buffer = src->view_src != nullptr ? src->view_src->buffer : src->buffer;
++    auto dst_buffer = dst->view_src != nullptr ? dst->view_src->buffer : dst->buffer;
++    if (src_buffer == nullptr || dst_buffer == nullptr ||
++        src_buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
++        dst_buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base) {
++        return false;
++    }
++    auto src_ctx = static_cast<ggml_backend_webgpu_buffer_context *>(src_buffer->context);
++    auto dst_ctx = static_cast<ggml_backend_webgpu_buffer_context *>(dst_buffer->context);
++    if (src_ctx->global_ctx != dst_ctx->global_ctx || src->type != dst->type ||
++        !ggml_are_same_shape(src, dst) || !ggml_are_same_stride(src, dst)) {
++        return false;
++    }
++    const size_t bytes = ggml_nbytes(src);
++    if (bytes == 0) {
++        return true;
++    }
++    const size_t src_offset = ggml_webgpu_tensor_offset(src);
++    const size_t dst_offset = ggml_webgpu_tensor_offset(dst);
++    const size_t src_size = src_ctx->buffer.GetSize();
++    const size_t dst_size = dst_ctx->buffer.GetSize();
++    // copyBufferToBuffer requires different GPU buffers and four-byte-aligned
++    // ranges. Do not round F16 tails into a neighboring tensor or risk overflow.
++    if (bytes % 4 != 0 || src_offset % 4 != 0 || dst_offset % 4 != 0 ||
++        src_offset > src_size || bytes > src_size - src_offset ||
++        dst_offset > dst_size || bytes > dst_size - dst_offset ||
++        src_ctx->buffer.Get() == dst_ctx->buffer.Get()) {
++        return false;
++    }
++    auto global = src_ctx->global_ctx;
++    std::lock_guard<std::recursive_mutex> lock(global->mutex);
++    auto encoder = global->device.CreateCommandEncoder();
++    encoder.CopyBufferToBuffer(src_ctx->buffer, src_offset, dst_ctx->buffer, dst_offset, bytes);
++    auto commands = encoder.Finish();
++    global->queue.Submit(1, &commands);
++    if (wait) {
++        ggml_backend_webgpu_wait_queue(global);
++    }
++    return true;
++}
++
++static bool ggml_backend_webgpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer,
++                                                  const ggml_tensor * src,
++                                                  ggml_tensor * dst) {
++    GGML_UNUSED(buffer);
++    // The synchronous buffer API must remain complete on return. RunnerCache
++    // uses the async backend API, then synchronizes once for all saved outputs.
++    return ggml_backend_webgpu_copy_tensor(src, dst, true);
++}
++
+ static void ggml_backend_webgpu_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     WEBGPU_LOG_DEBUG("ggml_backend_webgpu_buffer_clear(" << buffer << ", " << (uint32_t) value << ")");
+     WEBGPU_CPU_PROFILE_TOTAL_START(clear);
+@@ -3804,7 +3880,7 @@
+     /* .get_tensor      = */ ggml_backend_webgpu_buffer_get_tensor,
+     /* .set_tensor_2d   = */ NULL,
+     /* .get_tensor_2d   = */ NULL,
+-    /* .cpy_tensor      = */ NULL,  // TODO: optional, implement this
++    /* .cpy_tensor      = */ ggml_backend_webgpu_buffer_cpy_tensor,
+     /* .clear           = */ ggml_backend_webgpu_buffer_clear,
+     /* .reset           = */ NULL,  // TODO: optional, think it coordinates with
+                                     // .init_tensor

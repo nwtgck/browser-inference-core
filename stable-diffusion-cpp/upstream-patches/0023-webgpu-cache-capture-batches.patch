@@ -1,0 +1,167 @@
+diff --git a/src/core/runner_cache.cpp b/src/core/runner_cache.cpp
+--- a/src/core/runner_cache.cpp
++++ b/src/core/runner_cache.cpp
+@@ -1,6 +1,9 @@
+ #include "core/runner_cache.h"
+ 
+ #include <algorithm>
++#include <cstring>
++#include <utility>
++#include <vector>
+ #include <iterator>
+ #include <unordered_set>
+ 
+@@ -24,7 +27,7 @@
+         ggml_free(context);
+     }
+ 
+-    std::unique_ptr<CachedTensor> CachedTensor::copy(ggml_backend_t backend,
++    static std::unique_ptr<CachedTensor> allocate_cached_tensor(ggml_backend_t backend,
+                                                      const std::string& name,
+                                                      ggml_tensor* source,
+                                                      ggml_status& status) {
+@@ -46,15 +49,72 @@
+         if (entry->buffer == nullptr) {
+             return nullptr;
+         }
+-        if (source->view_src != nullptr || !ggml_is_contiguous(source) || source->buffer == nullptr) {
++        status = GGML_STATUS_SUCCESS;
++        return entry;
++    }
++
++    static void copy_cached_tensor(ggml_backend_t backend, ggml_tensor* source,
++                                      ggml_tensor* destination, bool asynchronous) {
++        if (!ggml_is_contiguous(source)) {
++            // Preserve raw strided spans for graph-cut views. This branch is not
++            // a packed tensor copy; it retains the original layout and holes.
+             std::vector<uint8_t> data(ggml_nbytes(source));
+             ggml_backend_tensor_get(source, data.data(), 0, data.size());
+-            ggml_backend_tensor_set(entry->tensor, data.data(), 0, data.size());
++            ggml_backend_tensor_set(destination, data.data(), 0, data.size());
+         } else {
+-            ggml_backend_tensor_copy(source, entry->tensor);
+-        }
+-        status = GGML_STATUS_SUCCESS;
++            // CPY outputs are contiguous views with a buffer on view_src. The
++            // generic copy API inspects tensor.buffer before consulting a backend;
++            // provide it on local metadata, preserving the view offset and owner.
++            auto copy_source = *source;
++            copy_source.buffer = ggml_graph_cut::tensor_buffer(source);
++            auto device = ggml_backend_get_device(backend);
++            auto registry = device != nullptr ? ggml_backend_dev_backend_reg(device) : nullptr;
++            const bool same_webgpu = registry != nullptr &&
++                std::strcmp(ggml_backend_reg_name(registry), "WebGPU") == 0 &&
++                !ggml_backend_buffer_is_host(copy_source.buffer) &&
++                ggml_backend_buft_get_device(ggml_backend_buffer_get_type(copy_source.buffer)) == device;
++            if (same_webgpu && asynchronous) {
++                // All producers and copies use this device's single queue. The
++                // cache capture caller owns the completion/lifetime boundary.
++                ggml_backend_tensor_copy_async(backend, backend, &copy_source, destination);
++            } else {
++                ggml_backend_tensor_copy(&copy_source, destination);
++            }
++        }
++    }
++
++    std::unique_ptr<CachedTensor> CachedTensor::copy(ggml_backend_t backend,
++                                                     const std::string& name,
++                                                     ggml_tensor* source,
++                                                     ggml_status& status) {
++        auto entry = allocate_cached_tensor(backend, name, source, status);
++        if (entry != nullptr) {
++            // Preserve the standalone helper's synchronous ownership contract.
++            copy_cached_tensor(backend, source, entry->tensor, false);
++        }
+         return entry;
++    }
++
++    struct CacheCopy {
++        std::string name;
++        ggml_tensor* source;
++        std::unique_ptr<CachedTensor> destination;
++    };
++
++    static void copy_cache_batch(ggml_backend_t backend, std::vector<CacheCopy>& copies) {
++        // Allocate ALL entries before submitting any copy. An allocation failure
++        // cannot strand queued work on destinations that have been destroyed.
++        // Retain every destination until the existing capture boundary completes,
++        // including exceptional exits; only then move ownership into the cache.
++        try {
++            for (auto& copy : copies) {
++                copy_cached_tensor(backend, copy.source, copy.destination->tensor, true);
++            }
++        } catch (...) {
++            ggml_backend_synchronize(backend);
++            throw;
++        }
++        ggml_backend_synchronize(backend);
+     }
+ 
+     static ggml_tensor* cached_tensor(const CachedTensors& tensors, const std::string& name) {
+@@ -115,19 +175,24 @@
+             return GGML_STATUS_SUCCESS;
+         }
+         const auto tensors = cache_graph_tensors(graph);
++        std::vector<CacheCopy> copies;
++        copies.reserve(outputs_.size());
+         for (const auto& output : outputs_) {
+             if (pending_.count(output.first) || !tensors.count(output.second)) {
+                 continue;
+             }
+             GGML_ASSERT(ggml_is_contiguous(output.second));
+             ggml_status status;
+-            auto entry = CachedTensor::copy(backend_, output.first, output.second, status);
++            auto entry = allocate_cached_tensor(backend_, output.first, output.second, status);
+             if (entry == nullptr) {
+                 return status;
+             }
+-            pending_[output.first] = std::move(entry);
+-        }
+-        ggml_backend_synchronize(backend_);
++            copies.push_back({output.first, output.second, std::move(entry)});
++        }
++        copy_cache_batch(backend_, copies);
++        for (auto& copy : copies) {
++            pending_[copy.name] = std::move(copy.destination);
++        }
+         return GGML_STATUS_SUCCESS;
+     }
+ 
+@@ -189,25 +254,30 @@
+                                              const ggml_graph_cut::Segment& segment,
+                                              const char* log_desc) {
+         size_t copied_bytes = 0;
+-        size_t copied_count = 0;
++        std::vector<CacheCopy> copies;
++        copies.reserve(segment.output_node_indices.size());
+         for (int index : segment.output_node_indices) {
+             auto output = ggml_graph_node(graph, index);
+             if (!ggml_graph_cut::is_graph_cut_tensor(output) ||
+                 !segment.future_cut_names.count(output->name)) {
+                 continue;
+             }
++            auto source = ggml_graph_cut::cache_source_tensor(output);
+             ggml_status status;
+-            auto entry = CachedTensor::copy(backend_, output->name, ggml_graph_cut::cache_source_tensor(output), status);
++            auto entry = allocate_cached_tensor(backend_, output->name, source, status);
+             if (entry == nullptr) {
+                 LOG_ERROR("%s failed to capture graph cut tensor: %s", log_desc, output->name);
+                 return status;
+             }
+             const size_t size = ggml_backend_buffer_get_size(entry->buffer);
+-            copied_bytes      = size > SIZE_MAX - copied_bytes ? SIZE_MAX : copied_bytes + size;
+-            ++copied_count;
+-            tensors_[output->name] = std::move(entry);
+-        }
+-        ggml_backend_synchronize(backend_);
++            copied_bytes = size > SIZE_MAX - copied_bytes ? SIZE_MAX : copied_bytes + size;
++            copies.push_back({output->name, source, std::move(entry)});
++        }
++        copy_cache_batch(backend_, copies);
++        const size_t copied_count = copies.size();
++        for (auto& copy : copies) {
++            tensors_[copy.name] = std::move(copy.destination);
++        }
+         if (copied_count > 0) {
+             LOG_DEBUG("%s graph cut cache added %6.2f MB (%zu tensors)",
+                       log_desc, copied_bytes / (1024.f * 1024.f), copied_count);

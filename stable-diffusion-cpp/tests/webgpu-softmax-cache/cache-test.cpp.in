@@ -1,0 +1,97 @@
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <vector>
+constexpr uint32_t CACHE_SIZE = @CACHE_SIZE@;
+void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+struct Storage {
+    std::vector<float> data;
+    size_t reads = 0, writes = 0;
+    float read(size_t i) { ++reads; return data.at(i); }
+    void write(size_t i, float value) { ++writes; data.at(i) = value; }
+    float operator[](size_t i) { return read(i); }
+};
+struct Cache {
+    std::array<float, CACHE_SIZE> data{};
+    std::array<bool, CACHE_SIZE> initialized{};
+    struct Slot {
+        Cache& cache; size_t i;
+        operator float() const { require(cache.initialized.at(i), "uninitialized cache read"); return cache.data.at(i); }
+        Slot& operator=(float value) { cache.data.at(i) = value; cache.initialized.at(i) = true; return *this; }
+    };
+    Slot operator[](size_t i) { require(i < CACHE_SIZE, "out-of-bounds cache index"); return {*this, i}; }
+};
+struct Lane {
+    Storage& src; Storage& dst; Storage& mask;
+    bool masked; bool sink; bool inplace;
+    uint32_t WG_SIZE;
+    struct { uint32_t x; } lid;
+    struct { uint32_t ne0; float scale; } params;
+    size_t i_src0_row, i_src1_row, i_dst_row;
+    uint32_t i2 = 0, col = 0, elems;
+    float slope, sink_value;
+    Cache cache;
+    size_t intermediate_reads = 0, intermediate_writes = 0;
+    float lower_max_bound(uint32_t) const { return sink ? sink_value : -1e30f; }
+    float mask_val(size_t i) { return masked ? mask.read(i) : 0.f; }
+    float inter_value(size_t i) { ++intermediate_reads; return inplace ? src.read(i) : dst.read(i); }
+    void update(size_t i, float value) { (inplace ? src : dst).write(i, value); }
+    float first() { @FIRST@ }
+    float second(float row_max) { @SECOND@ }
+    void third(float row_sum) { @THIRD@ }
+};
+float reduce(std::vector<float> v, bool maximum) {
+    for (size_t offset=v.size()/2; offset; offset/=2) for (size_t i=0;i<offset;++i)
+        v[i]=maximum?std::max(v[i],v[i+offset]):v[i]+v[i+offset];
+    return v[0];
+}
+void check(uint32_t width, uint32_t wg, bool masked, bool sink, bool inplace, float scale, int pattern) {
+    constexpr size_t source_offset = 7, output_offset = 11, mask_offset = 5;
+    Storage src{std::vector<float>(source_offset + width + 13, -991.f)},
+            dst{std::vector<float>(output_offset + width + 17, -991.f)},
+            mask{std::vector<float>(mask_offset + width + 19, -991.f)};
+    std::vector<double> logits;
+    const float slope=.75f, sink_value=5.7f;
+    for(uint32_t i=0;i<width;++i) {
+        const float x=pattern==0?float(int((i*37u)%113)-56)/19.f : pattern==1?float(int(i%7)-3)*50.f:0.f;
+        const float m=masked ? ((i%7==3)?-std::numeric_limits<float>::infinity():float(int(i%11)-5)/4.f) : 0.f;
+        src.data[source_offset+i]=x; mask.data[mask_offset+i]=m;
+        logits.push_back(float(x*scale+slope*m));
+    }
+    std::vector<Lane> lanes;
+    for(uint32_t id=0;id<wg;++id) lanes.push_back({src,dst,mask,masked,sink,inplace,wg,{id},{width,scale},source_offset,mask_offset,inplace?source_offset:output_offset,0,0,(width+wg-1)/wg,slope,sink_value,{}});
+    std::vector<float> scratch;
+    for(auto& lane:lanes) scratch.push_back(lane.first());
+    float maximum=reduce(scratch,true); scratch.clear();
+    for(auto& lane:lanes) scratch.push_back(lane.second(maximum));
+    float sum=reduce(scratch,false);
+    if(sink) sum+=std::exp(sink_value-maximum);
+    for(auto& lane:lanes) lane.third(sum);
+    double m=sink?std::max<double>(sink_value,*std::max_element(logits.begin(),logits.end())):*std::max_element(logits.begin(),logits.end());
+    double denom=sink?std::exp(sink_value-m):0;
+    for(auto v:logits) denom+=std::exp(v-m);
+    auto& output=inplace?src:dst;
+    size_t start=inplace?source_offset:output_offset;
+    for(uint32_t i=0;i<width;++i) {
+        double expected=std::exp(logits[i]-m)/denom, actual=output.data[start+i];
+        require(std::isfinite(actual) && std::abs(expected-actual)<=2e-7+2e-5*std::abs(expected),"softmax numerical mismatch");
+    }
+    for(size_t i=0;i<output.data.size();++i) if(i<start||i>=start+width) require(output.data[i]==-991.f,"output guard was overwritten");
+    size_t spill=width>size_t(wg)*CACHE_SIZE ? width-size_t(wg)*CACHE_SIZE : 0;
+    size_t inter_reads=0;for(auto& lane:lanes)inter_reads+=lane.intermediate_reads;
+    require(inter_reads==spill,"unexpected intermediate reads");
+    require(src.reads==width+spill+(inplace?spill:0),"unexpected input reads (cache hit still loads storage)");
+    require(output.writes==width+spill,"unexpected output writes");
+    require(mask.reads==(masked?width+spill:0),"unexpected mask reads");
+}
+int main() { try {
+    int cases=0;
+    for(uint32_t wg:{32u,64u,256u,1024u}) for(uint32_t width:{1u,15u,16u,17u,wg-1,wg,wg+1,16*wg-1,16*wg,16*wg+1,32*wg+3})
+        for(bool masked:{false,true}) for(bool sink:{false,true}) for(bool inplace:{false,true})
+            for(float scale:{1.f,.0883883476f}) for(int pattern:{0,1,2}) {check(width,wg,masked,sink,inplace,scale,pattern);++cases;}
+    std::cout<<"{\"cases\":"<<cases<<",\"source\":\"prepared WGSL lane loops\",\"execution\":\"checked CPU model, not GPU\",\"passed\":true}\n";
+} catch(const std::exception& e) {std::cerr<<e.what()<<"\n";return 1;}}
