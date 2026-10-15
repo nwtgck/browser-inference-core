@@ -10,6 +10,36 @@
 #include <memory>
 #include <string>
 
+// The wrapper can force partial reads, interruptions and a later hard failure.
+// Its lifetime is scoped to one synchronous test; production code is unchanged.
+struct pread_faults {
+    size_t calls = 0;
+    size_t max_bytes = std::numeric_limits<size_t>::max();
+    size_t interruptions = 0;
+    size_t fail_call = 0;
+    bool eof = false;
+    static pread_faults * active;
+    pread_faults() { if (active) throw std::runtime_error("nested pread fixture"); active = this; }
+    ~pread_faults() { active = nullptr; }
+    pread_faults(const pread_faults &) = delete;
+    pread_faults & operator=(const pread_faults &) = delete;
+};
+pread_faults * pread_faults::active = nullptr;
+extern "C" ssize_t __real_pread(int fd, void * buffer, size_t count, off_t offset);
+extern "C" ssize_t __wrap_pread(int fd, void * buffer, size_t count, off_t offset) {
+    if (auto * faults = pread_faults::active) {
+        ++faults->calls;
+        if (faults->interruptions) {
+            --faults->interruptions; errno = EINTR; return -1;
+        }
+        if (faults->calls == faults->fail_call) {
+            errno = EIO; return faults->eof ? 0 : -1;
+        }
+        count = std::min(count, faults->max_bytes);
+    }
+    return __real_pread(fd, buffer, count, offset);
+}
+
 static void check(bool condition, const char * message) {
     if (!condition) throw std::runtime_error(message);
 }
@@ -80,6 +110,54 @@ static void compare_rows(ggml_type type, int64_t columns, uint64_t offset) {
     reader.gather(nullptr, 0, actual);
     check(actual.empty(), "empty gather");
 }
+static void positioned_read_failures() {
+    constexpr size_t columns = 160, rows = 3;
+    const uint64_t offset = (uint64_t(1) << 32) + 83;
+    std::array<float, columns * rows> data{};
+    for (size_t i = 0; i < data.size(); ++i) data[i] = float(i) * 0.125f;
+    temporary_file file;
+    const uint64_t bytes = offset + sizeof(data);
+    check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate fault fixture");
+    write_at(file.fd(), offset, data.data(), sizeof(data));
+    lcb_file_backed_rows reader(file.fd(), 1, bytes, offset, GGML_TYPE_F32, columns, rows);
+    const std::array<int32_t, 5> indices{2, 0, 2, 1, 0};
+    std::vector<float> expected, output;
+    reader.gather(indices.data(), indices.size(), expected);
+    {
+        pread_faults faults;
+        reader.gather(indices.data(), indices.size(), output);
+        check(faults.calls == rows, "duplicate rows caused redundant reads");
+        check(output == expected, "sorted reads changed caller order");
+    }
+    {
+        pread_faults faults;
+        faults.max_bytes = 17;
+        faults.interruptions = 2;
+        check(lseek(file.fd(), 23, SEEK_SET) == 23, "set fault-test cursor");
+        reader.gather(indices.data(), indices.size(), output);
+        check(faults.calls == 2 + rows * ((columns * sizeof(float) + 16) / 17), "partial-read loop");
+        check(output == expected, "interrupted/partial reads changed rows");
+        check(lseek(file.fd(), 0, SEEK_CUR) == 23, "fault path changed file cursor");
+    }
+    for (bool eof : {false, true}) {
+        {
+            pread_faults faults;
+            faults.fail_call = 2; faults.eof = eof;
+            rejects([&] { reader.gather(indices.data(), indices.size(), output); });
+            check(faults.calls == 2, "continued reading after a hard failure");
+        }
+        reader.gather(indices.data(), indices.size(), output);
+        check(output == expected, "a later successful gather reused incomplete data");
+    }
+    {
+        pread_faults faults;
+        const std::array<int32_t, 2> invalid{0, int32_t(rows)};
+        rejects([&] { reader.gather(invalid.data(), invalid.size(), output); });
+        check(faults.calls == 0, "invalid batch started I/O before validating all indices");
+        reader.gather(nullptr, 0, output);
+        check(faults.calls == 0 && output.empty(), "empty gather performed I/O");
+    }
+}
 int main() {
     try {
         // IQ4_NL / 160 columns is the actual Unsloth PLE row format.
@@ -87,6 +165,7 @@ int main() {
             compare_rows(type, 160, 0);
             compare_rows(type, 160, (uint64_t(1) << 32) + 71);
         }
+        positioned_read_failures();
         temporary_file f;
         check(ftruncate(f.fd(), 4096) == 0, "truncate fixture");
         rejects([&] { lcb_file_backed_rows r(-1, 0, 4096, 0, GGML_TYPE_F32, 32, 1); });
@@ -105,6 +184,6 @@ int main() {
         check(ftruncate(f.fd(), 7) == 0, "truncate after load");
         int32_t index = 0; std::vector<float> output;
         rejects([&] { reader.gather(&index, 1, output); });
-        std::cout << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs and truncation\n";
+        std::cout << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs, truncation, partial reads, EINTR, hard failures and deduplication\n";
     } catch (const std::exception & e) { std::cerr << e.what() << '\n'; return 1; }
 }

@@ -2,7 +2,11 @@ get_filename_component(LCB_FILE_ROWS_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUT
 if(NOT TARGET llama)
     message(FATAL_ERROR "File-backed rows requires the upstream llama target")
 endif()
-if((EMSCRIPTEN AND NOT LCB_MEMORY64) OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+# Emscripten probes its default wasm32 ABI during project(), before this
+# project adds -sMEMORY64=1 to its targets. Do not confuse that probe with the
+# selected target ABI. Native builds still require an actual 64-bit toolchain;
+# the reader also checks sizeof(void *) and sizeof(off_t) at compile time.
+if((EMSCRIPTEN AND NOT LCB_MEMORY64) OR (NOT EMSCRIPTEN AND NOT CMAKE_SIZEOF_VOID_P EQUAL 8))
     message(FATAL_ERROR "File-backed rows requires a 64-bit build")
 endif()
 set(LCB_FILE_ROWS_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/file-backed-rows-overlay")

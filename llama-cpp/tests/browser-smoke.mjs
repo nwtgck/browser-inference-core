@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 const packageRoot = resolve(process.argv[2] || 'dist/package');
 const modelFile = resolve(process.argv[3] || 'build/fixture.gguf');
 const chatTestFile = resolve('tests/chat-surface.mjs');
+const fileMountTestFile = resolve('tests/file-mount-lifetime.mjs');
 const chatTemplate = await readFile('vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
 const playwrightPath = resolve('../.tools/browser/node_modules/playwright/index.mjs');
 const { chromium } = await import(pathToFileURL(playwrightPath).href);
@@ -17,8 +18,8 @@ const server = createServer(async (req, res) => {
     if (pathname === '/') {
       res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Core smoke test</title>'); return;
     }
-    const file = pathname === '/fixture.gguf' ? modelFile : pathname === '/chat-surface.mjs' ? chatTestFile : resolve(packageRoot, '.' + pathname);
-    if (file !== modelFile && file !== chatTestFile && !file.startsWith(packageRoot + sep)) { res.writeHead(403); res.end(); return; }
+    const file = pathname === '/fixture.gguf' ? modelFile : pathname === '/chat-surface.mjs' ? chatTestFile : pathname === '/file-mount-lifetime.mjs' ? fileMountTestFile : resolve(packageRoot, '.' + pathname);
+    if (file !== modelFile && file !== chatTestFile && file !== fileMountTestFile && !file.startsWith(packageRoot + sep)) { res.writeHead(403); res.end(); return; }
     res.setHeader('Content-Type', mime[extname(file)] || 'application/octet-stream');
     res.end(await readFile(file));
   } catch { res.writeHead(404); res.end(); }
@@ -100,20 +101,8 @@ try {
           size: bytes.length,
           read(view, position) { const chunk = bytes.subarray(position, position + view.length); view.set(chunk); return chunk.length; },
         }, { maxChunkBytes: 1024 });
-        // Exercise the actual Emscripten dupStream hook, not a hand-made FS
-        // mock: the loader's original descriptor may close before its reader.
-        const fs = core.module.FS;
-        const original = fs.open(mounted.path, 'r');
-        const duplicate = fs.dupStream(original);
-        fs.close(original);
-        let removalBlocked = false;
-        try { mounted.remove(); } catch { removalBlocked = true; }
-        if (!removalBlocked) throw new Error('Duplicate descriptor did not retain the model mount');
-        const magic = new Uint8Array(4);
-        if (fs.read(duplicate, magic, 0, 4, 0) !== 4 || magic.some((value, index) => value !== bytes[index])) {
-          throw new Error('Duplicate descriptor read failed');
-        }
-        fs.close(duplicate);
+        const { checkFileMountLifetime } = await import('/file-mount-lifetime.mjs');
+        const fileMountLifetime = checkFileMountLifetime(core, mountReadOnlyFile);
         const params = core.allocRecord('llama_model_params');
         await core.api.llama_model_default_params(params);
         core.setField('llama_model_params', params, 'n_gpu_layers', 0);
@@ -149,7 +138,7 @@ try {
         for (const pointer of [params, path, cp, token, batch, state]) core.free(pointer);
         mounted.remove();
         await core.api.llama_backend_free();
-        return { profile, variant, fileRowsVersion, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, passed: true };
+        return { profile, variant, fileRowsVersion, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, fileMountLifetime, passed: true };
       }, { profile, variant, chatTemplate });
       results.push(result); await page.close();
     }

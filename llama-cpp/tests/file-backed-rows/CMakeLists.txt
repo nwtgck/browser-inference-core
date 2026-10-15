@@ -9,6 +9,8 @@ set_target_properties(core_under_test PROPERTIES IMPORTED_LOCATION "${LCB_NATIVE
 add_executable(file-rows-reader reader.cpp)
 target_include_directories(file-rows-reader PRIVATE ../../bridge "${LCB_LLAMA_SOURCE}/ggml/include")
 target_link_libraries(file-rows-reader PRIVATE core_under_test)
+# Keep fault injection test-only; the production reader calls the real pread.
+target_link_options(file-rows-reader PRIVATE "-Wl,--wrap=pread")
 add_executable(file-rows-model model.cpp)
 target_include_directories(file-rows-model PRIVATE "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/common"
     "${LCB_LLAMA_SOURCE}/ggml/include" "${LCB_LLAMA_SOURCE}/src" "${LCB_LLAMA_SOURCE}/tests")

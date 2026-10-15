@@ -22,6 +22,7 @@ public:
     lcb_file_backed_rows(int fd, uint32_t shard, uint64_t file_bytes,
                         uint64_t offset, ggml_type type, int64_t columns, int64_t rows)
         : shard_(shard), offset_(offset), columns_(columns), rows_(rows), type_(type) {
+        static_assert(sizeof(void *) == 8, "file-backed rows require 64-bit pointers");
         static_assert(sizeof(off_t) >= 8, "file-backed rows require 64-bit file offsets");
         if (columns <= 0 || rows <= 0 || shard > INT32_MAX ||
             type < 0 || type >= GGML_TYPE_COUNT) {

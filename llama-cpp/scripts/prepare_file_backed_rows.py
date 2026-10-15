@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,6 +17,9 @@ INPUTS_PATH = ROOT / 'tests/file-backed-rows/inputs.json'
 
 
 def prepare(source: Path, output: Path) -> Path:
+    # Check the requested root before resolve erases its link identity.
+    if output.is_symlink():
+        raise ValueError('linked overlay destinations are not accepted')
     source, output = source.resolve(), output.resolve()
     if source == output or source in output.parents or output in source.parents:
         raise ValueError('file-backed overlay must be outside the upstream source tree')
@@ -36,9 +40,17 @@ def prepare(source: Path, output: Path) -> Path:
         work = Path(temporary)
         shutil.copytree(source / 'src', work / 'src')
         patch = ROOT / PATCH_DIRECTORY / PATCH_NAME
+        # --no-index alone does not isolate git apply from repository discovery
+        # or a Git hook's inherited worktree/index environment. With TMPDIR in
+        # a checkout, it can otherwise succeed while silently skipping every
+        # path. Stop discovery at this scratch tree and never touch that index.
+        env = os.environ.copy()
+        for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX'):
+            env.pop(name, None)
+        env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
         for flags in (['--check'], []):
             subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(patch)],
-                           cwd=work, check=True, capture_output=True)
+                           cwd=work, env=env, check=True, capture_output=True)
         shutil.copyfile(ROOT / 'bridge/file-backed-rows.h', work / 'src/models/file-backed-rows.h')
         desired = set()
         for path in (work / 'src').rglob('*'):
