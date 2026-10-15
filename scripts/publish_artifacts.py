@@ -193,4 +193,7 @@ def main():
             if subject is not None:
                 f.write(f'**Source commit title:** <code>{escape(subject)}</code>\n\n')
             f.write(f'```sh\nnpm install github:{repo}#{commit}\n```\n')
+            f.write('\n**Install with explicit package names:**\n\n')
+            f.write(f'```sh\nnpm install llama-cpp-browser-core@github:{repo}#{commit}\n```\n\n')
+            f.write(f'```sh\nnpm install stable-diffusion-cpp-browser-core@github:{repo}#{commit}\n```\n')
 if __name__=='__main__': main()
