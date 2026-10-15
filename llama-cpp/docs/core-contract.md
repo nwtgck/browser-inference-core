@@ -63,9 +63,9 @@ Callbacks do not have a generic asynchronous suspension contract. Treat logging,
 
 `mountReadOnlyFile` registers an ordinary read-only file in Emscripten's JavaScript filesystem. The caller supplies a fixed file size and synchronous `read(destination, offset)` implementation. OPFS, an existing Blob, or another store can provide the bytes; storage layout is not part of the core contract.
 
-Read requests are split at the configured chunk limit. Short reads advance by the actual returned length. Promises, negative or oversized results, and exceptions become I/O errors. File offsets use nonnegative safe integers without 32-bit bitwise truncation. The source must not change during loading.
+Read requests are split at the configured chunk limit. Short reads advance by the actual returned length. Promises, negative or oversized results, and exceptions become I/O errors. File offsets use nonnegative safe integers without 32-bit bitwise truncation. The source must not change while any native owner can still read it.
 
-Use `load_mode = LLAMA_LOAD_MODE_NONE` and `lazy_mode = LLAMA_LAZY_MODE_OFF`. The custom file rejects mmap rather than silently creating a file-wide emulated mapping. This does not bound every allocation made by the model loader, including GPU staging allocations.
+Use `load_mode = LLAMA_LOAD_MODE_NONE` and, by default, `lazy_mode = LLAMA_LAZY_MODE_OFF`. The optional versioned [file-backed Qwen4Exp row extension](file-backed-rows.md) permits `LLAMA_LAZY_MODE_ON` on supported 64-bit builds; it requires retaining the selected shard through model destruction. The custom file rejects mmap rather than silently creating a file-wide emulated mapping. This does not bound every allocation made by the model loader, including GPU staging allocations.
 
 The caller owns any OPFS access handle. Removing a mounted file is rejected while native code still has it open. Destroy contexts and models in the appropriate order, remove the file, and then close its storage handle.
 

@@ -61,3 +61,16 @@ test('a source cannot be removed while a native handle is open', () => {
   assert.equal(f.removed, '/models/a.gguf');
   f.mounted.remove();
 });
+
+test('dupStream retains its own native open count even when the loader closes first', () => {
+  const f = fixture({ size: 4, read: view => { view.fill(8); return view.length; } });
+  f.node.stream_ops.open({ flags: 0 });
+  f.node.stream_ops.dup();
+  f.node.stream_ops.close();
+  assert.throws(() => f.mounted.remove(), /Close all/);
+  const bytes = new Uint8Array(4);
+  assert.equal(f.node.stream_ops.read({}, bytes, 0, 4, 0), 4);
+  assert.deepEqual([...bytes], [8,8,8,8]);
+  f.node.stream_ops.close(); f.mounted.remove();
+  assert.throws(() => f.node.stream_ops.dup(), /ENOENT/);
+});

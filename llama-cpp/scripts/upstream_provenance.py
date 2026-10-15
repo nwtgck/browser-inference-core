@@ -15,6 +15,7 @@ from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_moe_direct_slot as moe
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
+import prepare_file_backed_rows as file_rows
 
 
 def file_identity(path: Path) -> dict:
@@ -43,6 +44,7 @@ def collect(root: Path, manifest: dict) -> dict:
     moe_enabled = []
     copy_enabled = []
     batch_enabled = []
+    rows_enabled = []
     toolchain = runtime_toolchain(root)
     for profile, info in manifest['profiles'].items():
         for variant, provenance in info['variants'].items():
@@ -54,6 +56,12 @@ def collect(root: Path, manifest: dict) -> dict:
             if webgpu_enabled:
                 copy_enabled.append(profile + '/' + variant)
                 batch_enabled.append(profile + '/' + variant)
+            rows_options = [option for option in provenance['cmakeCommand']
+                            if option.startswith('-DLCB_FILE_BACKED_PLE=') or option.startswith('-DLCB_FILE_BACKED_PLE:')]
+            if rows_options not in (['-DLCB_FILE_BACKED_PLE=ON'], ['-DLCB_FILE_BACKED_PLE=OFF']):
+                raise ValueError('Unknown file-backed PLE activation in compiled provenance')
+            if rows_options == ['-DLCB_FILE_BACKED_PLE=ON']:
+                rows_enabled.append(profile + '/' + variant)
             audio_enabled.append(profile + '/' + variant)
             moe_options = [option for option in provenance['cmakeCommand']
                            if option.startswith('-DLCB_WEBGPU_MOE_DIRECT_SLOT=')]
@@ -74,7 +82,23 @@ def collect(root: Path, manifest: dict) -> dict:
                 raise ValueError('Unknown BF16 overlay activation in compiled provenance')
             if options[0].endswith('=ON'):
                 enabled.append(profile + '/' + variant)
+    rows_compiled = None
+    rows_tree = None
     with tempfile.TemporaryDirectory(prefix='lcb-report-overlay-') as temporary:
+        if rows_enabled:
+            rows_source = file_rows.prepare(vendor, Path(temporary) / 'file-rows')
+            # These model TUs must all use the same modified models.h definition.
+            paths = [rows_source / 'llama.cpp', rows_source / 'llama-model.cpp', *sorted((rows_source / 'models').glob('*.cpp')),
+                     rows_source / 'models/models.h', rows_source / 'models/file-backed-rows.h']
+            identities = {p.relative_to(rows_source).as_posix(): file_identity(p) for p in paths}
+            # Unchanged model TUs are covered by an aggregate rather than making
+            # the publication summary grow by hundreds of per-file entries.
+            encoded = json.dumps(identities, sort_keys=True, separators=(',', ':')).encode()
+            rows_tree = {'files': len(identities), 'sha256': hashlib.sha256(encoded).hexdigest(),
+                         'encoding': 'UTF-8 compact JSON of sorted relative paths to bytes/SHA-256 objects'}
+            selected = ['llama.cpp', 'llama-model.cpp', 'models/models.h', 'models/qwen4exp.cpp',
+                        'models/file-backed-rows.h']
+            rows_compiled = {name: identities[name] for name in selected}
         patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
         patched_identity = file_identity(patched)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
@@ -239,9 +263,28 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Use one token lane only for single-token SSM_CONV, retaining eight lanes otherwise. Cache key, shader define and dispatch decisions share the selected width; arithmetic and MoE embedded shaders remain unchanged. Software-adapter correctness is not a Mac performance claim.',
+        }, {
+            'id': 'qwen4exp-file-backed-rows',
+            'kind': 'build-tree-coherent-model-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / file_rows.PATCH_NAME)},
+            'compiledCopies': rows_compiled,
+            'coherentSourceSet': rows_tree,
+            'reviewedInputs': json.loads((root / 'tests/file-backed-rows/inputs.json').read_text()),
+            'application': {
+                'preparationScript': 'scripts/prepare_file_backed_rows.py',
+                'cmakeHook': 'cmake/FileBackedRowsOverlay.cmake',
+                'option': 'LCB_FILE_BACKED_PLE',
+                'runtimeOptIn': 'LLAMA_LOAD_MODE_NONE plus LLAMA_LAZY_MODE_ON; non-Qwen4Exp remains eager',
+                'enabledProfileVariants': sorted(rows_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
+                                 'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']},
+            'behavior': 'Qwen4Exp PLE only: retain a positioned-read descriptor, gather bounded rows into F32 input, leave n-gram hashing and downstream graph unchanged. No mmap, worker pool, global cache or full-model memory guarantee. All model definition consumers compile a coherent private header copy.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

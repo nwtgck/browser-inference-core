@@ -30,7 +30,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-moe-direct-slot.patch', 'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'llama-model-loader-webgpu-chunked-upload.patch',
-            'ggml-webgpu-ssm-conv-single-token.patch'})
+            'ggml-webgpu-ssm-conv-single-token.patch', 'qwen4exp-file-backed-rows.patch'})
         for patch in directory.glob('*.patch'):
             self.assertIn(patch.name, register)
         # Source-rewriting and toolchain exceptions are covered too, not only .patch.

@@ -201,3 +201,31 @@ commit with different bytes or invent a future artifact identity.
 - **Evidence and limits:** isolated shader correctness and tiny LFM full-runtime tests pass on software WebGPU adapters, including both pipeline creation orders and full/partial checkpoint restoration. Those tests do not establish production model quality, physical GPU occupancy or a Mac throughput improvement. Other MoE operators are not modified.
 - **No-patch alternative:** retain the existing eight-token launch for decode. The change removes inactive logical token lanes; it does not guarantee a performance improvement.
 - **Removal condition:** remove this preparation/header patch when upstream selects an equivalent single-token workgroup and the same supported profiles pass correctness and device validation, or when the owner drops the optimization.
+
+## Qwen4Exp file-backed per-layer embedding rows
+
+- **Patch:** `qwen4exp-file-backed-rows.patch`.
+- **Approval scope:** the project owner's request to implement the reviewed
+  Qwen3.8 browser design after explicitly discussing llama.cpp patch size.
+  This authorizes this Qwen4Exp table path, not unrelated model/backend work.
+- **Base:** v0.6.0, `d81235049384534c167caea52b85a694f6103d14`.
+  Input hashes are checked in `tests/file-backed-rows/inputs.json`.
+- **Reason / alternatives:** this table is 26.82 GiB in the investigated model,
+  larger than the current 16 GiB Wasm64 linear memory limit. Existing mmap-based
+  lazy reading is not provided by the browser file adapter. Deferring the model,
+  changing its quantization, or using native inference avoids a downstream patch,
+  but does not implement the requested browser path. Native threaded pread work
+  cannot be copied unchanged to a non-pthread browser runtime.
+- **Scope:** Qwen4Exp PLE (Per-Layer Embedding), 64-bit profiles,
+  `LCB_FILE_BACKED_PLE` plus per-load `LLAMA_LOAD_MODE_NONE` /
+  `LLAMA_LAZY_MODE_ON`. Non-Qwen4Exp stays eager for this combination; explicit
+  mmap/AUTO behavior is unchanged. Export of a file-backed model is rejected
+  before creating an incomplete output. Other weights,
+  n-gram hash computation, downstream graph, GGML kernels and public llama.h
+  remain unchanged. Shared model header users compile coherent build-tree copies.
+- **Validation / limitations:** see `docs/file-backed-rows.md`. Synthetic native
+  graph equivalence is not a real-model WebGPU inference claim.
+- **Removal condition:** pinned upstream offers a tested non-mmap bounded row
+  reader with compatible ownership and browser behavior, or the owner drops
+  the requirement. Re-run lifetime, split, graph equivalence and browser tests
+  before removing the overlay and retiring the versioned consumer handshake.

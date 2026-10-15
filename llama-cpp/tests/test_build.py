@@ -119,6 +119,8 @@ class BuildProvenance(unittest.TestCase):
             with self.subTest(profile=profile):
                 info=self.build(profile)
                 self.assertFalse(info['sourceDirty'])
+                memory64 = json.loads((ROOT / 'config/profiles.json').read_text())[profile]['memory64']
+                self.assertIn('-DLCB_FILE_BACKED_PLE=' + ('ON' if memory64 else 'OFF'), info['cmakeCommand'])
                 self.assertEqual(info['sourceCommit'],self.source_sha)
                 self.assertEqual(info['sourceStatusBeforeBuild'],[])
                 self.assertEqual(info['sourceStatusAfterBuild'],[])

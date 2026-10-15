@@ -58,6 +58,7 @@ def main():
     command=['emcmake','cmake','-S',str(ROOT),'-B',str(build),'-G','Ninja',
              '-DCMAKE_BUILD_TYPE=Release', '-DLCB_VARIANT='+a.variant,
              '-DLCB_MEMORY64='+('ON' if cfg['memory64'] else 'OFF'),
+             '-DLCB_FILE_BACKED_PLE='+('ON' if cfg['memory64'] else 'OFF'),
              '-DLCB_WEBGPU='+('ON' if cfg['webgpu'] else 'OFF'),
              # The same reviewed WGSL/dispatch contract applies to all WebGPU profiles.
              # Explicit OFF keeps CPU profiles on the original source path.

@@ -229,6 +229,13 @@ class OverlayProvenance(unittest.TestCase):
         (self.vendor / provenance.webgpu_source.LOADER_PATH).write_text('Loader provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME)
+        (self.root / 'tests/file-backed-rows').mkdir(parents=True)
+        shutil.copy2(ROOT / 'tests/file-backed-rows/inputs.json', self.root / 'tests/file-backed-rows/inputs.json')
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.file_rows.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.file_rows.PATCH_NAME)
+        for path in ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
+                     'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']:
+            (self.root / path).write_text('file-backed rows provenance fixture\n')
         for path in ['scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
                      'docs/webgpu-tensor-copy.md', 'scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
                      'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
@@ -239,7 +246,7 @@ class OverlayProvenance(unittest.TestCase):
         for name, enabled in [('cpu-wasm32', False), ('webgpu-wasm64-jspi', True)]:
             self.manifest['profiles'][name] = {'variants': {variant: {
                 'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if enabled else 'OFF'),
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU=OFF'],
+                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU=OFF', '-DLCB_FILE_BACKED_PLE=OFF'],
             } for variant in ['browser', 'test']}}
         self.prepared = self.root / 'prepared.cpp'
         self.prepared.write_bytes(b'combined source fixture')
@@ -291,7 +298,8 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
             'experimental-webgpu-moe-direct-slot', 'webgpu-same-device-tensor-copy',
-            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token'})
+            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
+            'qwen4exp-file-backed-rows'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
             self.assertTrue(item['patch']['path'].startswith(provenance.PATCH_DIRECTORY + '/'))
@@ -322,6 +330,40 @@ class OverlayProvenance(unittest.TestCase):
                 self.assertEqual(item['reviewedCommit'], revision)
                 self.assertEqual(item['reviewedInputs'], inputs)
 
+    def test_file_rows_enabled_records_coherent_sources_and_supporting_files(self):
+        variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+        variant['cmakeCommand'] = [arg.replace('LCB_FILE_BACKED_PLE=OFF', 'LCB_FILE_BACKED_PLE=ON') for arg in variant['cmakeCommand']]
+        prepared = self.root / 'rows-copy/src'
+        (prepared / 'models').mkdir(parents=True)
+        for relative in ['llama.cpp', 'llama-model.cpp', 'models/qwen4exp.cpp', 'models/llama.cpp', 'models/models.h', 'models/file-backed-rows.h']:
+            (prepared / relative).write_text('coherent ' + relative)
+        with patch.object(provenance.file_rows, 'prepare', return_value=prepared) as prepare:
+            report = provenance.collect(self.root, self.manifest)
+        prepare.assert_called_once()
+        item = next(x for x in report['sourceOverlays'] if x['id'] == 'qwen4exp-file-backed-rows')
+        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser'])
+        self.assertEqual(item['compiledCopies']['models/qwen4exp.cpp'], provenance.file_identity(prepared / 'models/qwen4exp.cpp'))
+        self.assertEqual(item['coherentSourceSet']['files'], 6)
+        self.assertEqual(len(item['compiledCopies']), 5)
+        self.assertEqual(report['otherPatchFiles'], {})
+        # Coherent unchanged model copies are still covered without expanding
+        # the compact consumer report to hundreds of per-file hashes.
+        identities = {p.relative_to(prepared).as_posix(): provenance.file_identity(p)
+                      for p in prepared.rglob('*') if p.is_file()}
+        encoded = json.dumps(identities, sort_keys=True, separators=(',', ':')).encode()
+        self.assertEqual(item['coherentSourceSet']['sha256'], hashlib.sha256(encoded).hexdigest())
+
+    def test_file_rows_provenance_rejects_ambiguous_build_flags(self):
+        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
+        original = variant['cmakeCommand']
+        for command in ([a for a in original if 'LCB_FILE_BACKED_PLE' not in a],
+                        original + ['-DLCB_FILE_BACKED_PLE=ON'],
+                        original + ['-DLCB_FILE_BACKED_PLE:BOOL=ON'],
+                        [a.replace('LCB_FILE_BACKED_PLE=OFF', 'LCB_FILE_BACKED_PLE=MAYBE') for a in original]):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'file-backed PLE'):
+                variant['cmakeCommand'] = command
+                provenance.collect(self.root, self.manifest)
+
     def test_moe_enabled_provenance_records_actual_prepared_bytes(self):
         variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
         variant['cmakeCommand'] = [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON').replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON')
@@ -347,7 +389,7 @@ class OverlayProvenance(unittest.TestCase):
                 variants = {name: copy.deepcopy(template) for name in ('browser', 'test')}
                 for variant in variants.values():
                     variant['cmakeCommand'] = [
-                        'cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF',
+                        'cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF', '-DLCB_FILE_BACKED_PLE=OFF',
                         '-DLCB_WEBGPU=' + ('ON' if config['webgpu'] else 'OFF'),
                         '-DLCB_WEBGPU_MOE_DIRECT_SLOT=' + ('ON' if config['webgpu'] else 'OFF'),
                     ]

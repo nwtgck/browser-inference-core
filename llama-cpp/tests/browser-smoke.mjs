@@ -54,6 +54,9 @@ try {
         const core = await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } });
         const expectedPointerBytes = profile.includes('wasm64') ? 8 : 4;
         if (core.pointerBytes !== expectedPointerBytes) throw new Error('Unexpected pointer width');
+        const fileRowsVersion = core.module._lcb_file_backed_rows_version();
+        if (fileRowsVersion !== (expectedPointerBytes === 8 ? 1 : 0)) throw new Error('Unexpected file-backed rows capability');
+
         // Keep this first: backend registry initialization must reach requestAdapter.
         const pending = core.api.ggml_backend_init_by_type(core.constant('GGML_BACKEND_DEVICE_TYPE_GPU'), 0n);
         if (!core.busy) throw new Error('The wrapper released the pending suspended call');
@@ -69,7 +72,7 @@ try {
           if (adapterRequests !== 1 || backend !== 0n || core.busy || failures.length) {
             throw new Error(`Invalid suspension completion: ${JSON.stringify({ adapterRequests, backend: String(backend), busy: core.busy, failures })}`);
           }
-          return { profile, variant, pointerBytes: core.pointerBytes, adapterRequests, mockedAdapter: true, suspension: true, passed: true };
+          return { profile, variant, pointerBytes: core.pointerBytes, fileRowsVersion, adapterRequests, mockedAdapter: true, suspension: true, passed: true };
         } finally { clearTimeout(timer); }
       }, { profile, variant });
       results.push(suspensionResult);
@@ -89,20 +92,37 @@ try {
         const chatSurface = await checkChatSurface(native, chatTemplate);
         const { createCore, mountReadOnlyFile } = await import('/examples/runtime/index.mjs');
         const core = await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } });
+        const fileRowsVersion = core.module._lcb_file_backed_rows_version();
+        if (fileRowsVersion !== (profile === 'cpu-wasm64' ? 1 : 0)) throw new Error('Unexpected file-backed rows capability');
         await core.api.llama_backend_init();
         const bytes = new Uint8Array(await (await fetch('/fixture.gguf')).arrayBuffer());
         const mounted = mountReadOnlyFile(core, '/models/test.gguf', {
           size: bytes.length,
           read(view, position) { const chunk = bytes.subarray(position, position + view.length); view.set(chunk); return chunk.length; },
         }, { maxChunkBytes: 1024 });
+        // Exercise the actual Emscripten dupStream hook, not a hand-made FS
+        // mock: the loader's original descriptor may close before its reader.
+        const fs = core.module.FS;
+        const original = fs.open(mounted.path, 'r');
+        const duplicate = fs.dupStream(original);
+        fs.close(original);
+        let removalBlocked = false;
+        try { mounted.remove(); } catch { removalBlocked = true; }
+        if (!removalBlocked) throw new Error('Duplicate descriptor did not retain the model mount');
+        const magic = new Uint8Array(4);
+        if (fs.read(duplicate, magic, 0, 4, 0) !== 4 || magic.some((value, index) => value !== bytes[index])) {
+          throw new Error('Duplicate descriptor read failed');
+        }
+        fs.close(duplicate);
         const params = core.allocRecord('llama_model_params');
         await core.api.llama_model_default_params(params);
         core.setField('llama_model_params', params, 'n_gpu_layers', 0);
         core.setField('llama_model_params', params, 'load_mode', core.constant('LLAMA_LOAD_MODE_NONE'));
-        core.setField('llama_model_params', params, 'lazy_mode', core.constant('LLAMA_LAZY_MODE_OFF'));
+        core.setField('llama_model_params', params, 'lazy_mode', core.constant(fileRowsVersion ? 'LLAMA_LAZY_MODE_ON' : 'LLAMA_LAZY_MODE_OFF'));
         const path = core.utf8(mounted.path);
         const model = await core.api.llama_model_load_from_file(path, params);
         if (!model) throw new Error('Synthetic model load failed');
+        if (core.module._lcb_model_file_backed_shard(model) !== -1) throw new Error('Unexpected retained shard for the synthetic Llama model');
         const cp = core.allocRecord('llama_context_params');
         await core.api.llama_context_default_params(cp);
         for (const [key, value] of Object.entries({ n_ctx: 128, n_batch: 16, n_ubatch: 16, n_threads: 1, n_threads_batch: 1 })) {
@@ -129,7 +149,7 @@ try {
         for (const pointer of [params, path, cp, token, batch, state]) core.free(pointer);
         mounted.remove();
         await core.api.llama_backend_free();
-        return { profile, variant, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, passed: true };
+        return { profile, variant, fileRowsVersion, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, passed: true };
       }, { profile, variant, chatTemplate });
       results.push(result); await page.close();
     }

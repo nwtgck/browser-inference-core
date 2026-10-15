@@ -164,6 +164,9 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
            '#include "mtmd.h"', '#include "mtmd-helper.h"',
            '#include <stdint.h>', '#include <stddef.h>',
            '#include <errno.h>', '#include <stdlib.h>', '#include <stdexcept>',
+           '#ifdef LCB_FILE_BACKED_PLE',
+           'extern "C" int32_t lcb_qwen4exp_file_backed_shard(const llama_model * model);',
+           '#endif',
            'static uintptr_t lcb_checked_pointer(uint64_t p) {',
            '  if (p > UINTPTR_MAX) throw std::range_error("pointer/size exceeds address space");',
            '  return (uintptr_t)p;', '}', 'extern "C" {',
@@ -171,7 +174,14 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
            'void lcb_free(uint64_t ptr) { free((void *)lcb_checked_pointer(ptr)); }',
            'uint32_t lcb_pointer_bytes(void) { return sizeof(void *); }',
            'uint32_t lcb_abi_version(void) { return 1; }',
-           'uint32_t lcb_callback_metadata_version(void) { return 1; }']
+           'uint32_t lcb_callback_metadata_version(void) { return 1; }',
+           'uint32_t lcb_file_backed_rows_version(void) {',
+           '#ifdef LCB_FILE_BACKED_PLE', '  return 1;', '#else', '  return 0;', '#endif', '}',
+           'int32_t lcb_model_file_backed_shard(uint64_t model) {',
+           '  if (!model) throw std::invalid_argument("null model");',
+           '#ifdef LCB_FILE_BACKED_PLE',
+           '  return lcb_qwen4exp_file_backed_shard((const llama_model *)lcb_checked_pointer(model));',
+           '#else', '  return -1;', '#endif', '}']
     missing = CALLBACK_METADATA_GETTERS.keys() - {f['name'] for f in functions}
     if missing:
         raise ValueError(f'Callback metadata getters need upstream review: {sorted(missing)}')
@@ -224,7 +234,7 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     cpp += ['int64_t lcb_constant(uint32_t id) { switch(id) {']
     cpp += [f'case {i}: return (int64_t)({name});' for i,name in enumerate(constants)]
     cpp += ['default: throw std::out_of_range("constant id"); } }', '}']
-    helper_names = ['malloc','free','pointer_bytes','abi_version','sizeof_record','alignof_record','offsetof_field','sizeof_field','constant','schema_hash','callback_metadata_version']
+    helper_names = ['malloc','free','pointer_bytes','abi_version','sizeof_record','alignof_record','offsetof_field','sizeof_field','constant','schema_hash','callback_metadata_version','file_backed_rows_version','model_file_backed_shard']
     exports = ['_lcb_'+n for n in helper_names] + [f['export'] for f in functions]
     exports += ['_lcb_callback_'+name for name in sorted(CALLBACK_METADATA_GETTERS)]
     # Direct exports remain available for expert callers bound to this exact native ABI.
