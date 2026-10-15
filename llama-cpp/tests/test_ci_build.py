@@ -70,7 +70,8 @@ class CiBuildArtifacts(unittest.TestCase):
         shutil.copytree(ROOT/'examples',self.source/'examples')
         shutil.copytree(ROOT/'packaging',self.source/'packaging')
         (self.source/'docs').mkdir()
-        shutil.copy2(ROOT/'docs/chat-and-multimodal.md',self.source/'docs/chat-and-multimodal.md')
+        for file in package_runtime.GUIDE_FILES:
+            shutil.copy2(ROOT/'docs'/file,self.source/'docs'/file)
         shutil.copy2(ROOT/'LICENSE',self.source/'LICENSE')
         self.upstream=self.source/'vendor/llama.cpp'
         self.upstream.mkdir(parents=True)

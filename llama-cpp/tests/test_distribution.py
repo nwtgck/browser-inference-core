@@ -11,6 +11,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 from package_runtime import VARIANTS, build_package, validate
+from prepare_browser_module import prepare as prepare_browser_module
 from publish_artifacts import publish
 import publish_artifacts
 
@@ -48,6 +49,25 @@ class Distribution(unittest.TestCase):
         self.assertNotIn('scripts',package)
         self.assertNotIn('devDependencies',package)
         self.assertFalse((self.package/'.gitmodules').exists())
+        for name in ('chat-and-multimodal.md', 'browser-host.md'):
+            self.assertEqual((self.package/name).read_bytes(), (ROOT/'docs'/name).read_bytes())
+
+    def test_browser_preparation_provenance_survives_packaging_and_binds_output(self):
+        build=self.root/'build/cpu-wasm32/browser'
+        module=build/'runtime/core.mjs'
+        module.write_bytes(module.read_bytes() + b'function locate(){return new URL("core.wasm",import.meta.url).href}\n')
+        record=prepare_browser_module(module)
+        path=build/'provenance.json'; value=json.loads(path.read_text())
+        value['browserModulePreparation']=record; path.write_text(json.dumps(value))
+        self.assemble()
+        manifest_path=self.package/'manifest.json'; manifest=json.loads(manifest_path.read_text())
+        browser=manifest['profiles']['cpu-wasm32']['variants']['browser']
+        self.assertEqual(browser['browserModulePreparation'],record)
+        self.assertNotIn('browserModulePreparation',manifest['profiles']['cpu-wasm32']['variants']['test'])
+        browser['browserModulePreparation']['output']['sha256']='0'*64
+        manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError,'Browser module preparation output mismatch'):
+            validate(self.package,check_npm_pack=False)
     def test_payload_tampering_is_rejected(self):
         (self.package/'profiles/cpu-wasm32/browser/core.wasm').write_bytes(b'bad')
         with self.assertRaises(ValueError): validate(self.package)

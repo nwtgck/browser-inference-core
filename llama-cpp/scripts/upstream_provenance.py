@@ -27,6 +27,34 @@ def file_identity(path: Path) -> dict:
     return {'bytes': path.stat().st_size, 'sha256': digest}
 
 
+def browser_module_preparations(root: Path, manifest: dict) -> list[dict]:
+    records = []
+    implementation = None
+    files = {item['path']: item for item in manifest.get('files', [])}
+    for profile, info in sorted(manifest['profiles'].items()):
+        for variant, provenance in sorted(info['variants'].items()):
+            preparation = provenance.get('browserModulePreparation')
+            if preparation is None:
+                continue
+            expected = {'path': 'scripts/prepare_browser_module.py',
+                        **file_identity(root / 'scripts/prepare_browser_module.py')}
+            output = files.get(f'profiles/{profile}/{variant}/core.mjs')
+            if (variant != 'browser' or preparation['implementation'] != expected or output is None
+                    or preparation['output'] != {key: output[key] for key in ('bytes', 'sha256')}):
+                raise ValueError('Browser module preparation differs from published source/output')
+            implementation = expected
+            records.append({'profile': profile, 'variant': variant,
+                            'input': preparation['input'], 'output': preparation['output'],
+                            'alreadyAnnotated': preparation['alreadyAnnotated']})
+    if not records:
+        return []
+    return [{'id': 'browser-wasm-url-annotation', 'kind': 'generated-javascript-comment',
+             'implementation': implementation, 'profileVariants': records,
+             'supportingFiles': {path: file_identity(root / path) for path in
+                                 ['scripts/build.py', 'bridge/host-navigator-pre.js', 'docs/browser-host.md']},
+             'behavior': 'Add one @vite-ignore comment to the generated sibling core.wasm URL in browser variants. Vite skips automatic Wasm discovery at this expression; other bundlers may differ. Runtime acquisition, supplied bytes and fallback branches are unchanged. Hosts explicitly deploy the matching Wasm or supply bytes. Input/output identities describe the actual preparation, including no-op reruns.'}]
+
+
 def collect(root: Path, manifest: dict) -> dict:
     source = full_sha(manifest['sourceCommit'])
     upstream = full_sha(manifest['llamaCommit'])
@@ -176,7 +204,8 @@ def collect(root: Path, manifest: dict) -> dict:
         'upstreamRepository': 'ggml-org/llama.cpp',
         'baseCommit': upstream,
         'vendorCheckoutModified': False,
-        'inventoryScope': f'Known build-tree overlays plus every *.patch file under {PATCH_DIRECTORY}/; not an exhaustive compiler transformation inventory.',
+        'inventoryScope': f'Known build-tree overlays, recorded generated browser-module preparations, plus every *.patch file under {PATCH_DIRECTORY}/; not an exhaustive compiler transformation inventory.',
+        'generatedModuleTransformations': browser_module_preparations(root, manifest),
         'sourceOverlays': [{
             'id': 'webgpu-vision-bf16-projector',
             'kind': 'build-tree-source-overlay',

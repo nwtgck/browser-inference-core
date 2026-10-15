@@ -28,6 +28,7 @@ EMBEDDED_NOTICE_FILES = (
     'vendor/hash/sha1/sha1.c',
 )
 EXAMPLE_RUNTIME_FILES = ('index.mjs', 'index.d.ts', 'bindings.mjs', 'read-only-file.mjs', 'README.md')
+GUIDE_FILES = ('chat-and-multimodal.md', 'browser-host.md')
 
 
 @measured('package.copy_embedded_notices', packageKind='llama')
@@ -105,6 +106,11 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
             for ext in ('mjs','wasm','d.ts'):
                 if f'profiles/{name}/{variant}/core.{ext}' not in expected:
                     raise ValueError(f'Missing {name}/{variant} runtime')
+            preparation = info.get('browserModulePreparation')
+            if preparation is not None:
+                module = expected[f'profiles/{name}/{variant}/core.mjs']
+                if variant != 'browser' or preparation['output'] != {key: module[key] for key in ('bytes', 'sha256')}:
+                    raise ValueError(f'Browser module preparation output mismatch: {name}/{variant}')
             with (directory/f'profiles/{name}/{variant}/core.wasm').open('rb') as wasm:
                 if wasm.read(8) != b'\x00asm\x01\x00\x00\x00':
                     raise ValueError('Not a WebAssembly module')
@@ -148,7 +154,8 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
         for file in EXAMPLE_RUNTIME_FILES:
             copy_regular(ROOT/'examples/runtime'/file,example/file)
         copy_regular(ROOT/'packaging/README.md',out/'README.md')
-        copy_regular(ROOT/'docs/chat-and-multimodal.md',out/'chat-and-multimodal.md')
+        for file in GUIDE_FILES:
+            copy_regular(ROOT/'docs'/file,out/file)
         copy_regular(ROOT/'LICENSE',out/'LICENSE')
         licenses=out/'licenses'; licenses.mkdir()
         copied=0
@@ -157,7 +164,7 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
         if not copied: raise ValueError('No third-party license notices collected')
         copy_embedded_notices(ROOT/'vendor/llama.cpp', licenses/'embedded')
         pkg={'name':RUNTIME_NAME,'version':'0.1.0','private':True,'type':'module','license':'MIT',
-             'files':['examples/','profiles/','api/','manifest.json','licenses/','README.md','chat-and-multimodal.md','LICENSE'],
+             'files':['examples/','profiles/','api/','manifest.json','licenses/','README.md',*GUIDE_FILES,'LICENSE'],
              'exports':{'./examples/runtime':{'types':'./examples/runtime/index.d.ts','import':'./examples/runtime/index.mjs'},
                         './profiles/*/core.mjs':{'types':'./profiles/*/core.d.ts','import':'./profiles/*/core.mjs'},
                         './profiles/*':'./profiles/*','./api/*':'./api/*','./manifest.json':'./manifest.json'}}

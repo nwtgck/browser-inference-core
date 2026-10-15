@@ -158,6 +158,15 @@ else()
         "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','FS','WORKERFS','addFunction','removeFunction','UTF8ToString','stringToUTF8','lengthBytesUTF8','ccall','cwrap']"
         "-sINCOMING_MODULE_JS_API=['locateFile','wasmBinary','wasmMemory','instantiateWasm','print','printErr','onAbort','preRun','postRun','noInitialRun','mainScriptUrlOrBlob']"
         -lworkerfs.js)
+    if(LCB_WEBGPU AND LCB_VARIANT STREQUAL "browser")
+        # A local navigator would hide the earlier browser-version assertion guard.
+        if(NOT LCB_ASSERTIONS EQUAL 0)
+            message(FATAL_ERROR "Review host navigator scope before enabling browser assertions")
+        endif()
+        set(LCB_HOST_NAVIGATOR_PRE_JS "${CMAKE_CURRENT_SOURCE_DIR}/bridge/host-navigator-pre.js")
+        target_link_options(core PRIVATE --pre-js "${LCB_HOST_NAVIGATOR_PRE_JS}")
+        set_property(TARGET core APPEND PROPERTY LINK_DEPENDS "${LCB_HOST_NAVIGATOR_PRE_JS}")
+    endif()
     if(LCB_JSPI)
         target_link_options(core PRIVATE -sJSPI=1 "-sJSPI_EXPORTS=@${LCB_GENERATED}/jspi-exports.json")
     elseif(LCB_ASYNCIFY)

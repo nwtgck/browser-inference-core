@@ -13,6 +13,7 @@ import time
 sys.path.append(str(Path(__file__).resolve().parents[2] / 'scripts'))
 from browser_toolchain import runtime_toolchain
 from patch_emscripten import verify_asyncify_bigint_patch
+from prepare_browser_module import prepare as prepare_browser_module
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,6 +80,7 @@ def main():
     build.mkdir(parents=True,exist_ok=True)
     subprocess.run(command,cwd=build,check=True)
     subprocess.run(['cmake','--build',str(build),'--target','core','-j',str(a.jobs)],cwd=build,check=True)
+    browser_module = prepare_browser_module(build/'runtime/core.mjs') if a.variant == 'browser' else None
     status_after=source_status(ROOT)
     if status_before or status_after:
         print('Source changes detected; this build cannot be published:\n'+json.dumps({
@@ -92,6 +94,8 @@ def main():
                 'cmakeCommand':command,'builtAtUnix':int(time.time()),
                 'buildCache': {'identity': os.environ.get('BIC_CACHE_ID'), 'compilerWrapper': os.environ.get('EM_COMPILER_WRAPPER')},
                 'validation':{'compiled':True,'realModelInference':False,'browserSmoke':False}}
+    if browser_module is not None:
+        provenance['browserModulePreparation'] = browser_module
     (build/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
     print(build/'runtime/core.mjs')
 if __name__=='__main__': main()

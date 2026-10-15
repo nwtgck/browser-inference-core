@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import consumer_metadata as consumer
 import upstream_provenance as provenance
+import prepare_browser_module as browser
 
 A, B, C = 'a' * 40, 'b' * 40, 'c' * 40
 REPO = 'example/core'
@@ -173,8 +174,15 @@ class ReportMetadata(unittest.TestCase):
         self.assertEqual(envelope['markdownSha256'], hashlib.sha256(text.encode()).hexdigest())
         self.assertEqual(set(path.name for path in output.iterdir()), {'consumer-update.md', 'consumer-update.yaml', 'report.json'})
 
+    def test_browser_annotation_impact_is_visible_in_the_publication_summary(self):
+        self.data['upstreamDivergences']['generatedModuleTransformations'] = [{'id': 'browser-wasm-url-annotation'}]
+        text = consumer.render_markdown(self.data, consumer.render_yaml(self.data))
+        self.assertIn('Vite skips asset discovery at this expression; other bundlers may differ', text)
+        self.assertIn('runtime fallback behavior is unchanged', text)
+
     def test_oversized_report_links_the_complete_yaml_without_truncating(self):
         self.data['huge'] = 'x' * 60000
+        self.data['upstreamDivergences']['generatedModuleTransformations'] = [{'id': 'browser-wasm-url-annotation'}]
         output = self.root / 'report'
         text = consumer.write_report(output, self.data, '123', '2')
         raw = (output / 'consumer-update.yaml').read_bytes()
@@ -182,6 +190,8 @@ class ReportMetadata(unittest.TestCase):
         self.assertGreater(len(raw), 60000)
         self.assertLessEqual(len(text.encode('utf-8')), 55000)
         self.assertNotIn('```yaml', text)
+        self.assertIn('Vite skips asset discovery at this expression; other bundlers may differ', text)
+        self.assertIn('runtime fallback behavior is unchanged', text)
         self.assertIn(SPEC, text)
         self.assertIn(A, text)
         self.assertIn('consumer-update-2', text)
@@ -297,6 +307,26 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual(overlay['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
         self.assertEqual((self.vendor / 'tools/mtmd/clip.cpp').read_text(), 'before\noriginal\nafter\n')
         self.assertIn('toolchainDivergences', result)
+
+    def test_generated_browser_preparation_records_are_bound_to_source_and_published_output(self):
+        for name in ('scripts/prepare_browser_module.py', 'scripts/build.py',
+                     'bridge/host-navigator-pre.js', 'docs/browser-host.md'):
+            shutil.copy2(ROOT / name, self.root / name)
+        module = self.root / 'synthetic-core.mjs'
+        module.write_bytes(b'function locate(){return new URL("core.wasm",import.meta.url).href}')
+        record = browser.prepare(module)
+        self.manifest['profiles']['cpu-wasm32']['variants']['browser']['browserModulePreparation'] = record
+        self.manifest['files'] = [{'path': 'profiles/cpu-wasm32/browser/core.mjs', **record['output']}]
+        report = provenance.collect(self.root, self.manifest)
+        item, = report['generatedModuleTransformations']
+        self.assertEqual(item['implementation'], record['implementation'])
+        self.assertEqual(item['profileVariants'], [{'profile': 'cpu-wasm32', 'variant': 'browser',
+                         'input': record['input'], 'output': record['output'], 'alreadyAnnotated': False}])
+        self.assertEqual(item['supportingFiles']['bridge/host-navigator-pre.js'],
+                         provenance.file_identity(self.root / 'bridge/host-navigator-pre.js'))
+        self.manifest['files'][0]['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'Browser module preparation'):
+            provenance.collect(self.root, self.manifest)
 
     def test_audio_overlay_tracks_both_backends_and_actual_compiled_bytes(self):
         result = provenance.collect(self.root, self.manifest)

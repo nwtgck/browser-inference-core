@@ -54,6 +54,10 @@ class ProfileConfiguration(unittest.TestCase):
             (root.parent / '.tools/emdawnwebgpu_pkg/emdawnwebgpu.port.py').touch()
             for profile, values in expected.items():
                 for variant, settings in variants.items():
+                    module = root / 'build' / profile / variant / 'runtime/core.mjs'
+                    module.parent.mkdir(parents=True)
+                    source = b'function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}'
+                    module.write_bytes(source)
                     with self.subTest(profile=profile, variant=variant), \
                          patch.object(build, 'ROOT', root), \
                          patch.object(build, 'source_status', return_value=[]), \
@@ -79,6 +83,11 @@ class ProfileConfiguration(unittest.TestCase):
                         self.assertEqual(provenance['configuration'], profiles[profile])
                         self.assertEqual(provenance['variant'], variant)
                         self.assertEqual(provenance['variantConfiguration'], settings)
+                        self.assertEqual('browserModulePreparation' in provenance, variant == 'browser')
+                        if variant == 'browser':
+                            self.assertEqual(module.read_bytes().replace(b'/* @vite-ignore */', b'', 1), source)
+                        else:
+                            self.assertEqual(module.read_bytes(), source)
                         if profiles[profile]['asyncify']:
                             verify_patch.assert_called_once_with(Path('/test-toolchain'), toolchain['emscriptenAsyncifyBigIntPatch'])
                         else:

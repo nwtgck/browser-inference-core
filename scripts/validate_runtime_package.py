@@ -95,6 +95,10 @@ def checked_results(runtime: str, profiles: dict, variants: dict, results: objec
             elif (result.get('mockedAdapter') is not True or result.get('suspension') is not True or
                   result.get('syntheticModel', False) is not False):
                 raise ValueError('Wrong GPU smoke scope')
+            elif (result.get('defaultNavigatorFallback') is not True
+                  or result.get('hostNavigatorInjection') is not (pair[1] == 'browser')
+                  or result.get('independentFactories') is not (pair[1] == 'browser')):
+                raise ValueError('Wrong GPU host navigator smoke scope')
         else:
             if result.get('scope') != image_scope(test_webgpu):
                 raise ValueError('Wrong image smoke scope')

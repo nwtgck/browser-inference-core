@@ -21,7 +21,7 @@ class BrowserCache(unittest.TestCase):
         for directory in ('toolchain', 'scripts'):
             shutil.copytree(ROOT / directory, self.root / directory, ignore=shutil.ignore_patterns('__pycache__'))
         for runtime in ('llama-cpp', 'stable-diffusion-cpp'):
-            for part in ('config', 'scripts', 'upstream-patches', 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'):
+            for part in ('config', 'scripts', 'bridge', 'upstream-patches', 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'):
                 if (ROOT / runtime / part).is_dir():
                     shutil.copytree(ROOT / runtime / part, self.root / runtime / part, ignore=shutil.ignore_patterns('__pycache__'))
             shutil.copy2(ROOT / runtime / 'CMakeLists.txt', self.root / runtime / 'CMakeLists.txt')
@@ -105,6 +105,20 @@ class BrowserCache(unittest.TestCase):
         after = self.plan()
         self.assertNotEqual(before['em-key'], after['em-key'])
         self.assertEqual(before['cc-prefix'], after['cc-prefix'])
+
+    def test_browser_host_inputs_only_change_llama_browser_em_snapshot(self):
+        for name in ('scripts/prepare_browser_module.py', 'bridge/host-navigator-pre.js'):
+            with self.subTest(name=name):
+                browser = self.plan(runtime='llama-cpp')
+                test = self.plan(runtime='llama-cpp', variant='test')
+                image = self.plan()
+                with (self.root/'llama-cpp'/name).open('a') as out:
+                    out.write('\n// Browser host input fixture change\n')
+                after = self.plan(runtime='llama-cpp')
+                self.assertNotEqual(browser['em-key'], after['em-key'])
+                self.assertEqual(browser['cc-prefix'], after['cc-prefix'])
+                self.assertEqual(test, self.plan(runtime='llama-cpp', variant='test'))
+                self.assertEqual(image, self.plan())
 
     def test_dawn_key_is_content_addressed_and_paths_do_not_include_builds(self):
         before = self.plan()

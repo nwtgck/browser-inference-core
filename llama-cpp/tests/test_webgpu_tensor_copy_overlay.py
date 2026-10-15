@@ -95,6 +95,9 @@ class TensorCopyBuildCommand(unittest.TestCase):
                 return 'emcc fixture' if args[0] == 'emcc' else 'a' * 40
             for profile, config in profiles.items():
                 for variant in ('browser', 'test'):
+                    module = root / 'build' / profile / variant / 'runtime/core.mjs'
+                    module.parent.mkdir(parents=True)
+                    module.write_bytes(b'function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}')
                     argv = ['build.py', '--profile', profile, '--variant', variant]
                     with self.subTest(profile=profile, variant=variant), patch.object(builder, 'ROOT', root), \
                          patch.object(builder, 'runtime_toolchain', return_value=toolchain), \

@@ -48,7 +48,8 @@ class BuildProvenance(unittest.TestCase):
         toolchain['emscriptenAsyncifyBigIntPatch']['patchedSha256']=hashlib.sha256(patched_runtime).hexdigest()
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root/'scripts').mkdir()
-        shutil.copy2(ROOT/'scripts/build.py',self.root/'scripts/build.py')
+        for name in ('build.py', 'prepare_browser_module.py'):
+            shutil.copy2(ROOT/'scripts'/name,self.root/'scripts'/name)
         (self.root/'README.md').write_text('original\n')
         # The real CMake process intentionally runs a probe without WORKING_DIRECTORY,
         # matching the upstream configure-time pattern. No C/C++ or Wasm is compiled.
@@ -68,6 +69,12 @@ class BuildProvenance(unittest.TestCase):
             root=Path(sys.argv[1])
             building='--build' in sys.argv
             Path('a.out.wasm' if building else 'a.out.js').write_text('Probe output, not a runtime.\\n')
+            if building:
+                runtime=Path('runtime')
+                runtime.mkdir(exist_ok=True)
+                module=runtime/'core.mjs'
+                if not module.exists():
+                    module.write_text('function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}\\n')
             if not building:
                 mode=os.environ.get('LCB_TEST_MODE')
                 if mode=='modify':
@@ -125,11 +132,22 @@ class BuildProvenance(unittest.TestCase):
                 self.assertEqual(info['sourceCommit'],self.source_sha)
                 self.assertEqual(info['sourceStatusBeforeBuild'],[])
                 self.assertEqual(info['sourceStatusAfterBuild'],[])
+                self.assertFalse(info['browserModulePreparation']['alreadyAnnotated'])
                 self.assertEqual(self.git(self.root,'status','--porcelain','--untracked-files=all'),'')
                 for name in ('a.out.js','a.out.wasm'):
                     self.assertTrue((self.root/'build'/profile/'browser'/name).is_file())
                     self.assertFalse((self.root/name).exists())
                     self.assertFalse((self.caller/name).exists())
+
+    def test_reusing_a_linked_browser_module_does_not_duplicate_the_annotation(self):
+        first=self.build()
+        module=self.root/'build/cpu-wasm32/browser/runtime/core.mjs'
+        original=module.read_bytes()
+        second=self.build()
+        self.assertEqual(module.read_bytes(),original)
+        self.assertEqual(original.count(b'/* @vite-ignore */'),1)
+        self.assertTrue(second['browserModulePreparation']['alreadyAnnotated'])
+        self.assertEqual(first['browserModulePreparation']['output'],second['browserModulePreparation']['input'])
 
     def test_fresh_build_cleans_only_the_selected_profile_variant(self):
         stale=self.root/'build/cpu-wasm32/browser/stale-output'

@@ -338,7 +338,10 @@ class RuntimeSnapshot(unittest.TestCase):
                     else:
                         item.update(timestep=[], bf16Weights=[])
                 elif profile.startswith('cpu-'): item['syntheticModel'] = True
-                else: item.update(mockedAdapter=True, suspension=True)
+                else:
+                    item.update(mockedAdapter=True, suspension=True,
+                                hostNavigatorInjection=variant == 'browser',
+                                defaultNavigatorFallback=True, independentFactories=variant == 'browser')
                 result.append(item)
         return result
 
@@ -464,6 +467,36 @@ class RuntimeSnapshot(unittest.TestCase):
         self.runtime = 'llama-cpp'
         self.result_mutator = lambda env: env['results'][0].__setitem__('syntheticModel', 'true')
         with self.assertRaisesRegex(ValueError, 'scope'): self.validate()
+
+    def test_gpu_host_routing_evidence_cannot_finalize_without_matching_variant_scope(self):
+        self.runtime = 'llama-cpp'
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('{"status":"complete"}')
+        def mutate(envelope):
+            next(item for item in envelope['results']
+                 if item['profile'].startswith('webgpu-') and item['variant'] == 'browser').pop('hostNavigatorInjection')
+        self.result_mutator = mutate
+        with self.assertRaisesRegex(ValueError, 'host navigator smoke scope'):
+            self.validate()
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
+
+    def test_gpu_host_routing_flags_are_strict_booleans_with_test_variant_fallback(self):
+        self.runtime = 'llama-cpp'
+        root = self.repo / self.runtime
+        profiles = json.loads((root / 'config/profiles.json').read_text())
+        variants = json.loads((root / 'config/variants.json').read_text())
+        for variant in variants:
+            for flag in ('hostNavigatorInjection', 'defaultNavigatorFallback', 'independentFactories'):
+                results = self.results()
+                result = next(item for item in results
+                              if item['profile'].startswith('webgpu-') and item['variant'] == variant)
+                valid = result[flag]
+                for value in (not valid, int(valid), 'true', None):
+                    result[flag] = value
+                    with self.subTest(variant=variant, flag=flag, value=value), \
+                         self.assertRaisesRegex(ValueError, 'host navigator smoke scope'):
+                        snapshot.checked_results(self.runtime, profiles, variants, results)
 
     def test_missing_graph_walk_evidence_cannot_finalize_or_leave_a_receipt(self):
         before = (self.package() / 'manifest.json').read_bytes()

@@ -42,6 +42,12 @@ def cache_plan(root: Path, runtime: str, profile: str, variant: str, source: str
     prefix = f'{POLICY}-cc-{compiler_identity}-{partition}-'
     inputs = {name: hashlib.sha256((root / runtime / name).read_bytes()).hexdigest()
               for name in ('CMakeLists.txt', 'scripts/build.py')}
+    if runtime == 'llama-cpp' and variant == 'browser':
+        names = ['scripts/prepare_browser_module.py']
+        if profiles[profile]['webgpu']:
+            names.append('bridge/host-navigator-pre.js')
+        for name in names:
+            inputs[name] = hashlib.sha256((root / runtime / name).read_bytes()).hexdigest()
     # A changed upstream or patch can require additional system-library variants.
     # Give EM_CACHE a fresh immutable snapshot then; ccache still reuses unchanged
     # translation units via its own content/command/dependency checks.
