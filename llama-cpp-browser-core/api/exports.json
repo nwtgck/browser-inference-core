@@ -10,8 +10,6 @@
   "_lcb_constant",
   "_lcb_schema_hash",
   "_lcb_callback_metadata_version",
-  "_lcb_file_backed_rows_version",
-  "_lcb_model_file_backed_shard",
   "_lcb_ggml_abs",
   "_lcb_ggml_abs_inplace",
   "_lcb_ggml_acc",
