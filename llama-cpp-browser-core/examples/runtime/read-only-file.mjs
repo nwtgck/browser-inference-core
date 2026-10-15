@@ -37,6 +37,11 @@ export function mountReadOnlyFile(core, path, source, { maxChunkBytes = 8 * 1024
       if ((stream.flags & 3) !== 0 || (stream.flags & 512) !== 0) fail('EROFS');
       opens++;
     },
+    // dupStream invokes this hook instead of open for a duplicated descriptor.
+    dup() {
+      if (removed) fail('ENOENT');
+      opens++;
+    },
     close() { opens--; },
     llseek(stream, offset, whence) {
       const position = offset + (whence === 0 ? 0 : whence === 1 ? stream.position : whence === 2 ? size : NaN);

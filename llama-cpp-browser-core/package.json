@@ -12,7 +12,6 @@
     "licenses/",
     "README.md",
     "chat-and-multimodal.md",
-    "browser-host.md",
     "LICENSE"
   ],
   "exports": {

@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+  "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
   "llamaCommit": "d81235049384534c167caea52b85a694f6103d14",
   "profiles": {
     "cpu-wasm32": {
@@ -20,7 +20,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -51,6 +51,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=browser",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
@@ -58,9 +60,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792048666,
+          "builtAtUnix": 1792064462,
           "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -70,6 +72,7 @@
             "syntheticUntrainedModel": {
               "profile": "cpu-wasm32",
               "variant": "browser",
+              "fileRowsVersion": 0,
               "syntheticModel": true,
               "sampledToken": 13,
               "stateBytes": "197",
@@ -83,24 +86,14 @@
                 "trainedModelTools": false,
                 "multimodalModelInference": false
               },
+              "fileMountLifetime": {
+                "duplicateDepth": 2,
+                "logicalFileBytes": 50000000000,
+                "largeOffsetReads": 4,
+                "passed": true
+              },
               "passed": true
             }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 307945,
-              "sha256": "97ffddef2947614778926c2db75bdd2ce54ef3a86e3934a24741eca512ee7dfc"
-            },
-            "output": {
-              "bytes": 307963,
-              "sha256": "036871373448d2daa98591dd2b77e2b0e82e19ab597ec0dd593426917400c497"
-            },
-            "alreadyAnnotated": false
           }
         },
         "test": {
@@ -118,7 +111,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -149,6 +142,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=test",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
@@ -156,9 +151,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792048610,
+          "builtAtUnix": 1792064315,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -168,6 +163,7 @@
             "syntheticUntrainedModel": {
               "profile": "cpu-wasm32",
               "variant": "test",
+              "fileRowsVersion": 0,
               "syntheticModel": true,
               "sampledToken": 13,
               "stateBytes": "197",
@@ -180,6 +176,12 @@
                 "multimodalBitmaps": true,
                 "trainedModelTools": false,
                 "multimodalModelInference": false
+              },
+              "fileMountLifetime": {
+                "duplicateDepth": 2,
+                "logicalFileBytes": 50000000000,
+                "largeOffsetReads": 4,
+                "passed": true
               },
               "passed": true
             }
@@ -204,7 +206,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -235,6 +237,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=browser",
             "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
@@ -242,9 +246,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184"
           ],
-          "builtAtUnix": 1792048773,
+          "builtAtUnix": 1792064422,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -254,6 +258,7 @@
             "syntheticUntrainedModel": {
               "profile": "cpu-wasm64",
               "variant": "browser",
+              "fileRowsVersion": 1,
               "syntheticModel": true,
               "sampledToken": 13,
               "stateBytes": "197",
@@ -267,24 +272,14 @@
                 "trainedModelTools": false,
                 "multimodalModelInference": false
               },
+              "fileMountLifetime": {
+                "duplicateDepth": 2,
+                "logicalFileBytes": 50000000000,
+                "largeOffsetReads": 4,
+                "passed": true
+              },
               "passed": true
             }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 311107,
-              "sha256": "86f7e5153cb7b412274d191c0231fa8e5873651751e9ada17d7354be8a9eace7"
-            },
-            "output": {
-              "bytes": 311125,
-              "sha256": "b7851d74f625809785c19235572fc07ed084665085f9d432438f93909b726dfb"
-            },
-            "alreadyAnnotated": false
           }
         },
         "test": {
@@ -302,7 +297,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -333,6 +328,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=test",
             "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
@@ -340,9 +337,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184"
           ],
-          "builtAtUnix": 1792048738,
+          "builtAtUnix": 1792064322,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -352,6 +349,7 @@
             "syntheticUntrainedModel": {
               "profile": "cpu-wasm64",
               "variant": "test",
+              "fileRowsVersion": 1,
               "syntheticModel": true,
               "sampledToken": 13,
               "stateBytes": "197",
@@ -364,6 +362,12 @@
                 "multimodalBitmaps": true,
                 "trainedModelTools": false,
                 "multimodalModelInference": false
+              },
+              "fileMountLifetime": {
+                "duplicateDepth": 2,
+                "logicalFileBytes": 50000000000,
+                "largeOffsetReads": 4,
+                "passed": true
               },
               "passed": true
             }
@@ -388,7 +392,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -419,6 +423,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=browser",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -427,9 +433,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048765,
+          "builtAtUnix": 1792064411,
           "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -440,30 +446,12 @@
               "profile": "webgpu-wasm32-asyncify",
               "variant": "browser",
               "pointerBytes": 4,
+              "fileRowsVersion": 0,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": true,
-              "defaultNavigatorFallback": true,
-              "independentFactories": true,
               "suspension": true,
               "passed": true
             }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 393398,
-              "sha256": "ccae57e90c18b23c9f034cdfbc0ac134b9fbb0981f98a6715d8873bf9e45eca8"
-            },
-            "output": {
-              "bytes": 393416,
-              "sha256": "0095d436725af1928a9ce954b4d2a372c113123791be6d38fd459afb5cce050d"
-            },
-            "alreadyAnnotated": false
           }
         },
         "test": {
@@ -481,7 +469,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -512,6 +500,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=test",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -520,9 +510,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048834,
+          "builtAtUnix": 1792064401,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "aa242574787a34c8824b40d1c55a2b665537e756fe00f28be54fa04b7e5c4ef2",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -533,11 +523,9 @@
               "profile": "webgpu-wasm32-asyncify",
               "variant": "test",
               "pointerBytes": 4,
+              "fileRowsVersion": 0,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": false,
-              "defaultNavigatorFallback": true,
-              "independentFactories": false,
               "suspension": true,
               "passed": true
             }
@@ -562,7 +550,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -593,6 +581,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=browser",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -601,9 +591,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048665,
+          "builtAtUnix": 1792064496,
           "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -614,30 +604,12 @@
               "profile": "webgpu-wasm32-jspi",
               "variant": "browser",
               "pointerBytes": 4,
+              "fileRowsVersion": 0,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": true,
-              "defaultNavigatorFallback": true,
-              "independentFactories": true,
               "suspension": true,
               "passed": true
             }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 435499,
-              "sha256": "4c1219ede92c3db9de5ea05a0474f9b20d22808469e1b23fd39498480fcc3ac7"
-            },
-            "output": {
-              "bytes": 435517,
-              "sha256": "10930dc330173ae2dc9720ad454ad139540928f3b704393cb299fd49ada55bdc"
-            },
-            "alreadyAnnotated": false
           }
         },
         "test": {
@@ -655,7 +627,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -686,6 +658,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=test",
             "-DLCB_MEMORY64=OFF",
+            "-DLCB_FILE_BACKED_PLE=OFF",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -694,9 +668,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048622,
+          "builtAtUnix": 1792064465,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -707,11 +681,9 @@
               "profile": "webgpu-wasm32-jspi",
               "variant": "test",
               "pointerBytes": 4,
+              "fileRowsVersion": 0,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": false,
-              "defaultNavigatorFallback": true,
-              "independentFactories": false,
               "suspension": true,
               "passed": true
             }
@@ -736,7 +708,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -767,6 +739,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=browser",
             "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -775,9 +749,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048758,
+          "builtAtUnix": 1792064508,
           "buildCache": {
-            "identity": "59e7562cd0e2f06665e522c5891442574323f9a082847fa009879ef2a04a74d0",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -788,30 +762,12 @@
               "profile": "webgpu-wasm64-jspi",
               "variant": "browser",
               "pointerBytes": 8,
+              "fileRowsVersion": 1,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": true,
-              "defaultNavigatorFallback": true,
-              "independentFactories": true,
               "suspension": true,
               "passed": true
             }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 440586,
-              "sha256": "96486cff861917452153c5385794fbbcb78ca3d44796c670d23a1942cca5bd3b"
-            },
-            "output": {
-              "bytes": 440604,
-              "sha256": "6780aa14bff12093b0470f88f9898e096114eda300dee5e96d47a5d1bf28287f"
-            },
-            "alreadyAnnotated": false
           }
         },
         "test": {
@@ -829,7 +785,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "3184e957c40ee96f6e1683ebab098cc03ec2b646",
+          "sourceCommit": "a29e8db7d676f3e52542caf0a36c907dfd1ce322",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -860,6 +816,8 @@
             "-DCMAKE_BUILD_TYPE=Release",
             "-DLCB_VARIANT=test",
             "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
             "-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
@@ -868,9 +826,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792048791,
+          "builtAtUnix": 1792064531,
           "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "identity": "bdb78374f9aaa5a3b397e244028a2b45e903642cb86682a6e9f369857562806f",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -881,11 +839,9 @@
               "profile": "webgpu-wasm64-jspi",
               "variant": "test",
               "pointerBytes": 8,
+              "fileRowsVersion": 1,
               "adapterRequests": 1,
               "mockedAdapter": true,
-              "hostNavigatorInjection": false,
-              "defaultNavigatorFallback": true,
-              "independentFactories": false,
               "suspension": true,
               "passed": true
             }
@@ -907,13 +863,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 4619,
-      "sha256": "67959b2c349e651471c09d749ef21322032bba851174828a1c0607645a673daa"
+      "bytes": 4058,
+      "sha256": "22302a0d687f5c3f3aa285da7b9d9288a14c728ab7a4a16aa048b6ce4a57a1a5"
     },
     {
       "path": "api/exports.json",
-      "bytes": 55679,
-      "sha256": "66bc9112b5685c2755c983f255472132f539a7463f896695c6a0e2393487b900"
+      "bytes": 55748,
+      "sha256": "70ea4b0df24703615b1957f0aa9a5f802821ed4199958ad6ae80c9ab7772e73c"
     },
     {
       "path": "api/functions.d.ts",
@@ -931,19 +887,14 @@
       "sha256": "d2c1e3a704469eb2f19caf3895802d15d56324f29a4554bf9ea4bb01775602d8"
     },
     {
-      "path": "browser-host.md",
-      "bytes": 5738,
-      "sha256": "c08fbc8e0f91a36a1839549a4b78512a68ad7ca87aee0379314af684737c8742"
-    },
-    {
       "path": "chat-and-multimodal.md",
       "bytes": 11222,
       "sha256": "374360e9c02b3aea0cc059346d317fad26a0b0f3e637b1968bc4f5f99825f58d"
     },
     {
       "path": "examples/runtime/README.md",
-      "bytes": 3726,
-      "sha256": "4643718a08bf7cee64ebbcf391270282198da1a8d42dcf978a66ee97c3f3190a"
+      "bytes": 3271,
+      "sha256": "d453d5b745ff74cd25019909e5cd189570fd8dc64f3d8dbd84c5793d7b30aea9"
     },
     {
       "path": "examples/runtime/bindings.mjs",
@@ -952,8 +903,8 @@
     },
     {
       "path": "examples/runtime/index.d.ts",
-      "bytes": 1940,
-      "sha256": "c9536a0a8bbdee25545acc5eb1c339c62a1c577e0d2d5901354bb1c6dba450a7"
+      "bytes": 1743,
+      "sha256": "53ba371622ed31805b771ede486a7f198af56d09f81b3b3e9c833ed9790ac0e9"
     },
     {
       "path": "examples/runtime/index.mjs",
@@ -962,8 +913,8 @@
     },
     {
       "path": "examples/runtime/read-only-file.mjs",
-      "bytes": 3627,
-      "sha256": "c3d583c770bbdcc2d7e33601c1d6089747781f68b649a1cb4ec34b72fc351f6b"
+      "bytes": 3776,
+      "sha256": "5151fb52a4aa3929cdc6b0285e6ea319f2947698913af0a4983848a3b1886bf3"
     },
     {
       "path": "licenses/0/LICENSE",
@@ -1362,158 +1313,158 @@
     },
     {
       "path": "package.json",
-      "bytes": 678,
-      "sha256": "c03f54cffed62cac0c46d9a83c9dcbf9c50ad833dbdb152f36067901fa727cc7"
+      "bytes": 655,
+      "sha256": "ff0a3c9d6757acc79b25a554a6be7a4d42eeb1925b9fc7edc52aa6664b6e70ad"
     },
     {
       "path": "profiles/cpu-wasm32/browser/core.d.ts",
-      "bytes": 154038,
-      "sha256": "1c08dc601ef86161256d9b508489890e0eb0eda4348b84d41380a3c34de8a25e"
+      "bytes": 154133,
+      "sha256": "cf315731336acd1dc5ce5557268904d6827ebfa134317ccf276d68ad1238d035"
     },
     {
       "path": "profiles/cpu-wasm32/browser/core.mjs",
-      "bytes": 307963,
-      "sha256": "036871373448d2daa98591dd2b77e2b0e82e19ab597ec0dd593426917400c497"
+      "bytes": 308178,
+      "sha256": "ab3ac9452141cc21e99a26d34e44d182d0aa318c8c39d9d4187a0fb9a3ed4169"
     },
     {
       "path": "profiles/cpu-wasm32/browser/core.wasm",
-      "bytes": 6237047,
-      "sha256": "1ae5f4e47be98e415505fb9d88f78f4b9d38f4702c57b4a72f778e27646ebf10"
+      "bytes": 6237340,
+      "sha256": "32457fbc0d37bcdef4efa962ee12500103fe490f7b98beff8120a79b80c1a8a7"
     },
     {
       "path": "profiles/cpu-wasm32/test/core.d.ts",
-      "bytes": 154198,
-      "sha256": "57af2063c5068f5215657d74973b7bfbb6f639ca0d29fae6f335c4635c44348a"
+      "bytes": 154293,
+      "sha256": "a6d6420ef2b734f2da52afbd039e7d3a0b556bd4bf9de3335effe453e3e6db09"
     },
     {
       "path": "profiles/cpu-wasm32/test/core.mjs",
-      "bytes": 861518,
-      "sha256": "0303b1d3a89afdc84946baa9a7316c09a04312be5ac6366ab0be9c9935bff9ba"
+      "bytes": 862353,
+      "sha256": "18fa01db5a40b0dcbf3a11fe7c188f72e4b2bc59ef6822051bd90cc160fd1a54"
     },
     {
       "path": "profiles/cpu-wasm32/test/core.wasm",
-      "bytes": 6415398,
-      "sha256": "80ae9a7ca84f63cccd9a76af18d7518a4b97d29985c870a6c918a898ca6a318c"
+      "bytes": 6415634,
+      "sha256": "7203e0773ec6a26e3a4309d8168443bd849b908442973d950258e30a64f6c4b1"
     },
     {
       "path": "profiles/cpu-wasm64/browser/core.d.ts",
-      "bytes": 154038,
-      "sha256": "323ff2d075ea4e0743664004e844793c5aceb0512fd9d670c15f7df25b881613"
+      "bytes": 154133,
+      "sha256": "17534a71c835a4ecf764205d99febafc607191b8791f9106b2baa983870717c4"
     },
     {
       "path": "profiles/cpu-wasm64/browser/core.mjs",
-      "bytes": 311125,
-      "sha256": "b7851d74f625809785c19235572fc07ed084665085f9d432438f93909b726dfb"
+      "bytes": 311960,
+      "sha256": "7474eb6457e04fe1fe344d2ac3c9aae95e2aea1d2e23a9b286950b4db5c105e7"
     },
     {
       "path": "profiles/cpu-wasm64/browser/core.wasm",
-      "bytes": 6304740,
-      "sha256": "0b9140dd0eb5a7d32a3a02d82252d9691b79f4d4718fa7a14420d4edbfcb3b2b"
+      "bytes": 6318745,
+      "sha256": "7fa354abfa8cfb25912b1d0827da470ba62ccbad31b1de42b7ee9c6e6570b947"
     },
     {
       "path": "profiles/cpu-wasm64/test/core.d.ts",
-      "bytes": 154198,
-      "sha256": "660a6e276de4d817a95cf5e9459d5f6e8f2584e8dd16797fbdeeb19ed7670307"
+      "bytes": 154293,
+      "sha256": "eee45be0074e4cf651774340fc8aab49124dc7a60ffaa68830c542d1d35a7049"
     },
     {
       "path": "profiles/cpu-wasm64/test/core.mjs",
-      "bytes": 865570,
-      "sha256": "25c17329222616fba82a4ade0c387913b97dafdc698dd9b9de2c7ce69f25a1f3"
+      "bytes": 867042,
+      "sha256": "8aa6dca1e501d5f8ec3773f049e042121ca6185cd3abeb9fb401eba7e28e58f6"
     },
     {
       "path": "profiles/cpu-wasm64/test/core.wasm",
-      "bytes": 6485423,
-      "sha256": "8673df5dc0f164fc2e4a4b7fee050553f63393827201a468e7e054d8b0a75b76"
+      "bytes": 6498852,
+      "sha256": "16ec3bcf70608c3f19a0483f80a4c8a63cd2d6bdaaa85fa6705909e22774b655"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
-      "bytes": 154038,
-      "sha256": "1c08dc601ef86161256d9b508489890e0eb0eda4348b84d41380a3c34de8a25e"
+      "bytes": 154133,
+      "sha256": "cf315731336acd1dc5ce5557268904d6827ebfa134317ccf276d68ad1238d035"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs",
-      "bytes": 393416,
-      "sha256": "0095d436725af1928a9ce954b4d2a372c113123791be6d38fd459afb5cce050d"
+      "bytes": 393571,
+      "sha256": "5b832c71347848c70b09db1b0a8a249d44c47f594bb7bb3350c98e395c079169"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm",
-      "bytes": 14600192,
-      "sha256": "b2f9daff4bb6d46ffb95b365862be6d3f6d2417e81e18a2c490c7d0505ca6f52"
+      "bytes": 14600978,
+      "sha256": "72026a010338c3c9cc6a15bbac3c859fb1154c7d73fbacb2327783260bff472e"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts",
-      "bytes": 154198,
-      "sha256": "57af2063c5068f5215657d74973b7bfbb6f639ca0d29fae6f335c4635c44348a"
+      "bytes": 154293,
+      "sha256": "a6d6420ef2b734f2da52afbd039e7d3a0b556bd4bf9de3335effe453e3e6db09"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs",
-      "bytes": 987075,
-      "sha256": "4cf327a0dadce3f09b2069f92850868fc547511e5a31017797228f69afa79abc"
+      "bytes": 987910,
+      "sha256": "7c73e16e52d171c04d71e8b575587471fa7b2cf8384dee1a01e8e757a04c301e"
     },
     {
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm",
-      "bytes": 14864834,
-      "sha256": "805d10acdafd1a8a91a31fdf600755570cdde5e55feecd317ecbadcd9f9840d0"
+      "bytes": 14865671,
+      "sha256": "02130bb34532b4b470e9431bc8289e53c5d1017a6272fc10e71bb5178698feb1"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
-      "bytes": 171174,
-      "sha256": "c8cfd04a77f1ddea2534a5debf5d7d9302a25b636e9390208f95a01b6cee7fcd"
+      "bytes": 171269,
+      "sha256": "c374e1956db721cee81355a9ddc0b14f58bf4b4cd5a169a61b9297ba7ac76155"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs",
-      "bytes": 435517,
-      "sha256": "10930dc330173ae2dc9720ad454ad139540928f3b704393cb299fd49ada55bdc"
+      "bytes": 435723,
+      "sha256": "196045c1dc5f0e3956280f6ce8d4ae59c8536561c9cda6685e2d97796151da75"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 8146074,
-      "sha256": "ffacacf1a9b18009c63a09d10f8024b61f22578ff6f5c8991702eb865c7d7a9d"
+      "bytes": 8146433,
+      "sha256": "a7e00075e3423a52623be33c1704102df4a63f2049f70ed7b0a60880f949a796"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
-      "bytes": 171334,
-      "sha256": "700b744d8a68ee088149b795645a103b32b3392cde4398ef4a1af7718683c4ae"
+      "bytes": 171429,
+      "sha256": "ad7ddc009b36ddeb841f7ea2614641159fab041617768c0a26fcadb8b26bbf46"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 961012,
-      "sha256": "618a2f8898c009d7a37e21fe048c11ae780d40d2bf6167c8772dabe3e9c98b77"
+      "bytes": 961847,
+      "sha256": "1c94b53dd670a8415a79898ade86c2e7f6c91764628aae5385a49435ad73a8f7"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 8325124,
-      "sha256": "944215115a5a8155c2d3c588ef3883e74bda8416c1187860c7f89c804ce65e29"
+      "bytes": 8325370,
+      "sha256": "81661807fb8c7d389219d2dfb9b9912e924240770f5fb7eb8379b7e624de219a"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
-      "bytes": 171174,
-      "sha256": "302fae6b2e64455303fbb6f26dbb6c97a8ee7727493bf267e67bba2de2ac2ecb"
+      "bytes": 171269,
+      "sha256": "58c0610a294a7e6df629a999f823f28b53bc9366d0f250321a8d22915b7c581f"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.mjs",
-      "bytes": 440604,
-      "sha256": "6780aa14bff12093b0470f88f9898e096114eda300dee5e96d47a5d1bf28287f"
+      "bytes": 441447,
+      "sha256": "685ecc342443105cab84f6bfe001e0a9080108142297c1a8fdd15ebff46b7507"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 8250656,
-      "sha256": "219b6aa70efa3c3b82c32394ffd53532364469cf879874ff263de1ab87bc7821"
+      "bytes": 8266148,
+      "sha256": "08d5b6977ef9968953347f5da9e484313e8aea5deae7a78787201384a6313cff"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
-      "bytes": 171334,
-      "sha256": "20b0dd23607b1b9b2f0d924611703cd3e6640dcc8b0776d5add8e207f888b099"
+      "bytes": 171429,
+      "sha256": "44b100023dadb4bc8aff131e95928277b45bef5a6a26bfb24ec68d7b9803d45c"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 966947,
-      "sha256": "1556a789dc23921cb05532317153d635a0d773ab2a49a73f8437809ed0c10d06"
+      "bytes": 968419,
+      "sha256": "82e80555904a779ed1d5f10b035f85667deb5755d09abe682986614f9c9df43f"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 8431316,
-      "sha256": "1f4787eb43fd2b6c97253653382bbb27267873147f9aaf603f05e6d1cde904e2"
+      "bytes": 8445828,
+      "sha256": "093f6e8872b42278316aeaf085e35832b94248d0f3d064b15e0b908d8c4d4c20"
     }
   ]
 }
