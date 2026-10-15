@@ -299,11 +299,16 @@ unqualified success claim. Previously posted successful metadata is retained
 inside a section labelled **not confirmation of the current head/run**. An older
 completed event cannot blindly replace the current head's status.
 
-The small report artifact is named per rerun attempt and requests 90-day retention
+The report artifact is named per rerun attempt and requests 90-day retention
 (subject to repository limits). Existing PR comments persist independently of
 artifact expiry. A much later PR may not be able to recover an expired report;
-that state is explicit. A future oversized report fails rather than truncating
-its YAML.
+that state is explicit. When the full metadata exceeds the inline comment budget,
+the PR body keeps the commits and install command and links to that attempt's
+report artifact, with the full YAML's byte count and SHA-256. The artifact retains
+the complete YAML without truncation. After artifact expiry, a compact comment
+still identifies the publication but no longer provides the full YAML download.
+The notifier reads only the bounded report envelope and Markdown, never the YAML;
+the compressed archive download remains bounded.
 
 ## Failure recovery and non-goals
 

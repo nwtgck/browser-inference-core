@@ -173,10 +173,25 @@ class ReportMetadata(unittest.TestCase):
         self.assertEqual(envelope['markdownSha256'], hashlib.sha256(text.encode()).hexdigest())
         self.assertEqual(set(path.name for path in output.iterdir()), {'consumer-update.md', 'consumer-update.yaml', 'report.json'})
 
-    def test_oversized_report_fails_instead_of_truncating(self):
-        self.data['huge'] = 'x' * 55000
-        with self.assertRaisesRegex(ValueError, 'too large'):
-            consumer.write_report(self.root / 'report', self.data, '1', '1')
+    def test_oversized_report_links_the_complete_yaml_without_truncating(self):
+        self.data['huge'] = 'x' * 60000
+        output = self.root / 'report'
+        text = consumer.write_report(output, self.data, '123', '2')
+        raw = (output / 'consumer-update.yaml').read_bytes()
+        self.assertEqual(raw, consumer.render_yaml(self.data).encode('utf-8'))
+        self.assertGreater(len(raw), 60000)
+        self.assertLessEqual(len(text.encode('utf-8')), 55000)
+        self.assertNotIn('```yaml', text)
+        self.assertIn(SPEC, text)
+        self.assertIn(A, text)
+        self.assertIn('consumer-update-2', text)
+        self.assertIn(f'https://github.com/{REPO}/actions/runs/123/attempts/2', text)
+        self.assertIn(str(len(raw)), text)
+        self.assertIn(hashlib.sha256(raw).hexdigest(), text)
+        self.assertEqual(text, (output / 'consumer-update.md').read_text())
+        envelope = json.loads((output / 'report.json').read_text())
+        self.assertEqual(envelope['markdownSha256'], hashlib.sha256(text.encode('utf-8')).hexdigest())
+        self.assertEqual(set(path.name for path in output.iterdir()), {'consumer-update.md', 'consumer-update.yaml', 'report.json'})
 
     def test_yaml_ambiguous_scalars_are_quoted(self):
         for value in ['on', 'OFF', 'null', 'yes', '2026-09-22', '1234', '123e9', 'a: b', 'x\ny', 'value # comment', 'abc:']:

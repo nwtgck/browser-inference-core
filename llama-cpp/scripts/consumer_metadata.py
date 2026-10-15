@@ -241,7 +241,7 @@ def render_yaml(data: dict) -> str:
     return '\n'.join(result) + '\n'
 
 
-def render_markdown(data: dict, yaml: str) -> str:
+def publication_header(data: dict) -> str:
     runtime = data['runtime']
     return (
         '## Runtime artifact published\n\n'
@@ -249,10 +249,29 @@ def render_markdown(data: dict, yaml: str) -> str:
         f'**Source commit:** `{runtime["sourceCommit"]}`  \n'
         f'**llama.cpp commit:** `{runtime["llamaCommit"]}`\n\n'
         f'```sh\nnpm install {data["npm"]["specifier"]}\n```\n\n'
+    )
+
+
+def render_markdown(data: dict, yaml: str) -> str:
+    return publication_header(data) + (
         'This immutable runtime is available before the source PR is merged. '
         'Recorded validation scope is included below.\n\n'
         '<details>\n<summary>Consumer integration metadata (YAML)</summary>\n\n'
         '```yaml\n' + yaml + '```\n\n</details>\n'
+    )
+
+
+def render_compact_markdown(data: dict, yaml: str, run_id: str, attempt: str) -> str:
+    raw = yaml.encode('utf-8')
+    url = f'https://github.com/{data["runtime"]["repository"]}/actions/runs/{int(run_id)}/attempts/{int(attempt)}'
+    return publication_header(data) + (
+        'This immutable runtime is available before the source PR is merged. '
+        'The full consumer metadata exceeds the inline PR comment budget.\n\n'
+        f'Download **`consumer-update-{int(attempt)}`** from [this build attempt]({url}) '
+        'for the complete `consumer-update.yaml`, including recorded validation scope. '
+        'The YAML is preserved without truncation; the download is subject to Actions artifact retention.\n\n'
+        f'**YAML bytes:** `{len(raw)}`  \n'
+        f'**YAML SHA-256:** `{hashlib.sha256(raw).hexdigest()}`\n'
     )
 
 
@@ -272,9 +291,11 @@ def write_report(output: Path, data: dict, run_id: str, attempt: str) -> str:
     yaml = render_yaml(data)
     markdown = render_markdown(data, yaml)
     # Reserve room for the notifier's status header below the PR comment limit.
-    # A future large schema fails visibly rather than silently truncating YAML.
+    # Keep the full YAML in the artifact even when it no longer fits inline.
     if len(markdown.encode('utf-8')) > 55000:
-        raise ValueError('Consumer report is too large for a single PR comment')
+        markdown = render_compact_markdown(data, yaml, run_id, attempt)
+    if len(markdown.encode('utf-8')) > 55000:
+        raise ValueError('Consumer report summary is too large for a single PR comment')
     output.mkdir(parents=True, exist_ok=True)
     (output / 'consumer-update.yaml').write_text(yaml, encoding='utf-8')
     (output / 'consumer-update.md').write_text(markdown, encoding='utf-8')
