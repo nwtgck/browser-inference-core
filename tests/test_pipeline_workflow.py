@@ -20,7 +20,7 @@ class PipelineWorkflow(unittest.TestCase):
         self.assertIn('github.actor', JOBS['publish'])
 
     def test_checkout_keeps_recursive_notices_for_selected_runtime(self):
-        for name in ('test', 'compile', 'build', 'image-native', 'image-compile', 'image-build'):
+        for name in ('test', 'qsa-native', 'compile', 'build', 'image-native', 'image-compile', 'image-build'):
             block = JOBS[name]
             self.assertIn('submodules: false', block)
             command = re.search(r'git submodule update[^\n]+', block).group()
@@ -101,7 +101,7 @@ class PipelineWorkflow(unittest.TestCase):
             self.assertIn(b'--verify-only always includes npm packing', result.stderr)
 
     def test_profile_counts_and_job_dependencies_remain(self):
-        self.assertIn('needs: [test, compile]', JOBS['build'])
+        self.assertIn('needs: [test, qsa-native, compile]', JOBS['build'])
         self.assertIn('needs: [image-native, image-compile]', JOBS['image-build'])
         self.assertIn('needs: [build, image-build]', JOBS['publish'])
         self.assertEqual(len(json.loads((ROOT / 'llama-cpp/config/profiles.json').read_text())), 5)

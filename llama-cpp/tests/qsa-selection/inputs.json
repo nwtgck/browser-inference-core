@@ -1,0 +1,21 @@
+{
+  "upstream": {
+    "src/models/qwen4exp.cpp": "76652b83f1c2dfce27fdbe68089e4d3b1081100c4748eba15f27f4f04ee1bdda",
+    "src/llama-memory-hybrid-idx.cpp": "7e5e530956bc8503ce07737586f7146bd7aec81bc68472d77fd202cd03725c03",
+    "src/llama-memory-hybrid-idx.h": "338d1f7155fe0fb28b5bc8b93763092adbac844b8fcf1f85d2977d1e2b0a12fd",
+    "ggml/src/ggml.c": "7e8bf2b60598b50d718f46aa3c36c9293b10f4e7dfde6844f0693e6fc976d505",
+    "ggml/src/ggml-cpu/ops.cpp": "215d16e7ebbb4066920e2d7a5f7ea6c46636d298aedd553e00f0b3ebb0d59305",
+    "ggml/src/ggml-backend.cpp": "cdb79f2937aa147084a76f949adc0eb760ad1883e0ccc015bb4e0f599c89bd5f"
+  },
+  "patchSha256": "5c20ffc888096822727b9965ba245742e5f188a3e4599eec94678d62a9c74b56",
+  "variants": {
+    "upstream": {
+      "inputSha256": "76652b83f1c2dfce27fdbe68089e4d3b1081100c4748eba15f27f4f04ee1bdda",
+      "outputSha256": "6916ff267208f8d9d211f73826ed2d864a9009b6eaf9d4f8fb7e18b46d37bab0"
+    },
+    "file-backed-rows": {
+      "inputSha256": "d6dd5725fe32ae4f14b40611d6ca0309fc6e017dfa8661a1f60ac65b425d044f",
+      "outputSha256": "748f6c1066fd448d9aefa801552de1daf0e498487c80fe9998318f496397d9d0"
+    }
+  }
+}

@@ -399,8 +399,8 @@ class PublicationWorkflow(unittest.TestCase):
         self.assertLess(publish.index('Verify package source before publication'), publish.index('scripts/publish_artifacts.py'))
         self.assertLess(publish.index('scripts/publish_artifacts.py'), publish.index('scripts/consumer_metadata.py'))
         self.assertIn("failure() && steps.publish.outputs.commit != ''", publish)
-        self.assertEqual(workflow.count('submodules: false'), 7)
-        self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 6)
+        self.assertEqual(workflow.count('submodules: false'), 8)
+        self.assertEqual(workflow.count('submodule update --init --recursive --depth=1'), 7)
         self.assertIn('submodules: false', publish)
         self.assertIn('persist-credentials: false', publish)
 

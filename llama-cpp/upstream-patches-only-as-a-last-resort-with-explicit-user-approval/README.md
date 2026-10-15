@@ -229,3 +229,30 @@ commit with different bytes or invent a future artifact identity.
   reader with compatible ownership and browser behavior, or the owner drops
   the requirement. Re-run lifetime, split, graph equivalence and browser tests
   before removing the overlay and retiring the versioned consumer handshake.
+
+
+## QSA all-pools selection
+
+- **Patch:** `qwen4exp-all-pools-selection.patch`.
+- **Accepted scope:** continuation of the reviewed 008/009 short-context QSA
+  optimization requested by the owner. No model repository, quantization name
+  or device-name branch; no new longer-context GPU kernel is bundled here.
+- **Why / alternatives:** the pinned graph scores and ranks candidates even when
+  every padded pool fits its budget. No existing runtime option removes that
+  redundant work. Keeping the upstream graph, or deferring until equivalent
+  upstream support, avoids this maintenance cost.
+- **Base / dependencies:** `d81235049384534c167caea52b85a694f6103d14` and the
+  explicit semantic and source/output hashes in `tests/qsa-selection/inputs.json`.
+  Positive rectified scores, zero/-infinity visibility, and set-valued use of
+  selection are required. Raw/pooled key updates and the ranked path stay intact.
+- **Integration:** `LCB_QSA_ALL_POOLS` is independent of file-backed PLE. A single
+  private `qwen4exp.cpp` is composed after that optional overlay, keeping its
+  model header layout. Source is not edited in the vendor checkout. Build commands,
+  updater preflight and per-profile final-source provenance cover both variants.
+- **Validation / limits:** native full-model parity on small Q3_K/Q4_K/F16
+  fixtures, operation coverage, state/sequence/mixed-input cases, configuration,
+  provenance and negative controls. These are not real Q3/Q4 weights or an Apple
+  WebGPU throughput claim. See `docs/qsa-all-pools-selection.md`.
+- **Removal condition:** equivalent upstream selection, semantic inputs no longer
+  meeting the proof, or withdrawal by the owner. Remove the option, preparation,
+  hook, exception and reporting together without disturbing file-backed rows.

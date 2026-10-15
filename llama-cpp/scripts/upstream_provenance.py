@@ -16,6 +16,7 @@ import prepare_moe_direct_slot as moe
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
 import prepare_file_backed_rows as file_rows
+import prepare_qsa_selection as qsa
 
 
 def file_identity(path: Path) -> dict:
@@ -45,6 +46,7 @@ def collect(root: Path, manifest: dict) -> dict:
     copy_enabled = []
     batch_enabled = []
     rows_enabled = []
+    qsa_enabled = []
     toolchain = runtime_toolchain(root)
     for profile, info in manifest['profiles'].items():
         for variant, provenance in info['variants'].items():
@@ -62,6 +64,12 @@ def collect(root: Path, manifest: dict) -> dict:
                 raise ValueError('Unknown file-backed PLE activation in compiled provenance')
             if rows_options == ['-DLCB_FILE_BACKED_PLE=ON']:
                 rows_enabled.append(profile + '/' + variant)
+            qsa_options = [option for option in provenance['cmakeCommand']
+                           if option.startswith('-DLCB_QSA_ALL_POOLS=') or option.startswith('-DLCB_QSA_ALL_POOLS:')]
+            if qsa_options not in (['-DLCB_QSA_ALL_POOLS=ON'], ['-DLCB_QSA_ALL_POOLS=OFF']):
+                raise ValueError('Unknown QSA all-pools activation in compiled provenance')
+            if qsa_options == ['-DLCB_QSA_ALL_POOLS=ON']:
+                qsa_enabled.append(profile + '/' + variant)
             audio_enabled.append(profile + '/' + variant)
             moe_options = [option for option in provenance['cmakeCommand']
                            if option.startswith('-DLCB_WEBGPU_MOE_DIRECT_SLOT=')]
@@ -84,6 +92,11 @@ def collect(root: Path, manifest: dict) -> dict:
                 enabled.append(profile + '/' + variant)
     rows_compiled = None
     rows_tree = None
+    rows_by_variant = {}
+    rows_trees_by_variant = {}
+    qsa_by_variant = {}
+    rows_source = None
+    rows_identities = None
     with tempfile.TemporaryDirectory(prefix='lcb-report-overlay-') as temporary:
         if rows_enabled:
             rows_source = file_rows.prepare(vendor, Path(temporary) / 'file-rows')
@@ -99,6 +112,36 @@ def collect(root: Path, manifest: dict) -> dict:
             selected = ['llama.cpp', 'llama-model.cpp', 'models/models.h', 'models/qwen4exp.cpp',
                         'models/file-backed-rows.h']
             rows_compiled = {name: identities[name] for name in selected}
+            rows_identities = identities
+        # Describe the translation unit actually compiled, not just the first
+        # preparation stage. QSA may follow either original or file-backed rows.
+        qsa_by_mode = {}
+        for mode in sorted({variant in rows_enabled for variant in qsa_enabled}):
+            model_source = (rows_source / 'models/qwen4exp.cpp' if mode else vendor / qsa.SOURCE_PATH)
+            prepared_qsa = qsa.prepare(vendor, model_source, Path(temporary) / ('qsa-rows' if mode else 'qsa'))
+            qsa_by_mode[mode] = {
+                'logicalUpstreamPath': qsa.SOURCE_PATH,
+                **file_identity(prepared_qsa),
+                'inputTranslationUnit': file_identity(model_source),
+                'modelHeader': file_identity(model_source.parent / 'models.h'),
+                'fileBackedRows': mode,
+            }
+        qsa_by_variant = {variant: qsa_by_mode[variant in rows_enabled] for variant in qsa_enabled}
+        for variant in rows_enabled:
+            final_identities = dict(rows_identities)
+            if variant in qsa_enabled:
+                composed = qsa_by_variant[variant]
+                final_identities['models/qwen4exp.cpp'] = {key: composed[key] for key in ('bytes', 'sha256')}
+            rows_by_variant[variant] = {name: final_identities[name] for name in selected}
+            encoded = json.dumps(final_identities, sort_keys=True, separators=(',', ':')).encode()
+            rows_trees_by_variant[variant] = {**rows_tree, 'sha256': hashlib.sha256(encoded).hexdigest()}
+        # Keep the compact single-copy fields only when all activated builds
+        # really compile one identical set. Mixed flags require the per-variant map.
+        if rows_by_variant:
+            values = list(rows_by_variant.values())
+            rows_compiled = values[0] if all(value == values[0] for value in values) else None
+            trees = list(rows_trees_by_variant.values())
+            rows_tree = trees[0] if all(value == trees[0] for value in trees) else None
         patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
         patched_identity = file_identity(patched)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
@@ -270,6 +313,8 @@ def collect(root: Path, manifest: dict) -> dict:
                       **file_identity(root / PATCH_DIRECTORY / file_rows.PATCH_NAME)},
             'compiledCopies': rows_compiled,
             'coherentSourceSet': rows_tree,
+            'compiledCopiesByProfileVariant': rows_by_variant,
+            'coherentSourceSetsByProfileVariant': rows_trees_by_variant,
             'reviewedInputs': json.loads((root / 'tests/file-backed-rows/inputs.json').read_text()),
             'application': {
                 'preparationScript': 'scripts/prepare_file_backed_rows.py',
@@ -282,9 +327,27 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
                                  'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']},
             'behavior': 'Qwen4Exp PLE only: retain a positioned-read descriptor, gather bounded rows into F32 input, leave n-gram hashing and downstream graph unchanged. No mmap, worker pool, global cache or full-model memory guarantee. All model definition consumers compile a coherent private header copy.',
+        }, {
+            'id': 'qsa-all-pools-selection',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': qsa.SOURCE_PATH, **file_identity(vendor / qsa.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / qsa.PATCH_NAME)},
+            'compiledCopiesByProfileVariant': qsa_by_variant,
+            'reviewedInputs': json.loads((root / 'tests/qsa-selection/inputs.json').read_text()),
+            'application': {
+                'preparationScript': 'scripts/prepare_qsa_selection.py',
+                'cmakeHook': 'cmake/QsaSelectionOverlay.cmake',
+                'option': 'LCB_QSA_ALL_POOLS',
+                'enabledProfileVariants': sorted(qsa_enabled),
+            },
+            'supportingFiles': {path: file_identity(root / path) for path in
+                               ['scripts/prepare_qsa_selection.py', 'cmake/QsaSelectionOverlay.cmake',
+                                'docs/qsa-all-pools-selection.md']},
+            'behavior': 'Skip QSA scores, ranking and indirect pool gathers only when all padded pools fit the budget. Preserve visibility, tails, per-layer key writes and the original ranked path. Share only graph-local masks with the same input identity. Independent of file-backed PLE and quantization names; not a measured real-device speedup.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

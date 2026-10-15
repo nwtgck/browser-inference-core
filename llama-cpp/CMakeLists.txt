@@ -10,6 +10,7 @@ option(LCB_NATIVE_CHECK "Build a native shared library for boundary tests, not a
 option(LCB_MEMORY64 "Use 64-bit WebAssembly memory" OFF)
 # Explicit lazy_mode=ON opts Qwen4Exp into bounded file-backed PLE rows.
 option(LCB_FILE_BACKED_PLE "Build the reviewed Qwen4Exp file-backed rows extension" ${LCB_MEMORY64})
+option(LCB_QSA_ALL_POOLS "Skip QSA ranking when every pool is selected" ON)
 option(LCB_WEBGPU "Link the WebGPU backend" OFF)
 # Experimental downstream shader optimization; see docs/moe-direct-slot.md.
 option(LCB_WEBGPU_MOE_DIRECT_SLOT "Use the reviewed direct selected-slot MoE shader" OFF)
@@ -116,6 +117,10 @@ endif()
 
 if(LCB_FILE_BACKED_PLE)
     include(cmake/FileBackedRowsOverlay.cmake)
+endif()
+
+if(LCB_QSA_ALL_POOLS)
+    include(cmake/QsaSelectionOverlay.cmake)
 endif()
 
 # All browser profiles are single-threaded, including CPU and WebGPU.
