@@ -1,6 +1,10 @@
 import type { LowLevelFunctions } from '../../api/functions.js';
 export type Profile = 'cpu-wasm32' | 'cpu-wasm64' | 'webgpu-wasm32-asyncify' | 'webgpu-wasm32-jspi' | 'webgpu-wasm64-jspi';
 export type Variant = 'browser' | 'test';
+export interface CoreModuleOptions extends Record<string, unknown> {
+  /** WebGPU browser variants only. Opaque host handle; no WebGPU types dependency. */
+  hostNavigator?: { readonly gpu?: object };
+}
 export interface CoreModule {
   HEAPU8: Uint8Array;
   FS: any;
@@ -31,7 +35,7 @@ export function createCore(options: {
   profile: Profile;
   variant?: Variant;
   baseURL?: URL | string;
-  moduleOptions?: Record<string, unknown>;
+  moduleOptions?: CoreModuleOptions;
 }): Promise<Core>;
 export function attachCore(module: CoreModule, schema: any, options?: { suspension?: 'direct' | 'asyncify' }): Core;
 export function mountReadOnlyFile(core: Core, path: string, source: {

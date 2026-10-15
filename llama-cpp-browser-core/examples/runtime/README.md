@@ -34,6 +34,12 @@ Use `createCore({ profile: 'cpu-wasm32', variant: 'test' })` for Node.js tests;
 that variant retains both. The loader selects JavaScript and Wasm from the same
 `profiles/<profile>/<variant>/` directory. It does not detect an environment and
 switch variants automatically. Keep these files together when copying artifacts.
+All `browser` profiles annotate the generated sibling Wasm URL with
+`/* @vite-ignore */`. Vite therefore leaves this URL for the host instead of
+automatically copying its Wasm asset. Deploy the matching file explicitly or
+pass `moduleOptions.wasmBinary` / `moduleOptions.locateFile`; the runtime still
+supports its existing URL fallback. `test` variants are unchanged. See the
+artifact's [browser host guide](../../browser-host.md) for the full contract.
 
 `webgpu-wasm32-asyncify` provides WebGPU without memory64 or JSPI. The loader
 selects its `ccall(..., { async: true })` completion path automatically. When
