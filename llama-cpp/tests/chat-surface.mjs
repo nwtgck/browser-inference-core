@@ -5,6 +5,7 @@ export async function checkChatSurface(native, template) {
   const own = value => { objects.push(value); return value; };
   const json = value => own(native.common_json.parse(JSON.stringify(value)));
   const toJS = value => JSON.parse(value.dump(-1));
+  const input = text => own(new native.common_chat_input(text));
   try {
     // Exercise static and const-member bindings as well as the JSON grammar
     // free function below. Explicit native signatures must preserve the API.
@@ -34,7 +35,8 @@ export async function checkChatSurface(native, template) {
     inputs.tools = own(native.common_chat_tools_parse_oaicompat(json(tools)));
     inputs.enable_thinking = false;
     const params = own(templates.apply(inputs));
-    check(params.prompt.includes('lookup') && params.prompt.includes('Weather in Tokyo?'), 'Jinja tools/messages missing');
+    const prompt = own(params.prompt);
+    check(prompt.str().includes('lookup') && prompt.str().includes('Weather in Tokyo?'), 'Jinja tools/messages missing');
     check(typeof params.format.value === 'number', 'Chat format must retain its native enum');
     check(typeof params.grammar === 'string' && typeof params.grammar_lazy === 'boolean', 'Grammar metadata missing');
     check(typeof params.generation_prompt === 'string' && typeof params.supports_thinking === 'boolean', 'Generation metadata missing');
@@ -44,41 +46,64 @@ export async function checkChatSurface(native, template) {
     }
     const delimiters = own(params.message_delimiters);
     check(Number(own(delimiters.delimiters).size()) >= 0, 'Message delimiters missing');
-    check(params.parser.length > 0, 'Missing serialized tool parser');
+    const arena = own(params.parser);
+    check(!arena.empty() && Number(arena.size()) > 0, 'Missing native tool parser');
     const parserParams = own(new native.common_chat_parser_params(params));
-    parserParams.reasoning_format = native.common_reasoning_format.COMMON_REASONING_FORMAT_AUTO;
-    const arena = own(new native.common_peg_arena());
-    check(arena.empty() && Number(arena.size()) === 0, 'Default arena predicates changed');
-    arena.load(params.parser);
+    const emptyArena = own(new native.common_peg_arena());
+    check(emptyArena.empty() && Number(emptyArena.size()) === 0, 'Default arena predicates changed');
     const generated = '<tool_call>\n{"name":"lookup","arguments":{"city":"Tokyo"}}\n</tool_call>';
-    const parsed = own(native.common_chat_peg_parse(arena, generated, false, parserParams));
+    const parsed = own(native.common_chat_peg_parse(arena, input(generated), false, parserParams));
     const parsedJSON = toJS(own(parsed.to_json_oaicompat(false)));
     check(parsedJSON.tool_calls?.[0]?.function.name === 'lookup', 'Tool name not parsed');
     check(JSON.parse(parsedJSON.tool_calls[0].function.arguments).city === 'Tokyo', 'Tool arguments not parsed');
-    const restored = own(new native.common_peg_arena());
-    restored.load(arena.save());
-    const again = own(native.common_chat_peg_parse(restored, generated, false, parserParams));
-    check(own(again.to_json_oaicompat(false)).dump(-1) === own(parsed.to_json_oaicompat(false)).dump(-1), 'Saved parser changed result');
-    const jsonRestored = own(native.common_peg_arena.from_json(own(arena.to_json())));
-    const fromJSON = own(native.common_chat_peg_parse(jsonRestored, generated, false, parserParams));
-    check(own(fromJSON.to_json_oaicompat(false)).dump(-1) === own(parsed.to_json_oaicompat(false)).dump(-1), 'JSON-restored parser changed result');
-    own(native.common_chat_peg_parse(arena, generated.slice(0, -5), true, parserParams));
-    // Assignment copies an arena once; repeated parse calls then reuse the native member.
+    own(native.common_chat_peg_parse(arena, input(generated.slice(0, -5)), true, parserParams));
+    // v0.7.0 removed serialization. Assignment copies the upstream arena into
+    // the parser parameters; repeated calls reuse that member without JSON.
     parserParams.parser = arena;
-    const fromParams = own(native.common_chat_parse(generated, false, parserParams));
+    const fromParams = own(native.common_chat_parse(input(generated), false, parserParams));
     check(own(fromParams.to_json_oaicompat(false)).dump(-1) === own(parsed.to_json_oaicompat(false)).dump(-1), 'Native parser member changed result');
+    const sessionParams = own(new native.common_chat_session_params());
+    const session = own(new native.common_chat_session(templates, 0n, inputs, sessionParams));
+    check(session.has_template() && own(session.prompt()).str() === prompt.str(), 'Session template prompt changed');
+    const firstChunk = own(session.feed(input(generated.slice(0, 12))));
+    const firstSnapshot = own(firstChunk.to_json_oaicompat(false)).dump(-1);
+    const completed = own(session.finish(input(generated.slice(12))));
+    check(own(completed.to_json_oaicompat(false)).dump(-1) === own(parsed.to_json_oaicompat(false)).dump(-1), 'Session tool parsing changed');
+    check(own(firstChunk.to_json_oaicompat(false)).dump(-1) === firstSnapshot, 'Session result handle aliases mutable state');
+    check(!own(session.parser()).empty(), 'Session parser missing');
     inputs.messages = own(native.common_chat_msgs_parse_oaicompat(json([...messages,
       { ...parsedJSON, tool_calls: parsedJSON.tool_calls.map(call => ({ ...call, id: 'caller-assigned' })) },
       { role: 'tool', content: 'Sunny', name: 'lookup', tool_call_id: 'caller-assigned' }])));
-    check(own(templates.apply(inputs)).prompt.includes('<tool_response>\nSunny'), 'Tool result history missing');
+    check(own(own(templates.apply(inputs)).prompt).str().includes('<tool_response>\nSunny'), 'Tool result history missing');
 
     const plainParams = own(new native.common_chat_parser_params());
-    const previous = own(native.common_chat_parse('hel', true, plainParams));
-    const current = own(native.common_chat_parse('hello', false, plainParams));
+    const previous = own(native.common_chat_parse(input('hel'), true, plainParams));
+    const current = own(native.common_chat_parse(input('hello'), false, plainParams));
     const diffs = own(native.common_chat_msg_diff.compute_diffs(previous, current));
     const diff = own(diffs.get(0));
     check(diff.content_delta === 'lo', 'Streaming text diff failed');
     check(diff.tool_call_index === native.common_chat_no_tool_call_index(), 'Native missing-index sentinel changed');
+    // Inputs keep token positions per UTF-8 byte, not per JS UTF-16 code unit.
+    const tokenInput = input('a');
+    tokenInput.append('あ', 17);
+    check(tokenInput.text === 'aあ' && Number(tokenInput.size()) === 4, 'Token input byte length changed');
+    check(Array.from(own(tokenInput.tokens)).join(',') === '-1,17,-1,-1', 'Token byte alignment changed');
+    const byteIndex = value => typeof tokenInput.size() === 'bigint' ? BigInt(value) : value;
+    const suffix = own(tokenInput.substr(byteIndex(1), byteIndex(3)));
+    check(suffix.text === 'あ' && own(suffix.tokens).get(0) === 17, 'Token input slice lost token identity');
+    const segmented = own(new native.common_chat_prompt('<start>'));
+    segmented.append('<start>', true);
+    segmented.replace_last('<start>', '<changed>');
+    check(segmented.str() === '<changed><start>', 'Replacement changed a user input segment');
+    const segments = own(segmented.parts);
+    check(Number(segments.size()) === 2 && own(segments.get(1)).is_input, 'Prompt segments flattened');
+    const standalone = new native.common_chat_session();
+    let snapshot;
+    try {
+      snapshot = own(standalone.feed(input('hel')));
+      check(own(standalone.finish(input('lo'))).content === 'hello', 'Plain session stream failed');
+    } finally { standalone.delete(); }
+    check(snapshot.content === 'hel', 'Session deletion invalidated an owned result');
     // Keep the public JSON + force_gbnf signature even when upstream adds
     // schema-document overloads. Both calls use the same owned common_json.
     const schema = json({ type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] });

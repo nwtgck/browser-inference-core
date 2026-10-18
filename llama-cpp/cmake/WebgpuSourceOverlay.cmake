@@ -25,12 +25,12 @@ list(APPEND LCB_SOURCE_SOURCES "${LCB_SOURCE_OVERLAY}/ggml-webgpu.cpp")
 set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 # The prepared shader-library header is a sibling of the source above; its
-# embedded WGSL include still resolves through the existing MoE BEFORE path.
-# Keep sibling headers available after relocating the TU. Append, so the MoE
-# BEFORE include retains priority over upstream generated shader headers.
+# embedded WGSL include resolves through upstream's generated header. v0.7.0
+# already implements direct selected-slot MoE dispatch; no MoE shader overlay remains.
+# Keep sibling headers available after relocating the translation unit.
 target_include_directories(ggml-webgpu PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
 # Replace only the model loader on the existing llama target. Other core sources
-# and independent mtmd/MoE overlays retain their original target ownership.
+# and independent mtmd overlays retain their original target ownership.
 get_target_property(LCB_LOADER_SOURCES llama SOURCES)
 set(LCB_LOADER_MATCHES 0)
 foreach(LCB_LOADER_SOURCE IN LISTS LCB_LOADER_SOURCES)
@@ -69,7 +69,6 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-ssm-conv-single-token.patch"
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_source.py"
-    "${LCB_SOURCE_ROOT}/scripts/prepare_moe_direct_slot.py"
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_tensor_copy.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-batch-param-uploads.patch"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-same-device-tensor-copy.patch")

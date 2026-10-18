@@ -24,6 +24,16 @@ struct templates_owner {
     templates_owner(uint64_t model, const std::string & source, const std::string & bos, const std::string & eos)
         : value(common_chat_templates_init(pointer<const llama_model>(model), source, bos, eos)) {}
 };
+// The upstream session owns its prompt/parser state. Inputs and templates are
+// used only during construction; no JavaScript object's lifetime is borrowed.
+struct session_owner {
+    common_chat_session value;
+
+    session_owner() = default;
+    session_owner(const templates_owner & templates, uint64_t vocab,
+                  const common_chat_templates_inputs & inputs, const common_chat_session_params & params)
+        : value(templates.value.get(), pointer<const llama_vocab>(vocab), inputs, params) {}
+};
 } // namespace
 
 // These are type/member registrations, not a second chat data model.
@@ -73,6 +83,7 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
     register_vector<common_chat_tool>("common_chat_tools");
     register_vector<common_chat_tool_call>("common_chat_tool_calls");
     register_vector<common_chat_msg_content_part>("common_chat_content_parts");
+    register_vector<common_chat_prompt_part>("common_chat_prompt_parts");
     register_vector<common_chat_msg_diff>("common_chat_message_diffs");
     register_vector<common_grammar_trigger>("common_grammar_triggers");
     register_vector<common_chat_msg_delimiter>("common_chat_delimiter_vector");
@@ -144,8 +155,7 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         .function("add", select_overload<void(common_chat_role, const std::string &), common_chat_msg_delimiters>(&common_chat_msg_delimiters::add))
         .function("tokenize", +[](common_chat_msg_delimiters & self, uint64_t vocab) { self.tokenize(pointer<const llama_vocab>(vocab)); })
         .function("split",
-            select_overload<common_chat_msg_spans(const llama_tokens &, const std::map<size_t, size_t> &) const, common_chat_msg_delimiters>(&common_chat_msg_delimiters::split))
-        .function("to_json", select_overload<common_json() const, common_chat_msg_delimiters>(&common_chat_msg_delimiters::to_json));
+            select_overload<common_chat_msg_spans(const llama_tokens &, const std::map<size_t, size_t> &) const, common_chat_msg_delimiters>(&common_chat_msg_delimiters::split));
     class_<common_chat_templates_inputs>("common_chat_templates_inputs").constructor<>()
         FIELD(common_chat_templates_inputs, messages) FIELD(common_chat_templates_inputs, grammar)
         FIELD(common_chat_templates_inputs, json_schema) FIELD(common_chat_templates_inputs, add_generation_prompt)
@@ -155,6 +165,30 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         FIELD(common_chat_templates_inputs, enable_thinking) FIELD(common_chat_templates_inputs, now)
         FIELD(common_chat_templates_inputs, chat_template_kwargs) FIELD(common_chat_templates_inputs, add_bos)
         FIELD(common_chat_templates_inputs, add_eos) FIELD(common_chat_templates_inputs, force_pure_content);
+    // Keep template/input segments and byte-aligned token identity. Flattening
+    // these values at the boundary would undo upstream's special-token handling.
+    class_<common_chat_prompt_part>("common_chat_prompt_part").constructor<>()
+        FIELD(common_chat_prompt_part, text) FIELD(common_chat_prompt_part, is_input);
+    class_<common_chat_prompt>("common_chat_prompt").constructor<>()
+        .constructor<std::string>()
+        FIELD(common_chat_prompt, parts)
+        .function("str", select_overload<std::string() const, common_chat_prompt>(&common_chat_prompt::str))
+        .function("append", select_overload<void(const std::string &, bool), common_chat_prompt>(&common_chat_prompt::append))
+        .function("replace_last", select_overload<void(const std::string &, const std::string &), common_chat_prompt>(&common_chat_prompt::replace_last));
+    class_<common_chat_input>("common_chat_input").constructor<>()
+        .constructor<std::string>()
+        FIELD(common_chat_input, text) FIELD(common_chat_input, tokens)
+        .function("size", select_overload<size_t() const, common_chat_input>(&common_chat_input::size))
+        .function("empty", select_overload<bool() const, common_chat_input>(&common_chat_input::empty))
+        .function("append", select_overload<void(const std::string &, llama_token), common_chat_input>(&common_chat_input::append))
+        .function("append_input", select_overload<void(const common_chat_input &), common_chat_input>(&common_chat_input::append))
+        .function("prepend", select_overload<void(const std::string &), common_chat_input>(&common_chat_input::prepend))
+        .function("prepend_input", select_overload<void(const common_chat_input &), common_chat_input>(&common_chat_input::prepend))
+        .function("truncate", select_overload<void(size_t), common_chat_input>(&common_chat_input::truncate))
+        .function("substr", select_overload<common_chat_input(size_t, size_t) const, common_chat_input>(&common_chat_input::substr));
+    function("common_chat_input_tokenize", +[](uint64_t vocab, const std::string & text) {
+        return common_chat_input_tokenize(pointer<const llama_vocab>(vocab), text);
+    });
     class_<common_chat_params>("common_chat_params").constructor<>()
         FIELD(common_chat_params, format) FIELD(common_chat_params, prompt) FIELD(common_chat_params, grammar)
         FIELD(common_chat_params, grammar_lazy) FIELD(common_chat_params, generation_prompt)
@@ -164,19 +198,32 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         FIELD(common_chat_params, parser) FIELD(common_chat_params, message_delimiters);
     class_<common_chat_parser_params>("common_chat_parser_params").constructor<>()
         .constructor<const common_chat_params &>()
-        FIELD(common_chat_parser_params, format) FIELD(common_chat_parser_params, reasoning_format)
-        FIELD(common_chat_parser_params, reasoning_in_content) FIELD(common_chat_parser_params, generation_prompt)
-        FIELD(common_chat_parser_params, parse_tool_calls) FIELD(common_chat_parser_params, is_continuation)
-        FIELD(common_chat_parser_params, echo) FIELD(common_chat_parser_params, debug) FIELD(common_chat_parser_params, parser);
+        FIELD(common_chat_parser_params, format) FIELD(common_chat_parser_params, generation_prompt)
+        FIELD(common_chat_parser_params, debug) FIELD(common_chat_parser_params, parser);
     class_<common_chat_prompt_preset>("common_chat_prompt_preset").constructor<>()
         FIELD(common_chat_prompt_preset, system) FIELD(common_chat_prompt_preset, user);
     class_<common_peg_arena>("common_peg_arena").constructor<>()
-        .function("load", select_overload<void(const std::string &), common_peg_arena>(&common_peg_arena::load))
-        .function("save", select_overload<std::string() const, common_peg_arena>(&common_peg_arena::save))
         .function("empty", select_overload<bool() const, common_peg_arena>(&common_peg_arena::empty))
-        .function("size", select_overload<size_t() const, common_peg_arena>(&common_peg_arena::size))
-        .function("to_json", select_overload<common_json() const, common_peg_arena>(&common_peg_arena::to_json))
-        .class_function("from_json", select_overload<common_peg_arena(const common_json &)>(&common_peg_arena::from_json));
+        .function("size", select_overload<size_t() const, common_peg_arena>(&common_peg_arena::size));
+    class_<common_chat_session_params>("common_chat_session_params").constructor<>()
+        FIELD(common_chat_session_params, echo) FIELD(common_chat_session_params, debug);
+    class_<session_owner>("common_chat_session").constructor<>()
+        .constructor<const templates_owner &, uint64_t, const common_chat_templates_inputs &, const common_chat_session_params &>()
+        // Copy upstream reference returns: handles survive subsequent feed(),
+        // finish() and session deletion, and cannot mutate the session's state.
+        .function("prompt", +[](const session_owner & self) { return self.value.prompt(); })
+        .function("format", +[](const session_owner & self) { return self.value.format(); })
+        .function("msg", +[](const session_owner & self) { return self.value.msg(); })
+        .function("parser", +[](const session_owner & self) { return self.value.parser(); })
+        .function("grammar", +[](const session_owner & self) { return self.value.grammar(); })
+        .function("generation_prompt", +[](const session_owner & self) { return self.value.generation_prompt(); })
+        .function("thinking_start_tag", +[](const session_owner & self) { return self.value.thinking_start_tag(); })
+        .function("thinking_end_tags", +[](const session_owner & self) { return self.value.thinking_end_tags(); })
+        .function("additional_stops", +[](const session_owner & self) { return self.value.additional_stops(); })
+        .function("message_delimiters", +[](const session_owner & self) { return self.value.message_delimiters(); })
+        .function("has_template", +[](const session_owner & self) { return self.value.has_template(); })
+        .function("feed", +[](session_owner & self, const common_chat_input & chunk) { return self.value.feed(chunk); })
+        .function("finish", +[](session_owner & self, const common_chat_input & chunk) { return self.value.finish(chunk); });
 
     class_<templates_owner>("common_chat_templates")
         .constructor<uint64_t, const std::string &, const std::string &, const std::string &>()
@@ -201,9 +248,9 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
     function("common_chat_verify_template",
         select_overload<bool(const std::string &, bool)>(&common_chat_verify_template));
     function("common_chat_parse",
-        select_overload<common_chat_msg(const std::string &, bool, const common_chat_parser_params &)>(&common_chat_parse));
+        select_overload<common_chat_msg(const common_chat_input &, bool, const common_chat_parser_params &)>(&common_chat_parse));
     function("common_chat_peg_parse",
-        select_overload<common_chat_msg(const common_peg_arena &, const std::string &, bool, const common_chat_parser_params &)>(&common_chat_peg_parse));
+        select_overload<common_chat_msg(const common_peg_arena &, const common_chat_input &, bool, const common_chat_parser_params &)>(&common_chat_peg_parse));
     function("common_chat_msgs_parse_oaicompat",
         select_overload<std::vector<common_chat_msg>(const common_json &)>(&common_chat_msgs_parse_oaicompat));
     function("common_chat_msgs_to_json_oaicompat",
@@ -216,8 +263,6 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         select_overload<common_chat_continuation(const common_json &)>(&common_chat_continuation_parse));
     function("common_chat_tool_choice_parse_oaicompat",
         select_overload<common_chat_tool_choice(const std::string &)>(&common_chat_tool_choice_parse_oaicompat));
-    function("common_chat_msg_delimiters_parse",
-        select_overload<common_chat_msg_delimiters(const common_json &)>(&common_chat_msg_delimiters_parse));
     function("common_chat_role_from_string",
         select_overload<common_chat_role(const std::string &)>(&common_chat_role_from_string));
     function("common_chat_role_to_string", +[](common_chat_role role) { return std::string(common_chat_role_to_string(role)); });

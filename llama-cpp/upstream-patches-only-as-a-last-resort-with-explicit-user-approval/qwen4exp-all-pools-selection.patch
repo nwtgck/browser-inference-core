@@ -1,8 +1,7 @@
 diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
-index 250eb74..66250b4 100644
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
-@@ -683,6 +683,10 @@ public:
+@@ -681,6 +681,10 @@ public:
      ggml_tensor * pool_idxs     = nullptr; // I32 [kpool, n_pool]  member cells per block, n_kv sentinel for the padded blocks
      ggml_tensor * pool_mask     = nullptr; // F16 [n_pool, n_tokens]
      ggml_tensor * tail_idxs     = nullptr; // I32 [kpool - 1, n_tokens]
@@ -13,9 +12,9 @@ index 250eb74..66250b4 100644
      ggml_tensor * new_pool_idxs = nullptr; // I32 [kpool, n_new]   members of the blocks to re-pool this ubatch
      ggml_tensor * new_pool_rep  = nullptr; // I64 [n_new]          cell to write each new pooled key into
      ggml_tensor * new_pool_pos  = nullptr; // I32 [4*n_new]        M-RoPE position of each new block's first member
-@@ -791,32 +795,62 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
-     // the reserved graph cannot branch on cache_safe, and without sharing every pool is re-pooled
-     // anyway (n_new == n_pool_real, layout order), so the gather returns exactly pooled_new
+@@ -787,32 +791,62 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
+     // scatter the fresh pooled keys into their rep rows, then gather all n_pool of them by cell:
+     // the older pools come from the rows earlier ubatches wrote
      ggml_build_forward_expand(gf, kpool_cache.scatter_pooled(pooled_new, inp_kpool->new_pool_rep));
 -    ggml_tensor * pooled = kpool_cache.gather_pooled(inp_kpool->pool_cells);
 -    pooled = ggml_reshape_3d(ctx0, pooled, idx_dim, 1, n_pool);
@@ -98,7 +97,7 @@ index 250eb74..66250b4 100644
      sel_idx = ggml_reshape_2d(ctx0, sel_idx, kpool*n_top_pool, n_tokens);
      sel_idx = ggml_concat(ctx0, sel_idx, inp_kpool->tail_idxs, 0);
      const int64_t n_sel = sel_idx->ne[0];
-@@ -844,7 +878,6 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
+@@ -840,7 +874,6 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
      // top_k fills a short selection with invisible pools that can overlap the tail, so the scatter would write
      // some cells from several threads: map every dead slot to its own dump row, idx = dump + live*(idx - dump)
      // a picked pool is live when visible: a visible score is a rectified sum >= 0, an invisible one is -inf
@@ -106,7 +105,7 @@ index 250eb74..66250b4 100644
      ggml_tensor * live_pool = ggml_clamp(ctx0, ggml_scale_bias(ctx0, top_score, 1.0f, 1.0f), 0.0f, 1.0f);
      live_pool = ggml_reshape_2d(ctx0, ggml_repeat_4d(ctx0, live_pool, kpool, n_top_pool, n_tokens, 1), kpool*n_top_pool, n_tokens);
      // a tail cell is live unless it is the n_kv sentinel
-@@ -866,6 +899,10 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
+@@ -862,6 +895,10 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
              row, row*kq_mask->ne[1], row*kq_mask->ne[1]*kq_mask->ne[2], 0);
      sel = ggml_add(ctx0, sel, kq_mask);
      cb(sel, "indexer_sel", il);

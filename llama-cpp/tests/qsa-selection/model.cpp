@@ -43,7 +43,9 @@ static void generate(const std::string & path, ggml_type quant) {
         const bool ple = std::strcmp(name, "per_layer_token_embd.weight") == 0;
         const bool matrix = tensor->ne[1] > 1 && tensor->ne[0] % 256 == 0 &&
                             std::strstr(name, "norm") == nullptr;
-        if (!ple && (!matrix || quant == GGML_TYPE_F16)) continue;
+        // The upstream synthetic generator writes F32 matrices. F16 must be
+        // converted too; otherwise that fixture only has a misleading label.
+        if (!ple && !matrix) continue;
         const auto type = ple ? GGML_TYPE_IQ4_NL : quant;
         std::vector<float> floats(ggml_nelements(tensor));
         if (tensor->type == GGML_TYPE_F32) std::memcpy(floats.data(), tensor->data, floats.size()*sizeof(float));
@@ -55,9 +57,18 @@ static void generate(const std::string & path, ggml_type quant) {
         gguf_set_tensor_data(output.get(), name, storage.back().data());
         if (!ple) ++quantized_count;
     }
-    require(quant == GGML_TYPE_F16 || quantized_count > 10, "quantized matrix coverage");
+    require(quantized_count > 10, "requested matrix type coverage, including F16");
     require(gguf_write_to_file(output.get(), path.c_str(), false), "save quantized fixture");
-    std::cout << "fixture=" << ggml_type_name(quant) << " quantized_matrices=" << quantized_count << '\n';
+    // Verify the persisted metadata, not just which conversion branch ran.
+    gguf_context_ptr saved(gguf_init_from_file(path.c_str(), {true, nullptr}));
+    require(bool(saved), "reopen saved fixture metadata");
+    size_t saved_count = 0;
+    for (int64_t i = 0; i < gguf_get_n_tensors(saved.get()); ++i) {
+        if (gguf_get_tensor_type(saved.get(), i) == quant) ++saved_count;
+    }
+    require(saved_count == quantized_count, "saved fixture matrix type coverage");
+    std::cout << "fixture=" << ggml_type_name(quant) << " quantized_matrices=" << quantized_count
+              << " verified_saved_type_count=" << saved_count << '\n';
 }
 
 struct capture {
@@ -75,7 +86,10 @@ struct capture {
         if (t->op == GGML_OP_LIGHTNING_INDEXER) self.pools[t->ne[0]]++;
         if (std::strncmp(t->name, "indexer_q-", 10) == 0) ++self.query_projections;
         if (std::strncmp(t->name, "indexer_k_raw-", 14) == 0) ++self.raw_key_projections;
-        if (std::strncmp(t->name, "indexer_sel-", 12) == 0) ++self.selection_masks;
+        // v0.7.0 consumes the selection directly and renames that same tensor
+        // in build_qsa_attn. Count the actual shared ADD node, not the earlier
+        // indexer_sel label which is no longer observable by the scheduler.
+        if (t->op == GGML_OP_ADD && std::strncmp(t->name, "kq_mask_qsa-", 12) == 0) ++self.selection_masks;
         return false; // metadata only; never request a node's completion
     }
     void record(std::ostream & out, const std::string & phase) {
