@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+  "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
   "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
   "profiles": {
     "cpu-wasm32": {
@@ -20,7 +20,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -54,12 +54,13 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
             "-DLCB_JSPI=OFF",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792352377,
+          "builtAtUnix": 1792360246,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -126,7 +127,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -160,12 +161,13 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=OFF",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
             "-DLCB_JSPI=OFF",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792351610,
+          "builtAtUnix": 1792360251,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -178,206 +180,6 @@
               "profile": "cpu-wasm32",
               "variant": "test",
               "fileRowsVersion": 0,
-              "syntheticModel": true,
-              "sampledToken": 13,
-              "stateBytes": "197",
-              "chatSurface": {
-                "directGeneratedModule": true,
-                "nativeChatToolsAndHistory": true,
-                "reusedParser": true,
-                "nativeEnumsAndDefaults": true,
-                "reasoningSampler": true,
-                "multimodalBitmaps": true,
-                "trainedModelTools": false,
-                "multimodalModelInference": false
-              },
-              "fileMountLifetime": {
-                "duplicateDepth": 2,
-                "logicalFileBytes": 50000000000,
-                "largeOffsetReads": 4,
-                "passed": true
-              },
-              "passed": true
-            }
-          }
-        }
-      }
-    },
-    "cpu-wasm64": {
-      "variants": {
-        "browser": {
-          "profile": "cpu-wasm64",
-          "variant": "browser",
-          "configuration": {
-            "memory64": true,
-            "webgpu": false,
-            "jspi": false,
-            "asyncify": false,
-            "pthreads": false,
-            "maximumMemory": 17179869184
-          },
-          "variantConfiguration": {
-            "assertions": 0,
-            "environment": "web,worker"
-          },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
-          "sourceDirty": false,
-          "sourceStatusBeforeBuild": [],
-          "sourceStatusAfterBuild": [],
-          "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
-          "toolchain": {
-            "emsdkVersion": "6.0.9",
-            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
-            "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
-            },
-            "nodeVersion": "22.16.0",
-            "dawnTag": "v20260908.214631",
-            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
-            "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
-            "artifactBranch": "artifacts"
-          },
-          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
-          "cmakeCommand": [
-            "emcmake",
-            "cmake",
-            "-S",
-            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp",
-            "-B",
-            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp/build/cpu-wasm64/browser",
-            "-G",
-            "Ninja",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DLCB_VARIANT=browser",
-            "-DLCB_MEMORY64=ON",
-            "-DLCB_FILE_BACKED_PLE=ON",
-            "-DLCB_QSA_ALL_POOLS=ON",
-            "-DLCB_WEBGPU=OFF",
-            "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
-            "-DLCB_JSPI=OFF",
-            "-DLCB_ASYNCIFY=OFF",
-            "-DLCB_MAXIMUM_MEMORY=17179869184"
-          ],
-          "builtAtUnix": 1792352057,
-          "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
-            "compilerWrapper": "ccache"
-          },
-          "validation": {
-            "compiled": true,
-            "realModelInference": false,
-            "browserSmoke": true,
-            "syntheticUntrainedModel": {
-              "profile": "cpu-wasm64",
-              "variant": "browser",
-              "fileRowsVersion": 1,
-              "syntheticModel": true,
-              "sampledToken": 13,
-              "stateBytes": "197",
-              "chatSurface": {
-                "directGeneratedModule": true,
-                "nativeChatToolsAndHistory": true,
-                "reusedParser": true,
-                "nativeEnumsAndDefaults": true,
-                "reasoningSampler": true,
-                "multimodalBitmaps": true,
-                "trainedModelTools": false,
-                "multimodalModelInference": false
-              },
-              "fileMountLifetime": {
-                "duplicateDepth": 2,
-                "logicalFileBytes": 50000000000,
-                "largeOffsetReads": 4,
-                "passed": true
-              },
-              "passed": true
-            }
-          },
-          "browserModulePreparation": {
-            "implementation": {
-              "path": "scripts/prepare_browser_module.py",
-              "bytes": 2053,
-              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
-            },
-            "input": {
-              "bytes": 313510,
-              "sha256": "1df1ee107ace4b4adcf527336d0bda503fdc1f93bfbcfa4fda293e327d74064a"
-            },
-            "output": {
-              "bytes": 313528,
-              "sha256": "e31e3d46283f3d0e9bbac7e973e8e2594e0404d7670c3c4217890a94f6e7ad69"
-            },
-            "alreadyAnnotated": false
-          }
-        },
-        "test": {
-          "profile": "cpu-wasm64",
-          "variant": "test",
-          "configuration": {
-            "memory64": true,
-            "webgpu": false,
-            "jspi": false,
-            "asyncify": false,
-            "pthreads": false,
-            "maximumMemory": 17179869184
-          },
-          "variantConfiguration": {
-            "assertions": 1,
-            "environment": "web,worker,node"
-          },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
-          "sourceDirty": false,
-          "sourceStatusBeforeBuild": [],
-          "sourceStatusAfterBuild": [],
-          "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
-          "toolchain": {
-            "emsdkVersion": "6.0.9",
-            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
-            "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
-            },
-            "nodeVersion": "22.16.0",
-            "dawnTag": "v20260908.214631",
-            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
-            "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
-            "artifactBranch": "artifacts"
-          },
-          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
-          "cmakeCommand": [
-            "emcmake",
-            "cmake",
-            "-S",
-            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp",
-            "-B",
-            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp/build/cpu-wasm64/test",
-            "-G",
-            "Ninja",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DLCB_VARIANT=test",
-            "-DLCB_MEMORY64=ON",
-            "-DLCB_FILE_BACKED_PLE=ON",
-            "-DLCB_QSA_ALL_POOLS=ON",
-            "-DLCB_WEBGPU=OFF",
-            "-DLCB_WEBGPU_BF16_PROJECTOR=OFF",
-            "-DLCB_JSPI=OFF",
-            "-DLCB_ASYNCIFY=OFF",
-            "-DLCB_MAXIMUM_MEMORY=17179869184"
-          ],
-          "builtAtUnix": 1792352018,
-          "buildCache": {
-            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
-            "compilerWrapper": "ccache"
-          },
-          "validation": {
-            "compiled": true,
-            "realModelInference": false,
-            "browserSmoke": true,
-            "syntheticUntrainedModel": {
-              "profile": "cpu-wasm64",
-              "variant": "test",
-              "fileRowsVersion": 1,
               "syntheticModel": true,
               "sampledToken": 13,
               "stateBytes": "197",
@@ -420,7 +222,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -454,13 +256,14 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=OFF",
             "-DLCB_ASYNCIFY=ON",
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792351912,
+          "builtAtUnix": 1792360350,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -515,7 +318,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -549,13 +352,14 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=OFF",
             "-DLCB_ASYNCIFY=ON",
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792352430,
+          "builtAtUnix": 1792360280,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -598,7 +402,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -632,13 +436,14 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=ON",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792352404,
+          "builtAtUnix": 1792360263,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -693,7 +498,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -727,13 +532,14 @@
             "-DLCB_FILE_BACKED_PLE=OFF",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=ON",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792352113,
+          "builtAtUnix": 1792360242,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -776,7 +582,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -810,13 +616,14 @@
             "-DLCB_FILE_BACKED_PLE=ON",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=ON",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792352062,
+          "builtAtUnix": 1792360298,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -871,7 +678,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -905,13 +712,14 @@
             "-DLCB_FILE_BACKED_PLE=ON",
             "-DLCB_QSA_ALL_POOLS=ON",
             "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=OFF",
             "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
             "-DLCB_JSPI=ON",
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792352397,
+          "builtAtUnix": 1792360270,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -922,6 +730,188 @@
             "browserSmoke": true,
             "mockedAdapterSuspension": {
               "profile": "webgpu-wasm64-jspi",
+              "variant": "test",
+              "pointerBytes": 8,
+              "fileRowsVersion": 1,
+              "adapterRequests": 1,
+              "mockedAdapter": true,
+              "hostNavigatorInjection": false,
+              "defaultNavigatorFallback": true,
+              "independentFactories": false,
+              "suspension": true,
+              "passed": true
+            }
+          }
+        }
+      }
+    },
+    "webgpu-wasm64-jspi-gpu-profile": {
+      "variants": {
+        "browser": {
+          "profile": "webgpu-wasm64-jspi-gpu-profile",
+          "variant": "browser",
+          "configuration": {
+            "memory64": true,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 17179869184,
+            "gpuProfile": true
+          },
+          "variantConfiguration": {
+            "assertions": 0,
+            "environment": "web,worker"
+          },
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
+          "sourceDirty": false,
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
+            "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+            "artifactBranch": "artifacts"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp/build/webgpu-wasm64-jspi-gpu-profile/browser",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DLCB_VARIANT=browser",
+            "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
+            "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=ON",
+            "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
+            "-DLCB_JSPI=ON",
+            "-DLCB_ASYNCIFY=OFF",
+            "-DLCB_MAXIMUM_MEMORY=17179869184",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "builtAtUnix": 1792360485,
+          "buildCache": {
+            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "realModelInference": false,
+            "browserSmoke": true,
+            "mockedAdapterSuspension": {
+              "profile": "webgpu-wasm64-jspi-gpu-profile",
+              "variant": "browser",
+              "pointerBytes": 8,
+              "fileRowsVersion": 1,
+              "adapterRequests": 1,
+              "mockedAdapter": true,
+              "hostNavigatorInjection": true,
+              "defaultNavigatorFallback": true,
+              "independentFactories": true,
+              "suspension": true,
+              "passed": true
+            }
+          },
+          "browserModulePreparation": {
+            "implementation": {
+              "path": "scripts/prepare_browser_module.py",
+              "bytes": 2053,
+              "sha256": "f9fc29909f60cdd6581dbcc9c84c5d1f4a735929647d498dd3bca975820f5698"
+            },
+            "input": {
+              "bytes": 444682,
+              "sha256": "9686df0875b987ed3c7391144f91b058f453b28619338756b5e2a67aef94c27b"
+            },
+            "output": {
+              "bytes": 444700,
+              "sha256": "b06bb7fff29b8d838c39fc01a5fe2bc52901e434c89e9f2244efa788b9f66b48"
+            },
+            "alreadyAnnotated": false
+          }
+        },
+        "test": {
+          "profile": "webgpu-wasm64-jspi-gpu-profile",
+          "variant": "test",
+          "configuration": {
+            "memory64": true,
+            "webgpu": true,
+            "jspi": true,
+            "asyncify": false,
+            "pthreads": false,
+            "maximumMemory": 17179869184,
+            "gpuProfile": true
+          },
+          "variantConfiguration": {
+            "assertions": 1,
+            "environment": "web,worker,node"
+          },
+          "sourceCommit": "c247a9c49484e6c4e796215d27fffeacb182a89e",
+          "sourceDirty": false,
+          "sourceStatusBeforeBuild": [],
+          "sourceStatusAfterBuild": [],
+          "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+          "toolchain": {
+            "emsdkVersion": "6.0.9",
+            "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenAsyncifyBigIntPatch": {
+              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
+              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+            },
+            "nodeVersion": "22.16.0",
+            "dawnTag": "v20260908.214631",
+            "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
+            "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+            "artifactBranch": "artifacts"
+          },
+          "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
+          "cmakeCommand": [
+            "emcmake",
+            "cmake",
+            "-S",
+            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp",
+            "-B",
+            "/home/runner/work/browser-inference-core/browser-inference-core/llama-cpp/build/webgpu-wasm64-jspi-gpu-profile/test",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DLCB_VARIANT=test",
+            "-DLCB_MEMORY64=ON",
+            "-DLCB_FILE_BACKED_PLE=ON",
+            "-DLCB_QSA_ALL_POOLS=ON",
+            "-DLCB_WEBGPU=ON",
+            "-DGGML_WEBGPU_GPU_PROFILE=ON",
+            "-DLCB_WEBGPU_BF16_PROJECTOR=ON",
+            "-DLCB_JSPI=ON",
+            "-DLCB_ASYNCIFY=OFF",
+            "-DLCB_MAXIMUM_MEMORY=17179869184",
+            "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
+          ],
+          "builtAtUnix": 1792360479,
+          "buildCache": {
+            "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
+            "compilerWrapper": "ccache"
+          },
+          "validation": {
+            "compiled": true,
+            "realModelInference": false,
+            "browserSmoke": true,
+            "mockedAdapterSuspension": {
+              "profile": "webgpu-wasm64-jspi-gpu-profile",
               "variant": "test",
               "pointerBytes": 8,
               "fileRowsVersion": 1,
@@ -996,13 +986,13 @@
     },
     {
       "path": "examples/runtime/index.d.ts",
-      "bytes": 1940,
-      "sha256": "c9536a0a8bbdee25545acc5eb1c339c62a1c577e0d2d5901354bb1c6dba450a7"
+      "bytes": 1960,
+      "sha256": "ad2f7612f654fedeca1eb2aefe8205d1b8b8db7897f07caeaf898912f6fb09d7"
     },
     {
       "path": "examples/runtime/index.mjs",
-      "bytes": 1136,
-      "sha256": "c7856cc886de494d2afb6fa7e722dd83f2fa1d7548f389c2b5ffb83dd178795d"
+      "bytes": 1156,
+      "sha256": "e0e62f1584da8c48ee2185726eea782c02cc99580d1538259cfbdb052670c1a7"
     },
     {
       "path": "examples/runtime/read-only-file.mjs",
@@ -1440,36 +1430,6 @@
       "sha256": "fb1eb96d7e9b9bf4f55d59e837b3a407808b72586ab77f8cd6787741be3c95c2"
     },
     {
-      "path": "profiles/cpu-wasm64/browser/core.d.ts",
-      "bytes": 156460,
-      "sha256": "cfe96db80eaa97ca565297b8c996d5b49e9dd897be8dafd73020daa10a803770"
-    },
-    {
-      "path": "profiles/cpu-wasm64/browser/core.mjs",
-      "bytes": 313528,
-      "sha256": "e31e3d46283f3d0e9bbac7e973e8e2594e0404d7670c3c4217890a94f6e7ad69"
-    },
-    {
-      "path": "profiles/cpu-wasm64/browser/core.wasm",
-      "bytes": 6570233,
-      "sha256": "181d010379bd7cb1a0852ee47a50ddaf5465f10e147a4ac9528f213dc3334fce"
-    },
-    {
-      "path": "profiles/cpu-wasm64/test/core.d.ts",
-      "bytes": 156620,
-      "sha256": "11724a5a56e4e6165fdc004a322cac9900363f0ea09279eef4a2ec7008384ce9"
-    },
-    {
-      "path": "profiles/cpu-wasm64/test/core.mjs",
-      "bytes": 869144,
-      "sha256": "4d167e714d5c99fa2c940b9eaabd7e0c1b2860c8f771daf0b5d5befa68f8f804"
-    },
-    {
-      "path": "profiles/cpu-wasm64/test/core.wasm",
-      "bytes": 6751582,
-      "sha256": "6e5d0a2664a81c1be241062f9e29abcb37c9cb04f9f8eb896588392f8e4d1841"
-    },
-    {
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.d.ts",
       "bytes": 156460,
       "sha256": "61d45199e184be03c8da8c6cf0340772ffdd56ca8aed7423fd6cff6edf0bf214"
@@ -1558,6 +1518,36 @@
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
       "bytes": 8703482,
       "sha256": "b9f2b056aa52587ed71d26cce92d77d03552f04195b97fa4e4e1aba63d089c66"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.d.ts",
+      "bytes": 173632,
+      "sha256": "e15a88677035cdbf7c5ff7ee9a48084455040809a5aa73005c44b2d8e7a4bd8e"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.mjs",
+      "bytes": 444700,
+      "sha256": "b06bb7fff29b8d838c39fc01a5fe2bc52901e434c89e9f2244efa788b9f66b48"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.wasm",
+      "bytes": 8540788,
+      "sha256": "c59db59aadf341ad8195ef20c5b60cabb112b1bf0887a196cae05850bc08a95b"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.d.ts",
+      "bytes": 173792,
+      "sha256": "d7fa4a97685153ae72d7d37c430ccab8737f763eb5fd6bc401e722a62663ca5f"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.mjs",
+      "bytes": 972057,
+      "sha256": "c13442ba131df16bf3187bcf5c9aafd8628538b7866cd5aaf055d933fcd97b80"
+    },
+    {
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.wasm",
+      "bytes": 8720445,
+      "sha256": "42c553529ca4a3bbbc2303264edd0c8eb6ca6b423e4348231103fdf1e7078eff"
     }
   ]
 }

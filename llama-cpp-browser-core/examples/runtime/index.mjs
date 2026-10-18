@@ -6,7 +6,7 @@ export { schema };
 
 /** No automatic download, model selection, fallback, or Worker creation. */
 export async function createCore({ profile, variant = 'browser', baseURL = new URL('../../profiles/', import.meta.url), moduleOptions = {} } = {}) {
-  if (!['cpu-wasm32', 'cpu-wasm64', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi'].includes(profile)) {
+  if (!['cpu-wasm32', 'webgpu-wasm64-jspi-gpu-profile', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi'].includes(profile)) {
     throw new TypeError('Select an explicit supported build profile');
   }
   if (!['browser', 'test'].includes(variant)) {
