@@ -122,7 +122,9 @@ export interface LowLevelFunctions {
   ggml_backend_sched_reserve(arg0: bigint, arg1: bigint): Promise<number>;
   ggml_backend_sched_reserve_size(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_backend_sched_reset(arg0: bigint): Promise<void>;
+  ggml_backend_sched_set_copy_callback(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_backend_sched_set_eval_callback(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
+  ggml_backend_sched_set_realloc_callback(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_backend_sched_set_tensor_backend(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_backend_sched_split_graph(arg0: bigint, arg1: bigint): Promise<void>;
   ggml_backend_sched_synchronize(arg0: bigint): Promise<void>;

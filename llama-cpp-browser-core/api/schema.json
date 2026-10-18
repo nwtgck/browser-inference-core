@@ -2082,6 +2082,29 @@
       ]
     },
     {
+      "name": "ggml_backend_sched_set_copy_callback",
+      "export": "_lcb_ggml_backend_sched_set_copy_callback",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "sched",
+          "cType": "ggml_backend_sched_t",
+          "kind": "pointer"
+        },
+        {
+          "name": "callback",
+          "cType": "ggml_backend_sched_copy_callback",
+          "kind": "pointer"
+        },
+        {
+          "name": "user_data",
+          "cType": "void *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "ggml_backend_sched_set_eval_callback",
       "export": "_lcb_ggml_backend_sched_set_eval_callback",
       "returnType": "void",
@@ -2095,6 +2118,29 @@
         {
           "name": "callback",
           "cType": "ggml_backend_sched_eval_callback",
+          "kind": "pointer"
+        },
+        {
+          "name": "user_data",
+          "cType": "void *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "ggml_backend_sched_set_realloc_callback",
+      "export": "_lcb_ggml_backend_sched_set_realloc_callback",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "sched",
+          "cType": "ggml_backend_sched_t",
+          "kind": "pointer"
+        },
+        {
+          "name": "callback",
+          "cType": "ggml_backend_sched_realloc_callback",
           "kind": "pointer"
         },
         {
@@ -20151,70 +20197,76 @@
           "id": 25
         },
         {
+          "name": "moe_cache_size",
+          "cType": "size_t",
+          "kind": "u64",
+          "id": 26
+        },
+        {
           "name": "abort_callback",
           "cType": "ggml_abort_callback",
           "kind": "pointer",
-          "id": 26
+          "id": 27
         },
         {
           "name": "abort_callback_data",
           "cType": "void *",
           "kind": "pointer",
-          "id": 27
+          "id": 28
         },
         {
           "name": "embeddings",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 28
+          "id": 29
         },
         {
           "name": "offload_kqv",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 29
+          "id": 30
         },
         {
           "name": "no_perf",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 30
+          "id": 31
         },
         {
           "name": "op_offload",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 31
+          "id": 32
         },
         {
           "name": "swa_full",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 32
+          "id": 33
         },
         {
           "name": "kv_unified",
           "cType": "_Bool",
           "kind": "boolean",
-          "id": 33
+          "id": 34
         },
         {
           "name": "samplers",
           "cType": "struct llama_sampler_seq_config *",
           "kind": "pointer",
-          "id": 34
+          "id": 35
         },
         {
           "name": "n_samplers",
           "cType": "size_t",
           "kind": "u64",
-          "id": 35
+          "id": 36
         },
         {
           "name": "ctx_other",
           "cType": "struct llama_context *",
           "kind": "pointer",
-          "id": 36
+          "id": 37
         }
       ],
       "id": 18
@@ -20663,6 +20715,18 @@
           "cType": "int32_t",
           "kind": "signed",
           "id": 6
+        },
+        {
+          "name": "n_reallocs_same",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 7
+        },
+        {
+          "name": "n_reallocs_diff",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 8
         }
       ],
       "id": 28
@@ -21920,6 +21984,7 @@
     "LLAMA_VOCAB_TYPE_BPE",
     "LLAMA_VOCAB_TYPE_NONE",
     "LLAMA_VOCAB_TYPE_PLAMO2",
+    "LLAMA_VOCAB_TYPE_PLAMO3",
     "LLAMA_VOCAB_TYPE_RWKV",
     "LLAMA_VOCAB_TYPE_SPM",
     "LLAMA_VOCAB_TYPE_TEST",

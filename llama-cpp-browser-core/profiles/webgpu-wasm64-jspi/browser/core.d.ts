@@ -536,8 +536,12 @@ interface WasmModule {
   _ggml_backend_sched_reserve_size(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_sched_reset(_0: BigInt): Promise<void>;
   _ggml_backend_sched_reset(_0: BigInt): Promise<void>;
+  _lcb_ggml_backend_sched_set_copy_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
+  _ggml_backend_sched_set_copy_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_sched_set_eval_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _ggml_backend_sched_set_eval_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
+  _lcb_ggml_backend_sched_set_realloc_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
+  _ggml_backend_sched_set_realloc_callback(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_sched_set_tensor_backend(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _ggml_backend_sched_set_tensor_backend(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_sched_split_graph(_0: BigInt, _1: BigInt): Promise<void>;
@@ -2314,6 +2318,14 @@ export interface common_chat_content_parts extends ClassHandle, Iterable<common_
   set(_0: number, _1: common_chat_msg_content_part): boolean;
 }
 
+export interface common_chat_prompt_parts extends ClassHandle, Iterable<common_chat_prompt_part> {
+  size(): number;
+  get(_0: number): common_chat_prompt_part | undefined;
+  push_back(_0: common_chat_prompt_part): void;
+  resize(_0: number, _1: common_chat_prompt_part): void;
+  set(_0: number, _1: common_chat_prompt_part): boolean;
+}
+
 export interface common_chat_message_diffs extends ClassHandle, Iterable<common_chat_msg_diff> {
   size(): number;
   get(_0: number): common_chat_msg_diff | undefined;
@@ -2470,7 +2482,6 @@ export interface common_chat_msg_delimiters extends ClassHandle {
   add(_0: common_chat_role, _1: EmbindString): void;
   tokenize(_0: bigint): void;
   split(_0: llama_tokens, _1: size_map): common_chat_msg_spans;
-  to_json(): common_json;
 }
 
 export interface common_chat_templates_inputs extends ClassHandle {
@@ -2494,10 +2505,36 @@ export interface common_chat_templates_inputs extends ClassHandle {
   force_pure_content: boolean;
 }
 
+export interface common_chat_prompt_part extends ClassHandle {
+  get text(): string;
+  set text(value: EmbindString);
+  is_input: boolean;
+}
+
+export interface common_chat_prompt extends ClassHandle {
+  parts: common_chat_prompt_parts;
+  str(): string;
+  append(_0: EmbindString, _1: boolean): void;
+  replace_last(_0: EmbindString, _1: EmbindString): void;
+}
+
+export interface common_chat_input extends ClassHandle {
+  get text(): string;
+  set text(value: EmbindString);
+  tokens: llama_tokens;
+  size(): bigint;
+  empty(): boolean;
+  append(_0: EmbindString, _1: number): void;
+  append_input(_0: common_chat_input): void;
+  prepend(_0: EmbindString): void;
+  prepend_input(_0: common_chat_input): void;
+  truncate(_0: bigint): void;
+  substr(_0: bigint, _1: bigint): common_chat_input;
+}
+
 export interface common_chat_params extends ClassHandle {
   format: common_chat_format;
-  get prompt(): string;
-  set prompt(value: EmbindString);
+  prompt: common_chat_prompt;
   get grammar(): string;
   set grammar(value: EmbindString);
   grammar_lazy: boolean;
@@ -2510,20 +2547,13 @@ export interface common_chat_params extends ClassHandle {
   grammar_triggers: common_grammar_triggers;
   preserved_tokens: string_vector;
   additional_stops: string_vector;
-  get parser(): string;
-  set parser(value: EmbindString);
   message_delimiters: common_chat_msg_delimiters;
+  parser: common_peg_arena;
 }
 
 export interface common_chat_parser_params extends ClassHandle {
   format: common_chat_format;
-  reasoning_format: common_reasoning_format;
-  reasoning_in_content: boolean;
-  get generation_prompt(): string;
-  set generation_prompt(value: EmbindString);
-  parse_tool_calls: boolean;
-  is_continuation: boolean;
-  echo: boolean;
+  generation_prompt: common_chat_input;
   debug: boolean;
   parser: common_peg_arena;
 }
@@ -2536,11 +2566,29 @@ export interface common_chat_prompt_preset extends ClassHandle {
 }
 
 export interface common_peg_arena extends ClassHandle {
-  load(_0: EmbindString): void;
-  save(): string;
   empty(): boolean;
   size(): bigint;
-  to_json(): common_json;
+}
+
+export interface common_chat_session_params extends ClassHandle {
+  echo: boolean;
+  debug: boolean;
+}
+
+export interface common_chat_session extends ClassHandle {
+  prompt(): common_chat_prompt;
+  format(): common_chat_format;
+  msg(): common_chat_msg;
+  parser(): common_peg_arena;
+  grammar(): string;
+  generation_prompt(): string;
+  thinking_start_tag(): string;
+  thinking_end_tags(): string_vector;
+  additional_stops(): string_vector;
+  message_delimiters(): common_chat_msg_delimiters;
+  has_template(): boolean;
+  feed(_0: common_chat_input): common_chat_msg;
+  finish(_0: common_chat_input): common_chat_msg;
 }
 
 export interface common_chat_templates extends ClassHandle {
@@ -2585,6 +2633,9 @@ interface EmbindModule {
   };
   common_chat_content_parts: {
     new(): common_chat_content_parts;
+  };
+  common_chat_prompt_parts: {
+    new(): common_chat_prompt_parts;
   };
   common_chat_message_diffs: {
     new(): common_chat_message_diffs;
@@ -2660,6 +2711,18 @@ interface EmbindModule {
   common_chat_templates_inputs: {
     new(): common_chat_templates_inputs;
   };
+  common_chat_prompt_part: {
+    new(): common_chat_prompt_part;
+  };
+  common_chat_prompt: {
+    new(): common_chat_prompt;
+    new(_0: EmbindString): common_chat_prompt;
+  };
+  common_chat_input: {
+    new(): common_chat_input;
+    new(_0: EmbindString): common_chat_input;
+  };
+  common_chat_input_tokenize(_0: bigint, _1: EmbindString): common_chat_input;
   common_chat_params: {
     new(): common_chat_params;
   };
@@ -2672,21 +2735,26 @@ interface EmbindModule {
   };
   common_peg_arena: {
     new(): common_peg_arena;
-    from_json(_0: common_json): common_peg_arena;
+  };
+  common_chat_session_params: {
+    new(): common_chat_session_params;
+  };
+  common_chat_session: {
+    new(): common_chat_session;
+    new(_0: common_chat_templates, _1: bigint, _2: common_chat_templates_inputs, _3: common_chat_session_params): common_chat_session;
   };
   common_chat_templates: {
     new(_0: bigint, _1: EmbindString, _2: EmbindString, _3: EmbindString): common_chat_templates;
   };
   common_chat_verify_template(_0: EmbindString, _1: boolean): boolean;
-  common_chat_parse(_0: EmbindString, _1: boolean, _2: common_chat_parser_params): common_chat_msg;
-  common_chat_peg_parse(_0: common_peg_arena, _1: EmbindString, _2: boolean, _3: common_chat_parser_params): common_chat_msg;
+  common_chat_parse(_0: common_chat_input, _1: boolean, _2: common_chat_parser_params): common_chat_msg;
+  common_chat_peg_parse(_0: common_peg_arena, _1: common_chat_input, _2: boolean, _3: common_chat_parser_params): common_chat_msg;
   common_chat_msgs_parse_oaicompat(_0: common_json): common_chat_messages;
   common_chat_msgs_to_json_oaicompat(_0: common_chat_messages, _1: boolean): common_json;
   common_chat_tools_parse_oaicompat(_0: common_json): common_chat_tools;
   common_chat_tools_to_json_oaicompat(_0: common_chat_tools): common_json;
   common_chat_continuation_parse(_0: common_json): common_chat_continuation;
   common_chat_tool_choice_parse_oaicompat(_0: EmbindString): common_chat_tool_choice;
-  common_chat_msg_delimiters_parse(_0: common_json): common_chat_msg_delimiters;
   common_chat_role_from_string(_0: EmbindString): common_chat_role;
   common_chat_role_to_string(_0: common_chat_role): string;
   common_chat_format_name(_0: common_chat_format): string;
