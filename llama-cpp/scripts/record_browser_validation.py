@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 results=json.loads((ROOT/'build/browser-results.json').read_text())
 expected={(profile,variant) for profile in
-          ('cpu-wasm32','cpu-wasm64','webgpu-wasm32-jspi','webgpu-wasm64-jspi','webgpu-wasm32-asyncify')
+          ('cpu-wasm32','webgpu-wasm64-jspi-gpu-profile','webgpu-wasm32-jspi','webgpu-wasm64-jspi','webgpu-wasm32-asyncify')
           for variant in ('browser','test')}
 if (len(results)!=len(expected) or {(r['profile'],r['variant']) for r in results}!=expected
         or not all(r.get('passed') is True for r in results)):

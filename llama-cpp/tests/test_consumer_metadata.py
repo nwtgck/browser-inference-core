@@ -37,7 +37,7 @@ def fixture_package(root):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         manifest['files'].append({'path': path, **provenance.file_identity(target)})
-    profiles = ['cpu-wasm32', 'cpu-wasm64', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']
+    profiles = ['cpu-wasm32', 'webgpu-wasm64-jspi-gpu-profile', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']
     for name in profiles:
         manifest['profiles'][name] = {'variants': {}}
         for variant in ['browser', 'test']:
@@ -457,7 +457,7 @@ class OverlayProvenance(unittest.TestCase):
 
     def test_all_profile_compositions_fit_the_publication_report_limit(self):
         template = copy.deepcopy(self.manifest['profiles']['cpu-wasm32'])
-        profiles = ['cpu-wasm32', 'cpu-wasm64', 'webgpu-wasm32-asyncify',
+        profiles = ['cpu-wasm32', 'webgpu-wasm64-jspi-gpu-profile', 'webgpu-wasm32-asyncify',
                     'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']
         self.manifest['profiles'] = {name: copy.deepcopy(template) for name in profiles}
         for name, info in self.manifest['profiles'].items():

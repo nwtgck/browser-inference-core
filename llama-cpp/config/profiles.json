@@ -7,14 +7,6 @@
     "pthreads": false,
     "maximumMemory": 4294967296
   },
-  "cpu-wasm64": {
-    "memory64": true,
-    "webgpu": false,
-    "jspi": false,
-    "asyncify": false,
-    "pthreads": false,
-    "maximumMemory": 17179869184
-  },
   "webgpu-wasm32-asyncify": {
     "memory64": false,
     "webgpu": true,
@@ -38,5 +30,14 @@
     "asyncify": false,
     "pthreads": false,
     "maximumMemory": 17179869184
+  },
+  "webgpu-wasm64-jspi-gpu-profile": {
+    "memory64": true,
+    "webgpu": true,
+    "jspi": true,
+    "asyncify": false,
+    "pthreads": false,
+    "maximumMemory": 17179869184,
+    "gpuProfile": true
   }
 }

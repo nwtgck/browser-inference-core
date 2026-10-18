@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2] / 'scripts'))
 from browser_toolchain import runtime_toolchain
 from patch_emscripten import verify_asyncify_bigint_patch
 from prepare_browser_module import prepare as prepare_browser_module
+from verify_gpu_profile_build import verify as verify_gpu_profile_build
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,6 +63,9 @@ def main():
              '-DLCB_FILE_BACKED_PLE='+('ON' if cfg['memory64'] else 'OFF'),
              '-DLCB_QSA_ALL_POOLS=ON',
              '-DLCB_WEBGPU='+('ON' if cfg['webgpu'] else 'OFF'),
+             # Upstream's supported profiling build splits compute passes and
+             # requires timestamp-query. Never leave this enabled in a normal cache.
+             '-DGGML_WEBGPU_GPU_PROFILE='+('ON' if cfg.get('gpuProfile', False) else 'OFF'),
              # The same reviewed WGSL/dispatch contract applies to all WebGPU profiles.
              # Explicit OFF keeps CPU profiles on the original source path.
              # Reset cached comparison overrides and record the workaround in
@@ -78,6 +82,7 @@ def main():
     # Keep those incidental outputs in the ignored build tree, not in the source tree.
     build.mkdir(parents=True,exist_ok=True)
     subprocess.run(command,cwd=build,check=True)
+    verify_gpu_profile_build(build/'compile_commands.json', webgpu=cfg['webgpu'], enabled=cfg.get('gpuProfile', False))
     subprocess.run(['cmake','--build',str(build),'--target','core','-j',str(a.jobs)],cwd=build,check=True)
     browser_module = prepare_browser_module(build/'runtime/core.mjs') if a.variant == 'browser' else None
     status_after=source_status(ROOT)

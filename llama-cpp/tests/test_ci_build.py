@@ -135,7 +135,7 @@ class CiBuildArtifacts(unittest.TestCase):
 
     def test_stale_source_profile_toolchain_or_config_is_rejected(self):
         file=self.build/'cpu-wasm32/browser/provenance.json';original=file.read_bytes()
-        changes=[{'sourceCommit':'c'*40},{'profile':'cpu-wasm64'},
+        changes=[{'sourceCommit':'c'*40},{'profile':'webgpu-wasm64-jspi-gpu-profile'},
                  {'llamaCommit':'d'*40},{'toolchain':{}},{'configuration':{}},
                  {'variant':'test'},{'variantConfiguration':VARIANTS['test']}]
         for change in changes:
@@ -230,13 +230,13 @@ class CiBuildArtifacts(unittest.TestCase):
         stage_toolchain_notices([self.sdk,self.dawn],self.output)
         roots=[self.upstream,self.output/'toolchain-licenses/emscripten',
                self.output/'toolchain-licenses/emdawnwebgpu_pkg']
-        file=self.output/'cpu-wasm64/browser/generated/schema.json';original=file.read_bytes()
+        file=self.output/'webgpu-wasm64-jspi-gpu-profile/browser/generated/schema.json';original=file.read_bytes()
         file.write_text('{"different":true}')
         with patch.object(package_runtime,'ROOT',self.source):
             with self.assertRaisesRegex(ValueError,'Mixed binding schemas'):
                 build_package(self.output,self.root/'package',list(self.profiles),license_roots=roots)
             file.write_bytes(original)
-            provenance=self.output/'cpu-wasm64/browser/provenance.json'
+            provenance=self.output/'webgpu-wasm64-jspi-gpu-profile/browser/provenance.json'
             data=json.loads(provenance.read_text());data['sourceCommit']='c'*40;provenance.write_text(json.dumps(data))
             with self.assertRaisesRegex(ValueError,'Mixed source commits'):
                 build_package(self.output,self.root/'package',list(self.profiles),license_roots=roots)

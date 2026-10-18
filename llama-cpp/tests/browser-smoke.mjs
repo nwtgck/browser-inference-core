@@ -33,11 +33,11 @@ try {
   // suspension. A mocked missing adapter requires no physical GPU and does not
   // establish WebGPU inference or production-model support.
   for (const variant of ['browser', 'test']) {
-    for (const profile of ['webgpu-wasm32-jspi', 'webgpu-wasm64-jspi', 'webgpu-wasm32-asyncify']) {
+    for (const profile of ['webgpu-wasm32-jspi', 'webgpu-wasm64-jspi', 'webgpu-wasm32-asyncify', 'webgpu-wasm64-jspi-gpu-profile']) {
       const suspensionPage = await browser.newPage();
       await suspensionPage.goto(url);
       const suspensionResult = await suspensionPage.evaluate(async ({ profile, variant }) => {
-        if (profile.endsWith('-jspi') && (typeof WebAssembly.Suspending !== 'function' || typeof WebAssembly.promising !== 'function')) {
+        if (profile.includes('-jspi') && (typeof WebAssembly.Suspending !== 'function' || typeof WebAssembly.promising !== 'function')) {
           throw new Error('The CI browser must support JSPI');
         }
         let adapterRequests = 0;
@@ -111,7 +111,7 @@ try {
     }
   }
   for (const variant of ['browser', 'test']) {
-    for (const profile of ['cpu-wasm32', 'cpu-wasm64']) {
+    for (const profile of ['cpu-wasm32']) {
       const page = await browser.newPage();
       page.on('console', msg => { if (msg.type() === 'error') console.error(msg.text()); });
       await page.goto(url);
@@ -123,7 +123,7 @@ try {
         const { createCore, mountReadOnlyFile } = await import('/examples/runtime/index.mjs');
         const core = await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } });
         const fileRowsVersion = core.module._lcb_file_backed_rows_version();
-        if (fileRowsVersion !== (profile === 'cpu-wasm64' ? 1 : 0)) throw new Error('Unexpected file-backed rows capability');
+        if (fileRowsVersion !== 0) throw new Error('Unexpected file-backed rows capability');
         await core.api.llama_backend_init();
         const bytes = new Uint8Array(await (await fetch('/fixture.gguf')).arrayBuffer());
         const mounted = mountReadOnlyFile(core, '/models/test.gguf', {

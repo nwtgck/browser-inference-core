@@ -19,7 +19,7 @@ class WorkflowBoundaries(unittest.TestCase):
         self.report = (folder / 'runtime-comments.yml').read_text()
 
     def test_existing_push_publish_and_full_matrix_remain(self):
-        for profile in ['cpu-wasm32', 'cpu-wasm64', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']:
+        for profile in ['cpu-wasm32', 'webgpu-wasm64-jspi-gpu-profile', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi']:
             self.assertIn('- ' + profile, self.build)
         self.assertIn('needs: [test, qsa-native, compile]', self.build)
         self.assertIn('fail-fast: false', self.build)

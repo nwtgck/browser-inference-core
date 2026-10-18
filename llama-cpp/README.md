@@ -57,7 +57,7 @@ Run these commands from `llama-cpp/`:
 git submodule update --init --recursive
 python3 ../scripts/setup_toolchain.py
 source ../.tools/emsdk/emsdk_env.sh
-for profile in cpu-wasm32 cpu-wasm64 webgpu-wasm32-asyncify webgpu-wasm32-jspi webgpu-wasm64-jspi; do
+for profile in cpu-wasm32 webgpu-wasm32-asyncify webgpu-wasm32-jspi webgpu-wasm64-jspi webgpu-wasm64-jspi-gpu-profile; do
   for variant in browser test; do
     python3 scripts/build.py --profile "$profile" --variant "$variant"
   done
@@ -70,12 +70,22 @@ Build outputs go to `build/<profile>/<variant>/runtime/`; the assembled package 
 | Profile | Pointer width | Maximum linear memory | Backends |
 |---|---:|---:|---|
 | `cpu-wasm32` | 32-bit | 4 GiB | CPU |
-| `cpu-wasm64` | 64-bit | 16 GiB | CPU |
+| `webgpu-wasm64-jspi-gpu-profile` | 64-bit | 16 GiB | CPU and WebGPU; diagnostic GPU timestamps |
 | `webgpu-wasm32-asyncify` | 32-bit | 4 GiB | CPU and WebGPU without JSPI; experimental |
 | `webgpu-wasm32-jspi` | 32-bit | 4 GiB | CPU and WebGPU with JSPI; experimental |
 | `webgpu-wasm64-jspi` | 64-bit | 16 GiB | CPU and WebGPU; experimental |
 
 All profiles are single-threaded. The Asyncify profile uses transformed Wasm and JavaScript exception handling; it does not require memory64 or JSPI. It still requires Wasm SIMD and a usable WebGPU adapter/device. Asyncify adds code-size and execution overhead; applications should prefer a JSPI profile when supported and feature-detect their choice rather than use browser names. `webgpu-wasm32-jspi` requires JSPI but not memory64 and does not use Asyncify. Memory limits are build-time ceilings, not guarantees that a browser can allocate that memory or run a model of that size. Browser and device support must be checked for the chosen profile.
+
+The diagnostic profile uses the same upstream and settings as `webgpu-wasm64-jspi`,
+with `GGML_WEBGPU_GPU_PROFILE=ON`. It additionally requires the optional WebGPU
+`timestamp-query` feature. Upstream separates dispatches into compute passes and
+reads timestamps back, so its generation rates are **not** normal-chat performance
+measurements. The build checks the actual backend compile definition and keeps it
+absent from all ordinary profiles. Consumers must opt in explicitly and should
+load this asset only for diagnostics; it is not an automatic fallback. The retired
+`cpu-wasm64` profile is no longer published. CPU fallback uses `cpu-wasm32`, with
+its 4 GiB linear-memory ceiling.
 
 ## Test
 

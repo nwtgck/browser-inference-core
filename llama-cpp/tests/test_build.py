@@ -48,7 +48,7 @@ class BuildProvenance(unittest.TestCase):
         toolchain['emscriptenAsyncifyBigIntPatch']['patchedSha256']=hashlib.sha256(patched_runtime).hexdigest()
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root/'scripts').mkdir()
-        for name in ('build.py', 'prepare_browser_module.py'):
+        for name in ('build.py', 'prepare_browser_module.py', 'verify_gpu_profile_build.py'):
             shutil.copy2(ROOT/'scripts'/name,self.root/'scripts'/name)
         (self.root/'README.md').write_text('original\n')
         # The real CMake process intentionally runs a probe without WORKING_DIRECTORY,
@@ -57,13 +57,14 @@ class BuildProvenance(unittest.TestCase):
             cmake_minimum_required(VERSION 3.24)
             project(build_provenance_fixture NONE)
             execute_process(COMMAND "$ENV{LCB_TEST_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/probe.py"
-                "${CMAKE_CURRENT_SOURCE_DIR}" COMMAND_ERROR_IS_FATAL ANY)
+                "${CMAKE_CURRENT_SOURCE_DIR}" "${LCB_WEBGPU}" "${GGML_WEBGPU_GPU_PROFILE}" COMMAND_ERROR_IS_FATAL ANY)
             add_custom_target(core
                 COMMAND "$ENV{LCB_TEST_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/probe.py"
                     "${CMAKE_CURRENT_SOURCE_DIR}" --build)
         '''))
         (self.root/'probe.py').write_text(textwrap.dedent('''\
             import os
+            import json
             from pathlib import Path
             import sys
             root=Path(sys.argv[1])
@@ -76,6 +77,9 @@ class BuildProvenance(unittest.TestCase):
                 if not module.exists():
                     module.write_text('function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}\\n')
             if not building:
+                macro=' -DGGML_WEBGPU_GPU_PROFILE=1' if sys.argv[3]=='ON' else ''
+                commands=[{'file':'ggml-webgpu.cpp','command':'c++ -c ggml-webgpu.cpp'+macro}] if sys.argv[2]=='ON' else []
+                Path('compile_commands.json').write_text(json.dumps(commands))
                 mode=os.environ.get('LCB_TEST_MODE')
                 if mode=='modify':
                     (root/'README.md').write_text('modified during configure\\n')

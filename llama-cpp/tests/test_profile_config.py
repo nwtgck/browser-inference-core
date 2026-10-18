@@ -29,7 +29,7 @@ class ProfileConfiguration(unittest.TestCase):
         profiles = json.loads((ROOT / 'config/profiles.json').read_text())
         expected = {
             'cpu-wasm32': ('OFF', 'OFF', 'OFF', 'OFF', '4294967296'),
-            'cpu-wasm64': ('ON', 'OFF', 'OFF', 'OFF', '17179869184'),
+            'webgpu-wasm64-jspi-gpu-profile': ('ON', 'ON', 'ON', 'OFF', '17179869184'),
             'webgpu-wasm32-asyncify': ('OFF', 'ON', 'OFF', 'ON', '4294967296'),
             'webgpu-wasm32-jspi': ('OFF', 'ON', 'ON', 'OFF', '4294967296'),
             'webgpu-wasm64-jspi': ('ON', 'ON', 'ON', 'OFF', '17179869184'),
@@ -58,6 +58,11 @@ class ProfileConfiguration(unittest.TestCase):
                     module.parent.mkdir(parents=True)
                     source = b'function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}'
                     module.write_bytes(source)
+                    macro = ' -DGGML_WEBGPU_GPU_PROFILE=1' if profiles[profile].get('gpuProfile') else ''
+                    commands = ([{'file': '/build/generated/ggml-webgpu.cpp',
+                                  'command': 'em++ -c /build/generated/ggml-webgpu.cpp' + macro}]
+                                if profiles[profile]['webgpu'] else [])
+                    (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     with self.subTest(profile=profile, variant=variant), \
                          patch.object(build, 'ROOT', root), \
                          patch.object(build, 'source_status', return_value=[]), \
@@ -72,6 +77,7 @@ class ProfileConfiguration(unittest.TestCase):
                         build.main()
                         command = run.call_args_list[0].args[0]
                         self.assertIn(f'-DLCB_VARIANT={variant}', command)
+                        self.assertIn('-DGGML_WEBGPU_GPU_PROFILE=' + ('ON' if profiles[profile].get('gpuProfile') else 'OFF'), command)
                         self.assertFalse(any('LCB_WEBGPU_MOE_DIRECT_SLOT' in arg for arg in command))
                         self.assertIn('-DLCB_WEBGPU_BF16_PROJECTOR='+('ON' if values[1]=='ON' else 'OFF'), command)
                         names = ('MEMORY64', 'WEBGPU', 'JSPI', 'ASYNCIFY', 'MAXIMUM_MEMORY')

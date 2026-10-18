@@ -98,6 +98,9 @@ class TensorCopyBuildCommand(unittest.TestCase):
                     module = root / 'build' / profile / variant / 'runtime/core.mjs'
                     module.parent.mkdir(parents=True)
                     module.write_bytes(b'function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}')
+                    macro = ' -DGGML_WEBGPU_GPU_PROFILE=1' if config.get('gpuProfile') else ''
+                    commands = [{'file': 'ggml-webgpu.cpp', 'command': 'c++ -c ggml-webgpu.cpp' + macro}] if config['webgpu'] else []
+                    (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     argv = ['build.py', '--profile', profile, '--variant', variant]
                     with self.subTest(profile=profile, variant=variant), patch.object(builder, 'ROOT', root), \
                          patch.object(builder, 'runtime_toolchain', return_value=toolchain), \

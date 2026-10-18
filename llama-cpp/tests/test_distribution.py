@@ -161,7 +161,7 @@ for (const variant of ['browser', 'test']) {
         script.parent.mkdir()
         shutil.copy2(ROOT/'scripts/record_browser_validation.py',script)
         results=[]
-        for profile in ('cpu-wasm32','cpu-wasm64','webgpu-wasm32-jspi','webgpu-wasm64-jspi','webgpu-wasm32-asyncify'):
+        for profile in ('cpu-wasm32','webgpu-wasm64-jspi-gpu-profile','webgpu-wasm32-jspi','webgpu-wasm64-jspi','webgpu-wasm32-asyncify'):
             for variant,settings in VARIANTS.items():
                 path=self.root/'build'/profile/variant/'provenance.json'
                 path.parent.mkdir(parents=True,exist_ok=True)
@@ -187,7 +187,7 @@ for (const variant of ['browser', 'test']) {
         script.parent.mkdir()
         shutil.copy2(ROOT/'scripts/record_browser_validation.py',script)
         results=[{'profile':profile,'variant':'browser','passed':True}
-                 for profile in ('cpu-wasm32','cpu-wasm64','webgpu-wasm32-jspi',
+                 for profile in ('cpu-wasm32','webgpu-wasm64-jspi-gpu-profile','webgpu-wasm32-jspi',
                                  'webgpu-wasm64-jspi','webgpu-wasm32-asyncify')]
         (self.root/'build/browser-results.json').write_text(json.dumps(results))
         result=subprocess.run([sys.executable,str(script)],capture_output=True,text=True)

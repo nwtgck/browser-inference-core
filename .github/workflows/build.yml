@@ -148,7 +148,7 @@ jobs:
       matrix:
         profile:
           - cpu-wasm32
-          - cpu-wasm64
+          - webgpu-wasm64-jspi-gpu-profile
           - webgpu-wasm32-asyncify
           - webgpu-wasm32-jspi
           - webgpu-wasm64-jspi

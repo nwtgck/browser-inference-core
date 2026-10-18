@@ -1,5 +1,5 @@
 import type { LowLevelFunctions } from '../../api/functions.js';
-export type Profile = 'cpu-wasm32' | 'cpu-wasm64' | 'webgpu-wasm32-asyncify' | 'webgpu-wasm32-jspi' | 'webgpu-wasm64-jspi';
+export type Profile = 'cpu-wasm32' | 'webgpu-wasm64-jspi-gpu-profile' | 'webgpu-wasm32-asyncify' | 'webgpu-wasm32-jspi' | 'webgpu-wasm64-jspi';
 export type Variant = 'browser' | 'test';
 export interface CoreModuleOptions extends Record<string, unknown> {
   /** WebGPU browser variants only. Opaque host handle; no WebGPU types dependency. */
