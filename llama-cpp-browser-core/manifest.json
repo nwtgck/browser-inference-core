@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+  "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
   "llamaCommit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
   "profiles": {
     "cpu-wasm32": {
@@ -20,7 +20,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -59,7 +59,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792304582,
+          "builtAtUnix": 1792352377,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -126,7 +126,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -165,7 +165,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1792304603,
+          "builtAtUnix": 1792351610,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -220,7 +220,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -259,7 +259,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184"
           ],
-          "builtAtUnix": 1792304621,
+          "builtAtUnix": 1792352057,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -326,7 +326,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -365,7 +365,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=17179869184"
           ],
-          "builtAtUnix": 1792304602,
+          "builtAtUnix": 1792352018,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -420,7 +420,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -460,7 +460,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304601,
+          "builtAtUnix": 1792351912,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -515,7 +515,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -555,7 +555,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304699,
+          "builtAtUnix": 1792352430,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -598,7 +598,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -638,7 +638,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304615,
+          "builtAtUnix": 1792352404,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -693,7 +693,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -733,7 +733,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304576,
+          "builtAtUnix": 1792352113,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -776,7 +776,7 @@
             "assertions": 0,
             "environment": "web,worker"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -816,7 +816,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304651,
+          "builtAtUnix": 1792352062,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
@@ -871,7 +871,7 @@
             "assertions": 1,
             "environment": "web,worker,node"
           },
-          "sourceCommit": "b4e0a953ec7cba82dd392ddb30ba32ce84f04cbc",
+          "sourceCommit": "a8b29161541ccddd4a2ad7c13a18debfa6ee59c7",
           "sourceDirty": false,
           "sourceStatusBeforeBuild": [],
           "sourceStatusAfterBuild": [],
@@ -911,7 +911,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1792304682,
+          "builtAtUnix": 1792352397,
           "buildCache": {
             "identity": "db1d7511fe0fefa4086a704b53b32eb5431bd637b2998c4d3c0f39e9871b00a2",
             "compilerWrapper": "ccache"
