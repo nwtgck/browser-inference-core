@@ -14,28 +14,28 @@ SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = 'd1fd96c0113ac2ffd60c6175fbe9ab8115a0a58d5c17bfd209a5a64f288a1f56'
+OUTPUT_SHA256 = '8e92cac989798a997ba40e06f1d553088529484f0d4c1feea55934707199f59f'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = '82ae3f5fd15ae83378a494312f6272b6b4128dbab205381b91ad09ce95ff4671'
+SSM_HEADER_OUTPUT_SHA256 = '8d6c8d311106eaf3d97b57b278c6264d806876242ce3b5f4f72573c69221b85f'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
 # browser transport thresholds are version-specific, not this loader's contract.
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
-LOADER_PATCH_SHA256 = 'c89c88a047ffca6875cc924df04fc92e73caa2338cb8644dbdf2ce1582c181c8'
-LOADER_OUTPUT_SHA256 = '775f94b93ef591f4313600ecfd23b2320718d6a9f8a626e5699dc800401eda65'
+LOADER_PATCH_SHA256 = 'ddb01246fb2a7901359c0bc576023ce0a0f2c5898ee46623f71c86c9eb6f7f3f'
+LOADER_OUTPUT_SHA256 = '6f3919c473df574163644661cbcc9741435397f1e0ea998518d93a49da0b0907'
 LOADER_INPUTS = {
-    'src/llama-model-loader.cpp': '301f8250eef5b34d14617c7c9bf5c14bb60519d199751f4d829502a5107f0593',
-    'src/llama-mmap.cpp': 'ed859abec87282d5dd13a08b03b93b4ff3efb3f852f289d5347904b0c1cc017d',
-    'src/llama-mmap.h': '0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5',
-    'src/CMakeLists.txt': '6602fed62f13557db0888ccf2fc69b5c49a01f1eea56a9a0c866e8e60084d5d2',
-    'src/llama-model-loader.h': '687dac85ea01c1fb0db19a4e53286144e29f351233c411e88932b99553538422',
-    'ggml/src/ggml-quants.c': '5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab',
+    "src/llama-model-loader.cpp": "7975d83406627e405d36876472495c6111696e70db66c65a629d6213ec54fc04",
+    "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
+    "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
+    "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",
+    "src/llama-model-loader.h": "4eb5318f7b70333015386d612738f507153770e4e5635895b2c1d8355ff22103",
+    "ggml/src/ggml-quants.c": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab"
 }
 
 
@@ -89,8 +89,8 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             raise ValueError('Unexpected chunked loader source identity')
         if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
             raise ValueError('Unexpected SSM convolution header identity')
-        # Do not emit an embedded WGSL header here: preserve the MoE BEFORE
-        # include (or upstream generated header) selected by this sibling.
+        # Do not emit an embedded WGSL header here: the sibling shader library
+        # must continue to use upstream's generated shaders, including MoE.
         header_result = output / header.name
         if not header_result.exists() or header_result.read_bytes() != header.read_bytes():
             header.replace(header_result)

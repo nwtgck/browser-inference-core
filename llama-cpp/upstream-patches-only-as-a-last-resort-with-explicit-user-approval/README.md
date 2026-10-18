@@ -6,10 +6,14 @@ The original reason for carrying source patches was required multimodal
 performance, not general feature expansion. The project owner decides which
 requirements justify upstream maintenance work.
 
-The two retained patches take the pristine pinned upstream tree as input;
-neither depends on a TTS-generation copy. The current reference pin is v0.5.0,
-`7fe450e19305b828c199d602c23a8337aaa1f03b`. Re-evaluate compatibility at each pin
+The vision/audio patches take the pristine pinned upstream tree as input;
+neither depends on a TTS-generation copy. Other accepted overlays compose only as
+specified below. The current reference pin is v0.7.0,
+`620d2225cc436ab0b001e3200e590e3b286ef9ab`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
+
+See [the v0.7.0 review](../docs/llama-v0.7.0-review.md) for reviewed contracts,
+mechanical patch rebases and the boundaries of native validation.
 
 ## Vision BF16 compatibility/performance
 
@@ -119,36 +123,19 @@ commit with different bytes or invent a future artifact identity.
   upstream emits the needed hint, or if hosts no longer need this asset boundary.
   See [browser host integration](../docs/browser-host.md).
 
-## Experimental WebGPU MoE direct selected-slot dispatch
+## Retired WebGPU MoE direct selected-slot overlay
 
-- **Patch:** `ggml-webgpu-moe-direct-slot.patch`.
-- **Scope:** locally authorized experiment, not final production approval. The
-  user authorized experimental upstream patches on 2026-10-06; adoption/commit
-  in their bicore remains their decision.
-- **Purpose:** remove expert-count-sized workgroup arrays, barriers and the
-  expert scan from the single-token `MUL_MAT_ID` vector shader. Index workgroups
-  by selected slot, preserving selected expert IDs and output placement.
-- **Integration:** the original patch bytes and upstream embedder generate one
-  build-tree shader header. No vendor edits, new public API, model graph changes,
-  sampler changes or application policy enter bicore.
-- **Reviewed upstream inputs:** `d81235049384534c167caea52b85a694f6103d14` and
-  `7fe450e19305b828c199d602c23a8337aaa1f03b`, with separate exact input maps.
-  This is source compatibility, not a claim of identical shader expansions or
-  completed browser/runtime validation for both revisions.
-  Dispatch C++, shader, CMake header lookup and embedder identities are guarded.
-  The user clarified on 2026-10-06 that this experiment need not be artificially
-  restricted to wasm64 JSPI. All WebGPU profiles share this shader contract.
-- **Activation:** standard `scripts/build.py` enables every configured WebGPU
-  profile (wasm32 Asyncify/JSPI and wasm64 JSPI), both browser/test variants.
-  CPU profiles pass OFF; direct CMake defaults OFF. Existing CI and source-bound publication are reused.
-- **No-patch alternative:** retain upstream shader and current artifact, or wait
-  for upstream adoption. This is an optional performance experiment.
-- **Validation/costs:** see [the integration design](../docs/moe-direct-slot.md).
-  Updating upstream requires semantic review; compiling or CI smoke tests alone
-  cannot certify target-device model speed or quality.
-- **Removal condition:** upstream supplies this behavior, the experiment is
-  rejected, or its maintenance cost outweighs the verified improvement. Remove
-  this patch, preparation/hook, build flag, tests and provenance entry together.
+- **Retired patch:** `ggml-webgpu-moe-direct-slot.patch`.
+- **Reason:** v0.7.0 implements the same selected-slot vector-kernel dispatch
+  upstream, including broadcast addressing and trailing-workgroup guards.
+- **Removal:** patch, option, preparation, CMake include override and old overlay
+  tests were removed together. The upstream-generated shader header is used by
+  every WebGPU profile. Separate source/dispatch and stale-header tests remain.
+- **Reporting:** retirement is recorded in `retiredSourceOverlays`, never as an
+  active source patch. Existing published manifests are not rewritten.
+- **Review and limits:** [MoE retirement](../docs/moe-direct-slot.md) and
+  [v0.7.0 source review](../docs/llama-v0.7.0-review.md). No v0.7.0 hardware-GPU
+  throughput claim accompanies the removal.
 
 ## Same-device WebGPU tensor copy
 
@@ -158,7 +145,7 @@ commit with different bytes or invent a future artifact identity.
   resource-identity, alignment and usage checks. No model or checkpoint policy.
 - **Integration:** shared checked build-tree source for every WebGPU profile;
   ordinary build and publication paths, without a separate optimization option.
-- **Inputs, tests and limits:** reviewed d812 backend/queue and fallback contracts
+- **Inputs, tests and limits:** reviewed v0.7.0 backend/queue and fallback contracts
   and pinned Dawn headers. See [design and tests](../docs/webgpu-tensor-copy.md).
   Mock/header checks do not certify browser/GPU correctness or performance.
 - **No-patch alternative:** generic host copies or upstream support.
@@ -191,7 +178,7 @@ commit with different bytes or invent a future artifact identity.
 - **Integration:** reuse ordinary WebGPU source preparation and its CMake hook to
   replace only `src/llama-model-loader.cpp` on `llama`. No additional options,
   variants, workflow inputs or publication gates. CPU builds stay upstream.
-- **Reviewed inputs:** d81235049384534c167caea52b85a694f6103d14; exact loader,
+- **Reviewed inputs:** 620d2225cc436ab0b001e3200e590e3b286ef9ab; exact loader,
   file-reader and target-layout identities augment existing backend/API guards.
   Copies are isolated; upstream sources are never rewritten. Updater preflight
   and provenance use the same preparation. Input drift requires semantic review.
@@ -224,8 +211,8 @@ commit with different bytes or invent a future artifact identity.
 
 - **Patch:** `ggml-webgpu-ssm-conv-single-token.patch`.
 - **Scope:** select one token lane for SSM_CONV when output tokens per sequence equal one; retain eight lanes otherwise. Channel block size, scalar/length-four arithmetic, upstream WGSL source-file bytes and bounds checks remain unchanged. The preprocessed shader workgroup size changes for single-token input. Include the selected width in the existing pipeline cache key, equality/hash and dispatch decisions.
-- **Integration:** the ordinary `LCB_WEBGPU` source preparation emits a checked `ggml-webgpu-shader-lib.hpp` beside its existing WebGPU source copy. It does not emit `ggml-wgsl-shaders.hpp`; the existing MoE BEFORE include or upstream generated header remains authoritative. No new workflow, profile, variant or feature switch.
-- **Reviewed inputs:** pinned `d81235049384534c167caea52b85a694f6103d14` host WebGPU source/header and `ssm_conv.wgsl`; strict patch/output identities fail closed on unknown inputs. Existing copy, parameter-upload, model-loader and BF16/audio output identities are unchanged.
+- **Integration:** the ordinary `LCB_WEBGPU` source preparation emits a checked `ggml-webgpu-shader-lib.hpp` beside its existing WebGPU source copy. It does not emit `ggml-wgsl-shaders.hpp`; the upstream-generated header remains authoritative after MoE overlay retirement. No new workflow, profile, variant or feature switch.
+- **Reviewed inputs:** pinned `620d2225cc436ab0b001e3200e590e3b286ef9ab` host WebGPU source/header and `ssm_conv.wgsl`; strict patch/output identities fail closed on unknown inputs. The v0.7.0 review refreshes the source/output identities; the accepted single-token behavior and patch bytes are unchanged.
 - **Evidence and limits:** isolated shader correctness and tiny LFM full-runtime tests pass on software WebGPU adapters, including both pipeline creation orders and full/partial checkpoint restoration. Those tests do not establish production model quality, physical GPU occupancy or a Mac throughput improvement. Other MoE operators are not modified.
 - **No-patch alternative:** retain the existing eight-token launch for decode. The change removes inactive logical token lanes; it does not guarantee a performance improvement.
 - **Removal condition:** remove this preparation/header patch when upstream selects an equivalent single-token workgroup and the same supported profiles pass correctness and device validation, or when the owner drops the optimization.
@@ -236,7 +223,7 @@ commit with different bytes or invent a future artifact identity.
 - **Approval scope:** the project owner's request to implement the reviewed
   Qwen3.8 browser design after explicitly discussing llama.cpp patch size.
   This authorizes this Qwen4Exp table path, not unrelated model/backend work.
-- **Base:** v0.6.0, `d81235049384534c167caea52b85a694f6103d14`.
+- **Base:** v0.7.0, `620d2225cc436ab0b001e3200e590e3b286ef9ab`.
   Input hashes are checked in `tests/file-backed-rows/inputs.json`.
 - **Reason / alternatives:** this table is 26.82 GiB in the investigated model,
   larger than the current 16 GiB Wasm64 linear memory limit. Existing mmap-based
@@ -269,7 +256,7 @@ commit with different bytes or invent a future artifact identity.
   every padded pool fits its budget. No existing runtime option removes that
   redundant work. Keeping the upstream graph, or deferring until equivalent
   upstream support, avoids this maintenance cost.
-- **Base / dependencies:** `d81235049384534c167caea52b85a694f6103d14` and the
+- **Base / dependencies:** `620d2225cc436ab0b001e3200e590e3b286ef9ab` and the
   explicit semantic and source/output hashes in `tests/qsa-selection/inputs.json`.
   Positive rectified scores, zero/-infinity visibility, and set-valued use of
   selection are required. Raw/pooled key updates and the ranked path stay intact.

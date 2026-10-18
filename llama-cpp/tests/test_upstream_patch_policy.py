@@ -28,7 +28,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
         self.assertFalse((ROOT / 'patches').exists(), 'Do not leave a second generic patch directory')
         self.assertEqual({p.name for p in directory.glob('*.patch')}, {
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
-            'ggml-webgpu-moe-direct-slot.patch', 'ggml-webgpu-same-device-tensor-copy.patch',
+            'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'llama-model-loader-webgpu-chunked-upload.patch',
             'ggml-webgpu-ssm-conv-single-token.patch', 'qwen4exp-file-backed-rows.patch',
             'qwen4exp-all-pools-selection.patch'})

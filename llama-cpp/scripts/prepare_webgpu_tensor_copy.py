@@ -2,25 +2,25 @@
 """Prepare and validate the same-device copy translation unit."""
 from __future__ import annotations
 import argparse
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from prepare_moe_direct_slot import digest
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval'
 PATCH_NAME = 'ggml-webgpu-same-device-tensor-copy.patch'
 SOURCE_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'
 REVIEWED_REVISIONS = {
-    "d81235049384534c167caea52b85a694f6103d14": {
-        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "a37cb03d2d85b3ecdcd203dd515f35f22b1ca895934b2aab17066d575299ba84",
-        "ggml/src/ggml-backend.cpp": "cdb79f2937aa147084a76f949adc0eb760ad1883e0ccc015bb4e0f599c89bd5f",
-        "ggml/include/ggml.h": "12ee71f99db7db9b353bc02b1fbb57c344ee17c01ac5fb7952b41a637a747ea9",
-        "ggml/include/ggml-backend.h": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+    "620d2225cc436ab0b001e3200e590e3b286ef9ab": {
+        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf",
+        "ggml/src/ggml-backend.cpp": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff",
+        "ggml/include/ggml.h": "475beaa7e959be8c383279d9ce9d5191f37426e6b338270cfb12b26a798129d3",
+        "ggml/include/ggml-backend.h": "0e5e8e1f16d11ebbf501e38bc6705d79eee819b5f0b17476533f2100ed9674e2",
         "ggml/src/ggml-backend-impl.h": "4e861c8e23d3d7b0d99d8e0836e68564af58f8597d75d7bbb732857d7a632fa7",
         "ggml/src/ggml-webgpu/CMakeLists.txt": "aa19125326050c3e0ae768f31f43a61b8150805a4b330853662b955e8ef34b2a",
-        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "a664575b8bcd54e0f300e869b5abac86da6ee237dc3237c93863417b5e7bccb0"
+        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289"
     }
 }
 PATCH_SHA256 = '7e37ea0704f53117b9d3876b34b1ffc58970ce7356385509a989e40d8381e97a'
@@ -31,7 +31,13 @@ DAWN_HEADERS = {
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
 }
-PATCHED_SOURCE_SHA256 = '0100a766829adeb06df66664646ddd2bb0f50763272f99fa0ea2f5deafda4dea'
+PATCHED_SOURCE_SHA256 = '62f0421c24eacd78591d5ba26b90d887c82e8a60ac9b5696b5b245acc59dc467'
+
+
+def digest(path: Path) -> str:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f'Missing or linked tensor-copy input: {path}')
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def verify_reviewed_source(source: Path) -> str:

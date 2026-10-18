@@ -101,6 +101,8 @@ struct common_json {};
 struct common_chat_msg {};
 struct common_chat_msg_diff {};
 struct common_chat_parser_params {};
+struct common_chat_input {};
+using llama_token = int32_t;
 struct common_peg_arena {};
 struct common_chat_tool {};
 struct common_chat_msg_delimiters {};
@@ -163,9 +165,9 @@ class BindingPolicyTests(unittest.TestCase):
         bindings = named_bindings(BRIDGE.read_text())
         # Regression count for the current exposed surface, not a production
         # registry. New exports intentionally need test review too.
-        self.assertEqual(len(bindings), 44)
+        self.assertEqual(len(bindings), 49)
         self.assertEqual({binding.kind for binding in bindings}, {'free', 'static', 'member'})
-        self.assertEqual(len({binding.target for binding in bindings}), len(bindings))
+        self.assertEqual(len({(binding.target, binding.signature, binding.owner) for binding in bindings}), len(bindings))
 
     def test_raw_free_static_and_member_registrations_are_rejected(self):
         for code in ['function("call", &native);', 'function("call", native);',

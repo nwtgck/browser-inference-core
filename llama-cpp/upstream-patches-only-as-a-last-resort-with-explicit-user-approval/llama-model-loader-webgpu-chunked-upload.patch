@@ -1,7 +1,7 @@
 diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 --- a/src/llama-model-loader.cpp
 +++ b/src/llama-model-loader.cpp
-@@ -1490,6 +1490,59 @@
+@@ -1550,6 +1550,59 @@ const void * llama_model_loader::load_data_range(const llama_tensor_weight & w,
      return data;
  }
  
@@ -60,17 +60,17 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 +
  bool llama_model_loader::load_all_data(
          struct ggml_context * ctx,
-         llama_buf_map & bufs,
-@@ -1620,6 +1673,8 @@
-             return staged_a && ggml_nbytes(a) > ggml_nbytes(b);
+         std::vector<ggml_backend_buffer_t> & bufs,
+@@ -1681,6 +1734,8 @@ bool llama_model_loader::load_all_data(
          });
      }
-+
-+    llama_webgpu_load_uploads webgpu_uploads;
  
++    llama_webgpu_load_uploads webgpu_uploads;
++
      for (struct ggml_tensor * cur : tensors) {
          const auto * weight = get_weight(ggml_get_name(cur));
-@@ -1734,13 +1789,35 @@
+         if (weight == nullptr) {
+@@ -1800,13 +1855,35 @@ bool llama_model_loader::load_all_data(
                          buffer_idx %= n_buffers;
                      }
                  } else {
@@ -113,12 +113,12 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
                      }
                  }
              }
-@@ -1748,6 +1825,8 @@
- 
+@@ -1815,6 +1892,8 @@ bool llama_model_loader::load_all_data(
          size_done += n_size;
      }
-+
-+    webgpu_uploads.drain();
  
++    webgpu_uploads.drain();
++
      // free temporary resources used for async uploads
      for (auto * event : events) {
+         ggml_backend_event_synchronize(event);

@@ -96,7 +96,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
             source.prepare(self.upstream, self.upstream / 'out')
 
     @unittest.skipUnless(shutil.which('cmake'), 'CMake required')
-    def test_actual_target_combined_source_and_moe_reconfiguration(self):
+    def test_actual_target_preserves_upstream_shaders_on_reconfiguration(self):
         dawn = os.environ.get('LCB_TEST_DAWN_PACKAGE')
         if not dawn:
             self.skipTest('Set LCB_TEST_DAWN_PACKAGE')
@@ -105,10 +105,12 @@ class WebgpuSourceOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             subprocess.run(['git', 'init', '--quiet', tmp], check=True)
             build = Path(tmp) / 'llama-cpp/build/overlay-check'
-            for moe in (False, True, False):
+            stale = build / 'moe-direct-slot-overlay'
+            stale.mkdir(parents=True)
+            (stale / 'ggml-wgsl-shaders.hpp').write_text('#error retired MoE overlay used\n')
+            for _ in range(2):
                 command = ['cmake', '-S', str(ROOT / 'tests/webgpu-tensor-copy'), '-B', str(build),
-                           '-DLCB_LLAMA_SOURCE=' + str(self.upstream), '-DEMDAWNWEBGPU_DIR=' + dawn,
-                           '-DLCB_WEBGPU_MOE_DIRECT_SLOT=' + ('ON' if moe else 'OFF')]
+                           '-DLCB_LLAMA_SOURCE=' + str(self.upstream), '-DEMDAWNWEBGPU_DIR=' + dawn]
                 subprocess.run(command, check=True, capture_output=True, text=True)
                 entries = json.loads((build / 'compile_commands.json').read_text())
                 compiled = [entry for entry in entries if Path(entry['file']).name == 'ggml-webgpu.cpp']
@@ -122,8 +124,8 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertEqual(len(loaders), 1)
                 self.assertEqual(Path(loaders[0]['file']), build / 'webgpu-source-overlay/llama-model-loader.cpp')
                 self.assertEqual(copy.digest(Path(loaders[0]['file'])), source.LOADER_OUTPUT_SHA256)
-                if moe:
-                    self.assertEqual((build / 'includes.txt').read_text().split(';')[0], str(build / 'moe-direct-slot-overlay'))
+                self.assertNotIn('moe-direct-slot-overlay', (build / 'includes.txt').read_text())
+                self.assertNotIn('moe-direct-slot-overlay', (build / 'compile_commands.json').read_text())
                 self.assertTrue((build / 'mtmd-overlay/clip.cpp').is_file())
                 self.assertTrue((build / 'mtmd-audio-overlay/mtmd-audio.cpp').is_file())
         self.assertEqual(before, (self.upstream / source.SOURCE_PATH).read_bytes())

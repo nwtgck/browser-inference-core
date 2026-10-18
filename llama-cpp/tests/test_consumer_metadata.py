@@ -236,12 +236,7 @@ class OverlayProvenance(unittest.TestCase):
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').write_text('--- a/clip.cpp\n+++ b/clip.cpp\n@@ -1,3 +1,3 @@\n before\n-original\n+patched\n after\n')
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
-        shaders = self.vendor / provenance.moe.SHADER_DIRECTORY
-        shaders.mkdir(parents=True)
-        # Metadata tests use synthetic inputs, independently of vendor availability.
-        (self.vendor / provenance.moe.SHADER_PATH).write_text('Provenance shader fixture\n')
-        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME,
-                     self.root / provenance.PATCH_DIRECTORY / provenance.moe.PATCH_NAME)
+        (self.vendor / provenance.tensor_copy.SOURCE_PATH).parent.mkdir(parents=True)
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
@@ -262,8 +257,7 @@ class OverlayProvenance(unittest.TestCase):
                      'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']:
             (self.root / path).write_text('file-backed rows provenance fixture\n')
         for path in ['scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
-                     'docs/webgpu-tensor-copy.md', 'scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
-                     'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
+                     'docs/webgpu-tensor-copy.md', 'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md',
                      'cmake/MtmdAudioOverlay.cmake', 'docs/audio-single-thread.md']:
             (self.root / path).write_text('Provenance fixture: ' + path + '\n')
@@ -281,7 +275,7 @@ class OverlayProvenance(unittest.TestCase):
         for name, enabled in [('cpu-wasm32', False), ('webgpu-wasm64-jspi', True)]:
             self.manifest['profiles'][name] = {'variants': {variant: {
                 'toolchain': toolchain, 'cmakeCommand': ['cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if enabled else 'OFF'),
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF', '-DLCB_WEBGPU=OFF', '-DLCB_FILE_BACKED_PLE=OFF', '-DLCB_QSA_ALL_POOLS=OFF'],
+                    '-DLCB_WEBGPU=OFF', '-DLCB_FILE_BACKED_PLE=OFF', '-DLCB_QSA_ALL_POOLS=OFF'],
             } for variant in ['browser', 'test']}}
         self.prepared = self.root / 'prepared.cpp'
         self.prepared.write_bytes(b'combined source fixture')
@@ -352,7 +346,7 @@ class OverlayProvenance(unittest.TestCase):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
             'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
-            'experimental-webgpu-moe-direct-slot', 'webgpu-same-device-tensor-copy',
+            'webgpu-same-device-tensor-copy',
             'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
             'qwen4exp-file-backed-rows', 'qsa-all-pools-selection'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
@@ -361,29 +355,22 @@ class OverlayProvenance(unittest.TestCase):
             self.assertNotIn('inputOverlay', item['application'])
         self.assertFalse((self.root / 'patches').exists())
 
-    def test_moe_disabled_provenance_keeps_patch_identity_without_preparing(self):
-        with patch.object(provenance.moe, 'prepare') as prepare:
-            report = provenance.collect(self.root, self.manifest)
-        prepare.assert_not_called()
-        item = next(entry for entry in report['sourceOverlays']
-                    if entry['id'] == 'experimental-webgpu-moe-direct-slot')
-        self.assertIsNone(item['compiledCopy'])
-        self.assertEqual(item['application']['enabledProfileVariants'], [])
-        self.assertEqual(item['patch']['sha256'], provenance.moe.PATCH_SHA256)
-        self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+    def test_retired_moe_overlay_is_reported_but_never_claimed_as_compiled(self):
+        report = provenance.collect(self.root, self.manifest)
+        retired, = report['retiredSourceOverlays']
+        self.assertEqual(retired['id'], 'experimental-webgpu-moe-direct-slot')
+        self.assertEqual(retired['upstreamedBy'], '620d2225cc436ab0b001e3200e590e3b286ef9ab')
+        self.assertNotIn(retired['id'], {item['id'] for item in report['sourceOverlays']})
+        self.assertFalse(any('moe-direct-slot' in path for path in report['otherPatchFiles']))
 
-    def test_moe_provenance_selects_the_built_upstream_revision(self):
-        for revision, inputs in provenance.moe.REVIEWED_REVISIONS.items():
-            with self.subTest(revision=revision):
-                manifest = copy.deepcopy(self.manifest)
-                manifest['llamaCommit'] = revision
-                with patch.object(provenance, 'git', side_effect=lambda *args, cwd: subprocess.CompletedProcess(
-                        args, 0, stdout=(A if cwd == self.root else revision) + '\n')):
-                    report = provenance.collect(self.root, manifest)
-                item = next(entry for entry in report['sourceOverlays']
-                            if entry['id'] == 'experimental-webgpu-moe-direct-slot')
-                self.assertEqual(item['reviewedCommit'], revision)
-                self.assertEqual(item['reviewedInputs'], inputs)
+    def test_retired_moe_flags_cannot_describe_a_new_build(self):
+        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
+        original = variant['cmakeCommand']
+        for flag in ('-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON', '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF',
+                     '-DLCB_WEBGPU_MOE_DIRECT_SLOT:BOOL=ON'):
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, 'Retired MoE'):
+                variant['cmakeCommand'] = original + [flag]
+                provenance.collect(self.root, self.manifest)
 
     def test_file_rows_enabled_records_coherent_sources_and_supporting_files(self):
         variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
@@ -480,7 +467,6 @@ class OverlayProvenance(unittest.TestCase):
                     '-DLCB_FILE_BACKED_PLE=' + ('ON' if 'wasm64' in name else 'OFF'),
                     '-DLCB_WEBGPU=' + ('ON' if name.startswith('webgpu') else 'OFF'),
                     '-DLCB_WEBGPU_BF16_PROJECTOR=' + ('ON' if name.startswith('webgpu') else 'OFF'),
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=' + ('ON' if name.startswith('webgpu') else 'OFF'),
                 ]
         prepared = self.root / 'rows-copy/src'
         (prepared / 'models').mkdir(parents=True)
@@ -493,8 +479,7 @@ class OverlayProvenance(unittest.TestCase):
             result.write_bytes(model_source.read_bytes() + b' optimized')
             return result
         with patch.object(provenance.file_rows, 'prepare', return_value=prepared), \
-             patch.object(provenance.qsa, 'prepare', side_effect=compose), \
-             patch.object(provenance.moe, 'prepare', return_value={'header': self.prepared, 'shader': self.prepared}):
+             patch.object(provenance.qsa, 'prepare', side_effect=compose):
             divergence = provenance.collect(self.root, self.manifest)
         package = self.root / 'runtime-package'
         fixture_package(package)
@@ -514,54 +499,6 @@ class OverlayProvenance(unittest.TestCase):
                         original + ['-DLCB_FILE_BACKED_PLE:BOOL=ON'],
                         [a.replace('LCB_FILE_BACKED_PLE=OFF', 'LCB_FILE_BACKED_PLE=MAYBE') for a in original]):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'file-backed PLE'):
-                variant['cmakeCommand'] = command
-                provenance.collect(self.root, self.manifest)
-
-    def test_moe_enabled_provenance_records_actual_prepared_bytes(self):
-        variant = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
-        variant['cmakeCommand'] = [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON').replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON')
-                                   for arg in variant['cmakeCommand']]
-        shader = self.root / 'shader'; shader.write_bytes(b'prepared shader')
-        header = self.root / 'header'; header.write_bytes(b'prepared header')
-        with patch.object(provenance.moe, 'prepare', return_value={'shader': shader, 'header': header}) as prepare:
-            report = provenance.collect(self.root, self.manifest)
-        prepare.assert_called_once()
-        item = next(entry for entry in report['sourceOverlays']
-                    if entry['id'] == 'experimental-webgpu-moe-direct-slot')
-        self.assertEqual(item['compiledCopy']['header'], provenance.file_identity(header))
-        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser'])
-
-    def test_moe_activation_follows_every_configured_webgpu_profile(self):
-        profiles = json.loads((ROOT / 'config/profiles.json').read_text())
-        shader = self.root / 'shader'; shader.write_bytes(b'prepared shader')
-        header = self.root / 'header'; header.write_bytes(b'prepared header')
-        template = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
-        for profile, config in profiles.items():
-            with self.subTest(profile=profile):
-                manifest = copy.deepcopy(self.manifest)
-                variants = {name: copy.deepcopy(template) for name in ('browser', 'test')}
-                for variant in variants.values():
-                    variant['cmakeCommand'] = [
-                        'cmake', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF', '-DLCB_FILE_BACKED_PLE=OFF', '-DLCB_QSA_ALL_POOLS=OFF',
-                        '-DLCB_WEBGPU=' + ('ON' if config['webgpu'] else 'OFF'),
-                        '-DLCB_WEBGPU_MOE_DIRECT_SLOT=' + ('ON' if config['webgpu'] else 'OFF'),
-                    ]
-                manifest['profiles'] = {profile: {'variants': variants}}
-                with patch.object(provenance.moe, 'prepare', return_value={'shader': shader, 'header': header}) as prepare:
-                    report = provenance.collect(self.root, manifest)
-                item = next(entry for entry in report['sourceOverlays']
-                            if entry['id'] == 'experimental-webgpu-moe-direct-slot')
-                self.assertEqual(item['application']['enabledProfileVariants'],
-                                 [profile + '/browser', profile + '/test'] if config['webgpu'] else [])
-                self.assertEqual(prepare.call_count, 1 if config['webgpu'] else 0)
-
-    def test_moe_activation_fails_closed_for_missing_duplicate_and_cpu_flags(self):
-        variant = self.manifest['profiles']['cpu-wasm32']['variants']['browser']
-        original = variant['cmakeCommand']
-        for command in ([arg for arg in original if 'MOE_DIRECT_SLOT' not in arg],
-                        original + ['-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'],
-                        [arg.replace('MOE_DIRECT_SLOT=OFF', 'MOE_DIRECT_SLOT=ON') for arg in original]):
-            with self.subTest(command=command), self.assertRaisesRegex(ValueError, 'MoE'):
                 variant['cmakeCommand'] = command
                 provenance.collect(self.root, self.manifest)
 

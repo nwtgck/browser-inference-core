@@ -50,13 +50,54 @@ objects, not lcore integers or booleans. Size-based values follow the selected A
 compare absent diff indices with `common_chat_no_tool_call_index()`, which returns
 the native `size_t` sentinel in the selected ABI's integer representation.
 
-Keep a `common_peg_arena` and call `load()` once, then reuse it with
-`common_chat_peg_parse(arena, cumulativeText, isPartial, parserParams)`. This passes
-the existing native arena by const reference. Assigning `parserParams.parser`
-copies it once; subsequent `common_chat_parse()` calls reuse that member. The caller
-controls the cumulative text and previous parsed message. Full apply results expose
-grammar/lazy triggers, generation prefixes, stops, preserved tokens, reasoning
-metadata, serialized parsers, and delimiters; retain the fields required by the loop.
+### v0.7.0 native prompt, input and parser values
+
+`common_chat_params.prompt` is now an owned `common_chat_prompt`, not a string.
+Its `parts` vector holds `common_chat_prompt_part` values (`text`, `is_input`).
+`str()` flattens them for display; do not discard `is_input` when tokenizing a
+prompt. User-input parts must not be interpreted as template special tokens.
+`append(text, isInput)` and `replace_last(from, to)` call upstream directly; the
+latter skips user-input parts. Specify the boolean argument explicitly.
+
+`common_chat_params.parser` is now a native `common_peg_arena` value. Retain the
+owned arena and use `common_chat_peg_parse(arena, input, isPartial, parserParams)`.
+Alternatively assign it once to `parserParams.parser` and reuse
+`common_chat_parse(input, isPartial, parserParams)`. Upstream's parser-parameter
+constructor copies format and generation prefix, **not** the parser itself.
+There is no serialization round trip: `load`, `save`, arena JSON methods and the
+old delimiter JSON parse/dump helpers were removed upstream and are no longer
+bound. Persist messages/template inputs and re-apply them instead of persisting
+an old serialized parser. Delimiter fields/vectors remain directly available.
+
+Parsing now takes `common_chat_input`, not a raw string. Construct it from a string
+for text without token identity; append generated pieces with `append(piece, token)`.
+`tokens` contains one entry per UTF-8 **byte**: a token ID on the piece's first byte
+and the null-token sentinel on continuation bytes. `append_input`, `prepend_input`,
+`prepend`, `truncate` and `substr` preserve the upstream byte-indexed representation.
+Avoid assigning `text` and `tokens` independently unless their invariant is maintained.
+`common_chat_input_tokenize(vocabPointer, text)` requires a valid vocabulary pointer.
+This function parses special tokens as upstream specifies; it is not a replacement
+for segment-aware prompt tokenization. Index/size arguments follow native `size_t`
+width (number on Wasm32, bigint on Wasm64), not the fixed-width C pointer wrapper ABI.
+
+`common_chat_session` exposes the upstream incremental parser/continuation state.
+Its full constructor takes `(templates, vocabPointer, inputs, sessionParams)`;
+`0n` is accepted for the optional vocabulary to retain upstream's text-only path.
+A default session handles plain content. `feed(input)` returns an owned message
+snapshot; `finish(input)` performs the final parse and is called exactly once.
+Pass an empty input object when no final chunk remains. Do not feed or finish a
+finished session: upstream rejects this misuse. `common_chat_session_params` holds
+`echo` and `debug`; reasoning/tool/continuation choices stay in template inputs,
+not removed fields of `common_chat_parser_params`.
+
+The session constructor does not borrow JavaScript template/input handles. Session
+accessors and `feed`/`finish` return copies, so returned handles survive later
+updates and session deletion; every handle still needs `delete()`. The session is
+a parsing owner, not a generation loop or sampler manager. Upstream's
+`apply_sampling(common_params_sampling&)` is not bound here because that sampling
+object is not part of this surface. Retain the apply-result grammar/lazy triggers,
+stops, preserved tokens and reasoning metadata for the caller's existing sampler
+setup; constructing a session does not install them into a sampler.
 
 JSON-schema grammar conversion and reasoning-budget sampler primitives are also
 bound. Sampler pointers use the C API's destructor or transfer to a sampler chain.
@@ -129,8 +170,15 @@ workflow change. `LCB_TEST_CXX` optionally selects a native C++ compiler for the
 
 The real generated-module `tests/chat-surface.mjs` continues to cover JSON grammar
 conversion with both boolean values and now also exercises static JSON factories,
-const predicates, message methods, and parser JSON serialization/restoration. Only
+const predicates, message methods, native parser reuse, segmented prompts, byte-indexed inputs and
+session snapshots without parser serialization. Only
 the actual runtime build/smoke test verifies the complete Emscripten binding.
+`tests/test_chat_binding_surface.py` additionally compiles the complete bridge
+against real upstream headers with a type-only Embind shim, including fields,
+constructors and adapter bodies plus negative controls for removed members.
+`tests/chat-native` exercises the actual native chat library and the same pinned
+Qwen3 template without a model or network access. Neither substitutes for Wasm
+marshalling tests; commands are in [the v0.7.0 review](llama-v0.7.0-review.md).
 
 Reference: [Embind select_overload](https://emscripten.org/docs/api_reference/bind.h.html#select-overload-and-select-const).
 

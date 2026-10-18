@@ -12,7 +12,6 @@ import tempfile
 
 from github_api import full_sha, git
 from prepare_mtmd import PATCH_DIRECTORY, prepare
-import prepare_moe_direct_slot as moe
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
 import prepare_file_backed_rows as file_rows
@@ -70,7 +69,6 @@ def collect(root: Path, manifest: dict) -> dict:
     patch_files = sorted(path.relative_to(root).as_posix() for path in (root / PATCH_DIRECTORY).rglob('*.patch'))
     enabled = []
     audio_enabled = []
-    moe_enabled = []
     copy_enabled = []
     batch_enabled = []
     rows_enabled = []
@@ -99,17 +97,9 @@ def collect(root: Path, manifest: dict) -> dict:
             if qsa_options == ['-DLCB_QSA_ALL_POOLS=ON']:
                 qsa_enabled.append(profile + '/' + variant)
             audio_enabled.append(profile + '/' + variant)
-            moe_options = [option for option in provenance['cmakeCommand']
-                           if option.startswith('-DLCB_WEBGPU_MOE_DIRECT_SLOT=')]
-            if len(moe_options) != 1 or moe_options[0] not in (
-                    '-DLCB_WEBGPU_MOE_DIRECT_SLOT=ON', '-DLCB_WEBGPU_MOE_DIRECT_SLOT=OFF'):
-                raise ValueError('Unknown MoE direct-slot activation in compiled provenance')
-            if moe_options[0].endswith('=ON'):
-                webgpu = [option for option in provenance['cmakeCommand']
-                          if option.startswith('-DLCB_WEBGPU=')]
-                if webgpu != ['-DLCB_WEBGPU=ON']:
-                    raise ValueError('MoE direct-slot activation requires WebGPU')
-                moe_enabled.append(profile + '/' + variant)
+            if any(option.startswith(('-DLCB_WEBGPU_MOE_DIRECT_SLOT=', '-DLCB_WEBGPU_MOE_DIRECT_SLOT:'))
+                   for option in provenance['cmakeCommand']):
+                raise ValueError('Retired MoE direct-slot overlay option in compiled provenance')
             if provenance['toolchain'] != toolchain:
                 raise ValueError('Reporting toolchain differs from compiled provenance')
             options = [option for option in provenance['cmakeCommand']
@@ -194,10 +184,6 @@ def collect(root: Path, manifest: dict) -> dict:
                 **file_identity(prepared.parent / 'ggml-webgpu-shader-lib.hpp'),
             }
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
-        moe_compiled = None
-        if moe_enabled:
-            outputs = moe.prepare(vendor, Path(temporary) / 'moe', root / PATCH_DIRECTORY / moe.PATCH_NAME)
-            moe_compiled = {key: file_identity(path) for key, path in outputs.items()}
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
     return {
@@ -206,6 +192,12 @@ def collect(root: Path, manifest: dict) -> dict:
         'vendorCheckoutModified': False,
         'inventoryScope': f'Known build-tree overlays, recorded generated browser-module preparations, plus every *.patch file under {PATCH_DIRECTORY}/; not an exhaustive compiler transformation inventory.',
         'generatedModuleTransformations': browser_module_preparations(root, manifest),
+        'retiredSourceOverlays': [{
+            'id': 'experimental-webgpu-moe-direct-slot',
+            'reason': 'llama.cpp v0.7.0 provides direct selected-slot dispatch upstream; no downstream MoE shader/header transformation is compiled.',
+            'upstreamedBy': '620d2225cc436ab0b001e3200e590e3b286ef9ab',
+            'documentation': 'docs/moe-direct-slot.md',
+        }],
         'sourceOverlays': [{
             'id': 'webgpu-vision-bf16-projector',
             'kind': 'build-tree-source-overlay',
@@ -238,26 +230,6 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'docs/audio-single-thread.md']},
             'searchHints': ['mtmd-audio-single-thread', '__EMSCRIPTEN_PTHREADS__', 'log_mel_spectrogram'],
             'behavior': 'Execute shared mel and Parakeet preprocessing serially in non-pthread Emscripten builds. Native and pthread worker loops are unchanged.',
-        }, {
-            'id': 'experimental-webgpu-moe-direct-slot',
-            'experimental': True,
-            'kind': 'build-tree-shader-header-overlay',
-            'upstreamSource': {'path': moe.SHADER_PATH, **file_identity(vendor / moe.SHADER_PATH)},
-            'patch': {'path': f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}',
-                      **file_identity(root / PATCH_DIRECTORY / moe.PATCH_NAME)},
-            'compiledCopy': moe_compiled,
-            'reviewedCommit': upstream if upstream in moe.REVIEWED_REVISIONS else None,
-            'reviewedInputs': moe.REVIEWED_REVISIONS.get(upstream),
-            'application': {
-                'preparationScript': 'scripts/prepare_moe_direct_slot.py',
-                'cmakeHook': 'cmake/MoeDirectSlotOverlay.cmake',
-                'option': 'LCB_WEBGPU_MOE_DIRECT_SLOT',
-                'enabledProfileVariants': sorted(moe_enabled),
-            },
-            'supportingFiles': {path: file_identity(root / path) for path in
-                                ['scripts/prepare_moe_direct_slot.py', 'cmake/MoeDirectSlotOverlay.cmake',
-                                 'docs/moe-direct-slot.md']},
-            'behavior': 'Single-token MoE vector dispatch indexes selected slots directly in all WebGPU profiles; CPU, routing, multi-token kernels and public interfaces are unchanged.',
         }, {
             'id': 'webgpu-same-device-tensor-copy',
             'kind': 'build-tree-source-overlay',
@@ -376,7 +348,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Skip QSA scores, ranking and indirect pool gathers only when all padded pools fit the budget. Preserve visibility, tails, per-layer key writes and the original ranked path. Share only graph-local masks with the same input identity. Independent of file-backed PLE and quantization names; not a measured real-device speedup.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{moe.PATCH_NAME}', f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

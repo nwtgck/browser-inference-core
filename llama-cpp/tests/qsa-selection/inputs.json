@@ -1,21 +1,21 @@
 {
   "upstream": {
-    "src/models/qwen4exp.cpp": "76652b83f1c2dfce27fdbe68089e4d3b1081100c4748eba15f27f4f04ee1bdda",
-    "src/llama-memory-hybrid-idx.cpp": "7e5e530956bc8503ce07737586f7146bd7aec81bc68472d77fd202cd03725c03",
-    "src/llama-memory-hybrid-idx.h": "338d1f7155fe0fb28b5bc8b93763092adbac844b8fcf1f85d2977d1e2b0a12fd",
-    "ggml/src/ggml.c": "7e8bf2b60598b50d718f46aa3c36c9293b10f4e7dfde6844f0693e6fc976d505",
-    "ggml/src/ggml-cpu/ops.cpp": "215d16e7ebbb4066920e2d7a5f7ea6c46636d298aedd553e00f0b3ebb0d59305",
-    "ggml/src/ggml-backend.cpp": "cdb79f2937aa147084a76f949adc0eb760ad1883e0ccc015bb4e0f599c89bd5f"
+    "src/models/qwen4exp.cpp": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
+    "src/llama-memory-hybrid-idx.cpp": "cbff3fb6fa05c597448f4e5edf310b95cd2635ae146aee4dee2ded447ea4280c",
+    "src/llama-memory-hybrid-idx.h": "99aaae2cc246de40b599d09c5713e0cb74fab04b6e1ded0910f999169e796ad9",
+    "ggml/src/ggml.c": "42b238412cda218552812a37329fab95a2f94be6d8bff5139083450d432f796d",
+    "ggml/src/ggml-cpu/ops.cpp": "0cb56844ee2e315e4cd35a6bf802a9372f4c9c41725328a5b22a2d28bb254582",
+    "ggml/src/ggml-backend.cpp": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
   },
-  "patchSha256": "5c20ffc888096822727b9965ba245742e5f188a3e4599eec94678d62a9c74b56",
+  "patchSha256": "38aa8f99cf1b39d4670d38fe4da7efbbe5eda2343e49769a04204c167214bbb7",
   "variants": {
     "upstream": {
-      "inputSha256": "76652b83f1c2dfce27fdbe68089e4d3b1081100c4748eba15f27f4f04ee1bdda",
-      "outputSha256": "6916ff267208f8d9d211f73826ed2d864a9009b6eaf9d4f8fb7e18b46d37bab0"
+      "inputSha256": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
+      "outputSha256": "7cde6621d653b084cd5836e4b7e749ebd34a5a52d7cd9dfc5176a431ba19ed05"
     },
     "file-backed-rows": {
-      "inputSha256": "d6dd5725fe32ae4f14b40611d6ca0309fc6e017dfa8661a1f60ac65b425d044f",
-      "outputSha256": "748f6c1066fd448d9aefa801552de1daf0e498487c80fe9998318f496397d9d0"
+      "inputSha256": "c4cbc3decc15179e3938d5c7609288c34c8e64519a13ac1977b0d966be254f09",
+      "outputSha256": "b9e073ff02988e184aeedda93414abe478a853ce167955d56c4f5d315e3f6671"
     }
   }
 }
