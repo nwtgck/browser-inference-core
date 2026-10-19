@@ -1,0 +1,267 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-hc.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-hc.hpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..b8a68559717d1c343c72d130d1c7bd3c4a8547a9
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-hc.hpp
+@@ -0,0 +1,90 @@
++#pragma once
++#include "ggml.h"
++#include <cstdint>
++#include <cstring>
++
++struct ggml_webgpu_hc_limits {
++    uint64_t max_binding_size;
++    uint32_t storage_alignment;
++    uint32_t max_workgroups;
++    uint32_t max_invocations;
++    uint32_t max_workgroup_x;
++    uint32_t max_storage_buffers;
++};
++
++static bool ggml_webgpu_hc_tensor_supported(const ggml_tensor * t, const ggml_webgpu_hc_limits & limits) {
++    if (!t || t->type != GGML_TYPE_F32 || !limits.storage_alignment ||
++        limits.storage_alignment % 4 || (limits.storage_alignment & (limits.storage_alignment - 1))) {
++        return false;
++    }
++    uint64_t size = 4;
++    for (int i = 0; i < 4; ++i) {
++        if (t->ne[i] <= 0 || uint64_t(t->ne[i]) > UINT32_MAX || t->nb[i] != size ||
++            size > UINT32_MAX * uint64_t(4) / uint64_t(t->ne[i])) {
++            return false;
++        }
++        size *= uint64_t(t->ne[i]);
++    }
++    const uint64_t padding = uint64_t(limits.storage_alignment) - 1 + 3;
++    return size + padding <= limits.max_binding_size && (size + padding) / 4 <= UINT32_MAX;
++}
++
++static bool ggml_webgpu_hc_shape(const ggml_tensor * t, int64_t d, int64_t h, int64_t n, int64_t s) {
++    return t->ne[0] == d && t->ne[1] == h && t->ne[2] == n && t->ne[3] == s;
++}
++
++static bool ggml_webgpu_hc_supported(const ggml_tensor * op, const ggml_webgpu_hc_limits & limits) {
++    if (!op || limits.max_invocations < 64 || limits.max_workgroup_x < 64 || !limits.max_workgroups ||
++        !ggml_webgpu_hc_tensor_supported(op, limits)) {
++        return false;
++    }
++    for (int i = 4; i < GGML_MAX_SRC; ++i) {
++        if (op->src[i]) { return false; }
++    }
++    const ggml_tensor * x = op->src[0];
++    const ggml_tensor * y = op->src[1];
++    if (!ggml_webgpu_hc_tensor_supported(x, limits) || !ggml_webgpu_hc_tensor_supported(y, limits)) {
++        return false;
++    }
++    const int64_t d = x->ne[0];
++    if (op->op == GGML_OP_DSV4_HC_PRE) {
++        int32_t gated;
++        std::memcpy(&gated, reinterpret_cast<const char *>(op->op_params) + 4, sizeof(gated));
++        const int64_t t = x->ne[2];
++        if (gated != 1 || limits.max_storage_buffers < 3 || op->src[2] || op->src[3] ||
++            !ggml_webgpu_hc_shape(x, d, 4, t, 1) || !ggml_webgpu_hc_shape(y, d, 4, t, 1) ||
++            !ggml_webgpu_hc_shape(op, d, t, 1, 1)) {
++            return false;
++        }
++    } else if (op->op == GGML_OP_DSV4_HC_POST) {
++        const ggml_tensor * p = op->src[2];
++        const int64_t t = x->ne[1];
++        if (op->src[3] || limits.max_storage_buffers < 4 || !ggml_webgpu_hc_tensor_supported(p, limits) ||
++            !ggml_webgpu_hc_shape(x, d, t, 1, 1) || !ggml_webgpu_hc_shape(y, d, 4, t, 1) ||
++            !ggml_webgpu_hc_shape(p, 4, t, 1, 1) || !ggml_webgpu_hc_shape(op, d, 4, t, 1)) {
++            return false;
++        }
++    } else {
++        return false;
++    }
++    // Distinct live allocations are storage-aligned. Views of one root can
++    // still overlap after binding alignment, even when their values are disjoint.
++    // No merged-binding shader is provided: reject those graphs before placement
++    // so the existing upstream fusion probe keeps its staged implementation.
++    const ggml_tensor * tensors[] = { op, x, y, op->src[2] };
++    const int tensor_count = op->op == GGML_OP_DSV4_HC_PRE ? 3 : 4;
++    for (int i = 0; i < tensor_count; ++i) {
++        const ggml_tensor * a = tensors[i]->view_src ? tensors[i]->view_src : tensors[i];
++        for (int j = 0; j < i; ++j) {
++            const ggml_tensor * b = tensors[j]->view_src ? tensors[j]->view_src : tensors[j];
++            if (a == b) {
++                return false;
++            }
++        }
++    }
++    const uint64_t count = op->nb[3] / 4;
++    const uint64_t groups = (count + 63) / 64;
++    // Include the padded last row of the two-dimensional launch in u32 indexing.
++    return groups <= uint64_t(limits.max_workgroups) * limits.max_workgroups &&
++           groups + limits.max_workgroups - 1 <= UINT32_MAX / 64;
++}
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index a69e821a907a3c7167f05822382c3f744fdd7507..5ba89e9c5a3162ef37c65aeadb35b5ba1157b743 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3,6 +3,7 @@
+ 
+ #include "ggml-impl.h"
+ #include "ggml-wgsl-shaders.hpp"
++#include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -1228,6 +1229,7 @@ class ggml_webgpu_shader_lib {
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is fixed, no variants yet
+     std::unordered_map<int, webgpu_pipeline> argmax_pipelines;         // key is vec4
+     std::unordered_map<int, webgpu_pipeline> argsort_pipelines;        // key is order
+@@ -1903,6 +1905,19 @@ class ggml_webgpu_shader_lib {
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_hc_pipeline(bool pre) {
++        const int key = pre ? 0 : 1;
++        auto it = hc_pipelines.find(key);
++        if (it != hc_pipelines.end()) {
++            return it->second;
++        }
++        const auto processed = preprocessor.preprocess(pre ? wgsl_hc_pre : wgsl_hc_post, {});
++        webgpu_pipeline pipeline = ggml_webgpu_create_pipeline(device, processed, pre ? "hc_pre" : "hc_post");
++        hc_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
++
+     webgpu_pipeline get_gated_delta_net_pipeline(const ggml_webgpu_shader_lib_context & context) {
+         ggml_webgpu_gated_delta_net_pipeline_key key = {};
+         key.type                                     = context.dst->type;
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index a173b50c2c10ad81c0541592cf8d94bf0ca66ad1..652e599f40158b8a73bf700e962f7559949cd66e 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4,6 +4,7 @@
+ */
+ 
+ #include "ggml-webgpu.h"
++#include "ggml-webgpu-hc.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-impl.h"
+@@ -3239,6 +3240,34 @@ static webgpu_encoded_op ggml_webgpu_cumsum(webgpu_context & ctx, ggml_tensor *
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
++static webgpu_encoded_op ggml_webgpu_hc(webgpu_context & ctx, ggml_tensor * dst) {
++    const bool pre = dst->op == GGML_OP_DSV4_HC_PRE;
++    ggml_tensor * x = dst->src[0];
++    ggml_tensor * y = dst->src[1];
++    auto offset = [&](ggml_tensor * t) { return (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, t) / 4); };
++    std::vector<uint32_t> params;
++    std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, x),
++        ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, y),
++    };
++    if (pre) {
++        params = { offset(x), offset(y), offset(dst), (uint32_t) x->ne[0], (uint32_t) x->ne[2],
++                   ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(dst, 0)), 0 };
++        entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, dst));
++    } else {
++        ggml_tensor * p = dst->src[2];
++        params = { offset(x), offset(y), offset(p), offset(dst), (uint32_t) x->ne[0], (uint32_t) x->ne[1] };
++        entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, p));
++        entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 3, dst));
++    }
++    webgpu_pipeline pipeline = ctx->shader_lib->get_hc_pipeline(pre);
++    uint32_t wg_x, wg_y;
++    const uint32_t groups = (uint32_t) ((ggml_nelements(dst) + 63) / 64);
++    compute_2d_workgroups(groups, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, wg_x, wg_y);
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
++}
++
++
+ static webgpu_encoded_op ggml_webgpu_sum_rows(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+     bool                  total_sum = dst->op == GGML_OP_SUM;
+     std::vector<uint32_t> params = { (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src) / ggml_type_size(src->type)),
+@@ -3512,6 +3541,9 @@ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+             return ggml_webgpu_argsort(ctx, src0, node);
+         case GGML_OP_CUMSUM:
+             return ggml_webgpu_cumsum(ctx, src0, node);
++        case GGML_OP_DSV4_HC_PRE:
++        case GGML_OP_DSV4_HC_POST:
++            return ggml_webgpu_hc(ctx, node);
+         case GGML_OP_SUM:
+         case GGML_OP_SUM_ROWS:
+             return ggml_webgpu_sum_rows(ctx, src0, node);
+@@ -4501,6 +4533,15 @@ static bool ggml_webgpu_supported_qtype(ggml_type type) {
+ static bool ggml_backend_webgpu_device_supports_op(ggml_backend_dev_t dev, const ggml_tensor * op) {
+     ggml_backend_webgpu_device_context * ctx = static_cast<ggml_backend_webgpu_device_context *>(dev->context);
+ 
++    if (op->op == GGML_OP_DSV4_HC_PRE || op->op == GGML_OP_DSV4_HC_POST) {
++        const auto & limits = ctx->webgpu_global_ctx->capabilities.limits;
++        return ggml_webgpu_hc_supported(op, {
++            limits.maxStorageBufferBindingSize, limits.minStorageBufferOffsetAlignment,
++            limits.maxComputeWorkgroupsPerDimension, limits.maxComputeInvocationsPerWorkgroup,
++            limits.maxComputeWorkgroupSizeX, limits.maxStorageBuffersPerShaderStage,
++        });
++    }
++
+     ggml_tensor * src0 = op->src[0];
+     ggml_tensor * src1 = op->src[1];
+     ggml_tensor * src2 = op->src[2];
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/hc_post.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/hc_post.wgsl
+new file mode 100644
+index 0000000000000000000000000000000000000000..6aaef21d2568eb03cc39a42531cd0990c8226d84
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/hc_post.wgsl
+@@ -0,0 +1,19 @@
++struct Params {
++    offset_x: u32, offset_residual: u32, offset_post: u32, offset_dst: u32,
++    d: u32, t: u32,
++};
++@group(0) @binding(0) var<storage, read_write> x: array<f32>;
++@group(0) @binding(1) var<storage, read_write> residual: array<f32>;
++@group(0) @binding(2) var<storage, read_write> post: array<f32>;
++@group(0) @binding(3) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(4) var<uniform> params: Params;
++
++@compute @workgroup_size(64)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let i = gid.x + (num_wg.x * 64u) * gid.y;
++    if (i >= params.d * 4u * params.t) { return; }
++    let h = (i / params.d) % 4u;
++    let t = i / (params.d * 4u);
++    let product = x[params.offset_x + t * params.d + i % params.d] * post[params.offset_post + t * 4u + h];
++    dst[params.offset_dst + i] = residual[params.offset_residual + i] + product;
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/hc_pre.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/hc_pre.wgsl
+new file mode 100644
+index 0000000000000000000000000000000000000000..e92a43c78babfe79b529b841362a0a77bf9a66ac
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/hc_pre.wgsl
+@@ -0,0 +1,27 @@
++struct Params {
++    offset_x: u32, offset_gate: u32, offset_dst: u32,
++    d: u32, t: u32, scale: f32, bias: f32,
++};
++@group(0) @binding(0) var<storage, read_write> x: array<f32>;
++@group(0) @binding(1) var<storage, read_write> gate: array<f32>;
++@group(0) @binding(2) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(3) var<uniform> params: Params;
++
++@compute @workgroup_size(64)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let i = gid.x + (num_wg.x * 64u) * gid.y;
++    if (i >= params.d * params.t) { return; }
++    let base = (i / params.d) * (4u * params.d) + i % params.d;
++    let s0 = 1.0 / (1.0 + exp(-gate[params.offset_gate + base]));
++    let s1 = 1.0 / (1.0 + exp(-gate[params.offset_gate + base + params.d]));
++    let s2 = 1.0 / (1.0 + exp(-gate[params.offset_gate + base + 2u * params.d]));
++    let s3 = 1.0 / (1.0 + exp(-gate[params.offset_gate + base + 3u * params.d]));
++    let p0 = x[params.offset_x + base] * s0;
++    let p1 = x[params.offset_x + base + params.d] * s1;
++    let p2 = x[params.offset_x + base + 2u * params.d] * s2;
++    let p3 = x[params.offset_x + base + 3u * params.d] * s3;
++    let a1 = p0 + p1;
++    let a2 = a1 + p2;
++    let a3 = a2 + p3;
++    dst[params.offset_dst + i] = a3 * params.scale + params.bias;
++}

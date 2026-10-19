@@ -271,3 +271,15 @@ commit with different bytes or invent a future artifact identity.
 - **Removal condition:** equivalent upstream selection, semantic inputs no longer
   meeting the proof, or withdrawal by the owner. Remove the option, preparation,
   hook, exception and reporting together without disturbing file-backed rows.
+
+## Four-stream HC PRE/POST fusion (2026-10-19)
+
+The user explicitly authorized bicore/Naidan patches for the Qwen3.8-Flash-Next
+performance investigation. The narrow overlay `ggml-webgpu-hc-pre-post.patch`
+adds WebGPU execution of existing gated PRE and identity POST operations for
+contiguous F32 HC4 only. No graph rewrite or extra profile is introduced. The
+no-patch option is the existing staged graph. See
+[`webgpu-hc-pre-post.md`](../docs/webgpu-hc-pre-post.md) for scope, maintenance,
+removal, continuous software-GPU validation and remaining physical-GPU/model
+measurements. Local preparation, host tests and standalone numerical checks do
+not establish target-device speed.
