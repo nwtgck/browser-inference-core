@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_hc as hc
+import prepare_webgpu_q8_short as q8_short
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -21,7 +22,7 @@ SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = '544c99d99ab4e986989f3220b0327f787ab200c4cbd23e3f6a5ff8901d7ec42c'
+SSM_HEADER_OUTPUT_SHA256 = '0e7176e1b2fc7576ce238516fb2dff437d8376a8ee9694ccda60312492fbdbfa'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -68,6 +69,8 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
     # HC shares this profile; it does not create another variant.
     if tensor_copy.digest(patch_root / hc.PATCH_NAME) != hc.PATCH_SHA256:
         raise ValueError('WebGPU HC patch identity changed')
+    if tensor_copy.digest(patch_root / q8_short.PATCH_NAME) != q8_short.PATCH_SHA256:
+        raise ValueError('WebGPU Q8 short matvec patch identity changed')
     for patch, expected in selected:
         if tensor_copy.digest(patch) != expected:
             raise ValueError('WebGPU patch identity changed: ' + patch.name)
@@ -90,6 +93,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         if (output / 'ggml-wgsl-shaders.hpp').exists():
             raise ValueError('Unexpected canonical WGSL header would shadow upstream shaders')
         hc_headers = hc.prepare(work, source, patch_root, env)
+        q8_short.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:

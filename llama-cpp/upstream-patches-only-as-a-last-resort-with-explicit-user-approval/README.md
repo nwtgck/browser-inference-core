@@ -283,3 +283,24 @@ no-patch option is the existing staged graph. See
 removal, continuous software-GPU validation and remaining physical-GPU/model
 measurements. Local preparation, host tests and standalone numerical checks do
 not establish target-device speed.
+
+## Q8_0 short-input matvec workgroups
+
+- **Patch:** `ggml-webgpu-q8-short-workgroup.patch`.
+- **Purpose and approval:** the owner's explicitly authorized Qwen Next
+  performance work, based on the supplied post-HC profiles. Limit this exception
+  to choosing the existing upstream workgroup specialization; no model change.
+- **Scope:** subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least
+  1024 output rows. Preserve other paths, WGSL, arithmetic, quantization, tiling
+  and dispatch count. Include the workgroup in the pipeline cache identity.
+- **Integration:** one checked shader-library header composed after HC; no
+  modified vendor checkout or copied/modified shader implementation. The
+  existing WebGPU profile switch is the only build switch.
+- **No-patch alternative:** retain upstream's 256-lane workgroup; public runtime
+  settings do not offer this shape-specific selection.
+- **Coupling and validation:** the cache key/factory and the transitive shader
+  contract are pinned. See [design and validation](../docs/webgpu-q8-short-workgroup.md).
+  Software-GPU checks do not establish Mac/model speed or universal bit identity.
+- **Removal condition:** upstream provides a suitable selection, the owner drops
+  the goal, or target-device measurements reject the change. Remove preparation,
+  CMake inputs, provenance and this exception together.

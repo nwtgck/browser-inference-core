@@ -84,7 +84,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
     def test_patch_result_and_overlap_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); patches = root / 'patches'; patches.mkdir()
-            for name in [copy.PATCH_NAME, source.PARAM_PATCH_NAME, source.LOADER_PATCH_NAME, source.SSM_PATCH_NAME, source.hc.PATCH_NAME]:
+            for name in [copy.PATCH_NAME, source.PARAM_PATCH_NAME, source.LOADER_PATCH_NAME, source.SSM_PATCH_NAME, source.hc.PATCH_NAME, source.q8_short.PATCH_NAME]:
                 shutil.copyfile(ROOT / copy.PATCH_DIRECTORY / name, patches / name)
             (patches / source.PARAM_PATCH_NAME).write_bytes(b'wrong')
             with self.assertRaisesRegex(ValueError, 'patch identity'):

@@ -1,0 +1,88 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index 5ba89e9..62821cf 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -97,6 +97,32 @@ struct ggml_webgpu_shader_lib_context {
+     std::string vendor;
+ };
+ 
++// Keep the upstream Q8_0 arithmetic, output tiling and lane-to-block mapping.
++// For K <= 1024, each useful lane visits exactly one block in both sizes;
++// the smaller power-of-two workgroup removes only lanes with no input work.
++inline uint32_t ggml_webgpu_q8_short_workgroup(const ggml_webgpu_shader_lib_context & context,
++                                             bool use_mmvq, bool src_overlap) {
++    constexpr uint32_t fallback = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++    const int64_t k = context.src0->ne[0];
++    const uint32_t sg_min = context.min_subgroup_size;
++    const uint32_t sg_max = context.max_subgroup_size;
++    if (!context.supports_subgroups || use_mmvq || src_overlap ||
++        context.src0->type != GGML_TYPE_Q8_0 || context.src1->type != GGML_TYPE_F32 ||
++        context.dst->ne[1] != 1 || context.dst->ne[0] < 1024 ||
++        k <= 0 || k > 1024 || k % 32 != 0 ||
++        sg_min < 4 || sg_max > 128 || sg_min > sg_max ||
++        (sg_min & (sg_min - 1)) != 0 || (sg_max & (sg_max - 1)) != 0) {
++        return fallback;
++    }
++    // Never launch a partial subgroup, even when an adapter exposes a range.
++    uint32_t workgroup = std::max(32u, sg_max);
++    const uint32_t useful_lanes = static_cast<uint32_t>(k / 8);
++    while (workgroup < useful_lanes) {
++        workgroup *= 2;
++    }
++    return workgroup <= context.max_wg_size ? workgroup : fallback;
++}
++
+ struct webgpu_pipeline {
+     wgpu::ComputePipeline pipeline;
+     std::string           name;
+@@ -965,12 +991,14 @@ struct ggml_webgpu_mul_mat_vec_pipeline_key {
+     ggml_type src1_type;
+     int       vectorized;
+     uint32_t  num_cols;
++    uint32_t  workgroup_size;
+     bool      use_mmvq;
+     bool      src_overlap;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+-               num_cols == other.num_cols && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
++               num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
++               use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
+     }
+ };
+ 
+@@ -981,6 +1009,7 @@ struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         ggml_webgpu_hash_combine(seed, key.num_cols);
++        ggml_webgpu_hash_combine(seed, key.workgroup_size);
+         ggml_webgpu_hash_combine(seed, key.use_mmvq);
+         ggml_webgpu_hash_combine(seed, key.src_overlap);
+         return seed;
+@@ -2038,6 +2067,7 @@ class ggml_webgpu_shader_lib {
+         key.use_mmvq =
+             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.supports_dot_product, context.vendor);
+         key.src_overlap = src_overlap;
++        key.workgroup_size = ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
+ 
+         auto it = mul_mat_vec_pipelines.find(key);
+         if (it != mul_mat_vec_pipelines.end()) {
+@@ -2148,7 +2178,7 @@ class ggml_webgpu_shader_lib {
+         // VEC/SCALAR controls
+         defines.push_back(key.vectorized ? "VEC" : "SCALAR");
+ 
+-        uint32_t wg_size        = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++        uint32_t wg_size        = key.workgroup_size;
+         uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
+ 
+         if (key.src0_type == GGML_TYPE_Q1_0) {
+@@ -2173,6 +2203,9 @@ class ggml_webgpu_shader_lib {
+         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
+         defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+         variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
++        if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
++            variant += "_wg" + std::to_string(wg_size);
++        }
+         if (key.vectorized) {
+             variant += "_vectorized";
+         }

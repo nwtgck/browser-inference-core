@@ -30,6 +30,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'ggml-webgpu-hc-pre-post.patch',
+            'ggml-webgpu-q8-short-workgroup.patch',
             'llama-model-loader-webgpu-chunked-upload.patch',
             'ggml-webgpu-ssm-conv-single-token.patch', 'qwen4exp-file-backed-rows.patch',
             'qwen4exp-all-pools-selection.patch'})
