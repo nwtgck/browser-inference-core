@@ -16,6 +16,7 @@ import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
 import prepare_webgpu_hc as hc
 import prepare_webgpu_q8_short as q8_short
+import prepare_webgpu_moe_sum as moe_sum
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -170,6 +171,7 @@ def collect(root: Path, manifest: dict) -> dict:
         loader_compiled = None
         ssm_compiled = None
         hc_compiled = None
+        moe_sum_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -181,6 +183,9 @@ def collect(root: Path, manifest: dict) -> dict:
             hc_compiled = {'ggml-webgpu.cpp': file_identity(prepared),
                            **{name: file_identity(prepared.parent / name) for name in
                               ['ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-hc.hpp', hc.HEADER_NAME]}}
+            moe_sum_compiled = {name: file_identity(prepared.parent / name) for name in
+                                ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                                 'ggml-webgpu-moe-sum.hpp', moe_sum.HEADER_NAME]}
             loader_compiled = {
                 'logicalUpstreamPath': webgpu_source.LOADER_PATH,
                 **file_identity(prepared.parent / 'llama-model-loader.cpp'),
@@ -377,9 +382,21 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                ['scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md']},
             'behavior': 'Use 32/64/128-lane workgroups for subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least 1024 output rows. Upstream WGSL, quantization, tiling and lane-to-block mapping are unchanged. Include the workgroup size in the pipeline cache key; other paths retain 256 lanes. No target-device speed guarantee.',
+        }, {
+            'id': 'webgpu-moe-expert-sum',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / moe_sum.PATCH_NAME)},
+            'compiledCopies': moe_sum_compiled,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_moe_sum.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                               ['scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md']},
+            'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

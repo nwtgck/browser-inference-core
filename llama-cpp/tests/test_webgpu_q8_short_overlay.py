@@ -71,7 +71,7 @@ class Q8ShortOverlay(unittest.TestCase):
             source.prepare(self.upstream, out)
             header = out / 'ggml-webgpu-shader-lib.hpp'
             stamp = header.stat().st_mtime_ns
-            self.assertEqual(copy.digest(header), q8.OUTPUT_SHA256)
+            self.assertEqual(copy.digest(header), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             source.prepare(self.upstream, out)
             self.assertEqual(header.stat().st_mtime_ns, stamp)

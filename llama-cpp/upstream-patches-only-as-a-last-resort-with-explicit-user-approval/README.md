@@ -304,3 +304,13 @@ not establish target-device speed.
 - **Removal condition:** upstream provides a suitable selection, the owner drops
   the goal, or target-device measurements reject the change. Remove preparation,
   CMake inputs, provenance and this exception together.
+
+## Ordered expert-output sums
+
+- Patch: `ggml-webgpu-moe-expert-sum.patch`.
+- Scope: the owner's continuing Qwen acceleration and ordered expert-sum candidate.
+- Replace only eligible complete F32 expert-output ADD chains with one dispatch.
+- Preserve slot/order, staged fallback, backend ownership, disjoint aligned bindings.
+- Alternative: retain upstream staged ADDs; no model pipeline or variant changes.
+- Maintenance: pinned graph, allocator, fusion, scheduler and shader contracts.
+- Tests, limits and removal: [ordered sums](../docs/webgpu-moe-expert-sum.md).

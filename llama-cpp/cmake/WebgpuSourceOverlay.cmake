@@ -26,7 +26,7 @@ set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 # The prepared shader-library header is a sibling of the source above; its
 # embedded WGSL include resolves through upstream's generated header. v0.7.0
-# already implements direct selected-slot MoE dispatch; no MoE shader overlay remains.
+# already implements direct selected-slot MoE dispatch; no direct-slot shader replacement remains.
 # Keep sibling headers available after relocating the translation unit.
 target_include_directories(ggml-webgpu PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
 # Replace only the model loader on the existing llama target. Other core sources
@@ -97,4 +97,18 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_q_acc.tmpl"
+)
+
+# Ordered expert-output sum contract and build inputs.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_moe_sum.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-moe-expert-sum.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-graph.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/binary.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/pre_wgsl.hpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py"
 )

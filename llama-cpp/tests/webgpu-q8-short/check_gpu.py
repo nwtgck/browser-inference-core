@@ -48,7 +48,8 @@ def main() -> int:
         'upstreamCommit': subprocess.check_output(
             ['git', 'rev-parse', 'HEAD'], cwd=upstream, text=True).strip(),
         'patchSha256': q8.PATCH_SHA256,
-        'preparedHeaderSha256': q8.OUTPUT_SHA256,
+        'preparedHeaderSha256': hashlib.sha256((work / 'prepared/ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(),
+        'q8IntermediateHeaderSha256': q8.OUTPUT_SHA256,
         'shaderSha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                          for p in sorted(shaders.glob('*.wgsl'))},
         'scope': 'Actual prepared factory and upstream emitter; standalone numerical validation only',
