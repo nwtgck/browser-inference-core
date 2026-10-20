@@ -314,3 +314,23 @@ not establish target-device speed.
 - Alternative: retain upstream staged ADDs; no model pipeline or variant changes.
 - Maintenance: pinned graph, allocator, fusion, scheduler and shader contracts.
 - Tests, limits and removal: [ordered sums](../docs/webgpu-moe-expert-sum.md).
+
+## Short Q5_1 / IQ4_NL expert matvec workgroups
+
+- Patch: `ggml-webgpu-expert-short-workgroup.patch`.
+- Scope: the continuing user-authorized Qwen speed investigation, following the
+  separately reported expert-down experiment. Reuse upstream `WG_SIZE` for a
+  guarded 128-lane single-token path; no new shader, model graph or quantization.
+- No-patch alternative: keep upstream's fixed 256-lane path. There is no public
+  upstream setting for shape-dependent workgroup selection. This avoids the
+  maintenance cost but keeps lanes without input work in the measured K=640 path.
+- Coupling: two narrow C++ changes (factory/cache and subgroup-limit forwarding),
+  pinned to llama.cpp `620d2225cc436ab0b001e3200e590e3b286ef9ab`. The selected-slot
+  shader, lane mapping, reduction, preprocessor and composed source are checked.
+  Existing HC/Q8/expert-sum composition ordering is explicit, not bypassed.
+- Limits and validation: see `docs/webgpu-expert-short-workgroup.md`. Retain the
+  unchanged 256-lane fallback for all unreviewed shapes, types and device limits.
+  Software-adapter correctness/timing does not establish real-model Mac speed.
+- Removal condition: upstream supplies equivalent guarded selection, or the user
+  chooses to drop it; remove preparation, cache field if no longer needed,
+  build/provenance plumbing and tests together, leaving other overlays independent.

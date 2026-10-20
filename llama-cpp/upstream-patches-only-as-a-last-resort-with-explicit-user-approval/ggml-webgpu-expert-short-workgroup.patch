@@ -1,0 +1,105 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index c701ca1..e9a1f8f 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -124,6 +124,36 @@ inline uint32_t ggml_webgpu_q8_short_workgroup(const ggml_webgpu_shader_lib_cont
+     return workgroup <= context.max_wg_size ? workgroup : fallback;
+ }
+ 
++// The existing Q5_1 / IQ4_NL decoder assigns four lanes per 32 weights.
++// For K <= 1024 every useful lane visits the same single block with either
++// 128 or 256 lanes. Keep upstream tiling, quantization and reduction code.
++inline uint32_t ggml_webgpu_expert_short_workgroup(const ggml_webgpu_shader_lib_context & context) {
++    constexpr uint32_t fallback = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * ids = context.src2;
++    const auto * dst = context.dst;
++    const uint32_t sg_min = context.min_subgroup_size;
++    const uint32_t sg_max = context.max_subgroup_size;
++    if (!a || !x || !ids || !dst || !context.supports_subgroups || context.max_wg_size < 128 ||
++        sg_min < 4 || sg_max > 128 || sg_min > sg_max ||
++        (sg_min & (sg_min - 1)) != 0 || (sg_max & (sg_max - 1)) != 0) {
++        return fallback;
++    }
++    if ((a->type != GGML_TYPE_Q5_1 && a->type != GGML_TYPE_IQ4_NL) ||
++        x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
++        a->ne[0] <= 0 || a->ne[0] > 1024 || a->ne[0] % 32 != 0 ||
++        a->ne[1] < 256 || a->ne[2] <= 0 || a->ne[2] > UINT32_MAX ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] ||
++        dst->ne[1] <= 0 || dst->ne[1] > a->ne[2] || ids->ne[0] != dst->ne[1] ||
++        (x->ne[1] != 1 && x->ne[1] != dst->ne[1]) ||
++        x->ne[2] != 1 || dst->ne[2] != 1 || ids->ne[1] != 1 || ids->ne[2] != 1 ||
++        a->ne[3] != 1 || x->ne[3] != 1 || dst->ne[3] != 1 || ids->ne[3] != 1) {
++        return fallback;
++    }
++    return 128;
++}
++
+ struct webgpu_pipeline {
+     wgpu::ComputePipeline pipeline;
+     std::string           name;
+@@ -1107,11 +1137,12 @@ struct ggml_webgpu_mul_mat_id_pipeline_key {
+     ggml_type src1_type;
+     uint32_t  n_experts;
+     uint32_t  num_cols;
++    uint32_t  workgroup_size;
+     int       vectorized;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+-               num_cols == other.num_cols && vectorized == other.vectorized;
++               num_cols == other.num_cols && workgroup_size == other.workgroup_size && vectorized == other.vectorized;
+     }
+ };
+ 
+@@ -1122,6 +1153,7 @@ struct ggml_webgpu_mul_mat_id_pipeline_key_hash {
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+         ggml_webgpu_hash_combine(seed, key.n_experts);
+         ggml_webgpu_hash_combine(seed, key.num_cols);
++        ggml_webgpu_hash_combine(seed, key.workgroup_size);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         return seed;
+     }
+@@ -2576,6 +2608,8 @@ class ggml_webgpu_shader_lib {
+                              1 :
+                              0;
+ 
++        key.workgroup_size = ggml_webgpu_expert_short_workgroup(context);
++
+         auto it = mul_mat_id_vec_pipelines.find(key);
+         if (it != mul_mat_id_vec_pipelines.end()) {
+             return it->second;
+@@ -2659,7 +2693,7 @@ class ggml_webgpu_shader_lib {
+         // VEC/SCALAR controls
+         defines.push_back(key.vectorized ? "VEC" : "SCALAR");
+ 
+-        uint32_t wg_size        = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++        uint32_t wg_size        = key.workgroup_size;
+         uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
+ 
+         if (key.src0_type == GGML_TYPE_Q1_0) {
+@@ -2677,6 +2711,9 @@ class ggml_webgpu_shader_lib {
+         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
+         defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+         variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
++        if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
++            variant += "_wg" + std::to_string(wg_size);
++        }
+         if (key.vectorized) {
+             variant += "_vectorized";
+         }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index b4a7461..60dd2f4 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -1806,6 +1806,9 @@ static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
+     shader_lib_ctx.supports_subgroups             = ctx->global_ctx->capabilities.supports_subgroups;
+     shader_lib_ctx.max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+ 
++    shader_lib_ctx.min_subgroup_size = ctx->global_ctx->capabilities.min_subgroup_size;
++    shader_lib_ctx.max_subgroup_size = ctx->global_ctx->capabilities.max_subgroup_size;
++
+     webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx);
+ 
+     std::vector<uint32_t> params = {

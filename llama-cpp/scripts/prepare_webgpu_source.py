@@ -11,19 +11,20 @@ import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_hc as hc
 import prepare_webgpu_q8_short as q8_short
 import prepare_webgpu_moe_sum as moe_sum
+import prepare_webgpu_expert_short as expert_short
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '339cf0c6c091cbab6647027c44a51d56ae7e318c90265530e5aa12788b3d6e85'
+OUTPUT_SHA256 = '162787d321853b63fdbf62696518d929c474c49d55d99d4ffb40e4125decfa2e'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = 'f934c06f188621fd5ffbc022b4241dc5c7654d8755a8d6e156e27bda346153f5'
+SSM_HEADER_OUTPUT_SHA256 = '4a4e19985f79f2931f6f426baaf3f1618dfff80bdd2c4de8634df6337c2f92ec'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -96,6 +97,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers = hc.prepare(work, source, patch_root, env)
         q8_short.prepare(work, source, patch_root, env)
         hc_headers.update(moe_sum.prepare(work, source, patch_root, env))
+        expert_short.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:
