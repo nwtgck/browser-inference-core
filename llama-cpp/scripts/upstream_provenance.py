@@ -14,6 +14,10 @@ from github_api import full_sha, git
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
+import prepare_webgpu_hc as hc
+import prepare_webgpu_q8_short as q8_short
+import prepare_webgpu_moe_sum as moe_sum
+import prepare_webgpu_expert_short as expert_short
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -167,6 +171,8 @@ def collect(root: Path, manifest: dict) -> dict:
         webgpu_compiled = None
         loader_compiled = None
         ssm_compiled = None
+        hc_compiled = None
+        moe_sum_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -175,6 +181,12 @@ def collect(root: Path, manifest: dict) -> dict:
                 'tensorCopy': True, 'parameterUploadBatching': True,
                 'compileDefinitions': ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'],
             }
+            hc_compiled = {'ggml-webgpu.cpp': file_identity(prepared),
+                           **{name: file_identity(prepared.parent / name) for name in
+                              ['ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-hc.hpp', hc.HEADER_NAME]}}
+            moe_sum_compiled = {name: file_identity(prepared.parent / name) for name in
+                                ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                                 'ggml-webgpu-moe-sum.hpp', moe_sum.HEADER_NAME]}
             loader_compiled = {
                 'logicalUpstreamPath': webgpu_source.LOADER_PATH,
                 **file_identity(prepared.parent / 'llama-model-loader.cpp'),
@@ -346,9 +358,60 @@ def collect(root: Path, manifest: dict) -> dict:
                                ['scripts/prepare_qsa_selection.py', 'cmake/QsaSelectionOverlay.cmake',
                                 'docs/qsa-all-pools-selection.md']},
             'behavior': 'Skip QSA scores, ranking and indirect pool gathers only when all padded pools fit the budget. Preserve visibility, tails, per-layer key writes and the original ranked path. Share only graph-local masks with the same input identity. Independent of file-backed PLE and quantization names; not a measured real-device speedup.',
+        }, {
+            'id': 'webgpu-hc-pre-post',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / hc.PATCH_NAME)},
+            'compiledCopies': hc_compiled,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_hc.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {name: file_identity(root / name) for name in
+                                ['scripts/prepare_webgpu_hc.py', 'docs/webgpu-hc-pre-post.md']},
+            'behavior': 'Support upstream gated HC PRE and identity-combination POST for contiguous F32 HC4 tensors. Use the upstream support probe and fallback; do not change graph construction, model weights, variants or sampling.',
+        }, {
+            'id': 'webgpu-q8-short-workgroup',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / q8_short.PATCH_NAME)},
+            'compiledCopy': ssm_compiled,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_q8_short.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU',
+                            'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                               ['scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md']},
+            'behavior': 'Use 32/64/128-lane workgroups for subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least 1024 output rows. Upstream WGSL, quantization, tiling and lane-to-block mapping are unchanged. Include the workgroup size in the pipeline cache key; other paths retain 256 lanes. No target-device speed guarantee.',
+        }, {
+            'id': 'webgpu-expert-short-workgroup',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / expert_short.PATCH_NAME)},
+            'compiledCopies': ({'ggml-webgpu.cpp': webgpu_compiled,
+                                'ggml-webgpu-shader-lib.hpp': ssm_compiled} if copy_enabled else None),
+            'reviewedInputs': expert_short.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_expert_short.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                               ['scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md']},
+            'behavior': 'Use 128 lanes for subgroup Q5_1/IQ4_NL x F32 single-token expert matvecs with K <= 1024 and at least 256 rows. Preserve upstream WGSL, selected-slot dispatch, quantization and per-lane block ownership. Forward actual subgroup limits and key pipelines by workgroup size; unsupported paths retain 256 lanes. No target-device speed guarantee.',
+        }, {
+            'id': 'webgpu-moe-expert-sum',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / moe_sum.PATCH_NAME)},
+            'compiledCopies': moe_sum_compiled,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_moe_sum.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                               ['scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md']},
+            'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

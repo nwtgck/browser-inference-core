@@ -1,0 +1,227 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
+new file mode 100644
+index 0000000..8950c9b
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
+@@ -0,0 +1,76 @@
++#pragma once
++#include "ggml-impl.h"
++#include <cstdint>
++
++// Source-bound admission for ordered expert-output ADD chains.
++// Require the complete slot-ordered sum, preserving all intermediate consumers.
++struct moe_sum_plan {
++    ggml_tensor * source = nullptr;
++    ggml_tensor * output = nullptr;
++    uint32_t experts = 0;
++    uint32_t width_vec4 = 0;
++    uint32_t tokens = 0;
++    int operations = 0;
++};
++
++inline bool moe_sum_dense(const ggml_tensor * t) {
++    if (!t || t->type != GGML_TYPE_F32) { return false; }
++    uint64_t bytes = 4;
++    for (int i = 0; i < 4; ++i) {
++        if (t->ne[i] <= 0 || uint64_t(t->ne[i]) > UINT32_MAX || t->nb[i] != bytes ||
++            bytes > uint64_t(UINT32_MAX) * 4 / uint64_t(t->ne[i])) { return false; }
++        bytes *= uint64_t(t->ne[i]);
++    }
++    // Leave room for an aligned binding prefix and tail in 32-bit indexing.
++    return bytes <= uint64_t(UINT32_MAX) * 4 - 4096;
++}
++
++inline bool moe_sum_slice(const ggml_tensor * v, const ggml_tensor * r, uint32_t slot) {
++    return v && v->op == GGML_OP_VIEW && v->type == GGML_TYPE_F32 && v->view_src == r &&
++        v->src[0] == r && v->view_offs == uint64_t(slot) * r->nb[1] &&
++        v->ne[0] == r->ne[0] && v->ne[1] == r->ne[2] && v->ne[2] == 1 && v->ne[3] == 1 &&
++        v->nb[0] == 4 && v->nb[1] == r->nb[2] && v->nb[2] == r->nb[3] && v->nb[3] == r->nb[3];
++}
++
++inline bool plan_moe_sum(const ggml_cgraph * graph, int index, moe_sum_plan & result) {
++    result = {};
++    if (!graph || index < 0 || index >= graph->n_nodes) { return false; }
++    ggml_tensor * first = graph->nodes[index];
++    if (!first || first->op != GGML_OP_ADD || !first->src[0]) { return false; }
++    ggml_tensor * root = first->src[0]->view_src;
++    if (!moe_sum_dense(root) || root->view_src || root->ne[3] != 1 || root->ne[0] % 4 ||
++        root->ne[1] < 3 || root->ne[1] > 32 || !moe_sum_slice(first->src[0], root, 0)) { return false; }
++    const int n = int(root->ne[1]) - 1;
++    if (n > graph->n_nodes - index) { return false; }
++    ggml_op ops[31];
++    for (int i = 0; i < n; ++i) {
++        ggml_tensor * t = graph->nodes[index + i];
++        if (!t || t->op != GGML_OP_ADD || !moe_sum_dense(t) ||
++            t->ne[0] != root->ne[0] || t->ne[1] != root->ne[2] || t->ne[2] != 1 || t->ne[3] != 1 ||
++            (i && t->src[0] != graph->nodes[index + i - 1]) ||
++            !moe_sum_slice(t->src[1], root, uint32_t(i + 1))) { return false; }
++        for (int s = 2; s < GGML_MAX_SRC; ++s) { if (t->src[s]) { return false; } }
++        ops[i] = GGML_OP_ADD;
++    }
++    if (!ggml_can_fuse(graph, index, ops, n)) { return false; }
++    ggml_tensor * last = graph->nodes[index + n - 1];
++    if (last->view_src) { return false; }
++    result = {root, last, uint32_t(root->ne[1]), uint32_t(root->ne[0] / 4), uint32_t(root->ne[2]), n};
++    return true;
++}
++
++// Must be applied to full aligned GPU binding ranges before integration.
++inline bool moe_sum_disjoint(uint64_t a, uint64_t an, uint64_t b, uint64_t bn) {
++    return an && bn && (a <= b ? an <= b - a : bn <= a - b);
++}
++
++// Keep all flattened invocation arithmetic representable even in padding groups.
++inline bool moe_sum_grid(uint64_t elements, uint32_t limit, uint32_t & x, uint32_t & y) {
++    x = y = 0;
++    if (!elements || !limit || elements > UINT32_MAX) { return false; }
++    const uint64_t groups = (elements + 127) / 128;
++    const uint64_t gy = (groups + limit - 1) / limit;
++    const uint64_t gx = (groups + gy - 1) / gy;
++    if (gx > limit || gy > limit || gx * gy > UINT32_MAX / 128u) { return false; }
++    x = uint32_t(gx); y = uint32_t(gy); return true;
++}
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index 62821cf..c701ca1 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -4,6 +4,7 @@
+ #include "ggml-impl.h"
+ #include "ggml-wgsl-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
++#include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -1258,6 +1259,7 @@ class ggml_webgpu_shader_lib {
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is fixed, no variants yet
+     std::unordered_map<int, webgpu_pipeline> argmax_pipelines;         // key is vec4
+@@ -1934,6 +1936,17 @@ class ggml_webgpu_shader_lib {
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_moe_sum_pipeline(uint32_t experts) {
++        auto it = moe_sum_pipelines.find(experts);
++        if (it != moe_sum_pipelines.end()) { return it->second; }
++        const std::string label = "moe_expert_sum_" + std::to_string(experts);
++        const auto code = preprocessor.preprocess(wgsl_moe_expert_sum,
++                                                   {"N_EXPERTS=" + std::to_string(experts) + "u"});
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
++        moe_sum_pipelines[experts] = pipeline;
++        return pipeline;
++    }
++
+     webgpu_pipeline get_hc_pipeline(bool pre) {
+         const int key = pre ? 0 : 1;
+         auto it = hc_pipelines.find(key);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index 652e599..b4a7461 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5,6 +5,7 @@
+ 
+ #include "ggml-webgpu.h"
+ #include "ggml-webgpu-hc.hpp"
++#include "ggml-webgpu-moe-sum.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-impl.h"
+@@ -3240,6 +3241,57 @@ static webgpu_encoded_op ggml_webgpu_cumsum(webgpu_context & ctx, ggml_tensor *
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
++static const char * ggml_backend_webgpu_buffer_type_get_name(ggml_backend_buffer_type_t buft);
++
++// Called before encoding any member of the ADD chain. All failure paths leave
++// num_encoded_ops and the command stream unchanged, preserving staged fallback.
++static std::optional<webgpu_encoded_op> ggml_webgpu_moe_sum(webgpu_context & ctx,
++                                                          ggml_cgraph * graph,
++                                                          int node_idx,
++                                                          int & num_encoded_ops) {
++    moe_sum_plan plan;
++    if (!plan_moe_sum(graph, node_idx, plan)) { return std::nullopt; }
++    auto * src = plan.source;
++    auto * dst = plan.output;
++    if (!src->buffer || !dst->buffer || !src->buffer->context || !dst->buffer->context ||
++        !src->data || !dst->data || !src->buffer->buft || src->buffer->buft != dst->buffer->buft ||
++        src->buffer->buft->iface.get_name != ggml_backend_webgpu_buffer_type_get_name) { return std::nullopt; }
++    auto * sc = static_cast<ggml_backend_webgpu_buffer_context *>(src->buffer->context);
++    auto * dc = static_cast<ggml_backend_webgpu_buffer_context *>(dst->buffer->context);
++    if (sc->global_ctx != ctx->global_ctx || dc->global_ctx != ctx->global_ctx) { return std::nullopt; }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
++        limits.maxStorageBuffersPerShaderStage < 2) { return std::nullopt; }
++    uint32_t x, y;
++    if (!moe_sum_grid(uint64_t(plan.width_vec4) * plan.tokens,
++                      limits.maxComputeWorkgroupsPerDimension, x, y)) { return std::nullopt; }
++    auto valid = [&](ggml_tensor * tensor, const wgpu::Buffer & buffer) {
++        const uint64_t offset = ggml_webgpu_tensor_align_offset(ctx, tensor);
++        const uint64_t size = ggml_webgpu_tensor_binding_size(ctx, tensor);
++        const uint64_t prefix = ggml_webgpu_tensor_misalignment(ctx, tensor);
++        return prefix % 16 == 0 && size <= limits.maxStorageBufferBindingSize &&
++               size / 16 <= UINT32_MAX && offset <= buffer.GetSize() && size <= buffer.GetSize() - offset;
++    };
++    if (!valid(src, sc->buffer) || !valid(dst, dc->buffer)) { return std::nullopt; }
++    if (sc->buffer.Get() == dc->buffer.Get() &&
++        !moe_sum_disjoint(ggml_webgpu_tensor_align_offset(ctx, src), ggml_webgpu_tensor_binding_size(ctx, src),
++                          ggml_webgpu_tensor_align_offset(ctx, dst), ggml_webgpu_tensor_binding_size(ctx, dst))) {
++        return std::nullopt;
++    }
++    const std::vector<uint32_t> params = {
++        uint32_t(ggml_webgpu_tensor_misalignment(ctx, src) / 16),
++        uint32_t(ggml_webgpu_tensor_misalignment(ctx, dst) / 16), plan.width_vec4, plan.tokens,
++    };
++    const std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, src),
++        ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, dst),
++    };
++    auto pipeline = ctx->shader_lib->get_moe_sum_pipeline(plan.experts);
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, x, y);
++    num_encoded_ops = plan.operations;
++    return encoded;
++}
++
+ static webgpu_encoded_op ggml_webgpu_hc(webgpu_context & ctx, ggml_tensor * dst) {
+     const bool pre = dst->op == GGML_OP_DSV4_HC_PRE;
+     ggml_tensor * x = dst->src[0];
+@@ -3475,6 +3527,10 @@ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+         case GGML_OP_FLASH_ATTN_EXT:
+             return ggml_webgpu_flash_attn(ctx, src0, src1, src2, node->src[3], node->src[4], node);
+         case GGML_OP_ADD:
++            if (auto sum = ggml_webgpu_moe_sum(ctx, cgraph, node_idx, num_encoded_ops)) {
++                return sum;
++            }
++            return ggml_webgpu_binary_op(ctx, src0, src1, node);
+         case GGML_OP_SUB:
+         case GGML_OP_MUL:
+         case GGML_OP_DIV:
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl
+new file mode 100644
+index 0000000..9e6619e
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl
+@@ -0,0 +1,20 @@
++// Ordered expert-output sum. Slot order matches the original left-associated ADDs.
++// No tree reduction, selection change, weight change, or reduced precision.
++struct Params { offset_src: u32, offset_dst: u32, width_vec4: u32, tokens: u32, };
++@group(0) @binding(0) var<storage, read_write> src: array<vec4<f32>>;
++@group(0) @binding(1) var<storage, read_write> dst: array<vec4<f32>>;
++@group(0) @binding(2) var<uniform> params: Params;
++@compute @workgroup_size(128)
++fn main(@builtin(local_invocation_id) lid: vec3<u32>, @builtin(workgroup_id) wid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let i = (wid.y * num_wg.x + wid.x) * 128u + lid.x;
++    if (i >= params.width_vec4 * params.tokens) { return; }
++    let token = i / params.width_vec4;
++    let col = i % params.width_vec4;
++    let base = params.offset_src + token * params.width_vec4 * N_EXPERTS + col;
++    var sum = src[base];
++    for (var slot = 1u; slot < N_EXPERTS; slot++) {
++        sum = sum + src[base + slot * params.width_vec4];
++    }
++    dst[params.offset_dst + i] = sum;
++}

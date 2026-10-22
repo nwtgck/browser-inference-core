@@ -271,3 +271,66 @@ commit with different bytes or invent a future artifact identity.
 - **Removal condition:** equivalent upstream selection, semantic inputs no longer
   meeting the proof, or withdrawal by the owner. Remove the option, preparation,
   hook, exception and reporting together without disturbing file-backed rows.
+
+## Four-stream HC PRE/POST fusion (2026-10-19)
+
+The user explicitly authorized bicore/Naidan patches for the Qwen3.8-Flash-Next
+performance investigation. The narrow overlay `ggml-webgpu-hc-pre-post.patch`
+adds WebGPU execution of existing gated PRE and identity POST operations for
+contiguous F32 HC4 only. No graph rewrite or extra profile is introduced. The
+no-patch option is the existing staged graph. See
+[`webgpu-hc-pre-post.md`](../docs/webgpu-hc-pre-post.md) for scope, maintenance,
+removal, continuous software-GPU validation and remaining physical-GPU/model
+measurements. Local preparation, host tests and standalone numerical checks do
+not establish target-device speed.
+
+## Q8_0 short-input matvec workgroups
+
+- **Patch:** `ggml-webgpu-q8-short-workgroup.patch`.
+- **Purpose and approval:** the owner's explicitly authorized Qwen Next
+  performance work, based on the supplied post-HC profiles. Limit this exception
+  to choosing the existing upstream workgroup specialization; no model change.
+- **Scope:** subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least
+  1024 output rows. Preserve other paths, WGSL, arithmetic, quantization, tiling
+  and dispatch count. Include the workgroup in the pipeline cache identity.
+- **Integration:** one checked shader-library header composed after HC; no
+  modified vendor checkout or copied/modified shader implementation. The
+  existing WebGPU profile switch is the only build switch.
+- **No-patch alternative:** retain upstream's 256-lane workgroup; public runtime
+  settings do not offer this shape-specific selection.
+- **Coupling and validation:** the cache key/factory and the transitive shader
+  contract are pinned. See [design and validation](../docs/webgpu-q8-short-workgroup.md).
+  Software-GPU checks do not establish Mac/model speed or universal bit identity.
+- **Removal condition:** upstream provides a suitable selection, the owner drops
+  the goal, or target-device measurements reject the change. Remove preparation,
+  CMake inputs, provenance and this exception together.
+
+## Ordered expert-output sums
+
+- Patch: `ggml-webgpu-moe-expert-sum.patch`.
+- Scope: the owner's continuing Qwen acceleration and ordered expert-sum candidate.
+- Replace only eligible complete F32 expert-output ADD chains with one dispatch.
+- Preserve slot/order, staged fallback, backend ownership, disjoint aligned bindings.
+- Alternative: retain upstream staged ADDs; no model pipeline or variant changes.
+- Maintenance: pinned graph, allocator, fusion, scheduler and shader contracts.
+- Tests, limits and removal: [ordered sums](../docs/webgpu-moe-expert-sum.md).
+
+## Short Q5_1 / IQ4_NL expert matvec workgroups
+
+- Patch: `ggml-webgpu-expert-short-workgroup.patch`.
+- Scope: the continuing user-authorized Qwen speed investigation, following the
+  separately reported expert-down experiment. Reuse upstream `WG_SIZE` for a
+  guarded 128-lane single-token path; no new shader, model graph or quantization.
+- No-patch alternative: keep upstream's fixed 256-lane path. There is no public
+  upstream setting for shape-dependent workgroup selection. This avoids the
+  maintenance cost but keeps lanes without input work in the measured K=640 path.
+- Coupling: two narrow C++ changes (factory/cache and subgroup-limit forwarding),
+  pinned to llama.cpp `620d2225cc436ab0b001e3200e590e3b286ef9ab`. The selected-slot
+  shader, lane mapping, reduction, preprocessor and composed source are checked.
+  Existing HC/Q8/expert-sum composition ordering is explicit, not bypassed.
+- Limits and validation: see `docs/webgpu-expert-short-workgroup.md`. Retain the
+  unchanged 256-lane fallback for all unreviewed shapes, types and device limits.
+  Software-adapter correctness/timing does not establish real-model Mac speed.
+- Removal condition: upstream supplies equivalent guarded selection, or the user
+  chooses to drop it; remove preparation, cache field if no longer needed,
+  build/provenance plumbing and tests together, leaving other overlays independent.

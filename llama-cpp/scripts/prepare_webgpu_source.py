@@ -8,19 +8,23 @@ import shutil
 import subprocess
 import tempfile
 import prepare_webgpu_tensor_copy as tensor_copy
+import prepare_webgpu_hc as hc
+import prepare_webgpu_q8_short as q8_short
+import prepare_webgpu_moe_sum as moe_sum
+import prepare_webgpu_expert_short as expert_short
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '8e92cac989798a997ba40e06f1d553088529484f0d4c1feea55934707199f59f'
+OUTPUT_SHA256 = '162787d321853b63fdbf62696518d929c474c49d55d99d4ffb40e4125decfa2e'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = '8d6c8d311106eaf3d97b57b278c6264d806876242ce3b5f4f72573c69221b85f'
+SSM_HEADER_OUTPUT_SHA256 = '4a4e19985f79f2931f6f426baaf3f1618dfff80bdd2c4de8634df6337c2f92ec'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -64,6 +68,11 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
                 (patch_root / PARAM_PATCH_NAME, PARAM_PATCH_SHA256),
                 (patch_root / LOADER_PATCH_NAME, LOADER_PATCH_SHA256),
                 (patch_root / SSM_PATCH_NAME, SSM_PATCH_SHA256)]
+    # HC shares this profile; it does not create another variant.
+    if tensor_copy.digest(patch_root / hc.PATCH_NAME) != hc.PATCH_SHA256:
+        raise ValueError('WebGPU HC patch identity changed')
+    if tensor_copy.digest(patch_root / q8_short.PATCH_NAME) != q8_short.PATCH_SHA256:
+        raise ValueError('WebGPU Q8 short matvec patch identity changed')
     for patch, expected in selected:
         if tensor_copy.digest(patch) != expected:
             raise ValueError('WebGPU patch identity changed: ' + patch.name)
@@ -83,6 +92,12 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             for flags in (['--check'], []):
                 subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(patch.resolve())],
                                cwd=work, env=env, check=True, capture_output=True)
+        if (output / 'ggml-wgsl-shaders.hpp').exists():
+            raise ValueError('Unexpected canonical WGSL header would shadow upstream shaders')
+        hc_headers = hc.prepare(work, source, patch_root, env)
+        q8_short.prepare(work, source, patch_root, env)
+        hc_headers.update(moe_sum.prepare(work, source, patch_root, env))
+        expert_short.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:
@@ -91,6 +106,10 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             raise ValueError('Unexpected SSM convolution header identity')
         # Do not emit an embedded WGSL header here: the sibling shader library
         # must continue to use upstream's generated shaders, including MoE.
+        for name, generated in hc_headers.items():
+            destination = output / name
+            if not destination.exists() or destination.read_bytes() != generated.read_bytes():
+                generated.replace(destination)
         header_result = output / header.name
         if not header_result.exists() or header_result.read_bytes() != header.read_bytes():
             header.replace(header_result)
