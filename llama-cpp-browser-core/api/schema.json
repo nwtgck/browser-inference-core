@@ -12364,6 +12364,44 @@
       ]
     },
     {
+      "name": "ggml_top_k_mask",
+      "export": "_lcb_ggml_top_k_mask",
+      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct ggml_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "mask",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "top_k",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "score",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "blocks",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "extra",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "ggml_transpose",
       "export": "_lcb_ggml_transpose",
       "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *)",
@@ -18021,6 +18059,116 @@
       ]
     },
     {
+      "name": "mtmd_audio_stream_flush",
+      "export": "_lcb_mtmd_audio_stream_flush",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "stream",
+          "cType": "mtmd_audio_stream *",
+          "kind": "pointer"
+        },
+        {
+          "name": "end",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_audio_stream_free",
+      "export": "_lcb_mtmd_audio_stream_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "stream",
+          "cType": "mtmd_audio_stream *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_audio_stream_get_output_embd",
+      "export": "_lcb_mtmd_audio_stream_get_output_embd",
+      "returnType": "const float *(const mtmd_audio_stream *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "stream",
+          "cType": "const mtmd_audio_stream *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_audio_stream_init",
+      "export": "_lcb_mtmd_audio_stream_init",
+      "returnType": "mtmd_audio_stream *(mtmd_context *, struct mtmd_audio_stream_params)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "params",
+          "cType": "struct mtmd_audio_stream_params",
+          "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_audio_stream_params_default",
+      "export": "_lcb_mtmd_audio_stream_params_default",
+      "returnType": "struct mtmd_audio_stream_params",
+      "returnKind": "record",
+      "parameters": []
+    },
+    {
+      "name": "mtmd_audio_stream_push",
+      "export": "_lcb_mtmd_audio_stream_push",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "stream",
+          "cType": "mtmd_audio_stream *",
+          "kind": "pointer"
+        },
+        {
+          "name": "samples",
+          "cType": "const float *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_samples",
+          "cType": "size_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_audio_stream_step",
+      "export": "_lcb_mtmd_audio_stream_step",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "stream",
+          "cType": "mtmd_audio_stream *",
+          "kind": "pointer"
+        },
+        {
+          "name": "last_token",
+          "cType": "llama_token",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
       "name": "mtmd_batch_add_chunk",
       "export": "_lcb_mtmd_batch_add_chunk",
       "returnType": "int32_t",
@@ -18392,6 +18540,11 @@
           "kind": "pointer"
         },
         {
+          "name": "state",
+          "cType": "mtmd_gen_state *",
+          "kind": "pointer"
+        },
+        {
           "name": "inp",
           "cType": "const struct mtmd_gen_inp *",
           "kind": "pointer"
@@ -18412,6 +18565,57 @@
         {
           "name": "ctx",
           "cType": "const mtmd_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_gen_state_free",
+      "export": "_lcb_mtmd_gen_state_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "state",
+          "cType": "mtmd_gen_state *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_gen_state_init",
+      "export": "_lcb_mtmd_gen_state_init",
+      "returnType": "mtmd_gen_state *(mtmd_context *, struct mtmd_gen_state_params)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "params",
+          "cType": "struct mtmd_gen_state_params",
+          "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_gen_state_params_default",
+      "export": "_lcb_mtmd_gen_state_params_default",
+      "returnType": "struct mtmd_gen_state_params",
+      "returnKind": "record",
+      "parameters": []
+    },
+    {
+      "name": "mtmd_gen_state_reset",
+      "export": "_lcb_mtmd_gen_state_reset",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "state",
+          "cType": "mtmd_gen_state *",
           "kind": "pointer"
         }
       ]
@@ -18684,6 +18888,19 @@
       ]
     },
     {
+      "name": "mtmd_helper_gen_audio_flush",
+      "export": "_lcb_mtmd_helper_gen_audio_flush",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_helper_gen_audio *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "mtmd_helper_gen_audio_free",
       "export": "_lcb_mtmd_helper_gen_audio_free",
       "returnType": "void",
@@ -18746,6 +18963,13 @@
           "kind": "pointer"
         }
       ]
+    },
+    {
+      "name": "mtmd_helper_gen_audio_inp_default",
+      "export": "_lcb_mtmd_helper_gen_audio_inp_default",
+      "returnType": "struct mtmd_helper_gen_audio_inp",
+      "returnKind": "record",
+      "parameters": []
     },
     {
       "name": "mtmd_helper_gen_audio_reset",
@@ -19266,6 +19490,19 @@
     {
       "name": "mtmd_support_audio",
       "export": "_lcb_mtmd_support_audio",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_support_audio_stream",
+      "export": "_lcb_mtmd_support_audio_stream",
       "returnType": "_Bool",
       "returnKind": "boolean",
       "parameters": [
@@ -20968,6 +21205,19 @@
       "id": 36
     },
     {
+      "name": "mtmd_audio_stream_params",
+      "cType": "struct mtmd_audio_stream_params",
+      "fields": [
+        {
+          "name": "step_ms",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 0
+        }
+      ],
+      "id": 37
+    },
+    {
       "name": "mtmd_caps",
       "cType": "struct mtmd_caps",
       "fields": [
@@ -20982,9 +21232,15 @@
           "cType": "_Bool",
           "kind": "boolean",
           "id": 1
+        },
+        {
+          "name": "gen_audio",
+          "cType": "_Bool",
+          "kind": "boolean",
+          "id": 2
         }
       ],
-      "id": 37
+      "id": 38
     },
     {
       "name": "mtmd_context_params",
@@ -21081,7 +21337,7 @@
           "id": 14
         }
       ],
-      "id": 38
+      "id": 39
     },
     {
       "name": "mtmd_decoder_pos",
@@ -21112,7 +21368,7 @@
           "id": 3
         }
       ],
-      "id": 39
+      "id": 40
     },
     {
       "name": "mtmd_gen_audio_info",
@@ -21137,7 +21393,7 @@
           "id": 2
         }
       ],
-      "id": 40
+      "id": 41
     },
     {
       "name": "mtmd_gen_inp",
@@ -21174,55 +21430,37 @@
           "id": 4
         },
         {
-          "name": "seed",
-          "cType": "uint32_t",
-          "kind": "unsigned",
-          "id": 5
-        },
-        {
           "name": "temp",
           "cType": "float",
           "kind": "float",
-          "id": 6
+          "id": 5
         },
         {
           "name": "codes",
           "cType": "int32_t *",
           "kind": "pointer",
-          "id": 7
+          "id": 6
         },
         {
           "name": "n_codes",
           "cType": "size_t",
           "kind": "u64",
-          "id": 8
+          "id": 7
         },
         {
           "name": "feats",
           "cType": "const float *",
           "kind": "pointer",
-          "id": 9
+          "id": 8
         },
         {
           "name": "n_feats",
           "cType": "size_t",
           "kind": "u64",
-          "id": 10
-        },
-        {
-          "name": "state_data",
-          "cType": "const char *",
-          "kind": "pointer",
-          "id": 11
-        },
-        {
-          "name": "state_size",
-          "cType": "size_t",
-          "kind": "u64",
-          "id": 12
+          "id": 9
         }
       ],
-      "id": 41
+      "id": 42
     },
     {
       "name": "mtmd_gen_out",
@@ -21275,21 +21513,22 @@
           "cType": "size_t",
           "kind": "u64",
           "id": 7
-        },
-        {
-          "name": "state_data",
-          "cType": "const char *",
-          "kind": "pointer",
-          "id": 8
-        },
-        {
-          "name": "state_size",
-          "cType": "size_t",
-          "kind": "u64",
-          "id": 9
         }
       ],
-      "id": 42
+      "id": 43
+    },
+    {
+      "name": "mtmd_gen_state_params",
+      "cType": "struct mtmd_gen_state_params",
+      "fields": [
+        {
+          "name": "seed",
+          "cType": "uint32_t",
+          "kind": "unsigned",
+          "id": 0
+        }
+      ],
+      "id": 44
     },
     {
       "name": "mtmd_helper_bitmap_wrapper",
@@ -21308,7 +21547,7 @@
           "id": 1
         }
       ],
-      "id": 43
+      "id": 45
     },
     {
       "name": "mtmd_helper_embd_batch",
@@ -21351,68 +21590,74 @@
           "id": 5
         }
       ],
-      "id": 44
+      "id": 46
     },
     {
       "name": "mtmd_helper_gen_audio_inp",
       "cType": "struct mtmd_helper_gen_audio_inp",
       "fields": [
         {
+          "name": "stream",
+          "cType": "_Bool",
+          "kind": "boolean",
+          "id": 0
+        },
+        {
           "name": "seq_id",
           "cType": "llama_seq_id",
           "kind": "signed",
-          "id": 0
+          "id": 1
         },
         {
           "name": "prompt",
           "cType": "const char *",
           "kind": "pointer",
-          "id": 1
+          "id": 2
         },
         {
           "name": "prompt_len",
           "cType": "size_t",
           "kind": "u64",
-          "id": 2
+          "id": 3
         },
         {
           "name": "speaker_ref",
           "cType": "mtmd_bitmap *",
           "kind": "pointer",
-          "id": 3
+          "id": 4
         },
         {
           "name": "lang",
           "cType": "const char *",
           "kind": "pointer",
-          "id": 4
+          "id": 5
         },
         {
           "name": "top_k",
           "cType": "int32_t",
           "kind": "signed",
-          "id": 5
+          "id": 6
         },
         {
           "name": "top_p",
           "cType": "float",
           "kind": "float",
-          "id": 6
+          "id": 7
         },
         {
           "name": "seed",
           "cType": "uint32_t",
           "kind": "unsigned",
-          "id": 7
+          "id": 8
         },
         {
           "name": "out_type",
           "cType": "enum mtmd_helper_gen_audio_outtype",
           "kind": "signed",
-          "id": 8
+          "id": 9
         }
       ],
-      "id": 45
+      "id": 47
     },
     {
       "name": "mtmd_helper_init_opt",
@@ -21425,7 +21670,7 @@
           "id": 0
         }
       ],
-      "id": 46
+      "id": 48
     },
     {
       "name": "mtmd_helper_video_info",
@@ -21456,7 +21701,7 @@
           "id": 3
         }
       ],
-      "id": 47
+      "id": 49
     },
     {
       "name": "mtmd_helper_video_init_params",
@@ -21481,7 +21726,7 @@
           "id": 2
         }
       ],
-      "id": 48
+      "id": 50
     },
     {
       "name": "mtmd_input_part",
@@ -21500,7 +21745,7 @@
           "id": 1
         }
       ],
-      "id": 49
+      "id": 51
     },
     {
       "name": "mtmd_input_text",
@@ -21531,7 +21776,7 @@
           "id": 3
         }
       ],
-      "id": 50
+      "id": 52
     }
   ],
   "constants": [
@@ -21733,6 +21978,7 @@
     "GGML_OP_SUM_ROWS",
     "GGML_OP_TIMESTEP_EMBEDDING",
     "GGML_OP_TOP_K",
+    "GGML_OP_TOP_K_MASK",
     "GGML_OP_TRANSPOSE",
     "GGML_OP_TRI",
     "GGML_OP_UNARY",

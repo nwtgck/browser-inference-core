@@ -576,6 +576,7 @@ export interface LowLevelFunctions {
   ggml_time_us(): Promise<bigint>;
   ggml_timestep_embedding(arg0: bigint, arg1: bigint, arg2: number, arg3: number): Promise<bigint>;
   ggml_top_k(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
+  ggml_top_k_mask(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<bigint>;
   ggml_transpose(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_tri(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   ggml_trunc(arg0: bigint, arg1: bigint): Promise<bigint>;
@@ -878,6 +879,13 @@ export interface LowLevelFunctions {
   llama_vocab_pad(arg0: bigint): Promise<number>;
   llama_vocab_sep(arg0: bigint): Promise<number>;
   llama_vocab_type(arg0: bigint): Promise<number>;
+  mtmd_audio_stream_flush(arg0: bigint, arg1: number): Promise<number>;
+  mtmd_audio_stream_free(arg0: bigint): Promise<void>;
+  mtmd_audio_stream_get_output_embd(arg0: bigint): Promise<bigint>;
+  mtmd_audio_stream_init(arg0: bigint, arg1: bigint): Promise<bigint>;
+  mtmd_audio_stream_params_default(out: bigint): Promise<void>;
+  mtmd_audio_stream_push(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
+  mtmd_audio_stream_step(arg0: bigint, arg1: number): Promise<number>;
   mtmd_batch_add_chunk(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_batch_encode(arg0: bigint): Promise<number>;
   mtmd_batch_free(arg0: bigint): Promise<void>;
@@ -902,8 +910,12 @@ export interface LowLevelFunctions {
   mtmd_encode_chunk(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_free(arg0: bigint): Promise<void>;
   mtmd_gen_audio_get_info(out: bigint, arg0: bigint): Promise<void>;
-  mtmd_gen_audio_process(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
+  mtmd_gen_audio_process(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
   mtmd_gen_inp_default(out: bigint, arg0: bigint): Promise<void>;
+  mtmd_gen_state_free(arg0: bigint): Promise<void>;
+  mtmd_gen_state_init(arg0: bigint, arg1: bigint): Promise<bigint>;
+  mtmd_gen_state_params_default(out: bigint): Promise<void>;
+  mtmd_gen_state_reset(arg0: bigint): Promise<void>;
   mtmd_get_audio_sample_rate(arg0: bigint): Promise<number>;
   mtmd_get_cap_from_file(out: bigint, arg0: bigint): Promise<void>;
   mtmd_get_marker(arg0: bigint): Promise<bigint>;
@@ -913,9 +925,11 @@ export interface LowLevelFunctions {
   mtmd_helper_decode_image_chunk(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: number, arg5: number, arg6: number, arg7: bigint, arg8: bigint, arg9: bigint): Promise<number>;
   mtmd_helper_eval_chunk_single(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: number, arg5: number, arg6: number, arg7: bigint): Promise<number>;
   mtmd_helper_eval_chunks(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: number, arg5: number, arg6: number, arg7: bigint): Promise<number>;
+  mtmd_helper_gen_audio_flush(arg0: bigint): Promise<number>;
   mtmd_helper_gen_audio_free(arg0: bigint): Promise<void>;
   mtmd_helper_gen_audio_get_output(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
   mtmd_helper_gen_audio_init(arg0: bigint, arg1: bigint): Promise<bigint>;
+  mtmd_helper_gen_audio_inp_default(out: bigint): Promise<void>;
   mtmd_helper_gen_audio_reset(arg0: bigint): Promise<void>;
   mtmd_helper_gen_audio_set_input(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_helper_gen_audio_step_gen(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
@@ -950,6 +964,7 @@ export interface LowLevelFunctions {
   mtmd_input_chunks_size(arg0: bigint): Promise<bigint>;
   mtmd_log_set(arg0: bigint, arg1: bigint): Promise<void>;
   mtmd_support_audio(arg0: bigint): Promise<number>;
+  mtmd_support_audio_stream(arg0: bigint): Promise<number>;
   mtmd_support_vision(arg0: bigint): Promise<number>;
   mtmd_test_create_input_chunks(): Promise<bigint>;
   mtmd_tokenize(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
