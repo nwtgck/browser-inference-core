@@ -24,6 +24,26 @@ pool count exceeds the budget, the original scoring, fusion metadata and ranking
 path runs. No cache format or public runtime ABI (Application Binary Interface)
 changes. No context-length, tool, grammar, quantization or sampling compromise.
 
+## b11804 fused-mask integration
+
+The b11804 graph shares `new_pool_flat` across QSA layers and selects a fused
+`TOP_K_MASK` only after probing backend support. The all-pools shortcut retains
+the shared input and every cache write; it skips the fused ranking path only
+when every pool is selected. Ranked selection still uses the upstream fused
+mask when supported and the original gather/scatter fallback otherwise.
+
+The native regression separately counts fused masks. A reference run that
+silently loses fused-mask coverage is rejected even when its logits match.
+A test-only `trace-unfused` mode disables the mask before first decode in each
+native context, covering the ranked fallback without changing the distributed
+runtime or turning off graph reuse. Both modes run on each fixture; the explicit
+`--mask-mode unfused` oracle rejects any fused execution, and fused/unfused
+outputs must agree within each independently compiled implementation.
+The source checks also cover the fusion probe and mask construction dependencies;
+CMake watches the same files so a warm build cannot bypass renewed review.
+See [the b11804 review](llama-b11804-review.md) for the exact input identities and
+remaining WebAssembly/browser validation boundaries.
+
 ## Build composition
 
 `LCB_QSA_ALL_POOLS` is independent of `LCB_FILE_BACKED_PLE`. The checked overlay
@@ -77,7 +97,7 @@ python3 tests/qsa-selection/run.py --source vendor/llama.cpp --work build/qsa-re
 
 The runner downloads nothing, configures independent reference/optimized builds,
 links two different libraries, and generates local fixtures for F16, Q3_K and
-Q4_K. Commands, exit statuses, fixture/library identities, finite output traces
+Q4_K, each with fused and explicitly unfused masks. Commands, exit statuses, fixture/library identities, finite output traces
 and graph censuses are saved in `build/qsa-regression/qsa-results`. `status.json`
 is authoritative for the most recent run; a failed rerun does not make earlier
 comparison files valid. Compiler intermediates are reusable, but configuration,

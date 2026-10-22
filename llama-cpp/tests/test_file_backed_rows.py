@@ -172,6 +172,9 @@ set(LCB_LLAMA_SOURCE "{SOURCE.as_posix()}")
 file(GLOB model_sources "${{LCB_LLAMA_SOURCE}}/src/models/*.cpp")
 add_library(llama OBJECT "${{LCB_LLAMA_SOURCE}}/src/llama.cpp"
     "${{LCB_LLAMA_SOURCE}}/src/llama-model.cpp" ${{model_sources}} "{loader.as_posix()}")
+set_target_properties(llama PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE 16)
+set_source_files_properties("${{LCB_LLAMA_SOURCE}}/src/llama.cpp"
+    "${{LCB_LLAMA_SOURCE}}/src/llama-model.cpp" PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 include("{(ROOT / 'cmake/FileBackedRowsOverlay.cmake').as_posix()}")
 get_target_property(selected llama SOURCES)
 get_target_property(includes llama INCLUDE_DIRECTORIES)
@@ -189,6 +192,14 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/includes.txt" "${{includes}}")
         self.assertEqual(len(selected), len(list((SOURCE / 'src/models').glob('*.cpp'))) + 3)
         self.assertEqual((build / 'includes.txt').read_text().split(';')[0],
                          str(build / 'file-backed-rows-overlay/src'))
+        # Source properties are keyed by path. Core TUs must not join the
+        # model unity batches just because the overlay changed their path.
+        unity_files = list((build / 'CMakeFiles/llama.dir/Unity').glob('*.cxx'))
+        self.assertTrue(unity_files)
+        unity = '\n'.join(path.read_text() for path in unity_files)
+        for name in ('llama.cpp', 'llama-model.cpp'):
+            self.assertNotIn(str(build / 'file-backed-rows-overlay/src' / name), unity)
+        self.assertIn(str(build / 'file-backed-rows-overlay/src/models/clef.cpp'), unity)
 
 
 if __name__ == '__main__':

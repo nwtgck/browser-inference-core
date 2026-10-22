@@ -18,7 +18,7 @@ SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '162787d321853b63fdbf62696518d929c474c49d55d99d4ffb40e4125decfa2e'
+OUTPUT_SHA256 = 'e17ea9ace857f4086d4f25041dc507a90baaf7a937987b16f75c50d80c36b140'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
@@ -32,9 +32,9 @@ SSM_HEADER_OUTPUT_SHA256 = '4a4e19985f79f2931f6f426baaf3f1618dfff80bdd2c4de8634d
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
 LOADER_PATCH_SHA256 = 'ddb01246fb2a7901359c0bc576023ce0a0f2c5898ee46623f71c86c9eb6f7f3f'
-LOADER_OUTPUT_SHA256 = '6f3919c473df574163644661cbcc9741435397f1e0ea998518d93a49da0b0907'
+LOADER_OUTPUT_SHA256 = '1a731095e6a97861c35c7bce9077d08093cffac43ca85fbb2586823073c6933a'
 LOADER_INPUTS = {
-    "src/llama-model-loader.cpp": "7975d83406627e405d36876472495c6111696e70db66c65a629d6213ec54fc04",
+    "src/llama-model-loader.cpp": "702c36b758178981be9f18cd6f3111c40ca1bb11c1dc688a7afd4c58fe5bb248",
     "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
     "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
     "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",

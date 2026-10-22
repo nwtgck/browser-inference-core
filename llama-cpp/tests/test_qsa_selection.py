@@ -141,8 +141,10 @@ add_library(llama STATIC "${{LCB_LLAMA_SOURCE}}/src/llama.cpp"
 get_target_property(before llama SOURCES)
 include("{(ROOT / 'cmake/QsaSelectionOverlay.cmake').as_posix()}")
 get_target_property(after llama SOURCES)
+get_property(dependencies DIRECTORY PROPERTY CMAKE_CONFIGURE_DEPENDS)
 get_source_file_property(headers "${{LCB_QSA_COPY}}" TARGET_DIRECTORY llama INCLUDE_DIRECTORIES)
 get_source_file_property(unity "${{LCB_QSA_COPY}}" TARGET_DIRECTORY llama SKIP_UNITY_BUILD_INCLUSION)
+file(WRITE "${{CMAKE_BINARY_DIR}}/dependencies.txt" "${{dependencies}}")
 file(WRITE "${{CMAKE_BINARY_DIR}}/before.txt" "${{before}}")
 file(WRITE "${{CMAKE_BINARY_DIR}}/after.txt" "${{after}}")
 file(WRITE "${{CMAKE_BINARY_DIR}}/properties.txt" "${{headers}}\\n${{unity}}\\n")
@@ -158,10 +160,57 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/properties.txt" "${{headers}}\\n${{unity}}\\n"
                 copy = Path(next(iter(copies)))
                 variant = 'file-backed-rows' if file_rows else 'upstream'
                 info = json.loads(qsa.INPUTS_PATH.read_text())
+                dependencies = set((build / 'dependencies.txt').read_text().split(';'))
+                for relative in info['upstream']:
+                    self.assertIn(str(self.source / relative), dependencies, relative)
                 self.assertEqual(qsa.digest(copy), info['variants'][variant]['outputSha256'])
                 headers, unity = (build / 'properties.txt').read_text().splitlines()
                 expected = build / 'file-backed-rows-overlay/src/models' if file_rows else self.source / 'src/models'
                 self.assertEqual(Path(headers), expected)
                 self.assertEqual(unity, 'ON')
+
+    @unittest.skipUnless(shutil.which('cmake') and shutil.which('ninja'), 'CMake and Ninja required')
+    def test_warm_build_rechecks_changed_fusion_dependencies(self):
+        # Exercise Ninja's actual regeneration path, not just the property list.
+        # A local copy ensures the corruption tests never edit the vendor tree.
+        source = self.work / 'upstream'
+        shutil.copytree(self.source / 'src', source / 'src')
+        info = json.loads(qsa.INPUTS_PATH.read_text())
+        for relative in set(info['upstream']) | set(json.loads(rows.INPUTS_PATH.read_text())):
+            target = source / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.source / relative, target)
+        for file_rows in (False, True):
+            caller = self.work / ('warm-rows' if file_rows else 'warm-plain')
+            caller.mkdir()
+            caller.joinpath('CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.24)
+project(qsa_warm_check LANGUAGES CXX)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(LCB_LLAMA_SOURCE "{source.as_posix()}")
+add_library(llama STATIC "${{LCB_LLAMA_SOURCE}}/src/llama.cpp"
+  "${{LCB_LLAMA_SOURCE}}/src/llama-model.cpp"
+  "${{LCB_LLAMA_SOURCE}}/src/models/qwen4exp.cpp")
+{'include("' + (ROOT / 'cmake/FileBackedRowsOverlay.cmake').as_posix() + '")' if file_rows else ''}
+include("{(ROOT / 'cmake/QsaSelectionOverlay.cmake').as_posix()}")
+add_custom_target(checked COMMAND "${{CMAKE_COMMAND}}" -E echo checked)
+''')
+            build = caller / 'build'
+            subprocess.run(['cmake', '-S', str(caller), '-B', str(build), '-G', 'Ninja'],
+                           check=True, capture_output=True)
+            command = ['cmake', '--build', str(build), '--target', 'checked']
+            subprocess.run(command, check=True, capture_output=True)
+            for relative in ('src/llama-context.cpp', 'src/llama-graph.cpp',
+                             'src/llama-cparams.h', 'ggml/include/ggml.h'):
+                path = source / relative
+                original = path.read_bytes()
+                with self.subTest(file_rows=file_rows, dependency=relative):
+                    path.write_bytes(original + b'\n// semantic drift\n')
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('upstream', result.stdout + result.stderr)
+                    self.assertIn(relative, result.stdout + result.stderr)
+                    path.write_bytes(original)
+                    # Recovery must also happen on the build entry point alone.
+                    subprocess.run(command, check=True, capture_output=True)
 
 if __name__=='__main__': unittest.main()

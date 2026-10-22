@@ -14,7 +14,7 @@ import math
 from pathlib import Path
 import struct
 
-FIELDS = ('phase', 'indexer', 'top_k', 'query', 'raw_key', 'selection_mask', 'pools64', 'pools128')
+FIELDS = ('phase', 'indexer', 'top_k', 'query', 'raw_key', 'selection_mask', 'fused_mask', 'pools64', 'pools128')
 SHORT = ('short-prefill', 'short-reused', 'prefill', 'before-threshold', 'shared-prefix',
          'sequence-zero-divergence', 'sequence-one-divergence', 'after-sequence-removal',
          'mixed', 'embedding-chunks', 'unified-prefix', 'parallel-sequences')
@@ -43,7 +43,9 @@ def read_nodes(path: Path):
     return dict(totals), phases
 
 
-def compare(reference: Path, optimized: Path):
+def compare(reference: Path, optimized: Path, *, mask_mode: str = 'fused'):
+    if mask_mode not in ('fused', 'unfused'):
+        raise ValueError('Unknown mask mode: ' + mask_mode)
     original = (reference / 'logits.f32').read_bytes()
     changed = (optimized / 'logits.f32').read_bytes()
     if len(original) == 0 or len(original) % 4 or len(original) != len(changed):
@@ -63,6 +65,21 @@ def compare(reference: Path, optimized: Path):
     after, after_phases = read_nodes(optimized / 'nodes.csv')
     if before_phases != after_phases:
         raise AssertionError('Observation schedules differ')
+    # The default native run must actually exercise the new fused mask. The
+    # explicitly forced fallback run must never execute it. Do not silently
+    # accept missing fused coverage based on what a trace happens to contain.
+    for phase in PHASES - {'reserve', 'parallel-reserve'}:
+        if mask_mode == 'fused':
+            if before[phase]['fused_mask'] <= 0 or before[phase]['fused_mask'] != before[phase]['selection_mask']:
+                raise AssertionError('Reference fused mask not exercised: ' + phase)
+            if after[phase]['fused_mask'] != after[phase]['top_k']:
+                raise AssertionError('Ranked fused mask coverage differs: ' + phase)
+            if phase in SHORT and after[phase]['fused_mask'] != 0:
+                raise AssertionError('All-pools path unexpectedly uses a fused ranked mask: ' + phase)
+        elif before[phase]['fused_mask'] != 0 or after[phase]['fused_mask'] != 0:
+            raise AssertionError('Unfused run unexpectedly executed a fused mask: ' + phase)
+        if before[phase]['selection_mask'] <= 0 or before[phase]['selection_mask'] != before[phase]['top_k']:
+            raise AssertionError('Reference selection mask coverage differs: ' + phase)
     for phase in SHORT:
         for operation in ('indexer', 'top_k', 'query'):
             if before[phase][operation] <= 0 or after[phase][operation] != 0:
@@ -81,7 +98,7 @@ def compare(reference: Path, optimized: Path):
         raise AssertionError('Restoration did not reproduce graph branch observations')
     if after['ranked-prefill'] != before['ranked-prefill'] or after['ranked-prefill']['indexer'] <= 0:
         raise AssertionError('Ranked path was not preserved')
-    return {'identical': True, 'bytes': len(original), 'floatValues': len(original) // 4,
+    return {'identical': True, 'maskMode': mask_mode, 'bytes': len(original), 'floatValues': len(original) // 4,
             'sha256': hashlib.sha256(original).hexdigest(),
             'referenceNodes': before, 'optimizedNodes': after,
             'scope': 'synthetic native full-model parity, not a real-model or WebGPU throughput result'}
@@ -91,8 +108,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--reference', type=Path, required=True)
     parser.add_argument('--optimized', type=Path, required=True)
+    parser.add_argument('--mask-mode', choices=('fused', 'unfused'), default='fused')
     args = parser.parse_args()
-    print(json.dumps(compare(args.reference, args.optimized), indent=2))
+    print(json.dumps(compare(args.reference, args.optimized, mask_mode=args.mask_mode), indent=2))
 
 
 if __name__ == '__main__':

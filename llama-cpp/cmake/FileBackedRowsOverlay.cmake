@@ -25,10 +25,16 @@ foreach(LCB_FILE_ROWS_SOURCE IN LISTS LCB_FILE_ROWS_SOURCES)
     if(LCB_FILE_ROWS_RELATIVE STREQUAL "llama.cpp" OR LCB_FILE_ROWS_RELATIVE STREQUAL "llama-model.cpp" OR LCB_FILE_ROWS_RELATIVE MATCHES "^models/[^/]+[.]cpp$")
         set(LCB_FILE_ROWS_COPY "${LCB_FILE_ROWS_OVERLAY}/src/${LCB_FILE_ROWS_RELATIVE}")
         list(APPEND LCB_FILE_ROWS_REPLACED "${LCB_FILE_ROWS_COPY}")
-        if(LCB_FILE_ROWS_RELATIVE STREQUAL "llama-model.cpp")
-            math(EXPR LCB_FILE_ROWS_MODEL_COUNT "${LCB_FILE_ROWS_MODEL_COUNT} + 1")
+        # Both are upstream core TUs, explicitly excluded from model unity
+        # batches. Source properties are path-keyed and do not follow a copy.
+        # Losing llama.cpp's exclusion shifts every model batch and can expose
+        # unrelated missing includes (e.g. clef.cpp as the first TU in b11804).
+        if(LCB_FILE_ROWS_RELATIVE STREQUAL "llama.cpp" OR LCB_FILE_ROWS_RELATIVE STREQUAL "llama-model.cpp")
             set_source_files_properties("${LCB_FILE_ROWS_COPY}" TARGET_DIRECTORY llama
                 PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+        endif()
+        if(LCB_FILE_ROWS_RELATIVE STREQUAL "llama-model.cpp")
+            math(EXPR LCB_FILE_ROWS_MODEL_COUNT "${LCB_FILE_ROWS_MODEL_COUNT} + 1")
         elseif(LCB_FILE_ROWS_RELATIVE STREQUAL "llama.cpp")
             math(EXPR LCB_FILE_ROWS_API_COUNT "${LCB_FILE_ROWS_API_COUNT} + 1")
         elseif(LCB_FILE_ROWS_RELATIVE STREQUAL "models/qwen4exp.cpp")

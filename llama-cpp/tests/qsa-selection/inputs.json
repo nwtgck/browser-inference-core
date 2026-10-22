@@ -1,21 +1,25 @@
 {
   "upstream": {
-    "src/models/qwen4exp.cpp": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
+    "src/models/qwen4exp.cpp": "8b723892b9f75ce6ce2c9f77d3e517c9b8032beb549f487857fb1c524f0efbe7",
     "src/llama-memory-hybrid-idx.cpp": "cbff3fb6fa05c597448f4e5edf310b95cd2635ae146aee4dee2ded447ea4280c",
     "src/llama-memory-hybrid-idx.h": "99aaae2cc246de40b599d09c5713e0cb74fab04b6e1ded0910f999169e796ad9",
-    "ggml/src/ggml.c": "42b238412cda218552812a37329fab95a2f94be6d8bff5139083450d432f796d",
-    "ggml/src/ggml-cpu/ops.cpp": "0cb56844ee2e315e4cd35a6bf802a9372f4c9c41725328a5b22a2d28bb254582",
-    "ggml/src/ggml-backend.cpp": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+    "ggml/src/ggml.c": "6f839423326ca75319ab0301b4b242e94974b48808888042813f199df98e7482",
+    "ggml/src/ggml-cpu/ops.cpp": "05ee55649f47fad58791436401444720a110d941f314a5ad623bb191d49d823a",
+    "ggml/src/ggml-backend.cpp": "79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0",
+    "src/llama-context.cpp": "07109d97009e8aae60c7a4b685246d9ffde3d9eadb1606364a1e5f6a56553502",
+    "src/llama-graph.cpp": "0f65e40d98be84c1e5e580532b931bfa1864cc3b1f7397e6a7ed21e9afbe3842",
+    "src/llama-cparams.h": "9f924d1edc672e0d1512ac5342a67aedae5e0807db8e4e694ce97ad3348935df",
+    "ggml/include/ggml.h": "349e1ea995dffbf900ce4345e0b2786c8a9b778035a66d6118b702f52b3af13f"
   },
-  "patchSha256": "38aa8f99cf1b39d4670d38fe4da7efbbe5eda2343e49769a04204c167214bbb7",
+  "patchSha256": "c93607b0be41b435d46f31b08fb1ffb6d0e56bbc717b7e987db3f530d0963885",
   "variants": {
     "upstream": {
-      "inputSha256": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
-      "outputSha256": "7cde6621d653b084cd5836e4b7e749ebd34a5a52d7cd9dfc5176a431ba19ed05"
+      "inputSha256": "8b723892b9f75ce6ce2c9f77d3e517c9b8032beb549f487857fb1c524f0efbe7",
+      "outputSha256": "98b0724567fb865bc7359c2416480af2f3669963e78fdc2a1dad97b86433dfce"
     },
     "file-backed-rows": {
-      "inputSha256": "c4cbc3decc15179e3938d5c7609288c34c8e64519a13ac1977b0d966be254f09",
-      "outputSha256": "b9e073ff02988e184aeedda93414abe478a853ce167955d56c4f5d315e3f6671"
+      "inputSha256": "537d7f7fc1c36a997a3ab6514f00ad01a0badb099d5188bbcae1ca4b54cd59c9",
+      "outputSha256": "8bf97861f27b031898205512108e38fa0c037b68e9e4034e6fccaccdcc1f34e3"
     }
   }
 }

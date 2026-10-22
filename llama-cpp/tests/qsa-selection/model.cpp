@@ -3,6 +3,7 @@
 #define main lcb_unused_architecture_test_main
 #include "test-llama-archs.cpp"
 #undef main
+#include "llama-context.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -78,6 +79,7 @@ struct capture {
     size_t query_projections = 0;
     size_t raw_key_projections = 0;
     size_t selection_masks = 0;
+    size_t fused_masks = 0;
     static bool callback(ggml_tensor * t, bool ask, void * opaque) {
         if (!ask) return true;
         auto & self = *static_cast<capture *>(opaque);
@@ -86,24 +88,38 @@ struct capture {
         if (t->op == GGML_OP_LIGHTNING_INDEXER) self.pools[t->ne[0]]++;
         if (std::strncmp(t->name, "indexer_q-", 10) == 0) ++self.query_projections;
         if (std::strncmp(t->name, "indexer_k_raw-", 14) == 0) ++self.raw_key_projections;
-        // v0.7.0 consumes the selection directly and renames that same tensor
-        // in build_qsa_attn. Count the actual shared ADD node, not the earlier
-        // indexer_sel label which is no longer observable by the scheduler.
-        if (t->op == GGML_OP_ADD && std::strncmp(t->name, "kq_mask_qsa-", 12) == 0) ++self.selection_masks;
+        // build_attn_qsa renames the final mask. b11804 can use TOP_K_MASK
+        // instead of ADD; count both, and retain separate fused-path coverage.
+        if (std::strncmp(t->name, "kq_mask_qsa-", 12) == 0 &&
+                (t->op == GGML_OP_ADD || t->op == GGML_OP_TOP_K_MASK)) {
+            ++self.selection_masks;
+            if (t->op == GGML_OP_TOP_K_MASK) ++self.fused_masks;
+        }
         return false; // metadata only; never request a node's completion
     }
     void record(std::ostream & out, const std::string & phase) {
         out << phase << ',' << ops["LIGHTNING_INDEXER"] << ',' << top_k_selections << ','
-            << query_projections << ',' << raw_key_projections << ',' << selection_masks << ',' << pools[64] << ',' << pools[128] << '\n';
-        ops.clear(); pools.clear(); top_k_selections = query_projections = raw_key_projections = selection_masks = 0;
+            << query_projections << ',' << raw_key_projections << ',' << selection_masks << ',' << fused_masks << ',' << pools[64] << ',' << pools[128] << '\n';
+        ops.clear(); pools.clear(); top_k_selections = query_projections = raw_key_projections = selection_masks = fused_masks = 0;
     }
 };
 
-static void trace(const std::string & path, const std::filesystem::path & directory, bool observe) {
+static void disable_fused_mask_for_test(llama_context * context) {
+    // Test-only access to the pinned native context, before its first decode.
+    // The object is non-const; no public/runtime switch or vendor edit is added.
+    // Initial reserve graphs are not inference graphs, and alloc_graph resizes
+    // the scheduler when the first unfused graph is built. Keep graph reuse on.
+    auto & params = const_cast<llama_cparams &>(context->get_cparams());
+    params.fused_top_k_mask = false;
+    params.auto_ftkm = false;
+}
+
+static void trace(const std::string & path, const std::filesystem::path & directory, bool observe,
+                  bool unfused_mask = false) {
     std::filesystem::create_directories(directory);
     std::ofstream values(directory / "logits.f32", std::ios::binary);
     std::ofstream counts(directory / "nodes.csv");
-    counts << "phase,indexer,top_k,query,raw_key,selection_mask,pools64,pools128\n";
+    counts << "phase,indexer,top_k,query,raw_key,selection_mask,fused_mask,pools64,pools128\n";
     auto mp = llama_model_default_params();
     mp.n_gpu_layers = 0; mp.load_mode = LLAMA_LOAD_MODE_NONE; mp.lazy_mode = LLAMA_LAZY_MODE_ON;
     llama_model_ptr model(llama_model_load_from_file(path.c_str(), mp));
@@ -115,6 +131,7 @@ static void trace(const std::string & path, const std::filesystem::path & direct
     if (observe) { cp.cb_eval = capture::callback; cp.cb_eval_user_data = &seen; }
     llama_context_ptr context(llama_init_from_model(model.get(), cp));
     require(bool(context), "create context");
+    if (unfused_mask) disable_fused_mask_for_test(context.get());
     seen.record(counts, "reserve");
     const size_t vocabulary = llama_vocab_n_tokens(llama_model_get_vocab(model.get()));
     auto write = [&](const float * data, size_t size) {
@@ -171,6 +188,7 @@ static void trace(const std::string & path, const std::filesystem::path & direct
     cp.kv_unified = true;
     context.reset(llama_init_from_model(model.get(), cp));
     require(bool(context), "create unified context");
+    if (unfused_mask) disable_fused_mask_for_test(context.get());
     seen.record(counts, "parallel-reserve");
     {
         common_batch batch(context.get());
@@ -194,7 +212,7 @@ static void trace(const std::string & path, const std::filesystem::path & direct
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 4) { std::cerr << "usage: model generate|trace|benchmark MODEL PATH_OR_Q3_K_OR_Q4_K_OR_F16\n"; return 2; }
+    if (argc != 4) { std::cerr << "usage: model generate|trace|trace-unfused|benchmark MODEL PATH_OR_Q3_K_OR_Q4_K_OR_F16\n"; return 2; }
     try {
         llama_backend_init();
         const std::string command(argv[1]);
@@ -203,8 +221,8 @@ int main(int argc, char ** argv) {
             require(quant == "Q3_K" || quant == "Q4_K" || quant == "F16", "quantization argument");
             generate(argv[2], quant == "Q3_K" ? GGML_TYPE_Q3_K : quant == "Q4_K" ? GGML_TYPE_Q4_K : GGML_TYPE_F16);
         } else {
-            require(command == "trace" || command == "benchmark", "command argument");
-            trace(argv[2], argv[3], command == "trace");
+            require(command == "trace" || command == "trace-unfused" || command == "benchmark", "command argument");
+            trace(argv[2], argv[3], command != "benchmark", command == "trace-unfused");
         }
         llama_backend_free();
     } catch (const std::exception & e) { std::cerr << "FAIL " << e.what() << '\n'; return 1; }
