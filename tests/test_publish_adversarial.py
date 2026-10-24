@@ -116,13 +116,52 @@ class AdversarialPublication(unittest.TestCase):
     def test_manifest_and_payload_may_contain_unusual_filenames(self):
         # ls-tree must use NUL framing, not line splitting or quoted paths.
         name = 'unicode-資料 space\ttab\nline.txt'
-        (self.out / 'llama-cpp-browser-core/licenses' / name).write_bytes(b'notice\x00binary\xff')
+        # This is arbitrary binary payload, not a UTF-8 native notice. Keep it
+        # outside licenses/, whose contents must be owned and indexed.
         inner = self.out / 'llama-cpp-browser-core'
+        relative = 'examples/runtime/' + name
+        (inner / relative).write_bytes(b'notice\x00binary\xff')
         fixtures.write_manifest(inner, json.loads((inner / 'manifest.json').read_text()))
         self.rewrite_root_manifest()
         commit = publisher.publish(self.out, str(self.remote))
-        data = subprocess.check_output(['git', '--git-dir=' + str(self.remote), 'show', commit + ':llama-cpp-browser-core/licenses/' + name])
+        data = subprocess.check_output(['git', '--git-dir=' + str(self.remote), 'show', commit + ':llama-cpp-browser-core/' + relative])
         self.assertEqual(data, b'notice\x00binary\xff')
+
+    def test_invalid_native_notices_cannot_be_published_with_refreshed_hashes(self):
+        # Publication still validates semantics after every manifest hash has
+        # been refreshed. Do not fix payload fixtures by weakening this gate.
+        for runtime, dirname in package.ARTIFACT_DIRS.items():
+            for case in ('empty', 'binary', 'control-path', 'unindexed'):
+                with self.subTest(runtime=runtime, case=case):
+                    self.fixture.assemble()
+                    inner = self.out / dirname
+                    manifest = json.loads((inner / 'manifest.json').read_text())
+                    if case == 'empty':
+                        (inner / 'LICENSE').write_bytes(b'')
+                        error = 'Empty native notice'
+                    elif case == 'binary':
+                        (inner / 'LICENSE').write_bytes(b'not UTF-8\xff')
+                        error = 'utf-8'
+                    elif case == 'control-path':
+                        (inner / 'licenses' / 'tab\tline\n.txt').write_text('Notice')
+                        error = 'Unsafe native notice path'
+                    else:
+                        # This has a known owner but is absent from the index.
+                        relative = ('licenses/0/COPYRIGHT-extra'
+                                    if runtime == 'llama-cpp'
+                                    else 'licenses/stable-diffusion/COPYRIGHT-extra')
+                        if runtime == 'llama-cpp':
+                            manifest['licenseRoots'] = ['llama.cpp']
+                        self.assertFalse((inner / relative).exists())
+                        (inner / relative).parent.mkdir(parents=True, exist_ok=True)
+                        (inner / relative).write_text('Additional contributor notice')
+                        error = 'Native license index differs'
+                    fixtures.write_manifest(inner, manifest)
+                    self.rewrite_root_manifest()
+                    with patch.object(publisher, 'run', wraps=publisher.run) as calls, \
+                         self.assertRaisesRegex(ValueError, error):
+                        publisher.publish(self.out, str(self.remote))
+                    self.assert_no_remote(calls)
 
     def test_mutation_during_report_construction_never_writes_report(self):
         for receipt in (True, False):
@@ -244,13 +283,21 @@ class AdversarialPublication(unittest.TestCase):
 
     def test_streaming_git_verification_accepts_empty_and_multichunk_blobs(self):
         # Synthetic data beyond the verifier's one-MiB read window, not Wasm.
-        notices = self.out / 'llama-cpp-browser-core/licenses'
-        (notices / 'empty.txt').write_bytes(b'')
-        (notices / 'large.txt').write_bytes(b'x' * (2 * 1024 * 1024 + 7))
+        # Neither an empty blob nor arbitrary bytes are native license text.
         inner = self.out / 'llama-cpp-browser-core'
+        payloads = {'empty.bin': b'', 'large.bin': b'x' * (2 * 1024 * 1024 + 7)}
+        for name, data in payloads.items():
+            (inner / 'examples/runtime' / name).write_bytes(data)
         fixtures.write_manifest(inner, json.loads((inner / 'manifest.json').read_text()))
         self.rewrite_root_manifest()
-        publisher.publish(self.out, str(self.remote))
+        commit = publisher.publish(self.out, str(self.remote))
+        for name, data in payloads.items():
+            with self.subTest(name=name):
+                published = subprocess.check_output([
+                    'git', '--git-dir=' + str(self.remote), 'show',
+                    commit + ':llama-cpp-browser-core/examples/runtime/' + name,
+                ])
+                self.assertEqual(published, data)
 
     def test_standalone_metadata_hashes_the_exact_bytes_it_parses(self):
         inner = self.out / 'llama-cpp-browser-core'
