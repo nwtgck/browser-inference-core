@@ -9,6 +9,7 @@
     "examples/",
     "profiles/",
     "licenses/",
+    "native-license-index.json",
     "manifest.json",
     "README.md",
     "LICENSE"
@@ -20,6 +21,7 @@
     },
     "./api/*": "./api/*",
     "./profiles/*": "./profiles/*",
-    "./manifest.json": "./manifest.json"
+    "./manifest.json": "./manifest.json",
+    "./native-license-index.json": "./native-license-index.json"
   }
 }

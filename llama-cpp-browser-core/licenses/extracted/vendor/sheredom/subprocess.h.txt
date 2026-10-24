@@ -1,0 +1,373 @@
+/*
+   The latest version of this library is available on GitHub;
+   https://github.com/sheredom/subprocess.h
+*/
+
+/*
+   This is free and unencumbered software released into the public domain.
+
+   Anyone is free to copy, modify, publish, use, compile, sell, or
+   distribute this software, either in source code form or as a compiled
+   binary, for any purpose, commercial or non-commercial, and by any
+   means.
+
+   In jurisdictions that recognize copyright laws, the author or authors
+   of this software dedicate any and all copyright interest in the
+   software to the public domain. We make this dedication for the benefit
+   of the public at large and to the detriment of our heirs and
+   successors. We intend this dedication to be an overt act of
+   relinquishment in perpetuity of all present and future rights to this
+   software under copyright law.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE.
+
+   For more information, please refer to <http://unlicense.org/>
+*/
+
+/* disable warning: '__cplusplus' is not defined as a preprocessor macro,
+ * replacing with '0' for '#if/#elif' */
+
+// stdout and stderr are the same FILE.
+
+
+// The child process should inherit the environment variables of the parent.
+
+
+// Enable asynchronous reading of stdout/stderr before it has completed.
+
+
+// Enable the child process to be spawned with no window visible if supported
+  // by the platform.
+
+
+// Search for program names in the PATH variable. Always enabled on Windows.
+  // Note: this will **not** search for paths in any provided custom environment
+  // and instead uses the PATH of the spawning process.
+
+
+// Make subprocess_read_stdout and subprocess_read_stderr return immediately
+  // with 0 if no data is available. Requires subprocess_option_enable_async.
+
+
+// Error codes returned by subprocess_create and subprocess_create_ex.
+// subprocess_error_success is always zero; all errors are non-zero.
+
+
+/// @brief Create a process.
+/// @param command_line An array of strings for the command line to execute for
+/// this process. The last element must be NULL to signify the end of the array.
+/// On Windows these strings are interpreted as UTF-8 and passed to the Unicode
+/// process creation APIs. The memory backing this parameter only needs to
+/// persist until this function returns.
+/// @param options A bit field of subprocess_option_e's to pass.
+/// @param out_process The newly created process.
+/// @return On success zero is returned. On failure a non-zero
+/// `subprocess_error_e` value is returned; inspect `errno` on POSIX platforms
+/// or `GetLastError()` on Windows for the platform-specific failure reason.
+
+
+/// @brief Create a process (extended create).
+/// @param command_line An array of strings for the command line to execute for
+/// this process. The last element must be NULL to signify the end of the array.
+/// On Windows these strings are interpreted as UTF-8 and passed to the Unicode
+/// process creation APIs. The memory backing this parameter only needs to
+/// persist until this function returns.
+/// @param options A bit field of subprocess_option_e's to pass.
+/// @param environment An optional array of strings for the environment to use
+/// for a child process (each element of the form FOO=BAR). The last element
+/// must be NULL to signify the end of the array. On Windows these strings are
+/// interpreted as UTF-8.
+/// @param process_cwd The current working directory of the newly created
+/// process. If NULL, will be the same as the parent process. On Windows this
+/// string is interpreted as UTF-8.
+/// @param out_process The newly created process.
+/// @return On success zero is returned. On failure a non-zero
+/// `subprocess_error_e` value is returned; inspect `errno` on POSIX platforms
+/// or `GetLastError()` on Windows for the platform-specific failure reason.
+///
+/// If `options` contains `subprocess_option_inherit_environment`, then
+/// `environment` must be NULL.
+
+
+/// @brief Get the standard input file for a process.
+/// @param process The process to query.
+/// @return The file for standard input of the process.
+///
+/// The file returned can be written to by the parent process to feed data to
+/// the standard input of the process.
+
+
+/// @brief Get the standard output file for a process.
+/// @param process The process to query.
+/// @return The file for standard output of the process.
+///
+/// The file returned can be read from by the parent process to read data from
+/// the standard output of the child process.
+
+
+/// @brief Get the standard error file for a process.
+/// @param process The process to query.
+/// @return The file for standard error of the process.
+///
+/// The file returned can be read from by the parent process to read data from
+/// the standard error of the child process.
+///
+/// If the process was created with the subprocess_option_combined_stdout_stderr
+/// option bit set, this function will return NULL, and the subprocess_stdout
+/// function should be used for both the standard output and error combined.
+
+
+/// @brief Wait for a process to finish execution.
+/// @param process The process to wait for.
+/// @param out_return_code The return code of the returned process (can be
+/// NULL).
+/// @return On success zero is returned.
+///
+/// Joining a process will close the stdin pipe to the process.
+
+
+/// @brief Destroy a previously created process.
+/// @param process The process to destroy.
+/// @return On success zero is returned.
+///
+/// If the process to be destroyed had not finished execution, it may out live
+/// the parent process.
+
+
+/// @brief Terminate a previously created process.
+/// @param process The process to terminate.
+/// @return On success zero is returned.
+///
+/// If the process to be destroyed had not finished execution, it will be
+/// terminated (i.e killed).
+
+
+/// @brief Read the standard output from the child process.
+/// @param process The process to read from.
+/// @param buffer The buffer to read into.
+/// @param size The maximum number of bytes to read.
+/// @return The number of bytes actually read into buffer. Can only be 0 if the
+/// process has complete, or if the process was created with
+/// `subprocess_option_enable_async_no_wait` and no data is currently available.
+///
+/// The only safe way to read from the standard output of a process during it's
+/// execution is to use the `subprocess_option_enable_async` option in
+/// conjunction with this method.
+
+
+/// @brief Read the standard error from the child process.
+/// @param process The process to read from.
+/// @param buffer The buffer to read into.
+/// @param size The maximum number of bytes to read.
+/// @return The number of bytes actually read into buffer. Can only be 0 if the
+/// process has complete, or if the process was created with
+/// `subprocess_option_enable_async_no_wait` and no data is currently available.
+///
+/// The only safe way to read from the standard error of a process during it's
+/// execution is to use the `subprocess_option_enable_async` option in
+/// conjunction with this method.
+
+
+/// @brief Returns if the subprocess is currently still alive and executing.
+/// @param process The process to check.
+/// @return If the process is still alive non-zero is returned.
+
+
+/* Which spelling of the chdir file action the platform provides, if any.
+   POSIX 2024 standardised posix_spawn_file_actions_addchdir; implementations
+   that shipped it earlier called it ..._np. macOS 26 and NetBSD 10 use the
+   standard name, glibc 2.29+, macOS 10.15+ and FreeBSD 13.1+ use the _np name,
+   and AIX, NetBSD 9 and older, and OpenBSD provide neither. */
+
+/* Whether to launch the child with fork()+exec() instead of posix_spawn(),
+   for platforms with no posix_spawn_file_actions_addchdir under either
+   spelling: the child chdir()s before exec, and a close-on-exec pipe carries
+   exec's errno back. Define this yourself to force either implementation. */
+
+/* Whether subprocess_create_ex can honour process_cwd. glibc only gained
+   posix_spawn_file_actions_addchdir_np in 2.29, and macOS in 10.15; the SDKs
+   mark it unavailable on iOS, tvOS and watchOS, where the undefined version
+   macro folds to 0 and so answers correctly. Define this yourself to override
+   the detection, for instance on musl older than 1.1.24. */
+
+/* Whether a failed exec is reported back to the caller. The fork() path always
+   reports it through its error pipe. glibc's posix_spawn only started doing so
+   in 2.24; before that the child silently exits with 127. */
+
+/* SIZE_T is ULONG_PTR, which is not size_t: on Win32 both are 32 bits wide but
+   unsigned long and unsigned int are still distinct types. */
+
+/* Move a pipe end off 0, 1 or 2. Duplicating a descriptor onto itself is a
+   no-op, so a pipe end already sitting on a standard descriptor would keep its
+   FD_CLOEXEC and be closed by exec, leaving the child without that stream. */
+
+/* Create pipes with close-on-exec set so later subprocesses do not inherit
+   descriptors belonging to subprocesses which are already running. */
+
+/* Older kernels can lack pipe2 even when the C library declares it. */
+
+/* Not every platform declares execvpe: AIX exports it from libc without ever
+   naming it in a header, and glibc hides it behind _GNU_SOURCE. */
+
+// We always end with two null terminators. MultiByteToWideChar includes
+      // each environment string's null terminator, so start with one extra.
+
+
+// Re-use len for the insertion position.
+
+
+// End with the second null terminator.
+
+
+// Combine commandLine together into a single string
+
+
+// for the trailing \0
+
+
+// Quote the argument if it has a space in it
+
+
+// Duplicate the preceding run and escape the quote.
+
+
+// Duplicate trailing slashes before the generated closing quote.
+
+
+// Gonna re-use len to store the write index into commandLineCombined
+
+
+// 2n + 1 slashes preserve n slashes and escape the quote.
+
+
+// 2n slashes preserve n slashes before the closing quote.
+
+
+/* Restrict inheritance to this subprocess's standard streams. Without a
+     handle list, concurrent subprocess_create calls can inherit each other's
+     temporarily-inheritable child pipe handles. */
+
+// command line
+
+
+// process security attributes
+
+
+// primary thread security attributes
+
+
+// handles are inherited
+
+
+// creation flags
+
+
+// used environment
+
+
+// use specified current directory
+
+
+// STARTUPINFOEX pointer
+
+
+// We don't need the handle of the primary thread in the called process.
+
+
+/* Pipe used to relay the child's exec() errno back to the parent. */
+
+/* fork()+exec() instead of posix_spawn, so the child can chdir() first.
+     exec_errfd[1] is close-on-exec: a successful exec closes it and the parent
+     reads EOF; a failed exec writes errno through it before _exit. */
+
+/* Child. Everything below must stay async-signal-safe: after fork() in a
+       threaded process only such functions may be called before exec. */
+
+/* The originals are only closed once they have been duplicated, so that a
+       pipe end that already sits on 0, 1 or 2 is not closed out from under us. */
+
+/* Nothing useful can be done if this write fails; the parent then sees EOF
+       and reports success, exactly as posix_spawn would without exec reporting. */
+
+/* 127 is what POSIX requires posix_spawn's child to exit with when exec
+       fails, so both implementations look the same to a caller. */
+
+/* Parent. */
+
+/* exec failed in the child. Reap it and surface the reason. */
+
+// Set working directory
+
+
+// Close the stdin write end
+
+
+// Map the read end to stdin
+
+
+// Close the stdout read end
+
+
+// Map the write end to stdout
+
+
+// Close the stderr read end
+
+
+// Map the write end to stdout
+
+
+/* posix_spawn cannot tell us the exec failed, so check up front */
+
+/* SUBPROCESS_SPAWN_VIA_FORK */
+
+  // Close the stdin read end
+
+
+// Store the stdin write end
+
+
+// Close the stdout write end
+
+
+// Store the stdout read end
+
+
+// Set non blocking if we are async and asked not to wait.
+
+
+// Close the stderr write end
+
+
+// Store the stderr read end
+
+
+// Set non blocking if we are async and asked not to wait.
+
+
+// Store the child's pid
+
+
+// Means we've got an async read!
+
+
+// Means we've got an async read!
+
+
+// If the process was successfully waited on we need to cleanup now.
+
+
+// Since we've already successfully waited on the process, we need to wipe
+      // the child now.
+
+
+// extern "C"
+
+
+/* SHEREDOM_SUBPROCESS_H_INCLUDED */

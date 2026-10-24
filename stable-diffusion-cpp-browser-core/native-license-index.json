@@ -1,0 +1,850 @@
+{
+  "components": [
+    {
+      "id": "darts-clone",
+      "name": "Darts-clone",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/LICENSE.darts_clone.txt"
+        }
+      ]
+    },
+    {
+      "id": "emdawnwebgpu_pkg/webgpu",
+      "name": "emdawnwebgpu_pkg / webgpu",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emdawnwebgpu_pkg/webgpu_cpp",
+      "name": "emdawnwebgpu_pkg / webgpu_cpp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten",
+      "name": "emscripten",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/SDL",
+      "name": "SDL",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING"
+        },
+        {
+          "path": "licenses/toolchain/emscripten/system/include/SDL/COPYING"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/ittnotify",
+      "name": "ittnotify",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/musl",
+      "name": "musl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/gen-mapping",
+      "name": "@jridgewell/gen-mapping",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/resolve-uri",
+      "name": "@jridgewell/resolve-uri",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/source-map",
+      "name": "@jridgewell/source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/sourcemap-codec",
+      "name": "@jridgewell/sourcemap-codec",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/trace-mapping",
+      "name": "@jridgewell/trace-mapping",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/acorn",
+      "name": "acorn",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/acorn/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/acorn-import-phases",
+      "name": "acorn-import-phases",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ansi-styles",
+      "name": "ansi-styles",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/ansi-styles/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/b4a",
+      "name": "b4a",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/b4a/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/bare-events",
+      "name": "bare-events",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/bare-events/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/buffer-from",
+      "name": "buffer-from",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/camel-case",
+      "name": "camel-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/camel-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/chalk",
+      "name": "chalk",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/chalk/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/chalk/node_modules/supports-color",
+      "name": "supports-color",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clean-css",
+      "name": "clean-css",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/clean-css/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clean-css/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clone",
+      "name": "clone",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/clone/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/color-convert",
+      "name": "color-convert",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/color-convert/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/color-name",
+      "name": "color-name",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/color-name/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/dot-case",
+      "name": "dot-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/dot-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/entities",
+      "name": "entities",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/entities/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/events-universal",
+      "name": "events-universal",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/events-universal/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-fifo",
+      "name": "fast-fifo",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/has-flag",
+      "name": "has-flag",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/has-flag/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/html-minifier-terser",
+      "name": "html-minifier-terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/html-minifier-terser/node_modules/commander",
+      "name": "commander",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/lower-case",
+      "name": "lower-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/lower-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/minimist",
+      "name": "minimist",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/minimist/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/no-case",
+      "name": "no-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/no-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/param-case",
+      "name": "param-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/param-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pascal-case",
+      "name": "pascal-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/relateurl",
+      "name": "relateurl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/relateurl/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/remove-trailing-separator",
+      "name": "remove-trailing-separator",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/replace-ext",
+      "name": "replace-ext",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map-support",
+      "name": "source-map-support",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map-support/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/streamx",
+      "name": "streamx",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/streamx/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/teex",
+      "name": "teex",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/teex/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/terser",
+      "name": "terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/terser/node_modules/commander",
+      "name": "commander",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/text-decoder",
+      "name": "text-decoder",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tslib",
+      "name": "tslib",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt"
+        },
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vinyl",
+      "name": "vinyl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/vinyl/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/compiler-rt",
+      "name": "compiler-rt",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libcxx",
+      "name": "libcxx",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libcxxabi",
+      "name": "libcxxabi",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libunwind",
+      "name": "libunwind",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/llvm-libc",
+      "name": "llvm-libc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/mimalloc",
+      "name": "mimalloc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/openmp",
+      "name": "openmp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/test-sounds",
+      "name": "Emscripten test sounds",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/test/sounds/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/closure-compiler",
+      "name": "closure-compiler",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/leb128",
+      "name": "leb128",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/third_party/leb128/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/terser",
+      "name": "terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/toolchain/emscripten/third_party/terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "ggml",
+      "name": "ggml",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/ggml/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "ggml/sageattention",
+      "name": "SageAttention (ggml)",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "nlohmann-json",
+      "name": "nlohmann/json",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/json.hpp.txt",
+          "sourcePath": "licenses/embedded/json.hpp.txt"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion-cpp-browser-core",
+      "name": "stable-diffusion-cpp-browser-core",
+      "version": "0.1.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp",
+      "name": "stable-diffusion.cpp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/frontend",
+      "name": "stable-diffusion.cpp server frontend",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/examples/server/frontend/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/ggml",
+      "name": "ggml (stable-diffusion.cpp)",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/ggml/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/thirdparty/libwebm",
+      "name": "libwebm",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/libwebm/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/thirdparty/libwebp",
+      "name": "libwebp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/libwebp/COPYING"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/thirdparty/oniguruma",
+      "name": "oniguruma",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/oniguruma/COPYING"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/thirdparty/utf8proc",
+      "name": "utf8proc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/utf8proc/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "stb_image",
+      "name": "stb_image",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/stb_image.h.txt",
+          "sourcePath": "licenses/embedded/stb_image.h.txt"
+        }
+      ]
+    },
+    {
+      "id": "stb_image_resize",
+      "name": "stb_image_resize",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/stb_image_resize.h.txt",
+          "sourcePath": "licenses/embedded/stb_image_resize.h.txt"
+        }
+      ]
+    },
+    {
+      "id": "stb_image_write",
+      "name": "stb_image_write",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/stb_image_write.h.txt",
+          "sourcePath": "licenses/embedded/stb_image_write.h.txt"
+        }
+      ]
+    }
+  ]
+}

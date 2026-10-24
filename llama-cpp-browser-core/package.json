@@ -9,6 +9,7 @@
     "profiles/",
     "api/",
     "manifest.json",
+    "native-license-index.json",
     "licenses/",
     "README.md",
     "chat-and-multimodal.md",
@@ -26,6 +27,7 @@
     },
     "./profiles/*": "./profiles/*",
     "./api/*": "./api/*",
-    "./manifest.json": "./manifest.json"
+    "./manifest.json": "./manifest.json",
+    "./native-license-index.json": "./native-license-index.json"
   }
 }

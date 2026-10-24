@@ -1,0 +1,64 @@
+/*
+SHA-1 in C
+By Steve Reid <steve@edmweb.com>
+100% Public Domain
+
+Test Vectors (from FIPS PUB 180-1)
+"abc"
+  A9993E36 4706816A BA3E2571 7850C26C 9CD0D89D
+"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+  84983E44 1C3BD26E BAAE4AA1 F95129E5 E54670F1
+A million repetitions of "a"
+  34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
+*/
+
+/* #define LITTLE_ENDIAN * This should be #define'd already, if true. */
+/* #define SHA1HANDSOFF * Copies data before messing with it. */
+
+/* for uint32_t */
+
+/* blk0() and blk() perform the initial expand. */
+/* I got the idea of expanding during the round function from SSLeay */
+
+/* (R0+R1), R2, R3, R4 are the different operations used in SHA1 */
+
+/* Hash a single 512-bit block. This is the core of the algorithm. */
+
+/* use array to appear as a pointer */
+
+/* The following had better never be used because it causes the
+     * pointer-to-const buffer to be cast into a pointer to non-const.
+     * And the result is written through.  I threw a "const" in, hoping
+     * this will cause a diagnostic.
+     */
+
+/* Copy context->state[] to working vars */
+
+/* 4 rounds of 20 operations each. Loop unrolled. */
+
+/* Add the working vars back into context.state[] */
+
+/* Wipe variables */
+
+/* SHA1Init - Initialize new context */
+
+/* SHA1 initialization constants */
+
+/* Run your data through this. */
+
+/* Add padding and return the message digest. */
+
+/* untested "improvement" by DHR */
+    /* Convert context->count to a sequence of bytes
+     * in finalcount.  Second element first, but
+     * big-endian order within element.
+     * But we do it all backwards.
+     */
+
+/* Endian independent */
+
+/* Should cause a SHA1Transform() */
+
+/* Wipe variables */
+
+// namespace vendor_hash
