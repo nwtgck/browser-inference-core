@@ -14,6 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT.parent / 'scripts'))
 from package_inputs import copy_regular, copy_regular_tree, read_regular, regular_path
 from pipeline_metrics import measured, span
+from native_license_index import write_index, validate_index
 
 RUNTIME_NAME='llama-cpp-browser-core'
 VARIANTS=json.loads((ROOT/'config/variants.json').read_text())
@@ -114,6 +115,7 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
             with (directory/f'profiles/{name}/{variant}/core.wasm').open('rb') as wasm:
                 if wasm.read(8) != b'\x00asm\x01\x00\x00\x00':
                     raise ValueError('Not a WebAssembly module')
+    validate_index(directory, runtime='llama-cpp', license_roots=manifest['licenseRoots'])
     if check_npm_pack:
         with span('package.npm_pack', packageKind='llama'):
             packed=json.loads(subprocess.check_output(['npm','pack','--dry-run','--json'],cwd=directory,text=True))
@@ -164,11 +166,12 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
         if not copied: raise ValueError('No third-party license notices collected')
         copy_embedded_notices(ROOT/'vendor/llama.cpp', licenses/'embedded')
         pkg={'name':RUNTIME_NAME,'version':'0.1.0','private':True,'type':'module','license':'MIT',
-             'files':['examples/','profiles/','api/','manifest.json','licenses/','README.md',*GUIDE_FILES,'LICENSE'],
+             'files':['examples/','profiles/','api/','manifest.json','native-license-index.json','licenses/','README.md',*GUIDE_FILES,'LICENSE'],
              'exports':{'./examples/runtime':{'types':'./examples/runtime/index.d.ts','import':'./examples/runtime/index.mjs'},
                         './profiles/*/core.mjs':{'types':'./profiles/*/core.d.ts','import':'./profiles/*/core.mjs'},
-                        './profiles/*':'./profiles/*','./api/*':'./api/*','./manifest.json':'./manifest.json'}}
+                        './profiles/*':'./profiles/*','./api/*':'./api/*','./manifest.json':'./manifest.json','./native-license-index.json':'./native-license-index.json'}}
         (out/'package.json').write_text(json.dumps(pkg,indent=2)+'\n')
+        write_index(out, runtime='llama-cpp', license_roots=[p.name for p in license_roots])
         manifest={'formatVersion':2,'sourceCommit':source,'llamaCommit':upstream,'profiles':provenance,
                   'licenseRoots':[p.name for p in license_roots],
                   'files':[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)}
