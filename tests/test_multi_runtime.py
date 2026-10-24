@@ -43,10 +43,10 @@ class MultiRuntime(unittest.TestCase):
             p.write_bytes(value if isinstance(value, bytes) else value.encode())
         put('LICENSE', 'fixture notice')
         put('package.json', json.dumps({'name': 'llama-cpp-browser-core' if runtime == 'llama-cpp' else validator.NAME,
-                                      'version': '0.1.0', 'type': 'module', 'files': ['profiles/', 'licenses/', 'api/', 'examples/', 'LICENSE', 'manifest.json']}))
+                                      'version': '0.1.0', 'type': 'module', 'files': ['profiles/', 'licenses/', 'api/', 'examples/', 'LICENSE', 'manifest.json', 'native-license-index.json']}))
         manifest = {'sourceCommit': SOURCE, 'profiles': {}}
         if runtime == 'llama-cpp':
-            manifest.update(formatVersion=2, llamaCommit='b' * 40)
+            manifest.update(formatVersion=2, llamaCommit='b' * 40, licenseRoots=[])
             for relative in validator.EMBEDDED_NOTICE_FILES: put('licenses/embedded/' + relative + '.txt', 'fixture embedded notice')
             for name in validator.EXAMPLE_RUNTIME_FILES: put('examples/runtime/' + name, 'fixture')
             profiles = {'cpu-wasm32': {}}
@@ -69,6 +69,7 @@ class MultiRuntime(unittest.TestCase):
                 else: data.update(upstreams=manifest['upstreams'], configuration=config, patches={'patches': [{'fixtureOnly': True}]})
                 variants[variant] = data
             manifest['profiles'][profile] = {'variants': variants}
+        validator.write_index(root, runtime=runtime, license_roots=manifest.get('licenseRoots', []))
         write_manifest(root, manifest)
     def test_complete_package_has_namespaces_and_resolvable_legacy_alias(self):
         package.assemble(self.inputs, self.out)

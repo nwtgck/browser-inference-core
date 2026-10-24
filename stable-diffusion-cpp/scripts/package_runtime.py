@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT.parent / 'scripts'))
 from package_inputs import copy_regular, copy_regular_tree, read_regular, regular_path
 from pipeline_metrics import measured, span
+from native_license_index import write_index, validate_index
 
 VARIANTS = json.loads((ROOT / 'config/variants.json').read_text())
 PROFILES = json.loads((ROOT / 'config/profiles.json').read_text())
@@ -85,6 +86,7 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
     for name in ('emscripten', 'emdawnwebgpu_pkg'):
         if not any(path.startswith(f'licenses/toolchain/{name}/') for path in expected):
             raise ValueError('Missing image toolchain notices: ' + name)
+    validate_index(directory, runtime='stable-diffusion-cpp')
     if check_npm_pack:
         with span('package.npm_pack', packageKind='image'):
             packed = json.loads(subprocess.check_output(['npm', 'pack', '--dry-run', '--json'], cwd=directory, text=True))
@@ -133,9 +135,10 @@ def package(build_root: Path, destination: Path, license_roots: list[Path], *, c
             raise ValueError('Provide exactly the Emscripten and Dawn notice roots')
         for name, root in roots.items(): collect_notices(root, out / 'licenses/toolchain' / name)
         pkg = {'name': NAME, 'version': '0.1.0', 'private': True, 'type': 'module', 'license': 'MIT',
-               'files': ['api/', 'examples/', 'profiles/', 'licenses/', 'manifest.json', 'README.md', 'LICENSE'],
-               'exports': {'./examples/runtime': {'types': './examples/runtime/index.d.ts', 'import': './examples/runtime/index.mjs'}, './api/*': './api/*', './profiles/*': './profiles/*', './manifest.json': './manifest.json'}}
+               'files': ['api/', 'examples/', 'profiles/', 'licenses/', 'native-license-index.json', 'manifest.json', 'README.md', 'LICENSE'],
+               'exports': {'./examples/runtime': {'types': './examples/runtime/index.d.ts', 'import': './examples/runtime/index.mjs'}, './api/*': './api/*', './profiles/*': './profiles/*', './manifest.json': './manifest.json', './native-license-index.json': './native-license-index.json'}}
         (out / 'package.json').write_text(json.dumps(pkg, indent=2) + '\n')
+        write_index(out, runtime='stable-diffusion-cpp')
         manifest = {'formatVersion': 2, 'runtime': 'stable-diffusion-cpp', 'abiVersion': 2,
                     'schemaSha256': hashlib.sha256(schema_bytes).hexdigest(), 'capabilities': CAPABILITIES,
                     'sourceCommit': source, 'upstreams': upstreams, 'profiles': profiles,
