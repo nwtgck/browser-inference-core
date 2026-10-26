@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate thin bindings from the pinned SD and selected public ggml C headers."""
+"""Generate thin bindings from the pinned SD and public ggml C headers."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -12,6 +12,8 @@ ABI_VERSION = 2
 EXTRA_CONSTANTS = ['EINVAL', 'EIO', 'EOVERFLOW', 'EROFS', 'ENOENT',
                    'SEEK_SET', 'SEEK_CUR', 'SEEK_END']
 GGML_HEADERS = {
+    # These names are a minimum reviewed surface, not an export allowlist.
+    # Export every supported public declaration from each covered header.
     'ggml.h': '''
         ggml_version ggml_commit ggml_status_to_string
         ggml_fp16_to_fp32 ggml_fp32_to_fp16
@@ -87,20 +89,29 @@ GGML_HEADERS = {
         ggml_cpu_get_rvv_vlen ggml_cpu_has_vsx ggml_cpu_has_vxe
         ggml_cpu_has_wasm_simd ggml_cpu_has_llamafile
     ''',
+    'ggml-alloc.h': '''
+        ggml_backend_alloc_ctx_tensors ggml_backend_alloc_ctx_tensors_from_buft
+        ggml_gallocr_new ggml_gallocr_free ggml_gallocr_reserve
+        ggml_gallocr_alloc_graph ggml_gallocr_get_buffer_size
+    ''',
 }
 GGML_TAG_RECORDS = {
-    'ggml.h': {'ggml_tensor', 'ggml_type_traits'},
+    'ggml.h': {'ggml_tensor', 'ggml_type_traits', 'ggml_init_params', 'ggml_threadpool_params'},
     'ggml-backend.h': {'ggml_backend_dev_caps', 'ggml_backend_dev_props'},
     'gguf.h': {'gguf_init_params'},
+    'ggml-cpu.h': {'ggml_cplan'},
 }
 GGML_MACRO_CONSTANTS = (
     'GGML_MAX_DIMS', 'GGML_MAX_SRC', 'GGML_DEFAULT_GRAPH_SIZE',
     'GGUF_VERSION', 'GGUF_DEFAULT_ALIGNMENT',
+    'GGML_MEM_ALIGN', 'GGML_MAX_N_THREADS',
 )
 GGML_EXCLUSION_REASONS = {
     'ggml_abort': 'variadic fatal-abort API',
     'ggml_fopen': 'FILE* lifetime is outside the browser core',
     'gguf_init_from_file_ptr': 'FILE* ownership is outside the browser core',
+    'ggml_threadpool_get_n_threads':
+        'declared in ggml-cpu.h but not implemented by the pinned upstream',
 }
 
 def direct_declarations(ast: dict, unit: Path) -> list[dict]:
@@ -108,7 +119,7 @@ def direct_declarations(ast: dict, unit: Path) -> list[dict]:
             if n.get('loc', {}).get('includedFrom', {}).get('file') == str(unit)]
 
 def select_ggml_functions(header: str, declarations: list[dict], names: set[str]) -> tuple[list[dict], list[dict], dict]:
-    """Make every omitted public declaration visible, and reject stale selections."""
+    """Export supported declarations, explaining exclusions and checking required names."""
     available = {n['name']: n for n in declarations if n.get('kind') == 'FunctionDecl' and n.get('name')}
     missing = names - available.keys()
     if missing:
@@ -116,13 +127,15 @@ def select_ggml_functions(header: str, declarations: list[dict], names: set[str]
     selected, excluded = [], []
     for name, node in sorted(available.items()):
         deprecated = any(x.get('kind') == 'DeprecatedAttr' for x in node.get('inner', []))
-        reason = ('deprecated' if deprecated else 'variadic' if node.get('variadic') else
-                  GGML_EXCLUSION_REASONS.get(name, 'not-selected'))
-        if name in names:
-            if deprecated or node.get('variadic'):
-                raise ValueError(f'{header}: selected function is {reason}: {name}')
+        reason = ('not-runtime-api' if not name.startswith(('ggml_', 'gguf_')) else
+                  'deprecated' if deprecated else 'variadic' if node.get('variadic') else
+                  'header-local' if node.get('storageClass') == 'static' else
+                  GGML_EXCLUSION_REASONS.get(name))
+        if reason is None:
             selected.append(node)
         else:
+            if name in names:
+                raise ValueError(f'{header}: selected function is {reason}: {name}')
             excluded.append({'name': name, 'header': header, 'reason': reason})
     return selected, excluded, {'available': len(available), 'selected': len(selected), 'excluded': len(excluded)}
 
@@ -185,9 +198,12 @@ def generate(source: Path, output: Path, compiler: str, ggml_source: Path | None
         missing = names - records.keys()
         if missing:
             raise ValueError(f'{header}: selected public records missing: {sorted(missing)}')
-        for name in names:
-            named_records[name] = records[name]
-            record_types[name] = 'struct ' + name
+    for direct in ggml_declarations.values():
+        for record in direct:
+            name = record.get('name', '')
+            if record.get('kind') == 'RecordDecl' and record.get('completeDefinition') and name.startswith(('ggml_', 'gguf_')):
+                named_records[name] = record
+                record_types[name] = 'struct ' + name
     for name in named_records: aliases[name] = 'struct ' + name
     def resolve(typ):
         old = None
@@ -237,7 +253,10 @@ def generate(source: Path, output: Path, compiler: str, ggml_source: Path | None
         if any(x.get('kind') == 'DeprecatedAttr' for x in n.get('inner', [])) or n.get('variadic'):
             excluded.append({'name': name, 'reason': 'deprecated' if not n.get('variadic') else 'variadic'})
             continue
-        result = n['type']['qualType'].split(' (', 1)[0]
+        result, separator, arguments = n['type']['qualType'].partition('(')
+        if not separator or arguments.lstrip().startswith(('*', '&')):
+            raise ValueError(f'Unsupported function return declarator: {n["type"]["qualType"]}')
+        result = result.strip()
         rk = classify(result)
         params = []
         for i, p in enumerate(x for x in n.get('inner', []) if x.get('kind') == 'ParmVarDecl'):
@@ -352,7 +371,7 @@ def main():
     p.add_argument('--source',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--ggml-source',type=Path,
-                   help='Prepared pinned ggml source; explicitly selected public APIs only')
+                   help='Prepared pinned ggml source; supported public C APIs')
     p.add_argument('--clang',default='clang')
     a=p.parse_args(); s=generate(a.source.resolve(),a.output.resolve(),a.clang,
                                  a.ggml_source.resolve() if a.ggml_source else None)

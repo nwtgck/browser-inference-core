@@ -33,15 +33,89 @@ class Bindings(unittest.TestCase):
         ]
         selected, excluded, coverage = generator.select_ggml_functions(
             'ggml.h', declarations, {'ggml_version'})
-        self.assertEqual([node['name'] for node in selected], ['ggml_version'])
-        self.assertEqual(coverage, {'available': 3, 'selected': 1, 'excluded': 2})
+        self.assertEqual([node['name'] for node in selected], ['ggml_unused', 'ggml_version'])
+        self.assertEqual(coverage, {'available': 3, 'selected': 2, 'excluded': 1})
         self.assertEqual({item['name']: item['reason'] for item in excluded}, {
-            'ggml_abort': 'variadic', 'ggml_unused': 'not-selected',
+            'ggml_abort': 'variadic',
         })
         with self.assertRaisesRegex(ValueError, 'selected public functions missing'):
             generator.select_ggml_functions('ggml.h', declarations, {'ggml_missing'})
         with self.assertRaisesRegex(ValueError, 'selected function is variadic'):
             generator.select_ggml_functions('ggml.h', declarations, {'ggml_abort'})
+
+    def test_public_additions_are_exported_and_only_reviewed_exclusions_are_omitted(self):
+        declarations = [
+            {'kind': 'FunctionDecl', 'name': 'ggml_new_public_function'},
+            {'kind': 'FunctionDecl', 'name': 'ggml_header_local', 'storageClass': 'static'},
+            {'kind': 'FunctionDecl', 'name': 'ggml_old', 'inner': [{'kind': 'DeprecatedAttr'}]},
+            {'kind': 'FunctionDecl', 'name': 'ggml_fopen'},
+            {'kind': 'FunctionDecl', 'name': 'ggml_threadpool_get_n_threads'},
+            {'kind': 'FunctionDecl', 'name': 'unrelated_function'},
+        ]
+        selected, excluded, _ = generator.select_ggml_functions('fixture.h', declarations, set())
+        self.assertEqual([node['name'] for node in selected], ['ggml_new_public_function'])
+        reasons = {item['name']: item['reason'] for item in excluded}
+        self.assertEqual(reasons['ggml_header_local'], 'header-local')
+        self.assertEqual(reasons['ggml_old'], 'deprecated')
+        self.assertEqual(reasons['unrelated_function'], 'not-runtime-api')
+        self.assertIn('FILE*', reasons['ggml_fopen'])
+        self.assertIn('not implemented', reasons['ggml_threadpool_get_n_threads'])
+
+    @unittest.skipUnless(shutil.which('clang') and shutil.which('c++'), 'native compilers required')
+    def test_direct_function_pointer_return_is_rejected_instead_of_guessed_as_void(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/'include').mkdir()
+            (root/'include/stable-diffusion.h').write_text('void (*callback_factory(void))(int);\n')
+            with self.assertRaisesRegex(ValueError, 'Unsupported function return declarator'):
+                generator.generate(root, root/'generated', 'clang')
+
+    @unittest.skipUnless(shutil.which('clang') and shutil.which('c++'), 'native compilers required')
+    def test_pinned_public_graph_signatures_and_generated_wire_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            schema = generator.generate(ROOT/'vendor/stable-diffusion.cpp', output, 'clang',
+                                        ROOT/'vendor/ggml-webgpu-source/ggml')
+            functions = {item['name']: item for item in schema['functions']}
+            expected = {
+                'ggml_init': ('struct ggml_context *', 'pointer', ['struct ggml_init_params'], ['record']),
+                'ggml_new_tensor_2d': ('struct ggml_tensor *', 'pointer',
+                                     ['struct ggml_context *', 'enum ggml_type', 'int64_t', 'int64_t'],
+                                     ['pointer', 'signed', 'i64', 'i64']),
+                'ggml_backend_tensor_get': ('void', 'void',
+                                           ['const struct ggml_tensor *', 'void *', 'size_t', 'size_t'],
+                                           ['pointer', 'pointer', 'u64', 'u64']),
+                'ggml_graph_plan': ('struct ggml_cplan', 'record',
+                                    ['const struct ggml_cgraph *', 'int', 'struct ggml_threadpool *'],
+                                    ['pointer', 'signed', 'pointer']),
+                'ggml_backend_cpu_set_abort_callback': ('void', 'void',
+                                                       ['ggml_backend_t', 'ggml_abort_callback', 'void *'],
+                                                       ['pointer', 'pointer', 'pointer']),
+            }
+            for name, (result, kind, arguments, kinds) in expected.items():
+                with self.subTest(function=name):
+                    function = functions[name]
+                    self.assertEqual(function['returnType'], result)
+                    self.assertEqual(function['returnKind'], kind)
+                    self.assertEqual([p['cType'] for p in function['parameters']], arguments)
+                    self.assertEqual([p['kind'] for p in function['parameters']], kinds)
+            self.assertNotIn('ggml_threadpool_get_n_threads', functions)
+            self.assertTrue(all(item['reason'] != 'not-selected' for item in schema['excluded']))
+            records = {record['name']: record for record in schema['records']}
+            self.assertEqual([f['name'] for f in records['ggml_init_params']['fields']],
+                             ['mem_size', 'mem_buffer', 'no_alloc'])
+            self.assertIn('ggml_cplan', records)
+            self.assertIn('ggml_tallocr', records)
+            cpp = (output/'bindings.cpp').read_text()
+            self.assertIn('uint64_t sdc_ggml_init(uint64_t a0)', cpp)
+            self.assertIn('*((const struct ggml_init_params *)sdc_checked_pointer(a0))', cpp)
+            self.assertIn('void sdc_ggml_graph_plan(uint64_t out, uint64_t a0, int32_t a1, uint64_t a2)', cpp)
+            self.assertIn('ggml_new_tensor_2d(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint): Promise<bigint>',
+                          (output/'functions.d.ts').read_text())
+            subprocess.run(['c++', '-std=c++17', '-fsyntax-only',
+                            '-I'+str(ROOT/'vendor/stable-diffusion.cpp/include'),
+                            '-I'+str(ROOT/'vendor/ggml-webgpu-source/ggml/include'),
+                            str(output/'bindings.cpp')], check=True, capture_output=True)
 
     def test_ggml_tagged_and_anonymous_records_and_signatures_without_clang(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -124,7 +198,7 @@ class Bindings(unittest.TestCase):
                 schema = generator.generate(sd, output, 'unused-clang', ggml)
             self.assertEqual(schema['ggmlCoverage']['ggml.h']['selected'],
                              len(generator.GGML_HEADERS['ggml.h'].split()))
-            self.assertTrue(all(x['reason'] == 'not-selected' for x in schema['excluded']))
+            self.assertTrue(all(x['reason'] == 'not-runtime-api' for x in schema['excluded']))
             functions = {item['name']: item for item in schema['functions']}
             self.assertEqual(functions['ggml_fp32_to_bf16']['returnKind'], 'record')
             self.assertEqual(functions['ggml_bf16_to_fp32']['parameters'][0]['kind'], 'record')
