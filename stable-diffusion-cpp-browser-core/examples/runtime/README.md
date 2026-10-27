@@ -113,27 +113,17 @@ label and perform no formatting or callback work. Enabled logging has callback
 overhead and is not a performance benchmark. This API requires an artifact built
 with the graph-stage patch; older ABI 2 artifacts do not expose it.
 
-## Public GGML control
+## Public GGML queries
 
-The generated schema includes supported public declarations from pinned `ggml.h`,
-`ggml-backend.h`, `ggml-cpu.h`, `ggml-alloc.h` and `gguf.h`. The caller can create
-contexts/tensors/graphs, choose a backend, allocate buffers, upload inputs, compute,
-download results and release resources without adding runtime-specific probes.
-Complete public records such as `ggml_init_params`, `ggml_cplan`, device properties,
-tensor/type traits and `gguf_init_params` use compiled layouts. Enumerated constants
-and selected numeric macros are exported. `schema.ggmlCoverage` and the exclusion
-list describe the supported surface and explicit omissions.
-
-Pointers, byte counts and dimension integers follow the generated schema: pointers
-and `size_t`/`int64_t` use bigint on both Wasm widths. By-value records use caller-owned
-storage; a returned record adds an output pointer as the first argument. All calls
-remain serialized by the host helper. Native callbacks keep their original pinned
-C signatures and must not re-enter a pending host-helper operation.
-
-The caller owns context/graph metadata, backend and buffer lifetimes. Keep graph
-inputs/outputs and callback table entries alive until computation settles; release
-backend buffers before their backend/context owners. Registry loading and graph
-mutation are explicit caller operations, not automatic generation instrumentation.
+The generated schema also includes explicitly selected functions from pinned
+`ggml.h`, `ggml-backend.h`, `ggml-cpu.h` and `gguf.h`: version/type/operation and
+CPU capability queries, tensor/buffer metadata, backend/device registry and
+capabilities, and GGUF construction/metadata reading. Tagged public records such
+as device properties/caps, tensor/type traits and `gguf_init_params` use compiled
+layouts too. Enumerated constants and selected numeric macros are exported.
+`schema.ggmlCoverage` and the exclusion list identify unselected public declarations;
+this is not a blanket export of every graph-building/backend mutation function.
+These are raw source-bound APIs, not checked high-level parsers.
 
 Query devices explicitly while idle. Registry loading and property queries may
 initialize native backend state; device memory values retain their backend's

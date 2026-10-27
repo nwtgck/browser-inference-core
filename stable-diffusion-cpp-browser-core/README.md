@@ -7,19 +7,11 @@ from functional browser bring-up.
 
 ## Boundary: native capability, application policy
 
-ABI 2 is generated from the patched `include/stable-diffusion.h` and the pinned
-public `ggml.h`, `ggml-backend.h`, `ggml-cpu.h`, `ggml-alloc.h` and `gguf.h` headers.
-Supported public declarations and complete public records are exposed, including
-tensor/graph construction, allocation, transfer, execution and CPU cancellation.
-Variadic calls, FILE-pointer APIs without a matching host ownership surface and
-the pinned upstream's unimplemented thread-count getter remain explicitly excluded.
-The generated schema records each exclusion and per-header coverage. Native
+ABI 2 is generated from the patched `include/stable-diffusion.h`: all 64 public
+functions, 18 public records and 140 constants (including filesystem/error helpers) are exposed. Native
 pointers and 64-bit integers are represented as `bigint` on both Wasm widths.
 Record sizes, offsets and constants come from the compiled binary. A SHA-256
 schema fingerprint prevents mismatching JavaScript helpers and Wasm layouts.
-New public declarations in these headers do not need a per-function export-list
-change. Required names and representative signature tests detect incompatible
-pin updates; unsupported C types fail generation instead of receiving guessed types.
 
 There is **no** `sdb_load(JSON)`/`sdb_generate(JSON)` dispatcher, singleton model,
 fixed model directory, preset sampler, resolution limit, memory budget or model
