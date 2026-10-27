@@ -64,6 +64,7 @@ class AsyncTensorCopy(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='async-copy-guards-') as temporary:
             root = Path(temporary)
             with patch.object(async_copy, 'prepare'), patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                    patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', async_copy.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.rms_scale.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
                 baseline = source.prepare(self.upstream, root / 'base')

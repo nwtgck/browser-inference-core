@@ -25,33 +25,42 @@ class WebgpuSourceOverlay(unittest.TestCase):
         before = (self.upstream / source.SOURCE_PATH).read_bytes()
         loader_before = (self.upstream / source.LOADER_PATH).read_bytes()
         sampler_before = (self.upstream / source.sampler_single_sync.SOURCE_PATH).read_bytes()
+        backend_before = (self.upstream / source.host_input_snapshot.BACKEND_SOURCE_PATH).read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
             result = source.prepare(self.upstream, Path(tmp))
             self.assertEqual(copy.digest(result), source.OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'llama-model-loader.cpp'), source.LOADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'llama-sampler.cpp'), source.sampler_single_sync.OUTPUT_SHA256)
+            self.assertEqual(copy.digest(result.parent / 'ggml-backend.cpp'), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
+            self.assertEqual(copy.digest(result.parent / 'ggml-backend-host-snapshot.h'), source.host_input_snapshot.HEADER_OUTPUT_SHA256)
             for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_subgroup):
                 self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), module.HEADER_SHA256)
             header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
             loader_stamp = (result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns
             sampler_stamp = (result.parent / 'llama-sampler.cpp').stat().st_mtime_ns
+            backend_stamp = (result.parent / 'ggml-backend.cpp').stat().st_mtime_ns
+            snapshot_header_stamp = (result.parent / 'ggml-backend-host-snapshot.h').stat().st_mtime_ns
             generated_stamps = {module.HEADER_NAME: (result.parent / module.HEADER_NAME).stat().st_mtime_ns
                                 for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_subgroup)}
             self.assertEqual(source.prepare(self.upstream, Path(tmp)).stat().st_mtime_ns, stamp)
             self.assertEqual((result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns, header_stamp)
             self.assertEqual((result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns, loader_stamp)
             self.assertEqual((result.parent / 'llama-sampler.cpp').stat().st_mtime_ns, sampler_stamp)
+            self.assertEqual((result.parent / 'ggml-backend.cpp').stat().st_mtime_ns, backend_stamp)
+            self.assertEqual((result.parent / 'ggml-backend-host-snapshot.h').stat().st_mtime_ns, snapshot_header_stamp)
             for name, previous in generated_stamps.items():
                 self.assertEqual((result.parent / name).stat().st_mtime_ns, previous)
         self.assertEqual(before, (self.upstream / source.SOURCE_PATH).read_bytes())
         self.assertEqual(loader_before, (self.upstream / source.LOADER_PATH).read_bytes())
         self.assertEqual(sampler_before, (self.upstream / source.sampler_single_sync.SOURCE_PATH).read_bytes())
+        self.assertEqual(backend_before, (self.upstream / source.host_input_snapshot.BACKEND_SOURCE_PATH).read_bytes())
 
     def test_repository_nested_builds_apply_all_patches_without_touching_git_state(self):
         upstream_before = {name: (self.upstream / name).read_bytes()
-                           for name in (source.SOURCE_PATH, source.LOADER_PATH, source.sampler_single_sync.SOURCE_PATH)}
+                           for name in (source.SOURCE_PATH, source.LOADER_PATH, source.sampler_single_sync.SOURCE_PATH,
+                                        source.host_input_snapshot.BACKEND_SOURCE_PATH)}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             checkout = root / 'checkout'
@@ -74,6 +83,8 @@ class WebgpuSourceOverlay(unittest.TestCase):
                     self.assertEqual(copy.digest(result), source.OUTPUT_SHA256)
                     self.assertEqual(copy.digest(build / 'llama-model-loader.cpp'), source.LOADER_OUTPUT_SHA256)
                     self.assertEqual(copy.digest(build / 'llama-sampler.cpp'), source.sampler_single_sync.OUTPUT_SHA256)
+                    self.assertEqual(copy.digest(build / 'ggml-backend.cpp'), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
+                    self.assertEqual(copy.digest(build / 'ggml-backend-host-snapshot.h'), source.host_input_snapshot.HEADER_OUTPUT_SHA256)
                     stamp = result.stat().st_mtime_ns
                     self.assertEqual(source.prepare(self.upstream, build).stat().st_mtime_ns, stamp)
                     self.assertEqual(subprocess.check_output(['git', 'status', '--porcelain=v1'], cwd=parent), status)
@@ -141,6 +152,18 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertEqual(Path(samplers[0]['file']), build / 'webgpu-source-overlay/llama-sampler.cpp')
                 self.assertEqual(copy.digest(Path(samplers[0]['file'])), source.sampler_single_sync.OUTPUT_SHA256)
                 self.assertEqual((build / 'sampler-unity.txt').read_text(), 'ON')
+                backends = [entry for entry in entries if Path(entry['file']).name == 'ggml-backend.cpp']
+                self.assertEqual(len(backends), 1)
+                self.assertEqual(Path(backends[0]['file']), build / 'webgpu-source-overlay/ggml-backend.cpp')
+                self.assertEqual(copy.digest(Path(backends[0]['file'])), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
+                self.assertEqual((build / 'backend-unity.txt').read_text(), 'ON')
+                self.assertIn(str(self.upstream / 'ggml/src'), backends[0]['command'])
+                self.assertIn(str(build / 'webgpu-source-overlay'), backends[0]['command'])
+                backend_before = (build / 'backend-before.txt').read_text().split(';')
+                backend_after = (build / 'backend-sources.txt').read_text().split(';')
+                self.assertEqual(backend_after, [str(build / 'webgpu-source-overlay/ggml-backend.cpp')
+                                                 if name == 'ggml-backend.cpp' else name
+                                                 for name in backend_before])
                 before_names = [Path(path).name for path in (build / 'llama-before.txt').read_text().split(';')]
                 after_names = [Path(path).name for path in (build / 'llama-sources.txt').read_text().split(';')]
                 self.assertEqual([name for name in before_names if name != 'llama-model-loader.cpp'],
@@ -172,9 +195,27 @@ class WebgpuSourceOverlay(unittest.TestCase):
                     self.assertEqual(Path(samplers[0]['file']), build / 'webgpu-source-overlay/llama-sampler.cpp')
                     self.assertEqual(copy.digest(Path(samplers[0]['file'])), source.sampler_single_sync.OUTPUT_SHA256)
                     self.assertEqual((build / 'sampler-unity.txt').read_text(), 'ON')
+                    backends = [entry for entry in entries if Path(entry['file']).name == 'ggml-backend.cpp']
+                    self.assertEqual(len(backends), 1)
+                    self.assertEqual(Path(backends[0]['file']), build / 'webgpu-source-overlay/ggml-backend.cpp')
                     paths = (build / 'llama-sources.txt').read_text().split(';')
                     self.assertEqual(sum(Path(path).name == 'llama-sampler.cpp' for path in paths), 1)
                     self.assertEqual(sum(Path(path).name == 'llama-model-loader.cpp' for path in paths), 1)
+
+    @unittest.skipUnless(shutil.which('cmake'), 'CMake required')
+    def test_backend_source_layout_drift_fails_closed(self):
+        dawn = os.environ.get('LCB_TEST_DAWN_PACKAGE')
+        if not dawn:
+            self.skipTest('Set LCB_TEST_DAWN_PACKAGE')
+        with tempfile.TemporaryDirectory() as tmp:
+            for layout in ('missing', 'duplicate'):
+                with self.subTest(layout=layout):
+                    result = subprocess.run(
+                        ['cmake', '-S', str(ROOT / 'tests/webgpu-tensor-copy'), '-B', str(Path(tmp) / layout),
+                         '-DLCB_LLAMA_SOURCE=' + str(self.upstream), '-DEMDAWNWEBGPU_DIR=' + dawn,
+                         '-DLCB_TEST_BACKEND_LAYOUT=' + layout], capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('Upstream ggml backend source layout changed', result.stderr)
 
     def test_loader_inputs_patch_and_output_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -301,6 +342,32 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertFalse((output / 'ggml-webgpu.cpp').exists())
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
         self.assertIn('scripts/prepare_webgpu_async_tensor_copy.py', cmake)
+        self.assertIn(module.PATCH_NAME, cmake)
+        for relative in module.CONTRACT_INPUTS:
+            self.assertIn('${LCB_LLAMA_SOURCE}/' + relative, cmake)
+
+    def test_host_snapshot_guards_and_configure_dependencies(self):
+        module = source.host_input_snapshot
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for relative in module.CONTRACT_INPUTS:
+                values = {**module.CONTRACT_INPUTS, relative: '0' * 64}
+                output = root / ('input-' + str(list(values).index(relative)))
+                with self.subTest(path=relative), patch.object(module, 'CONTRACT_INPUTS', values):
+                    with self.assertRaises(ValueError):
+                        source.prepare(self.upstream, output)
+                for name in ('ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h'):
+                    self.assertFalse((output / name).exists())
+            for field in ('INPUT_SHA256', 'OUTPUT_SHA256', 'PATCH_SHA256',
+                          'BACKEND_OUTPUT_SHA256', 'HEADER_OUTPUT_SHA256'):
+                output = root / field
+                with self.subTest(field=field), patch.object(module, field, '0' * 64):
+                    with self.assertRaises(ValueError):
+                        source.prepare(self.upstream, output)
+                for name in ('ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h'):
+                    self.assertFalse((output / name).exists())
+        cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
+        self.assertIn('scripts/prepare_webgpu_host_input_snapshot.py', cmake)
         self.assertIn(module.PATCH_NAME, cmake)
         for relative in module.CONTRACT_INPUTS:
             self.assertIn('${LCB_LLAMA_SOURCE}/' + relative, cmake)

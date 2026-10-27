@@ -238,6 +238,7 @@ class OverlayProvenance(unittest.TestCase):
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).parent.mkdir(parents=True)
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
+        (self.vendor / provenance.host_input_snapshot.BACKEND_SOURCE_PATH).write_text('Backend provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME,
@@ -261,7 +262,7 @@ class OverlayProvenance(unittest.TestCase):
                      self.root / provenance.PATCH_DIRECTORY / provenance.q4_short.PATCH_NAME)
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.sampler_single_sync.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.sampler_single_sync.PATCH_NAME)
-        for module in (provenance.scale_unary, provenance.q8_subgroup, provenance.rms_scale, provenance.async_tensor_copy, provenance.iq3s_subgroup):
+        for module in (provenance.scale_unary, provenance.q8_subgroup, provenance.rms_scale, provenance.async_tensor_copy, provenance.iq3s_subgroup, provenance.host_input_snapshot):
             shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / module.PATCH_NAME,
                          self.root / provenance.PATCH_DIRECTORY / module.PATCH_NAME)
         (self.vendor / 'src').mkdir()
@@ -276,7 +277,7 @@ class OverlayProvenance(unittest.TestCase):
         for path in ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
                      'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']:
             (self.root / path).write_text('file-backed rows provenance fixture\n')
-        for path in ['scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_rms_scale.py', 'scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_scale_unary.py', 'scripts/prepare_webgpu_q8_subgroup.py', 'scripts/prepare_sampler_single_sync.py', 'scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_q4_short.py', 'scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md', 'scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md', 'scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md',
+        for path in ['scripts/prepare_webgpu_host_input_snapshot.py', 'scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_rms_scale.py', 'scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_scale_unary.py', 'scripts/prepare_webgpu_q8_subgroup.py', 'scripts/prepare_sampler_single_sync.py', 'scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_q4_short.py', 'scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md', 'scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md', 'scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md',
                      'scripts/prepare_webgpu_hc.py', 'docs/webgpu-hc-pre-post.md', 'scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
                      'docs/webgpu-tensor-copy.md', 'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md',
@@ -302,6 +303,8 @@ class OverlayProvenance(unittest.TestCase):
         self.prepared.write_bytes(b'combined source fixture')
         (self.prepared.parent / 'llama-model-loader.cpp').write_bytes(b'loader source fixture')
         (self.prepared.parent / 'llama-sampler.cpp').write_bytes(b'sampler source fixture')
+        (self.prepared.parent / 'ggml-backend.cpp').write_bytes(b'prepared backend source fixture')
+        (self.prepared.parent / 'ggml-backend-host-snapshot.h').write_bytes(b'private snapshot header fixture')
         (self.prepared.parent / 'ggml-webgpu-shader-lib.hpp').write_bytes(b'SSM header source fixture')
         (self.prepared.parent / 'ggml-webgpu-hc.hpp').write_bytes(b'HC host fixture')
         (self.prepared.parent / provenance.hc.HEADER_NAME).write_bytes(b'HC shader fixture')
@@ -378,7 +381,7 @@ class OverlayProvenance(unittest.TestCase):
     def test_retained_overlays_are_independent_and_use_only_the_renamed_directory(self):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
-            'webgpu-iq3s-indexed-subgroup-matvec', 'webgpu-rms-scale-fusion', 'webgpu-async-tensor-copy', 'webgpu-scale-unary-fusion', 'webgpu-q8-fixed-subgroup-matvec', 'webgpu-q4-short-workgroup', 'webgpu-expert-short-workgroup', 'webgpu-moe-expert-sum', 'webgpu-q8-short-workgroup', 'webgpu-hc-pre-post', 'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
+            'webgpu-host-input-snapshot', 'webgpu-iq3s-indexed-subgroup-matvec', 'webgpu-rms-scale-fusion', 'webgpu-async-tensor-copy', 'webgpu-scale-unary-fusion', 'webgpu-q8-fixed-subgroup-matvec', 'webgpu-q4-short-workgroup', 'webgpu-expert-short-workgroup', 'webgpu-moe-expert-sum', 'webgpu-q8-short-workgroup', 'webgpu-hc-pre-post', 'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
             'webgpu-same-device-tensor-copy',
             'webgpu-parameter-upload-batching', 'webgpu-ordered-readback', 'webgpu-bind-group-cache', 'webgpu-sampler-single-sync', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
             'qwen4exp-file-backed-rows', 'qsa-all-pools-selection'})
@@ -474,6 +477,24 @@ class OverlayProvenance(unittest.TestCase):
             self.assertEqual(item['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/browser'], item['compiledCopies'])
             self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
             active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=ON', '-DLCB_WEBGPU=OFF') for arg in active['cmakeCommand']]
+
+    def test_host_snapshot_inventory_tracks_both_translation_units_and_private_header(self):
+        off = provenance.collect(self.root, self.manifest)
+        item = next(x for x in off['sourceOverlays'] if x['id'] == 'webgpu-host-input-snapshot')
+        self.assertIsNone(item['compiledCopies'])
+        self.assertEqual(item['application']['enabledProfileVariants'], [])
+        self.assertNotIn(item['patch']['path'], off['otherPatchFiles'])
+        active = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+        active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=OFF', '-DLCB_WEBGPU=ON') for arg in active['cmakeCommand']]
+        on = provenance.collect(self.root, self.manifest)
+        item = next(x for x in on['sourceOverlays'] if x['id'] == 'webgpu-host-input-snapshot')
+        self.assertEqual(item['patch']['sha256'], provenance.host_input_snapshot.PATCH_SHA256)
+        self.assertEqual(item['reviewedInputs'], provenance.host_input_snapshot.CONTRACT_INPUTS)
+        self.assertEqual(set(item['compiledCopies']), {'ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h'})
+        for name, identity in item['compiledCopies'].items():
+            self.assertEqual(identity, provenance.file_identity(self.prepared.parent / name))
+        self.assertEqual(item['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/browser'], item['compiledCopies'])
+        self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
 
     def test_moe_sum_inventory_tracks_active_compiled_copies_and_not_unclassified(self):
         off = provenance.collect(self.root, self.manifest)

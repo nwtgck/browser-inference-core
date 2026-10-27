@@ -84,6 +84,7 @@ class RmsScale(unittest.TestCase):
     def test_checked_composition_upstream_and_exact_reduction_source(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(source.async_tensor_copy, 'prepare'), \
                 patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             stage = source.prepare(self.upstream, Path(temporary)).parent

@@ -33,7 +33,9 @@ class Iq3sSubgroup(unittest.TestCase):
 
     def stage(self, destination):
         base = destination / 'base'
-        factory.prepare_base(self.upstream, base)
+        with patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
+                patch.object(source, 'OUTPUT_SHA256', source.host_input_snapshot.INPUT_SHA256):
+            factory.prepare_base(self.upstream, base)
         (destination / iq3.BASE).mkdir(parents=True)
         for name in iq3.INPUTS:
             shutil.copyfile(base / name, destination / iq3.BASE / name)

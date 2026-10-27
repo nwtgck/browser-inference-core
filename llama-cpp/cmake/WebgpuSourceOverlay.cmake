@@ -1,5 +1,5 @@
 get_filename_component(LCB_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-if(NOT LCB_WEBGPU OR NOT TARGET ggml-webgpu)
+if(NOT LCB_WEBGPU OR NOT TARGET ggml-webgpu OR NOT TARGET ggml-base)
     message(FATAL_ERROR "WebGPU source overlay requires WebGPU")
 endif()
 if(NOT EMDAWNWEBGPU_DIR)
@@ -24,6 +24,27 @@ list(REMOVE_ITEM LCB_SOURCE_SOURCES "ggml-webgpu.cpp")
 list(APPEND LCB_SOURCE_SOURCES "${LCB_SOURCE_OVERLAY}/ggml-webgpu.cpp")
 set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
+
+# The optional snapshot contract also changes the scheduler in ggml-base.
+# Preserve every other source and its order, and fail on upstream layout drift.
+get_target_property(LCB_BACKEND_SOURCES ggml-base SOURCES)
+set(LCB_BACKEND_MATCHES 0)
+set(LCB_BACKEND_REPLACED "")
+foreach(LCB_BACKEND_SOURCE IN LISTS LCB_BACKEND_SOURCES)
+    if(LCB_BACKEND_SOURCE STREQUAL "ggml-backend.cpp")
+        math(EXPR LCB_BACKEND_MATCHES "${LCB_BACKEND_MATCHES} + 1")
+        list(APPEND LCB_BACKEND_REPLACED "${LCB_SOURCE_OVERLAY}/ggml-backend.cpp")
+    else()
+        list(APPEND LCB_BACKEND_REPLACED "${LCB_BACKEND_SOURCE}")
+    endif()
+endforeach()
+if(NOT LCB_BACKEND_MATCHES EQUAL 1)
+    message(FATAL_ERROR "Upstream ggml backend source layout changed; review source overlay")
+endif()
+set_property(TARGET ggml-base PROPERTY SOURCES "${LCB_BACKEND_REPLACED}")
+set_source_files_properties("${LCB_SOURCE_OVERLAY}/ggml-backend.cpp"
+    TARGET_DIRECTORY ggml-base PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+target_include_directories(ggml-base PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src" "${LCB_SOURCE_OVERLAY}")
 # The prepared shader-library header is a sibling of the source above; its
 # embedded WGSL include resolves through upstream's generated header. v0.7.0
 # already implements direct selected-slot MoE dispatch; no direct-slot shader replacement remains.
@@ -119,6 +140,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_ordered_readback.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-ordered-readback.patch")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_host_input_snapshot.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-host-input-snapshot.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-reg.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-backend.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/CMakeLists.txt"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.cpp")
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_bind_group_cache.py"

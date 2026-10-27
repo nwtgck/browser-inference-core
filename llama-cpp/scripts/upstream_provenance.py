@@ -27,6 +27,7 @@ import prepare_webgpu_q8_subgroup as q8_subgroup
 import prepare_webgpu_rms_scale as rms_scale
 import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
+import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -187,6 +188,7 @@ def collect(root: Path, manifest: dict) -> dict:
         q8_subgroup_compiled = None
         rms_scale_compiled = None
         iq3s_subgroup_compiled = None
+        host_snapshot_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -224,6 +226,8 @@ def collect(root: Path, manifest: dict) -> dict:
                                    'ggml-webgpu-rms-scale.hpp', rms_scale.HEADER_NAME]}
             iq3s_subgroup_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', iq3s_subgroup.HEADER_NAME]}
+            host_snapshot_compiled = {name: file_identity(prepared.parent / name) for name in
+                                      ['ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h']}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
@@ -362,6 +366,24 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Use the existing optional async copy hook for checked same-queue WebGPU copies and CPU-to-WebGPU uploads after synchronizing the CPU producer; unsupported cases retain the generic fallback. No target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-host-input-snapshot',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSources': {path: file_identity(vendor / path) for path in
+                                [webgpu_source.SOURCE_PATH, host_input_snapshot.BACKEND_SOURCE_PATH]},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / host_input_snapshot.PATCH_NAME)},
+            'compiledCopies': host_snapshot_compiled,
+            'compiledCopiesByProfileVariant': {variant: host_snapshot_compiled for variant in copy_enabled},
+            'reviewedInputs': host_input_snapshot.CONTRACT_INPUTS,
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': tensor_copy.DAWN_HEADERS},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_source.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_host_input_snapshot.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'The scheduler optionally discovers a versioned host-input snapshot callback for eligible single-copy, event-free, non-weight inputs after the first input in each split. The first input retains the original wait path to bound queued work across repeated prefill calls without output readback. The WebGPU provider synchronizes the CPU producer and snapshots host bytes before return, ordering upload with destination work on the same queue. Other cases retain their existing paths; no target-device speedup is claimed.',
         }, {
             'id': 'webgpu-sampler-single-sync',
             'kind': 'build-tree-source-overlay',
@@ -581,7 +603,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

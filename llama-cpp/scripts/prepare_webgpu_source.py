@@ -21,13 +21,14 @@ import prepare_webgpu_q8_subgroup as q8_subgroup
 import prepare_webgpu_rms_scale as rms_scale
 import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
+import prepare_webgpu_host_input_snapshot as host_input_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '3de621e1507ba7b7dde3952742ffb9542f536f54e992d75bc257371481daa1bc'
+OUTPUT_SHA256 = '0837380d874c570a0a787edc19b21816638b03527075ea8eb9c37c95e3ca5526'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
@@ -115,6 +116,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(rms_scale.prepare(work, source, patch_root, env))
         async_tensor_copy.prepare(work, source, patch_root, env)
         hc_headers.update(iq3s_subgroup.prepare(work, source, patch_root, env))
+        hc_headers.update(host_input_snapshot.prepare(work, source, patch_root, env))
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')

@@ -181,6 +181,15 @@ commit with different bytes or invent a future artifact identity.
 - **No-patch alternative:** use the existing generic copy fallback or wait for equivalent upstream support.
 - **Removal:** upstream supplies equivalent behavior or the owner drops the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Optional WebGPU host-input snapshot
+
+- **Patch:** `ggml-webgpu-host-input-snapshot.patch`.
+- **Scope:** add a versioned optional registry contract between the scheduler and the WebGPU provider. For a single-copy, event-free split with a non-weight host input, the scheduler may try the callback before its existing wait. The first input in each split retains the original wait path, bounding queued work even across repeated prefill calls without output readback; only later inputs may skip their waits. Success synchronizes the CPU producer, snapshots the source bytes before returning, and orders the upload on the destination compute queue. Unsupported or absent callbacks retain the existing scheduler path. Host weights, multi-copy rotation and event paths retain their original behavior.
+- **Integration:** every WebGPU profile compiles checked build-tree copies of both `ggml-webgpu.cpp` and the scheduler's `ggml-backend.cpp`, plus their shared private contract header. The latter is a downstream registry semantic ABI and affects the scheduler in the WebGPU-enabled build; public backend structures and bindings are unchanged. CPU-only profiles and pristine upstream sources remain unchanged. Pinned source, registry, allocator and backend contracts, patch and all output identities require review on drift.
+- **Validation and limits:** source-bound scheduler/provider tests and target-configuration checks cover callback discovery, eligibility, fallback, ordering and producer lifetime. These checks do not establish browser/device-loss behavior, production model quality or target-device speedup. Existing backend and scheduler lifetime and synchronization obligations remain in force.
+- **No-patch alternative:** retain the existing scheduler waits and narrow async-copy hook or wait for equivalent upstream support.
+- **Removal:** equivalent upstream support or withdrawal of the optimization; remove patch, preparation, target replacement, tests and provenance together.
+
 ## Bounded WebGPU bind-group reuse
 
 - **Patch:** `ggml-webgpu-bind-group-cache.patch`.
