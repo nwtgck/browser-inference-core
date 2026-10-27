@@ -9,22 +9,22 @@ PATCH_NAME = 'ggml-webgpu-q8-diagnostic.patch'
 PATCH_SHA256 = 'a27bdcdbd74dd7c3b39b9bd94075adfda59e2803729dae9ee9d72383b4691ab7'
 BASE = Path('ggml/src/ggml-webgpu')
 INPUTS = {
-    'ggml-webgpu.cpp': '17a4296ce72ad1acf281f87435dd53f3cb6296578be35675cb374213d41139ac',
-    'ggml-webgpu-shader-lib.hpp': '84667b9b4afaebbee6c4ebb287a26256d909895eeefc2814eca01dabfdebc8fa',
+    'ggml-webgpu.cpp': '4b66eeacddb5927aaed6c67e351b190eb5de3662937a9e8fed8760fdd4a8a27d',
+    'ggml-webgpu-shader-lib.hpp': '4ca71dcd2df778ffbe3f1678c525e03a646f68fa8345d14168ac91c16a452656',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': '70d5da2e45ef99c0980bf3bb797450ce5c48ce252d0b10ad328468e1a84e9d4c',
-    'ggml-webgpu-shader-lib.hpp': '9a5c601cf1b54faa17d63190ab3148c3d78b0d58049662c99555d9957ad884bc',
+    'ggml-webgpu.cpp': 'c19bd1f96ae466a93560eee0121891d98f44ea4ee3cdf68010bfe5275d4c5650',
+    'ggml-webgpu-shader-lib.hpp': '7a0c78ef92adb745329777bc44d9e08d24ba68ff6ba4955047f8bb623628ce4b',
 }
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl': '4fdbbaf3b3d3b7c965786b62a58b6b35ceb6d2f80b29e53f4a027904d3243f18',
-    'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl': 'c938be30a28ea800dda6297dae2a9aee71ddef83f189c077b22bf8c8317d98dc',
+    'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl': '9421bdb7ac569e03e8483365653c28b95e659702f8ff849310b2c077ee64290f',
     'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl': '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',
     'ggml/src/ggml-opencl/cl-program-cache.cpp': 'f6a15a96350163de97b2c2feb00e5d675f2a9b69fff26b35e516d695b5877efe',
-    'ggml/include/ggml.h': '475beaa7e959be8c383279d9ce9d5191f37426e6b338270cfb12b26a798129d3',
+    'ggml/include/ggml.h': '2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7',
     'ggml/include/ggml-backend.h': '0e5e8e1f16d11ebbf501e38bc6705d79eee819b5f0b17476533f2100ed9674e2',
     'ggml/src/ggml-backend-impl.h': '4e861c8e23d3d7b0d99d8e0836e68564af58f8597d75d7bbb732857d7a632fa7',
 }

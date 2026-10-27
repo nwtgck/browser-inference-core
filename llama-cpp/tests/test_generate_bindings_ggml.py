@@ -26,6 +26,39 @@ def function(name, result, *parameters, variadic=False):
 
 
 class GgmlBindings(unittest.TestCase):
+    def test_existing_mtmd_capability_queries_survive_upstream_deprecation(self):
+        existing = {
+            'mtmd_helper_support_video': ('const struct mtmd_context *',),
+            'mtmd_helper_model_can_chat': ('const struct llama_context *', 'const struct mtmd_context *'),
+        }
+        declarations = []
+        for name, parameters in existing.items():
+            declaration = function(name, 'bool', *parameters)
+            declaration['inner'].append({'kind': 'DeprecatedAttr'})
+            declarations.append(declaration)
+        ignored = function('mtmd_other_deprecated_query', 'bool')
+        ignored['inner'].append({'kind': 'DeprecatedAttr'})
+        variadic = function('mtmd_helper_support_video', 'bool', 'mtmd_context *', variadic=True)
+        # Preserve only the existing direct exports. Deprecation elsewhere and
+        # unsafe variadic declarations still have their original exclusions.
+        with tempfile.TemporaryDirectory(prefix='lcb-deprecated-mtmd-') as temp, \
+             patch.object(generate_bindings.subprocess, 'check_output',
+                          return_value=json.dumps({'inner': declarations + [ignored]})), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
+            output = Path(temp)
+            schema = generate_bindings.generate(ROOT / 'vendor/llama.cpp', output, 'clang')
+            self.assertEqual({item['name'] for item in schema['functions']}, set(existing))
+            self.assertEqual(schema['excluded'], [{'name': ignored['name'], 'reason': 'deprecated'}])
+            for name in existing:
+                for filename, prefix in {'exports.json': '_lcb_', 'jspi-exports.json': 'lcb_',
+                                         'bindings.cpp': 'lcb_', 'functions.d.ts': ''}.items():
+                    self.assertIn(prefix + name, (output / filename).read_text(), filename)
+            with patch.object(generate_bindings.subprocess, 'check_output',
+                              return_value=json.dumps({'inner': [variadic]})):
+                variadic_schema = generate_bindings.generate(ROOT / 'vendor/llama.cpp', output, 'clang')
+            self.assertEqual(variadic_schema['functions'], [])
+            self.assertEqual(variadic_schema['excluded'], [{'name': variadic['name'], 'reason': 'variadic'}])
+
     def test_unimplemented_threadpool_query_is_explained_and_not_exported(self):
         source = ROOT / 'vendor/llama.cpp'
         missing = 'ggml_threadpool_get_n_threads'

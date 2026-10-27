@@ -11,7 +11,7 @@ import struct
 import unittest
 
 
-def selection(scores, pool_cells, tail_cells, kq_mask, budget):
+def selection(scores, pool_cells, tail_cells, n_kv, budget):
     selected = sorted(range(len(scores)), key=lambda i: (-scores[i], i))[:budget]
     live_cells = set(tail_cells)
     for index in selected:
@@ -22,8 +22,9 @@ def selection(scores, pool_cells, tail_cells, kq_mask, budget):
             live_cells.update(pool_cells[index])
         elif live != 0.0:
             raise ValueError('The Qwen4Exp score invariant was violated')
-    return tuple(value if cell in live_cells else -math.inf
-                 for cell, value in enumerate(kq_mask))
+    # The current upstream creates a zero/-infinity mask from these inputs;
+    # it no longer adds a separate causal/sequence mask afterward.
+    return tuple(0.0 if cell in live_cells else -math.inf for cell in range(n_kv))
 
 
 class AllPoolsEquivalence(unittest.TestCase):
@@ -36,28 +37,27 @@ class AllPoolsEquivalence(unittest.TestCase):
                     rng.shuffle(cells)  # storage-cell order need not equal pool order
                     scores = [rng.choice((0.0, 1e-8, 0.5, 5.0, 1e20)) if live else -math.inf for live in visible]
                     unranked = [0.0 if live else -math.inf for live in visible]
-                    # Holes, additive finite biases and another sequence's cells.
-                    mask = [rng.choice((0.0, -0.25, -math.inf)) for _ in range(count * pooling + pooling)]
-                    for tail in ([], [len(mask) - 1], list(range(len(mask) - pooling, len(mask)))):
-                        self.assertEqual(selection(scores, cells, tail, mask, count),
-                                         selection(unranked, cells, tail, mask, count))
+                    n_kv = count * pooling + pooling
+                    # A missing tail and padded pool use n_kv as a sentinel.
+                    for tail in ([], [n_kv], [n_kv - 1], list(range(n_kv - pooling, n_kv))):
+                        self.assertEqual(selection(scores, cells, tail, n_kv, count),
+                                         selection(unranked, cells, tail, n_kv, count))
 
     def test_it_is_not_a_dense_attention_substitution(self):
-        mask = [0.0] * 10
-        actual = selection([2.0, -math.inf], [[1, 3], [4, 6]], [9], mask, 2)
+        actual = selection([2.0, -math.inf], [[1, 3], [4, 6]], [9], 10, 2)
         self.assertEqual(actual, (-math.inf, 0.0, -math.inf, 0.0, -math.inf,
                                   -math.inf, -math.inf, -math.inf, -math.inf, 0.0))
-        self.assertNotEqual(actual, tuple(mask))
+        self.assertNotEqual(actual, (0.0,) * 10)
 
     def test_ranking_is_required_above_the_selection_budget(self):
         cells = [[0], [1], [2]]
-        original = selection([0.0, 1.0, 5.0], cells, [], [0.0] * 3, 2)
-        unsafe = selection([0.0, 0.0, 0.0], cells, [], [0.0] * 3, 2)
+        original = selection([0.0, 1.0, 5.0], cells, [], 3, 2)
+        unsafe = selection([0.0, 0.0, 0.0], cells, [], 3, 2)
         self.assertNotEqual(original, unsafe)
 
     def test_negative_scores_are_not_a_generic_indexer_optimization(self):
         with self.assertRaises(ValueError):
-            selection([-0.5], [[0]], [], [0.0], 1)
+            selection([-0.5], [[0]], [], 1, 1)
 
     def test_reordering_needs_exact_float32_dump_rows(self):
         def f32(value):
@@ -77,10 +77,16 @@ class AllPoolsEquivalence(unittest.TestCase):
         # the address after F32 cancellation, even though the member is live.
         self.assertNotEqual(redirect(1, 1 << 24, 0), redirect(1, 1 << 24, 2))
 
-    def test_shared_selection_must_keep_mask_identity(self):
-        first = selection([2.0], [[0, 1]], [], [0.0, -math.inf], 1)
-        other = selection([2.0], [[0, 1]], [], [-math.inf, 0.0], 1)
+    def test_shared_selection_must_keep_pool_input_identity(self):
+        first = selection([2.0, -math.inf], [[0], [1]], [], 2, 2)
+        other = selection([-math.inf, 2.0], [[0], [1]], [], 2, 2)
         self.assertNotEqual(first, other)
+
+    def test_selection_values_are_exact_in_both_supported_mask_types(self):
+        values = selection([2.0, -math.inf], [[1, 3], [4, 6]], [9, 10], 10, 2)
+        for format in ('e', 'f'):
+            restored = struct.unpack('<' + format * len(values), struct.pack('<' + format * len(values), *values))
+            self.assertEqual(restored, values)
 
 
 if __name__ == '__main__':

@@ -1,16 +1,16 @@
 {
-  "upstream_commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+  "upstream_commit": "338fce6511c744893cc0d3d958b275f40552c7a4",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
-  "module_sha256": "1ca2fb8cbe304f03065ac5c8f1e3bd78a0b391a88cdabe0a040e4936fc07ff32",
+  "module_sha256": "261fcf756b5b09cbe14e8183fd6f5543c0c916db15187c73ecc5b3cfa73582df",
   "oracle_inputs_sha256": {
     "ggml/src/ggml-quants.c": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab",
     "ggml/src/ggml-common.h": "0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c",
     "ggml/src/ggml-impl.h": "43564db0238aebb7ed68501e346c194866b5dac218d1d37b26baff9f458c00d3",
-    "ggml/include/ggml.h": "475beaa7e959be8c383279d9ce9d5191f37426e6b338270cfb12b26a798129d3"
+    "ggml/include/ggml.h": "2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7"
   }
 }

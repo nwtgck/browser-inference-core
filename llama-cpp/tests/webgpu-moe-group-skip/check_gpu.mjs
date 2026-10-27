@@ -49,21 +49,21 @@ try{
  function encode(p,g,grid,count=1,query,resolved){const en=device.createCommandEncoder();const pass=en.beginComputePass(query?{timestampWrites:{querySet:query,beginningOfPassWriteIndex:0,endOfPassWriteIndex:1}}:{});pass.setPipeline(p);pass.setBindGroup(0,g);for(let i=0;i<count;i++)pass.dispatchWorkgroups(...grid);pass.end();if(query)en.resolveQuerySet(query,0,2,resolved,0);return en.finish();}
  function u32(bytes){return new Uint32Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/4);}
  function f32(bytes){return new Float32Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/4);}
- function makeIds(spec,base,round){const bytes=Buffer.from(base);if(round){const a=new Int32Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/4),p=spec.args;for(let t=0;t<spec.tokens;t++)for(let s=0;s<spec.used;s++){const i=p[10]+t*p[15]+s;a[i]=(a[i]+3)%spec.experts;}}return bytes;}
+ function makeIds(spec,base,round){const bytes=Buffer.from(base);if(round){const a=new Int32Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/4),p=spec.args;for(let t=0;t<spec.tokens;t++)for(let s=0;s<spec.used;s++){const i=p[10]+t*p[15]+s;if(a[i]!==-1)a[i]=(a[i]+3)%spec.experts;}}return bytes;}
  function gatherCheck(spec,idsBytes,posBytes,tileBytes,initialPos,initialTiles){
   const ids=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4),pos=u32(posBytes),tiles=u32(tileBytes),p=spec.args,counts=Array(spec.experts).fill(0),slots=spec.used*spec.tokens;
-  const at=i=>ids[p[10]+Math.floor(i/spec.used)*p[15]+i%spec.used];for(let i=0;i<slots;i++)counts[at(i)]++;
+  const at=i=>ids[p[10]+Math.floor(i/spec.used)*p[15]+i%spec.used];for(let i=0;i<slots;i++){const expert=at(i);invariant(expert===-1||(expert>=0&&expert<spec.experts),'Invalid fixture expert');if(expert!==-1)counts[expert]++;}
   let expectedTiles=0,base=0;const seen=new Set(),histogram={};
   for(let e=0;e<spec.experts;e++){
    for(let k=0;k<counts[e];k+=32){const n=Math.min(32,counts[e]-k),idx=1+3*expectedTiles;invariant(tiles[idx]===e&&tiles[idx+1]===base+k&&tiles[idx+2]===n,'Gather tile metadata mismatch');histogram[n]=(histogram[n]??0)+1;expectedTiles++;}
    for(let j=base;j<base+counts[e];j++){invariant(pos[j]<slots&&!seen.has(pos[j])&&at(pos[j])===e,'Gather slot membership/uniqueness mismatch');seen.add(pos[j]);}
    base+=counts[e];
   }
-  invariant(tiles[0]===expectedTiles&&seen.size===slots,'Gather count mismatch');
-  for(let i=slots;i<pos.length;i++)invariant(pos[i]===initialPos[i],'Gather position guard');
+  invariant(tiles[0]===expectedTiles&&seen.size===base,'Gather count mismatch');
+  for(let i=base;i<pos.length;i++)invariant(pos[i]===initialPos[i],'Gather position guard');
   for(let i=1+3*expectedTiles;i<tiles.length;i++)invariant(tiles[i]===initialTiles[i],'Gather tile guard');
   const physicalWg=spec.grid[0]*spec.grid[1],rowsWg=Math.ceil(spec.m/32);
-  return {actualTiles:expectedTiles,maxTiles:spec.maxTiles,tileOccupancyHistogram:histogram,validWorkgroups:expectedTiles*rowsWg,physicalWorkgroups:physicalWg,invalidWorkgroups:physicalWg-expectedTiles*rowsWg,liveColumns:slots,paddedColumns:expectedTiles*32,slotPositionsChecked:slots};
+  return {actualTiles:expectedTiles,maxTiles:spec.maxTiles,tileOccupancyHistogram:histogram,validWorkgroups:expectedTiles*rowsWg,physicalWorkgroups:physicalWg,invalidWorkgroups:physicalWg-expectedTiles*rowsWg,liveColumns:base,skippedColumns:slots-base,paddedColumns:expectedTiles*32,slotPositionsChecked:base};
  }
  function cpuCheck(spec,weights,inputBytes,idsBytes,actualBytes){
   const dq=f32(weights),x=f32(inputBytes),ids=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4),out=f32(actualBytes),p=spec.args;
@@ -71,8 +71,9 @@ try{
   const unit=2**-11,nops=2*spec.k+4,gamma=nops*unit<1?nops*unit/(1-nops*unit):undefined;
   for(let t=0;t<spec.tokens;t++)for(let s=0;s<spec.used;s++)for(let m=0;m<spec.m;m++){
    const expert=ids[p[10]+t*p[15]+s],a=(expert*spec.m+m)*spec.k,b=p[8]+t*p[14]+s%p[6]*p[13];let dot=0,sumAbs=0;
-   for(let k=0;k<spec.k;k++){const product=dq[a+k]*x[b+k];dot+=product;sumAbs+=Math.abs(product);}
+   if(expert!==-1)for(let k=0;k<spec.k;k++){const product=dq[a+k]*x[b+k];dot+=product;sumAbs+=Math.abs(product);}
    const got=out[p[9]+(t*spec.used+s)*spec.m+m],err=Math.abs(got-dot);nonfinite+=Number(!Number.isFinite(got));maxAbsError=Math.max(maxAbsError,err);maxNormalizedError=Math.max(maxNormalizedError,err/(sumAbs+1e-30));if(gamma!==undefined)envelopeFailures+=Number(err>gamma*sumAbs+2**-20);outputs++;
+   if(expert===-1)invariant(Object.is(got,0),'Skipped output must be exact positive zero');
   }
   return {outputs,nonfinite,envelopeFailures,maxAbsError,maxNormalizedError,f16RoundingEnvelopeGamma:gamma??null,oracle:'Unmodified upstream dequantizer + Float64 dot/sumabs; F16 conservative rounding envelope where n*u<1; baseline byte equality is separate'};
  }
@@ -84,20 +85,25 @@ try{
   const iniPos=new Uint32Array(spec.used*spec.tokens+16);iniPos.fill(0xabcde071);const iniTiles=new Uint32Array(1+3*spec.maxTiles+16);iniTiles.fill(0xabcde073);
   const gparam=new Uint32Array(8);gparam.set(spec.gatherParams);const mparam=new Uint32Array(16);mparam.set(spec.mainParams);
   const wa=upload(data.weights,undefined,'weights'),xx=upload(data.input,undefined,'input'),ids=upload(data.ids,undefined,'ids'),pos=upload(iniPos,undefined,'slot-pos'),tiles=upload(iniTiles,undefined,'tiles'),gp=upload(gparam,GPUBufferUsage.UNIFORM,'gather-params'),mp=upload(mparam,GPUBufferUsage.UNIFORM,'main-params');
-  const gather=await pipeline(spec,'gather'),gg=group(gather,[ids,pos,tiles,gp]);const lanes=[];
+  const gatherOutput=upload(initial,undefined,'gather-output');
+  const gather=await pipeline(spec,'gather'),gg=group(gather,[ids,pos,tiles,gatherOutput,gp]);const lanes=[];
   for(const name of names){const p=await pipeline(spec,name),dst=upload(initial,undefined,'output-'+name);lanes.push({name,p,dst,g:group(p,[wa,xx,dst,pos,tiles,mp])});}
   const row={name:spec.name,type:spec.type,pattern:spec.pattern,k:spec.k,m:spec.m,experts:spec.experts,used:spec.used,tokens:spec.tokens,sharedInput:spec.sharedInput,mainParams:spec.mainParams,gatherParams:spec.gatherParams,grid:spec.grid,tileK:spec.tileK,vectorized:spec.vectorized,hashes:spec.hashes,rounds:[]};report.cases.push(row);let lastOutputHash,lastInputs;
   for(let round=0;round<2;round++){
-   const idsBytes=makeIds(spec,data.ids,round);device.queue.writeBuffer(ids,0,idsBytes);device.queue.writeBuffer(pos,0,iniPos);device.queue.writeBuffer(tiles,0,iniTiles);
+   const idsBytes=makeIds(spec,data.ids,round);device.queue.writeBuffer(ids,0,idsBytes);device.queue.writeBuffer(pos,0,iniPos);device.queue.writeBuffer(tiles,0,iniTiles);device.queue.writeBuffer(gatherOutput,0,initial);
    device.queue.submit([encode(gather,gg,[1,1])]);let posBytes=await read(pos),tilesBytes=await read(tiles);
+   const gatheredOutput=await read(gatherOutput),gatheredWords=u32(gatheredOutput),liveIds=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4);
+   for(let i=0;i<gatheredWords.length;i++){const slot=Math.floor((i-p[9])/spec.m),inside=i>=p[9]&&i<p[9]+words;const skipped=inside&&liveIds[p[10]+Math.floor(slot/spec.used)*p[15]+slot%spec.used]===-1;invariant(gatheredWords[i]===(skipped?0:initial[i]),'Gather output initialization/guard mismatch');}
    const occupancy=gatherCheck(spec,idsBytes,posBytes,tilesBytes,iniPos,iniTiles);
    const zeroOverride=spec.zeroTilesOverride&&round===0;
    if(zeroOverride){device.queue.writeBuffer(tiles,0,new Uint32Array([0]));tilesBytes=await read(tiles);}
    const rr={round,idsSha256:hash(idsBytes),gather:occupancy,zeroTilesOverride:zeroOverride,variants:[]};row.rounds.push(rr);let baseline,baselineCpu;
    for(const lane of lanes){
-    device.queue.writeBuffer(lane.dst,0,initial);device.queue.submit([encode(lane.p,lane.g,spec.grid)]);const out=await read(lane.dst),actual=u32(out);
+    // Each matrix variant starts with the exact output state produced by the
+    // canonical gather, including its skipped-slot zero initialization.
+    device.queue.writeBuffer(lane.dst,0,gatheredOutput);device.queue.submit([encode(lane.p,lane.g,spec.grid)]);const out=await read(lane.dst),actual=u32(out);
     let guardErrors=0,bitDifferences=0;
-    for(let i=0;i<actual.length;i++){if(i<p[9]||i>=p[9]+words||zeroOverride)guardErrors+=Number(actual[i]!==initial[i]);if(baseline)bitDifferences+=Number(actual[i]!==baseline[i]);}
+    for(let i=0;i<actual.length;i++){if(i<p[9]||i>=p[9]+words||zeroOverride)guardErrors+=Number(actual[i]!==gatheredWords[i]);if(baseline)bitDifferences+=Number(actual[i]!==baseline[i]);}
     if(!baseline)baseline=Uint32Array.from(actual);
     const cpu=zeroOverride?undefined:lane.name==='baseline'?(baselineCpu=cpuCheck(spec,data.dequantized,data.input,idsBytes,out)):{...baselineCpu,inheritedFromBitIdenticalBaseline:true};
     const result={name:lane.name,shaderSha256:spec.shaderHashes[lane.name],outputSha256:hash(out),checkedOutputWords:zeroOverride?0:words,guardErrors,bitDifferences,cpu};rr.variants.push(result);

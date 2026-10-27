@@ -9,7 +9,7 @@ import re
 import subprocess
 
 EXTRA_CONSTANTS = [
-    'LLAMA_DEFAULT_SEED', 'LLAMA_TOKEN_NULL',
+    'LLAMA_DEFAULT_SEED', 'LLAMA_TOKEN_NULL', 'LLAMA_DRY_MAX_SEQ_BREAKERS',
     'LLAMA_FILE_MAGIC_GGLA', 'LLAMA_FILE_MAGIC_GGSN', 'LLAMA_FILE_MAGIC_GGSQ',
     'LLAMA_SESSION_MAGIC', 'LLAMA_SESSION_VERSION',
     'LLAMA_STATE_SEQ_MAGIC', 'LLAMA_STATE_SEQ_VERSION',
@@ -35,6 +35,14 @@ EXTRA_CONSTANTS = [
 UNIMPLEMENTED_PUBLIC_FUNCTIONS = {
     'ggml_threadpool_get_n_threads':
         'declared in ggml-cpu.h but not implemented by the pinned upstream',
+}
+
+# These upstream functions remain implemented but became deprecated in the
+# current pin. Keep their existing exports while also exposing the replacement
+# capabilities API; other deprecated declarations remain excluded.
+COMPATIBILITY_DEPRECATED_FUNCTIONS = {
+    'mtmd_helper_model_can_chat',
+    'mtmd_helper_support_video',
 }
 
 # Explicit synchronous callback-only metadata surface. Normal generated APIs
@@ -121,7 +129,8 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
         if name.startswith('mtmd_helper_video_') and name != 'mtmd_helper_video_init_params_default':
             excluded.append({'name': name, 'reason': 'requires subprocess video support (MTMD_VIDEO=OFF)'})
             continue
-        if any(x.get('kind') == 'DeprecatedAttr' for x in n.get('inner', [])) or n.get('variadic'):
+        deprecated = any(x.get('kind') == 'DeprecatedAttr' for x in n.get('inner', []))
+        if (deprecated and name not in COMPATIBILITY_DEPRECATED_FUNCTIONS) or n.get('variadic'):
             excluded.append({'name': name, 'reason': 'deprecated' if not n.get('variadic') else 'variadic'})
             continue
         result = n['type']['qualType'].split(' (', 1)[0]

@@ -32,14 +32,14 @@ SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '17a4296ce72ad1acf281f87435dd53f3cb6296578be35675cb374213d41139ac'
+OUTPUT_SHA256 = '4b66eeacddb5927aaed6c67e351b190eb5de3662937a9e8fed8760fdd4a8a27d'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
 # Historical name retained for consumers of the final shared shader library.
-SSM_HEADER_OUTPUT_SHA256 = '84667b9b4afaebbee6c4ebb287a26256d909895eeefc2814eca01dabfdebc8fa'
+SSM_HEADER_OUTPUT_SHA256 = '4ca71dcd2df778ffbe3f1678c525e03a646f68fa8345d14168ac91c16a452656'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -47,9 +47,9 @@ SSM_HEADER_OUTPUT_SHA256 = '84667b9b4afaebbee6c4ebb287a26256d909895eeefc2814eca0
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
 LOADER_PATCH_SHA256 = 'ddb01246fb2a7901359c0bc576023ce0a0f2c5898ee46623f71c86c9eb6f7f3f'
-LOADER_OUTPUT_SHA256 = '6f3919c473df574163644661cbcc9741435397f1e0ea998518d93a49da0b0907'
+LOADER_OUTPUT_SHA256 = '96aefafbf214482f3116af5ee4de0c8a4e53d6da999077cf8492526f0c52837e'
 LOADER_INPUTS = {
-    "src/llama-model-loader.cpp": "7975d83406627e405d36876472495c6111696e70db66c65a629d6213ec54fc04",
+    "src/llama-model-loader.cpp": "fc7ab08ffda8f94ff2a1ae6ddff034b9a90d2eb1d532309bd14a388e1bfa83e3",
     "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
     "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
     "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",

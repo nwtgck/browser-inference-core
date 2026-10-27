@@ -1,21 +1,25 @@
 {
   "upstream": {
-    "src/models/qwen4exp.cpp": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
-    "src/llama-memory-hybrid-idx.cpp": "cbff3fb6fa05c597448f4e5edf310b95cd2635ae146aee4dee2ded447ea4280c",
-    "src/llama-memory-hybrid-idx.h": "99aaae2cc246de40b599d09c5713e0cb74fab04b6e1ded0910f999169e796ad9",
-    "ggml/src/ggml.c": "42b238412cda218552812a37329fab95a2f94be6d8bff5139083450d432f796d",
-    "ggml/src/ggml-cpu/ops.cpp": "0cb56844ee2e315e4cd35a6bf802a9372f4c9c41725328a5b22a2d28bb254582",
-    "ggml/src/ggml-backend.cpp": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+    "src/models/qwen4exp.cpp": "3f22371634e9de04fd7faf240aa287a2a146c4a1092de2702e617925b22219f9",
+    "src/llama-memory-hybrid-idx.cpp": "08cbd47bcac5e481ef66c586c27510b210f34d76042dbafa6d51d9dbc489831a",
+    "src/llama-memory-hybrid-idx.h": "cfd2ef37aed10a95f9eebe032d2e2279eb9e0c6174fab569d137115a04d0e7a7",
+    "ggml/src/ggml.c": "45e90696c4a766d5747f3443f817cd3be11f0110cf93cd16926698c0f49ed083",
+    "ggml/src/ggml-cpu/ops.cpp": "acaa7a406bea976cc82558316ef1cb1996f28d34b8203fc46da09b53783d943d",
+    "ggml/src/ggml-backend.cpp": "79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0",
+    "src/llama-context.cpp": "4e61e010041a60f2ed0b17d9b88d9723dc43f6b72e6c81541c55cccea89d93a2",
+    "src/llama-graph.cpp": "ab825d8307c90876bebf05b373fd2ddf71ba3969713fb019e306cf1fdfdc611f",
+    "src/llama-cparams.h": "9f924d1edc672e0d1512ac5342a67aedae5e0807db8e4e694ce97ad3348935df",
+    "ggml/include/ggml.h": "2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7"
   },
-  "patchSha256": "38aa8f99cf1b39d4670d38fe4da7efbbe5eda2343e49769a04204c167214bbb7",
+  "patchSha256": "0d53f3f0a2034525ad2ac9140111c735e59fa54a1abe31c2c4108fe0b8566dcc",
   "variants": {
     "upstream": {
-      "inputSha256": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
-      "outputSha256": "7cde6621d653b084cd5836e4b7e749ebd34a5a52d7cd9dfc5176a431ba19ed05"
+      "inputSha256": "3f22371634e9de04fd7faf240aa287a2a146c4a1092de2702e617925b22219f9",
+      "outputSha256": "ef1885a4cf181ee9395bc0ac7830f097e3cbcc78c892c2534700a45e112fc0ac"
     },
     "file-backed-rows": {
-      "inputSha256": "c4cbc3decc15179e3938d5c7609288c34c8e64519a13ac1977b0d966be254f09",
-      "outputSha256": "b9e073ff02988e184aeedda93414abe478a853ce167955d56c4f5d315e3f6671"
+      "inputSha256": "8be06ca75eb546dff08d45776ce6eb739b06e42793cabda3e4038fca211d2cc6",
+      "outputSha256": "28e284db66ae536aeafb10634ab068d13535219a7f29e3e21e1a4473903951a8"
     }
   }
 }

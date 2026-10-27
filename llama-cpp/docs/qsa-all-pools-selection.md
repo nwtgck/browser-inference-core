@@ -14,14 +14,19 @@ zero or negative infinity. After selection, only live/dead membership remains.
 
 The optimized graph substitutes visibility for scoring, repeats the pool member
 table without sorting or indirect gathering, and shares the final selection mask
-within a graph only for the exact same base attention mask input tensor.
+within a graph only through the same pool-input object and the same mask type.
+The pinned upstream derives selection from pool visibility and tail membership;
+it no longer takes a separate base attention mask. Flash attention uses an F16
+selection, while the other path uses F32. The selected rows become one contiguous
+two-dimensional mask before upstream reshapes it for the K/V cache streams.
 
 It does **not** replace sparse masking with an unconditional dense mask. The
 original live/dead redirection, unique dump rows, sequence visibility, cell holes,
-incomplete tail and final attention mask addition remain. Every layer still
+incomplete tail and upstream mask layout remain. Every layer still
 updates raw and pooled key caches before entering the fast path. Once the padded
 pool count exceeds the budget, the original scoring, fusion metadata and ranking
-path runs. No cache format or public runtime ABI (Application Binary Interface)
+path runs, including upstream's device-probed TOP_K_MASK and its scatter
+fallback. No cache format or public runtime ABI (Application Binary Interface)
 changes. No context-length, tool, grammar, quantization or sampling compromise.
 
 ## Build composition
@@ -53,6 +58,17 @@ to one input token; the test does not bypass that upstream restriction. `compare
 and checks that the executed native graph actually skipped scoring below the
 threshold and resumed it above. Comparing a baseline binary with itself fails
 that graph-coverage requirement.
+
+The runner checks both the native fused mask and an explicitly forced unfused
+mode in each independently built implementation. The census observes the actual
+CONT or TOP_K_MASK selection rather than its per-stream reshape aliases. It
+requires fused execution in the fused reference and ranked phases, rejects it in
+the unfused mode, and also requires byte-identical fused/unfused output traces.
+The forced mode uses the pinned context only inside the test executable before
+its first decode; it adds no production setting.
+An additional F16-weight control explicitly enables flash attention, requires
+observed selection masks to be F16, and repeats both comparisons. Native AUTO
+policy alone is not evidence that the F16 mask path ran.
 
 The recorded node census is not an individual-operation timing. Do not use its
 run time as a clean performance benchmark. `benchmark` omits the census; even that

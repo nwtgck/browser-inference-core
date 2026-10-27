@@ -36,6 +36,9 @@ def generate(upstream: Path, work: Path, factory: Path, *, large: bool=False) ->
      for count in [1,3,4,5,31,33]:cases.append((typ,'uniform' if count==1 else 'concentrated',32 if typ=='f32' else 256,7,2 if count==1 else 1,1,2 if count==1 else count,True,True))
      cases.append((typ,'uniform',32 if typ=='f32' else 256,7,512,10,2,False,True))
     cases.append(('f32','uniform',36,36,11,4,9,False,True))
+    for typ in ['f32','q8','iq3']:
+     for pattern in ['mixed-skipped','all-skipped']:
+      cases.append((typ,pattern,35 if typ=='f32' else 256,7,11,4,9,True,True))
     if args.large:
      for typ in (['q8','iq3'] if args.large_type=='both' else [args.large_type]):
       for pattern in (['uniform','concentrated','skewed','duplicate'] if args.large_pattern=='all' else ['uniform','concentrated'] if args.large_pattern=='paired' else [args.large_pattern]):
@@ -68,6 +71,7 @@ def generate(upstream: Path, work: Path, factory: Path, *, large: bool=False) ->
        elif pattern=='duplicate':ex=(token//2)%e
        elif pattern=='skewed':ex=0 if (token*u+slot)%5 else (token*3+slot)%e
        else:ex=(token*u+slot)*5%e
+       if pattern=='all-skipped' or (pattern=='mixed-skipped' and (token*u+slot)%3==0):ex=-1
        ids[offids+token*sid+slot]=ex
      name=f'{typ}-{pattern}-k{k}-m{m}-e{e}-u{u}-t{t}';d=fixtures/name;d.mkdir(exist_ok=True)
      (d/'weights.bin').write_bytes(weights);(d/'input.bin').write_bytes(inp);(d/'ids.bin').write_bytes(struct.pack('<'+'i'*len(ids),*ids));(d/'packed.bin').write_bytes(packed)

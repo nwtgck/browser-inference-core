@@ -137,7 +137,7 @@ class MoeGroupSkip(unittest.TestCase):
                 if input_type == 'f16':
                     command.append('f16')
                 metadata = json.loads(subprocess.check_output(command, text=True))
-                self.assertEqual(metadata['gatherParams'], [3, 11, 4, 9, 6])
+                self.assertEqual(metadata['gatherParams'], [3, dst, 11, 4, 9, 6, m])
                 self.assertEqual(metadata['mainParams'], [a, x, dst, k, m, 11, 4, 9, 4,
                                                          stride_a, stride_x, m * stride_a + 4, 4 * stride_x + 4])
                 self.assertEqual(metadata['maxTiles'], 13)
@@ -155,9 +155,11 @@ class MoeGroupSkip(unittest.TestCase):
         work = self.directory / 'fixtures'
         manifest = make_fixtures.generate(self.upstream, work, executable)
         cases = json.loads(manifest.read_text())
-        self.assertEqual(len(cases), 40)
+        self.assertEqual(len(cases), 46)
         self.assertEqual({case['type'] for case in cases}, {'f32', 'q8', 'iq3'})
         self.assertEqual(sum(case['zeroTilesOverride'] for case in cases), 3)
+        self.assertEqual(sum(case['pattern'] == 'mixed-skipped' for case in cases), 3)
+        self.assertEqual(sum(case['pattern'] == 'all-skipped' for case in cases), 3)
         for case in cases:
             for name, expected in case['hashes'].items():
                 self.assertEqual(hashlib.sha256((work / 'fixtures' / case['name'] / (name + '.bin')).read_bytes()).hexdigest(), expected)

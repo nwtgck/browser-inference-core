@@ -1,5 +1,5 @@
 {
-  "upstream_commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+  "upstream_commit": "338fce6511c744893cc0d3d958b275f40552c7a4",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",

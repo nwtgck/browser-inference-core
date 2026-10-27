@@ -121,17 +121,19 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
     class_<common_chat_tool_call>("common_chat_tool_call").constructor<>()
         FIELD(common_chat_tool_call, name) FIELD(common_chat_tool_call, arguments) FIELD(common_chat_tool_call, id);
     class_<common_chat_msg_content_part>("common_chat_msg_content_part").constructor<>()
-        FIELD(common_chat_msg_content_part, type) FIELD(common_chat_msg_content_part, text);
+        FIELD(common_chat_msg_content_part, type) FIELD(common_chat_msg_content_part, text)
+        FIELD(common_chat_msg_content_part, name);
     class_<common_chat_msg>("common_chat_msg").constructor<>()
         FIELD(common_chat_msg, role) FIELD(common_chat_msg, content) FIELD(common_chat_msg, content_parts)
         FIELD(common_chat_msg, tool_calls) FIELD(common_chat_msg, reasoning_content)
-        FIELD(common_chat_msg, tool_name) FIELD(common_chat_msg, tool_call_id)
+        FIELD(common_chat_msg, tool_name) FIELD(common_chat_msg, tool_call_id) FIELD(common_chat_msg, extra_json)
         .function("to_json_oaicompat", select_overload<common_json(bool) const, common_chat_msg>(&common_chat_msg::to_json_oaicompat))
         .function("render_content", select_overload<std::string(const std::string &) const, common_chat_msg>(&common_chat_msg::render_content))
         .function("empty", select_overload<bool() const, common_chat_msg>(&common_chat_msg::empty))
         .function("contains_media", select_overload<bool() const, common_chat_msg>(&common_chat_msg::contains_media));
     class_<common_chat_tool>("common_chat_tool").constructor<>()
-        FIELD(common_chat_tool, name) FIELD(common_chat_tool, description) FIELD(common_chat_tool, parameters);
+        FIELD(common_chat_tool, name) FIELD(common_chat_tool, description) FIELD(common_chat_tool, parameters)
+        FIELD(common_chat_tool, defer_loading);
     class_<common_chat_msg_diff>("common_chat_msg_diff").constructor<>()
         FIELD(common_chat_msg_diff, reasoning_content_delta) FIELD(common_chat_msg_diff, content_delta)
         FIELD(common_chat_msg_diff, tool_call_index) FIELD(common_chat_msg_diff, tool_call_delta)
@@ -201,7 +203,8 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         FIELD(common_chat_parser_params, format) FIELD(common_chat_parser_params, generation_prompt)
         FIELD(common_chat_parser_params, debug) FIELD(common_chat_parser_params, parser);
     class_<common_chat_prompt_preset>("common_chat_prompt_preset").constructor<>()
-        FIELD(common_chat_prompt_preset, system) FIELD(common_chat_prompt_preset, user);
+        FIELD(common_chat_prompt_preset, system) FIELD(common_chat_prompt_preset, user)
+        FIELD(common_chat_prompt_preset, has_language);
     class_<common_peg_arena>("common_peg_arena").constructor<>()
         .function("empty", select_overload<bool() const, common_peg_arena>(&common_peg_arena::empty))
         .function("size", select_overload<size_t() const, common_peg_arena>(&common_peg_arena::size));
@@ -243,7 +246,14 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         .function("format_example", +[](const templates_owner & self, bool use_jinja, const std::map<std::string, std::string> & kwargs) {
             return common_chat_format_example(self.value.get(), use_jinja, kwargs);
         })
-        .function("get_asr_prompt", +[](const templates_owner & self) { return common_chat_get_asr_prompt(self.value.get()); });
+        .function("get_asr_prompt", +[](const templates_owner & self) { return common_chat_get_asr_prompt(self.value.get()); })
+        .function("get_asr_prompt_with_language", +[](const templates_owner & self, const std::string & language) {
+            return common_chat_get_asr_prompt(self.value.get(), language);
+        })
+        .function("get_tts_prompt", +[](const templates_owner & self, const std::string & text,
+            const std::string & language, const std::string & voice) {
+            return common_chat_get_tts_prompt(self.value.get(), text, language, voice);
+        });
 
     function("common_chat_verify_template",
         select_overload<bool(const std::string &, bool)>(&common_chat_verify_template));

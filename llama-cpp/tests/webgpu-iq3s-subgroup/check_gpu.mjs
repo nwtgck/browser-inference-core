@@ -90,6 +90,7 @@ try {
     require(hash(code) === identity.shaderSha256[file], 'Factory WGSL hash mismatch: ' + file);
     pipelines.set(file, await pipeline(code.toString(), file));
   }
+  const caseOutputs = new Map();
   for (const spec of fixtures) {
     const decision = decisions.find(row => row.name === spec.name);
     require(decision && spec.params.length === 13, 'Missing actual factory decision');
@@ -101,11 +102,20 @@ try {
     const truth = new Float64Array(data.reference.buffer.slice(data.reference.byteOffset, data.reference.byteOffset + data.reference.byteLength));
     const outputs = spec.m * spec.slots, offset = spec.params[3];
     require(truth.length === outputs * 2, 'Reference output count mismatch');
+    const skippedSlots = new Set(Array.from({ length: spec.slots }, (_, slot) => slot)
+      .filter(slot => data.ids.readUInt32LE((spec.params[2] + slot) * 4) === 0xffffffff));
+    require(JSON.stringify([...skippedSlots]) === JSON.stringify(spec.skippedSlots), 'Skipped-slot fixture metadata mismatch');
+    if (skippedSlots.size > 0) {
+      require(decision.selectedFile === `iq3s-independent-sg${subgroup}.wgsl`
+        && decision.wgSize === 128 && decision.outputsPerWg === 4 * (128 / subgroup),
+      'Skipped-slot case did not select the independent-subgroup implementation: ' + spec.name);
+    }
     const initial = new Uint32Array(offset + outputs + 16); initial.fill(0x7eabcdef);
     const params = new Uint32Array(16); params.set(spec.params);
     const a = upload(data.weights, GPUBufferUsage.STORAGE), x = upload(data.input, GPUBufferUsage.STORAGE);
     const ids = upload(data.ids, GPUBufferUsage.STORAGE), uniform = upload(params, GPUBufferUsage.UNIFORM);
     const row = { name: spec.name, k: spec.k, m: spec.m, slots: spec.slots, params: spec.params,
+      baselineCase: spec.baselineCase, skippedSlots: [...skippedSlots],
       actualDecision: decision, referenceOutputs: outputs, variants: [] };
     report.cases.push(row);
     let baseline;
@@ -124,11 +134,19 @@ try {
       const floats = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
       if (!baseline) baseline = Uint32Array.from(words);
       let guardErrors = 0, nonfinite = 0, boundFailures = 0, bitDifferences = 0;
+      let skippedZeroErrors = 0, unchangedSlotErrors = 0;
+      const paired = spec.baselineCase ? caseOutputs.get(spec.baselineCase + ':' + variant.name) : undefined;
+      require(!spec.baselineCase || paired?.length === outputs, 'Missing paired baseline output');
       let maxAbsError = 0, maxRelativeError = 0, maxNormalizedError = 0, squared = 0, relativeSamples = 0;
       const operations = 2 * spec.k + 256 + 32, gamma = operations * 2 ** -23 / (1 - operations * 2 ** -23);
       for (let i = 0; i < words.length; i++) {
         if (i < offset || i >= offset + outputs) { guardErrors += Number(words[i] !== initial[i]); continue; }
         const j = i - offset, actual = floats[i], reference = truth[j * 2], sumAbs = truth[j * 2 + 1];
+        if (skippedSlots.has(Math.floor(j / spec.m))) {
+          skippedZeroErrors += Number(words[i] !== 0);
+        } else if (paired) {
+          unchangedSlotErrors += Number(words[i] !== paired[j]);
+        }
         nonfinite += Number(!Number.isFinite(actual));
         const error = Math.abs(actual - reference);
         boundFailures += Number(error > gamma * sumAbs);
@@ -145,14 +163,21 @@ try {
         mutations[key] = Number(!(await read(buffer)).equals(expected));
       }
       row.variants.push({ name: variant.name, file: variant.file, checkedOutputs: outputs, dispatchGrid: [width, height],
-        guardErrors, nonfinite, boundFailures, bitDifferences, maxAbsError, maxRelativeError, relativeSamples,
+        guardErrors, nonfinite, boundFailures, bitDifferences, skippedZeroErrors, unchangedSlotErrors,
+        maxAbsError, maxRelativeError, relativeSamples,
         maxNormalizedError, rmse: Math.sqrt(squared / outputs), gamma, mutations });
       require(!guardErrors && !nonfinite && !boundFailures && Object.values(mutations).every(value => !value), 'Numerical/boundary failure: ' + spec.name);
+      require(!skippedZeroErrors && !unchangedSlotErrors, 'Skipped-slot or paired-output failure: ' + spec.name);
+      caseOutputs.set(spec.name + ':' + variant.name, Uint32Array.from(words.subarray(offset, offset + outputs)));
       dst.destroy(); buffers.delete(dst);
     }
     await device.queue.onSubmittedWorkDone();
     for (const buffer of buffers) buffer.destroy(); buffers.clear();
   }
+  const specializedSkipped = report.cases.filter(row => row.skippedSlots.length > 0
+    && row.actualDecision.selectedFile !== 'iq3s-baseline.wgsl');
+  require(specializedSkipped.some(row => row.skippedSlots.length === row.slots), 'Missing actual-selection all-skipped coverage');
+  require(specializedSkipped.some(row => row.params[8] > 1 && row.skippedSlots.length < row.slots), 'Missing actual-selection per-slot-input skipped coverage');
   require(!report.errors.length, 'WebGPU validation errors');
   report.status = 'passed';
 } catch (error) {

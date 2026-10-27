@@ -79,6 +79,7 @@ int main(int argc, char ** argv) {
     if (argc != 2) return 2;
     try {
         llama_backend_init();
+        init_normal_pool(42, 0.02f);
         const std::string path = (std::filesystem::path(argv[1]) / "synthetic-qwen4exp.gguf").string();
         auto metadata = get_gguf_ctx(LLM_ARCH_QWEN4EXP, true);
         {

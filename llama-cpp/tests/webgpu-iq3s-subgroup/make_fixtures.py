@@ -34,7 +34,7 @@ command = ['cc', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-ffp-contrac
 subprocess.run(command, check=True)
 subprocess.run([str(oracle), '--self-test'], check=True)
 
-cases = [
+base_cases = [
     ('tiny-k256-m7-shared-padded', 256, 7, True, True, True),
     ('tiny-k512-m63-separate-padded', 512, 63, False, True, True),
     ('medium-k2048-m256-shared-contiguous', 2048, 256, True, False, False),
@@ -44,12 +44,25 @@ cases = [
     ('wide-k4096-m63-separate-padded', 4096, 63, False, True, True),
     ('wide-k4096-m641-separate-padded', 4096, 641, False, True, True),
 ]
+cases = [{'seed': seed, 'shape': shape, 'skippedSlots': [], 'baselineCase': None}
+         for seed, shape in enumerate(base_cases)]
+for base_index, suffix, skipped_slots in [
+    (5, 'mixed-skipped', [1, 4, 9]),
+    (3, 'mixed-skipped', [0, 3, 8]),
+    (4, 'mixed-skipped', [2, 5, 7]),
+    (4, 'all-skipped', list(range(10))),
+]:
+    shape = base_cases[base_index]
+    cases.append({'seed': base_index, 'shape': (shape[0] + '-' + suffix, *shape[1:]),
+                  'skippedSlots': skipped_slots, 'baselineCase': shape[0]})
 scales = [0x0000, 0x13ad, 0xa65b, 0x2d71, 0xb5b3, 0x3835, 0xbc27, 0x4159, 0x4913]
 high_bits = [0x00, 0xff, 0x55, 0xaa, 0x81, 0x18, 0x7e, 0xe7]
 subscales = [0x00, 0xff, 0x10, 0xef, 0x53, 0xa7, 0x38, 0xc2]
 manifest = []
 details = []
-for seed, (name, k, m, shared, padded, duplicates) in enumerate(cases):
+for case in cases:
+    seed = case['seed']
+    name, k, m, shared, padded, duplicates = case['shape']
     directory = fixtures / name
     directory.mkdir(exist_ok=True)
     experts, slots, blocks = 11, 10, k // 256
@@ -85,6 +98,8 @@ for seed, (name, k, m, shared, padded, duplicates) in enumerate(cases):
     selected = [10, 3, 7, 0, 9, 1, 8, 2, 6, 4]
     if duplicates:
         selected[-1] = selected[0]
+    for slot in case['skippedSlots']:
+        selected[slot] = 0xffffffff
     ids = [0xdeadbeef] * (offset_ids + slots + 4)
     ids[offset_ids:offset_ids + slots] = selected
     ids_data = struct.pack('<' + 'I' * len(ids), *ids)
@@ -102,13 +117,28 @@ for seed, (name, k, m, shared, padded, duplicates) in enumerate(cases):
     for dot, sum_abs in struct.iter_unpack('<dd', reference):
         if not math.isfinite(dot) or not math.isfinite(sum_abs) or sum_abs < abs(dot) or sum_abs < 0:
             raise ValueError('Invalid reference: ' + name)
+    if case['baselineCase'] is not None:
+        baseline = next(row for row in manifest if row['name'] == case['baselineCase'])
+        baseline_directory = fixtures / case['baselineCase']
+        if params != baseline['params'] or weights != (baseline_directory / 'weights.bin').read_bytes() \
+                or input_data != (baseline_directory / 'input.bin').read_bytes():
+            raise ValueError('Skipped-slot fixture changed its baseline inputs: ' + name)
+        baseline_reference = (baseline_directory / 'reference.bin').read_bytes()
+        for slot in range(slots):
+            actual = reference[slot * m * 16:(slot + 1) * m * 16]
+            expected = bytes(m * 16) if slot in case['skippedSlots'] \
+                else baseline_reference[slot * m * 16:(slot + 1) * m * 16]
+            if actual != expected:
+                raise ValueError('Skipped-slot oracle changed a baseline row: ' + name)
     row = {'name': name, 'k': k, 'm': m, 'storedExperts': experts, 'slots': slots, 'bNe1': input_rows,
+           'baselineCase': case['baselineCase'], 'skippedSlots': case['skippedSlots'],
            'params': params, 'weightsFile': f'{name}/weights.bin', 'inputFile': f'{name}/input.bin',
            'idsFile': f'{name}/ids.bin', 'referenceFile': f'{name}/reference.bin',
            'hashes': {key: hashlib.sha256((directory / file).read_bytes()).hexdigest()
                       for key, file in [('weights', 'weights.bin'), ('input', 'input.bin'), ('ids', 'ids.bin'), ('reference', 'reference.bin')]}}
     manifest.append(row)
     details.append({'name': name, 'padded': padded, 'sharedInput': shared, 'duplicateIds': duplicates,
+                    'baselineCase': case['baselineCase'], 'skippedSlots': case['skippedSlots'],
                     'selectedIds': selected, 'weightsBytes': len(weights), 'referenceOutputs': m * slots,
                     'referenceSumAbsMax': max(pair[1] for pair in struct.iter_unpack('<dd', reference))})
 (fixtures / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

@@ -78,6 +78,14 @@ int main(int argc, char ** argv) {
     float dequantized[256];
     for (uint32_t slot = 0; slot < slots; ++slot) {
         const uint32_t expert = ids[offset_ids + slot];
+        if (expert == UINT32_MAX) {
+            for (uint32_t row = 0; row < m; ++row) {
+                const size_t index = (size_t) slot * m + row;
+                reference[index * 2] = 0.0;
+                reference[index * 2 + 1] = 0.0;
+            }
+            continue;
+        }
         if (expert >= experts) die("Oracle selected expert outside stored payload");
         const size_t input_base = (size_t) offset_x + (slot % input_rows) * (size_t) stride_11;
         if (input_base + k > input_bytes / 4) die("Oracle input row outside payload");

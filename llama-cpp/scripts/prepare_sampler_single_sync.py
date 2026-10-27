@@ -10,18 +10,18 @@ import prepare_webgpu_tensor_copy as tensor_copy
 SOURCE_PATH = 'src/llama-sampler.cpp'
 PATCH_NAME = 'llama-sampler-single-sync.patch'
 PATCH_SHA256 = 'c5ec122ea02d13a6bdb70deb8db1c46c1ccdf99fbf9f61a0c8036781bdaf6d8c'
-INPUT_SHA256 = 'd0c147129ded606691b0b3e78562bec36f53459446aa7a5bac23bb93a01c86f6'
-OUTPUT_SHA256 = '216668acd899e58b69eeb83601678c261deebef47107947eaf419dcdc076f193'
+INPUT_SHA256 = '6313214bf0a4146036f3d62846299cba4fa9804757c353140a04de52130cf496'
+OUTPUT_SHA256 = '3fcfceade964ab4cad60621acca0f69f3eb54272cb2ca6d17f7d8b92c51ee410'
 CONTRACT_INPUTS = {
     SOURCE_PATH: INPUT_SHA256,
     'src/llama-sampler.h': 'd39c6bfd6c966acde7bfaeb55f08c176b3d9078bc5e8e8de2eee504fc66c258b',
-    'src/llama-context.cpp': '2a25e556cb0d16725e01ce853fb1b76da91dcb41b803ce1a6bacec89bfb94aa5',
+    'src/llama-context.cpp': '4e61e010041a60f2ed0b17d9b88d9723dc43f6b72e6c81541c55cccea89d93a2',
     'src/llama-context.h': 'c5123eb0b1b4426737a70a3a616d8ba48b646143b596fa3f42d20ab57b2fb9e5',
-    'src/llama-vocab.h': 'b3352ac3ca3e4429c6603e2bbc6e1db7a906d8d3098468dc827711e40d7babb5',
-    'src/llama-model.cpp': 'a83d3367793f0aa40a869e0ea067a365a6a6bf4b90ea59460ff827efa1dcdd9a',
-    'src/llama-vocab.cpp': 'ff2ec59299af84c51814020169177302003d8c14cdd30f2c44f333359bc17b41',
-    'include/llama.h': '961430f89e2553dbcd99e3e6c59826af9ec143f05911520c74f804d986ff3cd2',
-    'ggml/src/ggml-backend.cpp': '43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff',
+    'src/llama-vocab.h': '7123e342371b46887d12dc01a7261ff064b651a3c0ce1d99f61c224fd8a55d79',
+    'src/llama-model.cpp': '56d2f2d012a4cffa2ac39f8b4b7bc09ad456b8963ed2376a9c42c10757ade9bd',
+    'src/llama-vocab.cpp': '9cd7874651e10e0c154eeac9d31e947c5b6cc821bad332ae48cc0bd1db5fdefa',
+    'include/llama.h': 'c0854771d3760a41642c4e59429c5b3b9fc774887c59d37eeadc4527681732cd',
+    'ggml/src/ggml-backend.cpp': '79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0',
 }
 
 

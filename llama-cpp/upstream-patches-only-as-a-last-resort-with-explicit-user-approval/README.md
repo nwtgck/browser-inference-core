@@ -8,12 +8,13 @@ requirements justify upstream maintenance work.
 
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
-specified below. The current reference pin is v0.7.0,
-`620d2225cc436ab0b001e3200e590e3b286ef9ab`. Re-evaluate compatibility at each pin
+specified below. The current reference pin is
+`338fce6511c744893cc0d3d958b275f40552c7a4`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
-See [the v0.7.0 review](../docs/llama-v0.7.0-review.md) for reviewed contracts,
-mechanical patch rebases and the boundaries of native validation.
+See [the current upstream review](../docs/llama-338fce-review.md) for reviewed
+contracts and validation boundaries. The [v0.7.0 review](../docs/llama-v0.7.0-review.md)
+records the preceding pin and remains historical context.
 
 ## Vision BF16 compatibility/performance
 
@@ -302,10 +303,12 @@ commit with different bytes or invent a future artifact identity.
   every padded pool fits its budget. No existing runtime option removes that
   redundant work. Keeping the upstream graph, or deferring until equivalent
   upstream support, avoids this maintenance cost.
-- **Base / dependencies:** `620d2225cc436ab0b001e3200e590e3b286ef9ab` and the
+- **Base / dependencies:** `338fce6511c744893cc0d3d958b275f40552c7a4` and the
   explicit semantic and source/output hashes in `tests/qsa-selection/inputs.json`.
   Positive rectified scores, zero/-infinity visibility, and set-valued use of
   selection are required. Raw/pooled key updates and the ranked path stay intact.
+  Selection sharing requires the same graph-local pool input and mask type;
+  upstream's F16/F32 selection, fused ranked mask and scatter fallback are retained.
 - **Integration:** `LCB_QSA_ALL_POOLS` is independent of file-backed PLE. A single
   private `qwen4exp.cpp` is composed after that optional overlay, keeping its
   model header layout. Source is not edited in the vendor checkout. Build commands,

@@ -1,5 +1,5 @@
 {
-  "upstream_commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+  "upstream_commit": "338fce6511c744893cc0d3d958b275f40552c7a4",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
@@ -7,15 +7,15 @@
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
   "base_generated_normalized_sha256": {
-    "bindings.cpp": "21db8e4ebeec6519c3306de1d194cf295f410b851990ad482ea8c5493ae7db03",
-    "schema.json": "43d7385a7056d481854a34de914f93c6a0269cac3022eb8e45d5030ad1be6705",
-    "schema.mjs": "d60f97af770c2487e3fd8fd685c19a298b38019ad53b1c8a7c0fbb650b3e36ae",
-    "exports.json": "ae45ab18da843b0ecea2c890d38925e17fa308854ae7d1bb4ba6841b56e77145",
-    "jspi-exports.json": "2c0e95b8e4710842aba22f26341a711eeae17a174d03c24ffb0ef02798ab5c85",
-    "functions.d.ts": "46d52b6d6d34505a8dd0af2524dbf34c45182933c01e6e356c981ce117772087"
+    "bindings.cpp": "8f0cd26d86a0d6efeb6318289e85db5a9035bbf32dc98713514ba7ca9f262664",
+    "schema.json": "661059abdad121f33dc31ce96897769a96ed5eca037b23d0ef3eba7158f486bd",
+    "schema.mjs": "cd1f5f064daddb1a42d4fdffa5586b6753a9d42a1664764c1fd7bc3e47c6642a",
+    "exports.json": "5724dbdb55e7e7eaa2886ac2673204889f61817683c8935f82f8e499f0bd5cc8",
+    "jspi-exports.json": "71aee5e763caf0ffa3c7fd08c49288bbdcd99a585720d1260f88caf06facb8b1",
+    "functions.d.ts": "8d1dff3729b9eb386598535c855095dc36edca581dc0135a8d174f3e74693e95"
   },
   "public_source_sha256": {
-    "scripts/prepare_webgpu_q8_diagnostic.py": "d8bc02f696acb987722ba434085fbd6f6653e1599b15ef32a4993e5357d76d46",
+    "scripts/prepare_webgpu_q8_diagnostic.py": "c834d90ea72d6d271244657bb63270e3962dbdf048745bca359413bd687f75f8",
     "scripts/generate_webgpu_q8_diagnostic.py": "9f6a5e6a15f5edf4666f1ae6470653834c52b981dd94920987168b6211129e57",
     "bridge/webgpu-q8-diagnostic.h": "55923a7e5e1f5b96abbe8185e1499280d9a99c36c5c45887d42e54005d9c0bbc",
     "bridge/webgpu-q8-diagnostic.cpp": "5b71bea4b263c2a03c0127d57a59f3fbcffb9941e24f2e7b4661728b5760ec0d",

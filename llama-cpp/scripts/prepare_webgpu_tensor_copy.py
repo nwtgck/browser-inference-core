@@ -13,14 +13,14 @@ PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-app
 PATCH_NAME = 'ggml-webgpu-same-device-tensor-copy.patch'
 SOURCE_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'
 REVIEWED_REVISIONS = {
-    "620d2225cc436ab0b001e3200e590e3b286ef9ab": {
-        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf",
-        "ggml/src/ggml-backend.cpp": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff",
-        "ggml/include/ggml.h": "475beaa7e959be8c383279d9ce9d5191f37426e6b338270cfb12b26a798129d3",
+    "338fce6511c744893cc0d3d958b275f40552c7a4": {
+        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e",
+        "ggml/src/ggml-backend.cpp": "79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0",
+        "ggml/include/ggml.h": "2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7",
         "ggml/include/ggml-backend.h": "0e5e8e1f16d11ebbf501e38bc6705d79eee819b5f0b17476533f2100ed9674e2",
         "ggml/src/ggml-backend-impl.h": "4e861c8e23d3d7b0d99d8e0836e68564af58f8597d75d7bbb732857d7a632fa7",
         "ggml/src/ggml-webgpu/CMakeLists.txt": "aa19125326050c3e0ae768f31f43a61b8150805a4b330853662b955e8ef34b2a",
-        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289"
+        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d"
     }
 }
 PATCH_SHA256 = '7e37ea0704f53117b9d3876b34b1ffc58970ce7356385509a989e40d8381e97a'
@@ -31,7 +31,7 @@ DAWN_HEADERS = {
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
 }
-PATCHED_SOURCE_SHA256 = '62f0421c24eacd78591d5ba26b90d887c82e8a60ac9b5696b5b245acc59dc467'
+PATCHED_SOURCE_SHA256 = 'f14c954fab8f7094ad931fe84019d19cccbde3f31dd1e7441fb0397095447153'
 
 
 def digest(path: Path) -> str:

@@ -1,12 +1,12 @@
 {
-  "src/models/models.h": "6ca029e9124c3f03ff3bd88796a08d229704f9ee3c74871516cabba6b7ede9e0",
-  "src/models/qwen4exp.cpp": "db80782772e2ab65ac2b25c37ece9cc0fd4ce71c83673652437932eeb7f18308",
-  "src/llama-model.cpp": "a83d3367793f0aa40a869e0ea067a365a6a6bf4b90ea59460ff827efa1dcdd9a",
-  "src/llama-model-loader.cpp": "7975d83406627e405d36876472495c6111696e70db66c65a629d6213ec54fc04",
+  "src/models/models.h": "f660e8bcea0fc3f22d44643d939fbfbf0bbf824fe4e3f4a79da7d072a481278e",
+  "src/models/qwen4exp.cpp": "3f22371634e9de04fd7faf240aa287a2a146c4a1092de2702e617925b22219f9",
+  "src/llama-model.cpp": "56d2f2d012a4cffa2ac39f8b4b7bc09ad456b8963ed2376a9c42c10757ade9bd",
+  "src/llama-model-loader.cpp": "fc7ab08ffda8f94ff2a1ae6ddff034b9a90d2eb1d532309bd14a388e1bfa83e3",
   "src/llama-model-loader.h": "4eb5318f7b70333015386d612738f507153770e4e5635895b2c1d8355ff22103",
   "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
   "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
   "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",
-  "ggml/include/ggml.h": "475beaa7e959be8c383279d9ce9d5191f37426e6b338270cfb12b26a798129d3",
-  "src/llama.cpp": "8058a140d444b67bf64a1ce393d241dfd60080f4b117130c6f82e637e2109233"
+  "ggml/include/ggml.h": "2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7",
+  "src/llama.cpp": "0283e941ddd0ac3f8bc637a2e058336201bcd0784e1ebc697ea9bee3b2761bcd"
 }

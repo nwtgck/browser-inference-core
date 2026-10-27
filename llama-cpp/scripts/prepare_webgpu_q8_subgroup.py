@@ -16,23 +16,23 @@ BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-q8-subgroup-shaders.hpp'
 SHADER_NAME = 'q8_subgroup_matvec.wgsl'
 INPUTS = {
-    'ggml-webgpu.cpp': 'df43feda75cf9f1485f177d88d94bd6a436e7d562df42ee941d97c2c8b0c5ed8',
-    'ggml-webgpu-shader-lib.hpp': '1ef8ab81da16dcbdf9c505142b33557cbba4b38f38f524cc37419119303e4dd1',
+    'ggml-webgpu.cpp': 'afb7f066d73ce1c742296502087a2881dad9454957e19f90d5b822982e208274',
+    'ggml-webgpu-shader-lib.hpp': '84912f50de5cd9489c76228bd06de74bc87208bec89bc8b3a3a5a7510aed756e',
 }
 OUTPUTS = {
     'ggml-webgpu.cpp': INPUTS['ggml-webgpu.cpp'],
-    'ggml-webgpu-shader-lib.hpp': '560e5881d91c2f693f244142ff3b13dfefa6eb020abe5ddbfe952b9d8fff1ab8',
+    'ggml-webgpu-shader-lib.hpp': 'a301a9c08cf0c3d92849286e1066d81b17ff7b1b7deb058da0b6870d13456304',
     'wgsl-shaders/q8_subgroup_matvec.wgsl': '503e7785159426aefa700f4edd8625a59a88997c4beee995328744e06cd8f25c',
 }
-HEADER_SHA256 = '09dffdd0f3f8e6ce6af2653a24417715a8fc679f305de524f9ccacc220ff675a'
+HEADER_SHA256 = '7d151de06e9a3cb5366b29e043052b3b949c4c1948e7b3c2e80e99a944b95cab'
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl': '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',
     'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl': '4fdbbaf3b3d3b7c965786b62a58b6b35ceb6d2f80b29e53f4a027904d3243f18',
-    'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl': 'c938be30a28ea800dda6297dae2a9aee71ddef83f189c077b22bf8c8317d98dc',
+    'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl': '9421bdb7ac569e03e8483365653c28b95e659702f8ff849310b2c077ee64290f',
 }
 
 

@@ -8,7 +8,7 @@
  #include "gguf.h"
  
  #include <algorithm>
-@@ -2101,6 +2102,16 @@
+@@ -2480,6 +2481,16 @@
          auto & hparams = model.hparams;
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
@@ -25,7 +25,7 @@
  
          auto fin = open_ifstream_binary(fname);
          if (!fin) {
-@@ -2142,7 +2153,21 @@
+@@ -2521,7 +2532,21 @@
              }
              if (cur) {
                  tensors_to_load.push_back(cur);
@@ -48,7 +48,7 @@
                  ggml_set_name(data_tensor, cur->name);
                  loaded_tensor_names.insert(name);
                  cur = data_tensor;
-@@ -3583,11 +3608,15 @@
+@@ -4195,11 +4220,15 @@
  
          // load data
          {
@@ -65,7 +65,7 @@
              }
  
              // compute total tensor data size for progress reporting
-@@ -3599,6 +3628,9 @@
+@@ -4211,6 +4240,9 @@
              // alloc memory and offload data
              ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx_clip.backend);
              ctx_clip.buf.reset(ggml_backend_alloc_ctx_tensors_from_buft(ctx_clip.ctx_data.get(), buft));
@@ -75,7 +75,7 @@
              ggml_backend_buffer_set_usage(ctx_clip.buf.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
              // read the weight from file
              if (!ctx_clip.no_alloc) {
-@@ -3613,15 +3645,31 @@
+@@ -4225,15 +4257,31 @@
                      if (!fin) {
                          throw std::runtime_error(string_format("%s: failed to seek for tensor %s\n", __func__, t->name));
                      }
@@ -109,7 +109,7 @@
                      }
                      data_loaded += num_bytes;
                      if (progress_callback && total_data_size > 0) {
-@@ -3630,6 +3678,13 @@
+@@ -4242,6 +4290,13 @@
                              throw std::runtime_error(string_format("%s: model loading cancelled by progress_callback\n", __func__));
                          }
                      }
@@ -123,14 +123,12 @@
                  }
                  LOG_DBG("%s: loaded %zu tensors from %s\n", __func__, tensors_to_load.size(), fname.c_str());
              } else {
-@@ -4436,10 +4491,35 @@
-     // build the inference graph
-     ggml_backend_sched_reset(ctx->sched.get());
-     ggml_cgraph * gf = clip_get_graph_builder(ctx, imgs, params)->build();
+@@ -5246,6 +5301,32 @@
      if (!ggml_backend_sched_alloc_graph(ctx->sched.get(), gf)) {
          LOG_ERR("%s: failed to allocate compute graph\n", __func__);
          return false;
-     }
++    }
++
 +
 +    if (ctx->model.modality == CLIP_MODALITY_VISION &&
 +            lcb_mtmd_is_webgpu(ctx->backend)) {
@@ -155,7 +153,6 @@
 +        // This reports assigned backends, not GPU eligibility or kernel timings.
 +        LOG_INF("lcb_clip: matmul placement cpu=%zu webgpu=%zu other=%zu cpu_bf16=%zu\n",
 +                cpu, webgpu, other, cpu_bf16);
-+    }
+     }
  
      // set inputs
-     const auto & model   = ctx->model;

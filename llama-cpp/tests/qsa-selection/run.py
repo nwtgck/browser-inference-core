@@ -41,7 +41,7 @@ def run(source: Path, work: Path, jobs: int) -> None:
     logs = results / 'logs'
     logs.mkdir(parents=True, exist_ok=True)
     status = {'scope': 'synthetic native parity; not WebGPU or real-model throughput',
-              'commands': [], 'fixtures': {}, 'libraries': {}, 'success': False}
+              'commands': [], 'fixtures': {}, 'libraries': {}, 'maskParity': [], 'flashMaskParity': [], 'success': False}
 
     def save():
         (results / 'status.json').write_text(json.dumps(status, indent=2) + '\n')
@@ -78,11 +78,43 @@ def run(source: Path, work: Path, jobs: int) -> None:
             fixture = results / (quant + '.gguf')
             command('generate-' + quant, [work / 'test-reference/qsa-model', 'generate', fixture, quant])
             status['fixtures'][quant] = identity(fixture)
+            for mask_mode in ('fused', 'unfused'):
+                # Keep the original paths for the default native mode.
+                trace_root = results / quant if mask_mode == 'fused' else results / quant / 'unfused'
+                trace_command = 'trace' if mask_mode == 'fused' else 'trace-unfused'
+                for mode in ('reference', 'fast'):
+                    command('trace-' + quant + '-' + mask_mode + '-' + mode,
+                            [work / ('test-' + mode) / 'qsa-model', trace_command, fixture, trace_root / mode])
+                command('compare-' + quant + '-' + mask_mode,
+                        [sys.executable, ROOT / 'tests/qsa-selection/compare.py',
+                         '--reference', trace_root / 'reference', '--optimized', trace_root / 'fast',
+                         '--mask-mode', mask_mode])
+            # The fallback is not allowed to silently change numerical outputs.
             for mode in ('reference', 'fast'):
-                command('trace-' + quant + '-' + mode,
-                        [work / ('test-' + mode) / 'qsa-model', 'trace', fixture, results / quant / mode])
-            command('compare-' + quant, [sys.executable, ROOT / 'tests/qsa-selection/compare.py',
-                    '--reference', results / quant / 'reference', '--optimized', results / quant / 'fast'])
+                fused = identity(results / quant / mode / 'logits.f32')
+                unfused = identity(results / quant / 'unfused' / mode / 'logits.f32')
+                if fused != unfused:
+                    raise RuntimeError('Fused/unfused outputs differ: ' + quant + '/' + mode)
+                status['maskParity'].append({'quant': quant, 'mode': mode, **fused})
+        # The newer graph chooses F16 masks when flash attention is enabled.
+        # Verify that path explicitly instead of relying on native AUTO policy.
+        flash_root = results / 'F16' / 'flash'
+        for mask_mode in ('fused', 'unfused'):
+            trace_command = 'trace-flash' if mask_mode == 'fused' else 'trace-flash-unfused'
+            for mode in ('reference', 'fast'):
+                command('trace-F16-flash-' + mask_mode + '-' + mode,
+                        [work / ('test-' + mode) / 'qsa-model', trace_command, results / 'F16.gguf',
+                         flash_root / mask_mode / mode])
+            command('compare-F16-flash-' + mask_mode,
+                    [sys.executable, ROOT / 'tests/qsa-selection/compare.py',
+                     '--reference', flash_root / mask_mode / 'reference',
+                     '--optimized', flash_root / mask_mode / 'fast', '--mask-mode', mask_mode])
+        for mode in ('reference', 'fast'):
+            fused = identity(flash_root / 'fused' / mode / 'logits.f32')
+            unfused = identity(flash_root / 'unfused' / mode / 'logits.f32')
+            if fused != unfused:
+                raise RuntimeError('Flash F16 fused/unfused outputs differ: ' + mode)
+            status['flashMaskParity'].append({'maskType': 'F16', 'mode': mode, **fused})
         status['success'] = True
     finally:
         save()

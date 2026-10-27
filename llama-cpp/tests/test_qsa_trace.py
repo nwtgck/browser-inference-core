@@ -42,7 +42,7 @@ class TraceOracle(unittest.TestCase):
                 rows.append({'phase': phase, 'indexer': selected, 'top_k': selected,
                              'query': selected, 'raw_key': count,
                              'selection_mask': count//2 if mode == 'optimized' and phase in compare.SHORT else count,
-                             'pools64': 0, 'pools128': 0})
+                             'fused_mask': selected, 'pools64': 0, 'pools128': 0})
             self.rows[mode] = rows
             self.write(directory, rows)
 
@@ -59,8 +59,26 @@ class TraceOracle(unittest.TestCase):
     def test_valid_trace_is_accepted(self):
         self.assertTrue(compare.compare(self.reference, self.optimized)['identical'])
 
+    def test_explicit_unfused_trace_is_accepted_but_not_as_fused_coverage(self):
+        for mode, directory in (('reference', self.reference), ('optimized', self.optimized)):
+            rows = [dict(row, fused_mask=0) for row in self.rows[mode]]
+            self.write(directory, rows)
+        result = compare.compare(self.reference, self.optimized, mask_mode='unfused')
+        self.assertTrue(result['identical'])
+        self.assertEqual(result['maskMode'], 'unfused')
+        with self.assertRaisesRegex(AssertionError, 'fused mask'):
+            compare.compare(self.reference, self.optimized)
+
+    def test_unfused_mode_rejects_fused_execution(self):
+        with self.assertRaisesRegex(AssertionError, 'Unfused run'):
+            compare.compare(self.reference, self.optimized, mask_mode='unfused')
+
+    def test_unknown_mask_mode_is_not_an_escape_from_coverage(self):
+        with self.assertRaisesRegex(ValueError, 'Unknown mask mode'):
+            compare.compare(self.reference, self.optimized, mask_mode='automatic')
+
     def test_reference_compared_to_itself_is_not_optimization_coverage(self):
-        with self.assertRaisesRegex(AssertionError, 'bypass'):
+        with self.assertRaisesRegex(AssertionError, 'bypass|All-pools'):
             compare.compare(self.reference, self.reference)
 
     def test_nonfinite_identical_outputs_are_not_parity(self):
@@ -96,6 +114,26 @@ class TraceOracle(unittest.TestCase):
         rows = [{key: value for key, value in row.items() if key != 'top_k'} for row in self.rows['optimized']]
         self.write(self.optimized, rows, [key for key in compare.FIELDS if key != 'top_k'])
         self.assert_invalid()
+
+    def test_missing_fused_mask_column_is_rejected(self):
+        rows = [{key: value for key, value in row.items() if key != 'fused_mask'}
+                for row in self.rows['optimized']]
+        self.write(self.optimized, rows, [key for key in compare.FIELDS if key != 'fused_mask'])
+        self.assert_invalid()
+
+    def test_fused_mask_execution_is_required_even_with_identical_logits(self):
+        for mode, phase, value in (('reference', 'short-reused', 0),
+                                   ('reference', 'ranked-prefill', 0),
+                                   ('optimized', 'short-reused', 1),
+                                   ('optimized', 'cross-threshold', 0),
+                                   ('optimized', 'ranked-prefill', 0)):
+            with self.subTest(mode=mode, phase=phase):
+                for candidate, directory in (('reference', self.reference), ('optimized', self.optimized)):
+                    rows = [dict(row) for row in self.rows[candidate]]
+                    if candidate == mode:
+                        next(row for row in rows if row['phase'] == phase)['fused_mask'] = value
+                    self.write(directory, rows)
+                self.assert_invalid()
 
     def test_negative_counts_are_rejected(self):
         self.rows['optimized'][0]['query'] = -1

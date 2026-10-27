@@ -195,7 +195,7 @@
      uint32_t wg_y = 1;
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,104 @@
 +#ifdef USE_SUBGROUP_REDUCTION
 +enable subgroups;
 +#endif
@@ -259,7 +259,10 @@
 +    let own_expert = ids[params.offset_ids + slot];
 +    let row_base   = (wg_linear % output_groups) * rows_per_wg + subgroup_id * OUTPUTS_PER_WG;
 +
-+    let src0_batch_offset = params.offset_src0 + own_expert * params.stride_02;
++    // Match the canonical indexed matvec: -1 owns no expert, but every
++    // invocation must still reach the subgroup collectives below.
++    let skipped = i32(own_expert) == -1;
++    let src0_batch_offset = params.offset_src0 + select(own_expert, 0u, skipped) * params.stride_02;
 +    let src1_idx_base     = params.offset_src1 + (slot % params.b_ne1) * params.stride_11;
 +    let dst_idx_base      = params.offset_dst + slot * params.m + row_base;
 +
@@ -269,12 +272,14 @@
 +    if (num_subgroups == expected_subgroups) {
 +        // All workgroup invocations fit exactly in full subgroups. Preserve
 +        // the original accumulator call and floating-point operation order.
-+        acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++        if (!skipped) {
++            acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++        }
 +    } else {
 +        // subgroup_size is a maximum: legal partial subgroups may have fewer
 +        // active invocations. Compute-stage lane IDs are dense from zero.
 +        let active_count = subgroupAdd(1u);
-+        if (owns_rows) {
++        if (owns_rows && !skipped) {
 +            for (var virtual_tid = subgroup_invocation_id; virtual_tid < WG_SIZE; virtual_tid += active_count) {
 +                let partial = accumulate_vec_dot(virtual_tid, row_base, src0_batch_offset, src1_idx_base);
 +                for (var col = 0u; col < NUM_COLS; col++) {
