@@ -437,3 +437,31 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing separate dispatches or wait for upstream fusion. There is no existing runtime setting for this epilogue.
 - **Maintenance and validation:** pin the graph, allocator, backend, shader, preprocessor, patch, stage outputs and embedding identities. Source-bound native tests exercise graph admission, actual allocator reuse, runtime bindings, dispatch, cache variants and both profile syntax configurations. These tests do not establish browser/model quality or target-device speed.
 - **Removal:** upstream implements equivalent guarded fusion or the owner withdraws it; remove the patch, preparation, build wiring, tests and provenance entry together.
+
+
+## WebGPU MoE matrix inactive column groups
+
+- **Patch:** `ggml-webgpu-moe-group-skip.patch`.
+- **Approval and scope:** the owner selected the constant-loop group guard after
+  isolated comparisons. Skip only matrix register-tile calculation for a local
+  four-column group whose first column is outside the gathered tile. Retain the
+  fixed column loop and its final partial group; do not change shared loads,
+  workgroup barriers, parameters, routing/gather, tiling, grid or final stores.
+  No early workgroup return, matvec, CPU or model-specific behavior changes.
+- **Integration:** compose after the SSM convolution/SiLU stage. Copy the pinned
+  upstream matrix shader into an isolated work tree, apply the one-line guard,
+  and use the upstream include expander/emitter for one dedicated header. Only
+  the matrix factory selects that symbol; the canonical full shader header,
+  gather and selected-slot matvec shaders remain authoritative upstream.
+- **Alternatives:** retain upstream padding work or wait for equivalent upstream
+  handling. Dynamic column-loop bounds and per-column guards remain unselected;
+  they can change code generation and regress fully occupied tiles.
+- **Validation and maintenance:** pin the patch, input stage, host/gather/shader
+  contracts, expanded embedding and outputs. Tests exercise normal preparation,
+  actual factory/preprocessor and cache behavior, canonical byte comparisons and
+  both profile syntax configurations. Opt-in synthetic GPU checks compare every
+  output byte with canonical shaders and verify routing metadata, guards and
+  immutable inputs. Software-adapter results do not establish Mac/model speed.
+- **Removal:** upstream provides equivalent inactive-group handling, or the owner
+  withdraws it; remove the patch, preparation, dedicated embedding, build wiring,
+  tests and provenance entry together.

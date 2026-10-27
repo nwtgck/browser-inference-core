@@ -23,6 +23,7 @@ import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
+import prepare_webgpu_moe_group_skip as moe_group_skip
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -35,7 +36,8 @@ SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = '86567b1e8d20063c7b8a6a12a8b2a10c379ab1c851a0eb18455ed76582fb7ba7'
+# Historical name retained for consumers of the final shared shader library.
+SSM_HEADER_OUTPUT_SHA256 = 'bd8f3e7a39cec314c47fc6753eb044dbc5b4411ad20c195345879e003a6040da'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -119,15 +121,17 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(iq3s_subgroup.prepare(work, source, patch_root, env))
         hc_headers.update(host_input_snapshot.prepare(work, source, patch_root, env))
         hc_headers.update(ssm_conv_silu.prepare(work, source, patch_root, env))
+        hc_headers.update(moe_group_skip.prepare(work, source, patch_root, env))
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
         if tensor_copy.digest(loader) != LOADER_OUTPUT_SHA256:
             raise ValueError('Unexpected chunked loader source identity')
         if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
-            raise ValueError('Unexpected SSM convolution header identity')
+            raise ValueError('Unexpected combined shader-library header identity')
         # Do not emit an embedded WGSL header here: the sibling shader library
-        # must continue to use upstream's generated shaders, including MoE.
+        # must continue to use upstream's generated shaders. Narrow matrix-only
+        # specializations use dedicated embedded headers, never shadowing it.
         for name, generated in hc_headers.items():
             destination = output / name
             if not destination.exists() or destination.read_bytes() != generated.read_bytes():
