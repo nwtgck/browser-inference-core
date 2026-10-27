@@ -75,6 +75,9 @@ class BindGroupCache(unittest.TestCase):
             # retaining the final production identity guard in normal operation.
             with patch.object(cache, 'prepare'), patch.object(source.scale_unary, 'prepare', return_value={}), \
                     patch.object(source.q8_subgroup, 'prepare', return_value={}), \
+                    patch.object(source.rms_scale, 'prepare', return_value={}), \
+                    patch.object(source.async_tensor_copy, 'prepare'), \
+                    patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.q4_short.OUTPUT_SHA256):
                 baseline = source.prepare(self.upstream, root / 'base')

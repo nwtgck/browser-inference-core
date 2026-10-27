@@ -1,0 +1,75 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4061,6 +4061,63 @@
+                                                   size_t                offset,
+                                                   size_t                size);
+ 
++static bool ggml_backend_webgpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer,
++                                                 const ggml_tensor * src,
++                                                 ggml_tensor * dst);
++
++static bool ggml_backend_webgpu_cpy_tensor_async(ggml_backend_t backend_src,
++                                                 ggml_backend_t backend_dst,
++                                                 const ggml_tensor * src,
++                                                 ggml_tensor * dst) {
++    if (!backend_src || !backend_dst || !src || !dst || !src->data || !dst->data ||
++        !ggml_are_same_layout(src, dst) || backend_dst->iface.get_name != ggml_backend_webgpu_name ||
++        !backend_dst->context) { return false; }
++    const size_t size = ggml_nbytes(src);
++    if (size == 0) { return false; }
++    ggml_backend_buffer_t src_buffer = src->view_src ? src->view_src->buffer : src->buffer;
++    ggml_backend_buffer_t dst_buffer = dst->view_src ? dst->view_src->buffer : dst->buffer;
++    if (!src_buffer || !dst_buffer || dst_buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
++        !dst_buffer->context) { return false; }
++    auto * dst_backend_ctx = (ggml_backend_webgpu_context *) backend_dst->context;
++    auto * dst_ctx = (ggml_backend_webgpu_buffer_context *) dst_buffer->context;
++    if (!dst_backend_ctx->webgpu_ctx || !dst_ctx->global_ctx || !dst_ctx->buffer ||
++        dst_ctx->global_ctx != dst_backend_ctx->webgpu_ctx->global_ctx) { return false; }
++    const size_t dst_offset = ggml_webgpu_tensor_offset(dst);
++    if (dst_offset < dst->view_offs || dst_offset > dst_buffer->size || size > dst_buffer->size - dst_offset ||
++        dst_offset > dst_ctx->buffer.GetSize() || size > dst_ctx->buffer.GetSize() - dst_offset) { return false; }
++
++    if (src_buffer->iface.get_base == ggml_backend_webgpu_buffer_get_base) {
++        if (backend_src->iface.get_name != ggml_backend_webgpu_name || !backend_src->context ||
++            !src_buffer->context) { return false; }
++        auto * src_backend_ctx = (ggml_backend_webgpu_context *) backend_src->context;
++        auto * src_ctx = (ggml_backend_webgpu_buffer_context *) src_buffer->context;
++        if (!src_backend_ctx->webgpu_ctx || !src_ctx->buffer || src_ctx->global_ctx != dst_ctx->global_ctx ||
++            src_ctx->global_ctx != src_backend_ctx->webgpu_ctx->global_ctx) { return false; }
++        const size_t src_offset = ggml_webgpu_tensor_offset(src);
++        if (src_offset < src->view_offs || src_offset > src_buffer->size || size > src_buffer->size - src_offset ||
++            src_offset > src_ctx->buffer.GetSize() || size > src_ctx->buffer.GetSize() - src_offset) { return false; }
++        // The checked helper preserves exact-alias no-ops and rejects unsupported
++        // same-buffer, alignment and usage cases. Both backends share this queue.
++        return ggml_backend_webgpu_buffer_cpy_tensor(dst_buffer, src, dst);
++    }
++
++    ggml_backend_dev_t src_device = ggml_backend_get_device(backend_src);
++    if (!src_device || ggml_backend_dev_type(src_device) != GGML_BACKEND_DEVICE_TYPE_CPU ||
++        !src_buffer->buft || !src_buffer->iface.get_base || !ggml_backend_buffer_is_host(src_buffer) ||
++        dst_offset % 4 || size % 4 ||
++        (dst_ctx->buffer.GetUsage() & wgpu::BufferUsage::CopyDst) == wgpu::BufferUsage::None) { return false; }
++    const uintptr_t base = (uintptr_t) ggml_backend_buffer_get_base(src_buffer);
++    const uintptr_t data = (uintptr_t) src->data;
++    if (!base || data < base || data - base > src_buffer->size || size > src_buffer->size - (data - base)) {
++        return false;
++    }
++    // A host buffer alone does not establish producer completion. Synchronize
++    // even custom asynchronous CPU backends before WriteBuffer snapshots bytes.
++    ggml_backend_synchronize(backend_src);
++    ggml_backend_tensor_set(dst, src->data, 0, size);
++    return true;
++}
++
+ static void ggml_backend_webgpu_get_tensor_async(ggml_backend_t backend,
+                                                  const ggml_tensor * tensor,
+                                                  void *              data,
+@@ -4095,7 +4152,7 @@
+     /* .get_tensor_async        = */ ggml_backend_webgpu_get_tensor_async,
+     /* .set_tensor_2d_async     = */ NULL,
+     /* .get_tensor_2d_async     = */ NULL,
+-    /* .cpy_tensor_async        = */ NULL,
++    /* .cpy_tensor_async        = */ ggml_backend_webgpu_cpy_tensor_async,
+     /* .synchronize             = */ ggml_backend_webgpu_synchronize,
+     /* .graph_plan_create       = */ NULL,
+     /* .graph_plan_free         = */ NULL,

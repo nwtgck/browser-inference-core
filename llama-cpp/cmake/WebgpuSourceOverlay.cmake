@@ -125,6 +125,18 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-bind-group-cache.patch")
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_rms_scale.py"
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_async_tensor_copy.py"
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_iq3s_subgroup.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-rms-scale.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-async-tensor-copy.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-iq3s-id-subgroup.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-common.h")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_scale_unary.py"
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_subgroup.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-scale-unary.patch"

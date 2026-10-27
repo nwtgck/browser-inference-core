@@ -26,12 +26,13 @@ def build_host(upstream, prepared, output):
     text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
     original = (upstream / q4.HEADER_PATH).read_text()
     here = ROOT / 'tests/webgpu-q4-short'
-    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-q8-subgroup-shaders.hpp"',
+    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';']
     for name in ('q8', 'expert', 'q4'):
         chunks.append(function(text, 'inline uint32_t ggml_webgpu_' + name + '_short_workgroup('))
     chunks.append(function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('))
+    chunks.append(function(text, 'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size('))
     chunks += [text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')],
                function(text, 'inline bool ggml_webgpu_can_use_mmvq(')]

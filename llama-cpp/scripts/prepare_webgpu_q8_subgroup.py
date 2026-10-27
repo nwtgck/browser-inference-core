@@ -11,7 +11,7 @@ import sys
 import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-q8-subgroup-matvec.patch'
-PATCH_SHA256 = '00531cfc21dd9efced591d0289b5531fb31fb065ba1ad0b5f1b6c9a2690a5c48'
+PATCH_SHA256 = 'dba97f95c2f5c6fd2a7cf48b7063ea672bab1225ef147722e6444141f90a1dc7'
 BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-q8-subgroup-shaders.hpp'
 SHADER_NAME = 'q8_subgroup_matvec.wgsl'
@@ -22,9 +22,9 @@ INPUTS = {
 OUTPUTS = {
     'ggml-webgpu.cpp': INPUTS['ggml-webgpu.cpp'],
     'ggml-webgpu-shader-lib.hpp': '560e5881d91c2f693f244142ff3b13dfefa6eb020abe5ddbfe952b9d8fff1ab8',
-    'wgsl-shaders/q8_subgroup_matvec.wgsl': 'ac4abdc83d665eb28f637e9543f77328129db0f2f2302befb779e6ea8d610790',
+    'wgsl-shaders/q8_subgroup_matvec.wgsl': '503e7785159426aefa700f4edd8625a59a88997c4beee995328744e06cd8f25c',
 }
-HEADER_SHA256 = 'c7b6ed10002c77aad941d01fa213725b28b295d45d3a40c9d679bfdabad843c4'
+HEADER_SHA256 = '09dffdd0f3f8e6ce6af2653a24417715a8fc679f305de524f9ccacc220ff675a'
 CONTRACT_INPUTS = {
     'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf',
     'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289',

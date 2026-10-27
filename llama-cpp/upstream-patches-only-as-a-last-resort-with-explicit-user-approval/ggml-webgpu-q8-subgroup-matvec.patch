@@ -109,7 +109,7 @@
              variant += "_vectorized";
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,92 @@
 +enable subgroups;
 +enable f16;
 +
@@ -148,7 +148,8 @@
 +    @builtin(workgroup_id) wg_id: vec3<u32>,
 +    @builtin(num_workgroups) num_wg: vec3<u32>,
 +    @builtin(subgroup_id) subgroup_id: u32,
-+    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32
++    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32,
++    @builtin(num_subgroups) num_subgroups: u32
 +) {
 +    let rows_per_wg: u32 = (Q8_SUBGROUP_WORKGROUP_SIZE / WG_SIZE) * OUTPUTS_PER_WG;
 +    let output_groups = (params.m + rows_per_wg - 1u) / rows_per_wg;
@@ -170,10 +171,33 @@
 +    let src1_idx_base = params.offset_src1 + dst3_idx * params.stride_13 + dst2_idx * params.stride_12;
 +    let dst_idx_base = params.offset_dst + dst3_idx * dst3_stride + dst2_idx * dst2_stride + row_base;
 +
-+    let acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++    let expected_subgroups: u32 = Q8_SUBGROUP_WORKGROUP_SIZE / WG_SIZE;
++    let owns_rows = subgroup_id < expected_subgroups;
++    var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
++    if (num_subgroups == expected_subgroups) {
++        // All workgroup invocations fit exactly in full subgroups. Preserve
++        // the original accumulator call and floating-point operation order.
++        acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++    } else {
++        // subgroup_size is a maximum: legal partial subgroups may have fewer
++        // active invocations. Compute-stage lane IDs are dense from zero.
++        let active_count = subgroupAdd(1u);
++        if (owns_rows) {
++            for (var virtual_tid = subgroup_invocation_id; virtual_tid < WG_SIZE; virtual_tid += active_count) {
++                let partial = accumulate_vec_dot(virtual_tid, row_base, src0_batch_offset, src1_idx_base);
++                for (var col = 0u; col < NUM_COLS; col++) {
++                    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                        acc[col][row] += partial[col][row];
++                    }
++                }
++            }
++        }
++    }
++    // Extra partial subgroups still reach every collective in uniform flow;
++    // only the expected subgroups access source rows or write output rows.
 +    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
 +        let total = subgroupAdd(acc[0][row]);
-+        if (subgroup_invocation_id == 0u && row_base + row < params.m) {
++        if (owns_rows && subgroup_invocation_id == 0u && row_base + row < params.m) {
 +            dst[dst_idx_base + row] = total;
 +        }
 +    }

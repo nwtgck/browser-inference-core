@@ -24,6 +24,9 @@ import prepare_webgpu_q4_short as q4_short
 import prepare_sampler_single_sync as sampler_single_sync
 import prepare_webgpu_scale_unary as scale_unary
 import prepare_webgpu_q8_subgroup as q8_subgroup
+import prepare_webgpu_rms_scale as rms_scale
+import prepare_webgpu_async_tensor_copy as async_tensor_copy
+import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -182,6 +185,8 @@ def collect(root: Path, manifest: dict) -> dict:
         moe_sum_compiled = None
         scale_unary_compiled = None
         q8_subgroup_compiled = None
+        rms_scale_compiled = None
+        iq3s_subgroup_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -214,6 +219,11 @@ def collect(root: Path, manifest: dict) -> dict:
                                      'ggml-webgpu-scale-unary.hpp', scale_unary.HEADER_NAME]}
             q8_subgroup_compiled = {name: file_identity(prepared.parent / name) for name in
                                     ['ggml-webgpu-shader-lib.hpp', q8_subgroup.HEADER_NAME]}
+            rms_scale_compiled = {name: file_identity(prepared.parent / name) for name in
+                                  ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                                   'ggml-webgpu-rms-scale.hpp', rms_scale.HEADER_NAME]}
+            iq3s_subgroup_compiled = {name: file_identity(prepared.parent / name) for name in
+                                      ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', iq3s_subgroup.HEADER_NAME]}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
@@ -336,6 +346,22 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Reuse exact buffer-only bind groups at matching dispatch positions across graph encodes; retain at most 8192 positions and 16 buffer entries per group, bypass unsupported entries and invalidate on buffer destruction. This bounds object counts, not retained resource bytes or VRAM; no target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-async-tensor-copy',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SOURCE_PATH, **file_identity(vendor / webgpu_source.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / async_tensor_copy.PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedInputs': async_tensor_copy.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_source.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Use the existing optional async copy hook for checked same-queue WebGPU copies and CPU-to-WebGPU uploads after synchronizing the CPU producer; unsupported cases retain the generic fallback. No target-device speedup is claimed.',
         }, {
             'id': 'webgpu-sampler-single-sync',
             'kind': 'build-tree-source-overlay',
@@ -468,6 +494,36 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Fuse eligible contiguous F32 scale, SILU or sigmoid, and optional final scale operations into one dispatch, retaining guarded fallback and upstream graph semantics. No target-device speedup is claimed.',
         }, {
+            'id': 'webgpu-rms-scale-fusion',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / rms_scale.PATCH_NAME)},
+            'compiledCopies': rms_scale_compiled,
+            'compiledCopiesByProfileVariant': {variant: rms_scale_compiled for variant in copy_enabled},
+            'reviewedInputs': rms_scale.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_rms_scale.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_rms_scale.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Fuse guarded F32 RMS normalization followed by scale into one dispatch, retaining existing RMS-multiply priority and eligible three-operation scale-unary-scale fusion. Unsupported graph and binding cases fall back. No target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-iq3s-indexed-subgroup-matvec',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / iq3s_subgroup.PATCH_NAME)},
+            'compiledCopies': iq3s_subgroup_compiled,
+            'compiledCopiesByProfileVariant': {variant: iq3s_subgroup_compiled for variant in copy_enabled},
+            'reviewedInputs': iq3s_subgroup.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_iq3s_subgroup.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Use independent fixed-width subgroups for guarded single-token IQ3_S indexed matvecs, preserving the upstream decoder and accumulator; cover missing logical lanes when subgroups are partial and fall back for unsupported shapes, device limits or ranges. Geometry probes are test-only and add no production CPU readback. Reduction order differs; target model quality and performance are not established.',
+        }, {
             'id': 'webgpu-q8-fixed-subgroup-matvec',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}',
@@ -481,7 +537,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_webgpu_q8_subgroup.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
-            'behavior': 'For guarded long-K Q8_0 single-column matvecs with fixed reported subgroup width, process rows independently per subgroup, reusing the pinned upstream decoder and accumulator; retain upstream fallback elsewhere. Numerical order changes and target-device speed or model quality are not established.',
+            'behavior': 'For guarded long-K Q8_0 single-column matvecs with fixed reported subgroup width, process rows independently per subgroup, reusing the pinned upstream decoder and accumulator; cover missing logical lanes when subgroups are partial and retain upstream fallback elsewhere. Geometry probes are test-only and add no production CPU readback. Numerical order changes and target-device speed or model quality are not established.',
         }, {
             'id': 'webgpu-q4-short-workgroup',
             'kind': 'build-tree-source-overlay',
@@ -525,7 +581,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

@@ -4,6 +4,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { createHash } from 'node:crypto';
+import { checkSubgroupGeometry, subgroupGeometryCode } from './subgroup-geometry.mjs';
 
 const [shaderDirectory, reportPath, manifestPath] = process.argv.slice(2);
 if (!shaderDirectory || !reportPath || !manifestPath || process.argv.length !== 5) {
@@ -324,7 +326,7 @@ try {
   for (const variant of variants) {
     const fixed = variant.experiment?.fixedSubgroupSizeRequired;
     if (fixed !== undefined && (adapter.info.subgroupMinSize !== fixed || adapter.info.subgroupMaxSize !== fixed)) {
-      throw new Error(`${variant.name} requires a proven fixed subgroup size of ${fixed}`);
+      throw new Error(`${variant.name} requires advertised fixed subgroup limits of ${fixed}`);
     }
   }
   report.forcedGc = forcedGc;
@@ -336,6 +338,23 @@ try {
   device = await adapter.requestDevice({ requiredFeatures: [...requiredFeatures] });
   device.addEventListener('uncapturederror', event => report.errors.push(event.error.message));
   device.lost.then(info => { if (info.reason !== 'destroyed') report.errors.push(`Device lost: ${info.reason}: ${info.message}`); });
+  // Fixed limits describe a maximum width, so legal partial subgroups are accepted.
+  const fixedWidths = new Set(variants.map(variant => variant.experiment?.fixedSubgroupSizeRequired)
+    .filter(value => value !== undefined));
+  if (fixedWidths.size) {
+    if (fixedWidths.size !== 1) throw new Error('Inconsistent fixed-width specializations');
+    const module = device.createShaderModule({ code: subgroupGeometryCode, label: 'subgroup geometry probe' });
+    const info = await module.getCompilationInfo();
+    if (info.messages.some(message => message.type === 'error')) throw new Error(JSON.stringify(info.messages));
+    const pipeline = await device.createComputePipelineAsync({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+    const buffer = upload({ data: new Uint32Array(128 * 5), usage: GPUBufferUsage.STORAGE });
+    const entry = { pipeline, group: bind({ pipeline, sources: [buffer] }) };
+    const encoded = encode({ entry, groups: 1, dispatches: 1 });
+    device.queue.submit([encoded.command]);
+    report.subgroupProbe = { shaderSha256: createHash('sha256').update(subgroupGeometryCode).digest('hex'),
+      ...checkSubgroupGeometry({ geometry: await readWords({ buffer }), advertisedWidth: [...fixedWidths][0] }) };
+    await releaseBuffers();
+  }
   const pipelines = new Map();
   for (const variant of variants) {
     const code = await readFile(resolve(shaderDirectory, variant.file), 'utf8');

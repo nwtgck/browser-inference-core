@@ -33,7 +33,7 @@ class Q8SubgroupOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             factory.prepare(self.upstream, out)
-            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), q8.OUTPUTS['ggml-webgpu-shader-lib.hpp'])
+            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(out / q8.HEADER_NAME), q8.HEADER_SHA256)
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             embedded = (out / q8.HEADER_NAME).read_text()
@@ -46,7 +46,12 @@ class Q8SubgroupOverlay(unittest.TestCase):
     def test_stage_fails_closed_on_contract_patch_composition_and_output_drift(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source.prepare(self.upstream, root / 'base')
+            with patch.object(source.rms_scale, 'prepare', return_value={}), \
+                    patch.object(source.async_tensor_copy, 'prepare'), \
+                    patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                    patch.object(source, 'OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu.cpp']), \
+                    patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
+                source.prepare(self.upstream, root / 'base')
             for field in ('CONTRACT_INPUTS', 'INPUTS', 'OUTPUTS'):
                 for name in getattr(q8, field):
                     with self.subTest(field=field, path=name), tempfile.TemporaryDirectory(dir=root) as tmp:
@@ -78,6 +83,78 @@ class Q8SubgroupOverlay(unittest.TestCase):
                     with patch.object(q8, field, '0' * 64), self.assertRaises(ValueError):
                         q8.prepare(work, self.upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work))
 
+    def test_partial_subgroups_cover_every_logical_lane_and_only_owned_rows(self):
+        for width in (4, 8, 16, 32, 64):
+            layouts = [[width] * (128 // width)]
+            for active in (1, 3, 7, width - 1):
+                if active > width:
+                    continue
+                layout, remaining = [], 128
+                while remaining:
+                    count = min(active, remaining)
+                    layout.append(count)
+                    remaining -= count
+                layouts.append(layout)
+            # Different subgroups may also have different, non-power-of-two counts.
+            layout, remaining = [], 128
+            while remaining:
+                count = min((1, 3, 7, width - 1)[len(layout) % 4], width, remaining)
+                layout.append(count)
+                remaining -= count
+            layouts.append(layout)
+            expected = 128 // width
+            for layout in layouts:
+                with self.subTest(width=width, active=layout):
+                    self.assertEqual(sum(layout), 128)
+                    if len(layout) == expected:
+                        self.assertEqual(layout, [width] * expected)
+                    row_visits = [0] * (expected * 4)
+                    for group, active in enumerate(layout):
+                        # This mirrors the noncollective owner guard. Extra groups
+                        # reach reductions, but perform no source reads or stores.
+                        if group >= expected:
+                            continue
+                        logical = [tid for lane in range(active) for tid in range(lane, width, active)]
+                        self.assertEqual(sorted(logical), list(range(width)))
+                        for row in range(4):
+                            row_visits[group * 4 + row] += 1
+                    self.assertEqual(row_visits, [1] * (expected * 4))
+
+    @unittest.skipUnless(shutil.which('node'), 'Node needed')
+    def test_probe_accepts_legal_partial_geometry_and_rejects_invalid_partitions(self):
+        helper = (ROOT / 'tests/webgpu-q8-subgroup/subgroup-geometry.mjs').as_uri()
+        code = """
+import { checkSubgroupGeometry } from 'HELPER';
+function fixture(width, counts) {
+    const words = [];
+    for (let group = 0; group < counts.length; group++)
+        for (let lane = 0; lane < counts[group]; lane++)
+            words.push(width, counts.length, group, lane, counts[group]);
+    return new Uint32Array(words);
+}
+for (const width of [4, 8, 16, 32, 64]) {
+    const full = fixture(width, Array(128 / width).fill(width));
+    if (!checkSubgroupGeometry({ geometry: full, advertisedWidth: width }).fullPacked)
+        throw new Error('Full geometry misclassified');
+    const partial = fixture(width, Array(128).fill(1));
+    if (checkSubgroupGeometry({ geometry: partial, advertisedWidth: width }).fullPacked)
+        throw new Error('Legal partial geometry rejected');
+    for (const [index, value] of [[0, width * 2], [6, 127], [8, 0], [9, 1]]) {
+        const invalid = Uint32Array.from(full); invalid[index] = value;
+        let rejected = false;
+        try { checkSubgroupGeometry({ geometry: invalid, advertisedWidth: width }); }
+        catch { rejected = true; }
+        if (!rejected) throw new Error('Invalid geometry accepted');
+    }
+}
+for (const width of [32, 64]) {
+    const actual = checkSubgroupGeometry({ geometry: fixture(width, Array(8).fill(16)), advertisedWidth: width });
+    if (actual.fullPacked || actual.numSubgroups !== 8 || actual.activeCounts.some(count => count !== 16))
+        throw new Error('Partial fixed-width geometry misclassified');
+}
+""".replace('HELPER', helper)
+        subprocess.run(['node', '--input-type=module', '-e', code], check=True)
+
     def test_checker_rejects_invalid_node_commands_before_preparation(self):
         script = ROOT / 'tests/webgpu-q8-subgroup/check_gpu.py'
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,6 +180,14 @@ class Q8SubgroupOverlay(unittest.TestCase):
             for sg in (4, 8, 16, 32, 64):
                 text = (out / 'shaders' / f'q8-independent-sg{sg}.wgsl').read_text()
                 self.assertIn('@workgroup_size(128)', text)
+                self.assertIn('if (num_subgroups == expected_subgroups)', text)
+                self.assertIn('acc = accumulate_vec_dot(subgroup_invocation_id,', text)
+                self.assertIn('let active_count = subgroupAdd(1u)', text)
+                self.assertIn('virtual_tid += active_count', text)
+                self.assertIn('acc[col][row] += partial[col][row]', text)
+                self.assertIn('if (owns_rows && subgroup_invocation_id == 0u', text)
+                self.assertEqual(text.count('return;'), 1)
+                self.assertLess(text.index('return;'), text.index('subgroupAdd(1u)'))
                 self.assertNotIn('workgroupBarrier', text)
                 self.assertNotIn('#include', text)
             print(result.stdout.strip())

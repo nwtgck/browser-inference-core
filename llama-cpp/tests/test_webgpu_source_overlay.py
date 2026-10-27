@@ -31,14 +31,14 @@ class WebgpuSourceOverlay(unittest.TestCase):
             self.assertEqual(copy.digest(result.parent / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'llama-model-loader.cpp'), source.LOADER_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'llama-sampler.cpp'), source.sampler_single_sync.OUTPUT_SHA256)
-            for module in (source.scale_unary, source.q8_subgroup):
+            for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_subgroup):
                 self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), module.HEADER_SHA256)
             header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
             loader_stamp = (result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns
             sampler_stamp = (result.parent / 'llama-sampler.cpp').stat().st_mtime_ns
             generated_stamps = {module.HEADER_NAME: (result.parent / module.HEADER_NAME).stat().st_mtime_ns
-                                for module in (source.scale_unary, source.q8_subgroup)}
+                                for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_subgroup)}
             self.assertEqual(source.prepare(self.upstream, Path(tmp)).stat().st_mtime_ns, stamp)
             self.assertEqual((result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns, header_stamp)
             self.assertEqual((result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns, loader_stamp)
@@ -255,7 +255,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
     def test_fusion_and_subgroup_production_guards_and_configure_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for module in (source.scale_unary, source.q8_subgroup):
+            for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_subgroup):
                 for field in ('CONTRACT_INPUTS', 'INPUTS', 'OUTPUTS'):
                     values = getattr(module, field)
                     for index, relative in enumerate(values):
@@ -274,11 +274,36 @@ class WebgpuSourceOverlay(unittest.TestCase):
                     self.assertFalse((output / 'ggml-webgpu.cpp').exists())
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
         for module, script in ((source.scale_unary, 'scripts/prepare_webgpu_scale_unary.py'),
-                               (source.q8_subgroup, 'scripts/prepare_webgpu_q8_subgroup.py')):
+                               (source.q8_subgroup, 'scripts/prepare_webgpu_q8_subgroup.py'),
+                               (source.rms_scale, 'scripts/prepare_webgpu_rms_scale.py'),
+                               (source.iq3s_subgroup, 'scripts/prepare_webgpu_iq3s_subgroup.py')):
             self.assertIn(script, cmake)
             self.assertIn(module.PATCH_NAME, cmake)
             for relative in module.CONTRACT_INPUTS:
                 self.assertIn('${LCB_LLAMA_SOURCE}/' + relative, cmake)
+
+    def test_async_copy_production_guards_and_configure_dependencies(self):
+        module = source.async_tensor_copy
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for relative in module.CONTRACT_INPUTS:
+                values = {**module.CONTRACT_INPUTS, relative: '0' * 64}
+                output = root / ('input-' + str(list(values).index(relative)))
+                with self.subTest(path=relative), patch.object(module, 'CONTRACT_INPUTS', values):
+                    with self.assertRaises(ValueError):
+                        source.prepare(self.upstream, output)
+                self.assertFalse((output / 'ggml-webgpu.cpp').exists())
+            for field in ('INPUT_SHA256', 'OUTPUT_SHA256', 'PATCH_SHA256'):
+                output = root / field
+                with self.subTest(field=field), patch.object(module, field, '0' * 64):
+                    with self.assertRaises(ValueError):
+                        source.prepare(self.upstream, output)
+                self.assertFalse((output / 'ggml-webgpu.cpp').exists())
+        cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
+        self.assertIn('scripts/prepare_webgpu_async_tensor_copy.py', cmake)
+        self.assertIn(module.PATCH_NAME, cmake)
+        for relative in module.CONTRACT_INPUTS:
+            self.assertIn('${LCB_LLAMA_SOURCE}/' + relative, cmake)
 
     def test_webgpu_is_the_only_source_overlay_build_switch(self):
         text = (ROOT / 'CMakeLists.txt').read_text()

@@ -135,11 +135,15 @@ class ScaleUnary(unittest.TestCase):
         subprocess.run([str(destination)], check=True)
 
     def test_checked_composition_and_upstream_preservation(self):
-        self.assertEqual(hashlib.sha256((self.prepared / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), fusion.OUTPUTS['ggml-webgpu.cpp'])
         self.assertEqual(hashlib.sha256((self.prepared / 'ggml-webgpu-scale-unary.hpp').read_bytes()).hexdigest(), fusion.OUTPUTS['ggml-webgpu-scale-unary.hpp'])
         with tempfile.TemporaryDirectory() as temporary, patch.object(source.q8_subgroup, 'prepare', return_value={}), \
+                patch.object(source.rms_scale, 'prepare', return_value={}), \
+                patch.object(source.async_tensor_copy, 'prepare'), \
+                patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                patch.object(source, 'OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             stage = source.prepare(self.upstream, Path(temporary)).parent
+            self.assertEqual(hashlib.sha256((stage / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), fusion.OUTPUTS['ggml-webgpu.cpp'])
             self.assertEqual(hashlib.sha256((stage / 'ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(), fusion.OUTPUTS['ggml-webgpu-shader-lib.hpp'])
         self.assertEqual(hashlib.sha256((self.prepared / fusion.HEADER_NAME).read_bytes()).hexdigest(), fusion.HEADER_SHA256)
         for name, expected in fusion.CONTRACT_INPUTS.items():

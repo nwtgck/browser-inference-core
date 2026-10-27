@@ -1,0 +1,274 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -7,6 +7,7 @@
+ #include "ggml-webgpu-hc.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
+ #include "ggml-webgpu-scale-unary.hpp"
++#include "ggml-webgpu-rms-scale.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-impl.h"
+@@ -3545,6 +3546,92 @@
+         return encoded;
+     }
+     return std::nullopt;
++}
++
++static void * ggml_backend_webgpu_buffer_get_base(ggml_backend_buffer_t buffer);
++
++struct webgpu_rms_scale_binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0;
++    uint64_t size = 0;
++    uint64_t tensor_offset = 0;
++    uint32_t element_offset = 0;
++};
++
++static bool ggml_webgpu_rms_scale_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                                          uint64_t bytes, webgpu_rms_scale_binding & binding) {
++    auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base || !tensor->data) { return false; }
++    auto * buffer_ctx = (ggml_backend_webgpu_buffer_context *) buffer->context;
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer ||
++        (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) { return false; }
++    const auto * root = tensor->view_src ? tensor->view_src : tensor;
++    if (root->view_src || root->view_offs || root->buffer != buffer || !root->data) { return false; }
++    const uint64_t base = reinterpret_cast<uintptr_t>(ggml_backend_webgpu_buffer_get_base(buffer));
++    const uint64_t root_data = reinterpret_cast<uintptr_t>(root->data);
++    if (root_data < base || tensor->view_offs > UINT64_MAX - root_data ||
++        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs) { return false; }
++    uint64_t root_bytes; uint32_t root_elements, root_rows;
++    if (!rms_scale_layout(root, false, root_bytes, root_elements, root_rows) ||
++        tensor->view_offs > root_bytes || bytes > root_bytes - tensor->view_offs) { return false; }
++    const uint64_t alignment = ctx->global_ctx->capabilities.limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1))) { return false; }
++    const uint64_t offset = ggml_webgpu_tensor_offset(tensor);
++    if (offset % 4 || offset > buffer->size || bytes > buffer->size - offset ||
++        offset > buffer_ctx->buffer.GetSize() || bytes > buffer_ctx->buffer.GetSize() - offset) { return false; }
++    const uint64_t aligned_offset = offset & ~(alignment - 1);
++    const uint64_t prefix = offset - aligned_offset;
++    const uint64_t size = prefix + bytes;
++    if (!size || size > ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize || size / 4 > UINT32_MAX) { return false; }
++    binding = { buffer_ctx->buffer, aligned_offset, size, offset, uint32_t(prefix / 4) };
++    return true;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_rms_scale(webgpu_context & ctx,
++                                                             ggml_cgraph * graph, int index,
++                                                             int & num_encoded_ops) {
++    rms_scale_plan plan;
++    if (!plan_rms_scale(graph, index, plan)) { return std::nullopt; }
++    // Preserve the existing three-operation SCALE/UNARY/SCALE fusion. Taking
++    // its first SCALE here would increase that chain from two dispatches to three.
++    // Prefer it conservatively even if its later runtime bindings must fall back.
++    scale_unary_plan longer;
++    if (plan_scale_unary(graph, index + 1, 3, longer)) { return std::nullopt; }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    uint32_t x, y;
++    if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
++        limits.maxComputeWorkgroupStorageSize < 128 * 2 * sizeof(float) || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        !rms_scale_grid(plan.rows, limits.maxComputeWorkgroupsPerDimension, x, y)) { return std::nullopt; }
++    webgpu_rms_scale_binding source, destination;
++    if (!ggml_webgpu_rms_scale_binding(ctx, plan.source, plan.source_bytes, source) ||
++        !ggml_webgpu_rms_scale_binding(ctx, plan.output, plan.output_bytes, destination)) { return std::nullopt; }
++    const bool same_buffer = source.buffer.Get() == destination.buffer.Get();
++    const bool inplace = same_buffer && source.tensor_offset == destination.tensor_offset &&
++                         rms_scale_same_mapping(plan.source, plan.output);
++    if (same_buffer && !inplace &&
++        (!rms_scale_disjoint(source.tensor_offset, plan.source_bytes, destination.tensor_offset, plan.output_bytes) ||
++         !rms_scale_disjoint(source.offset, source.size, destination.offset, destination.size))) { return std::nullopt; }
++    const uint32_t storage_bindings = inplace ? 1 : 2;
++    if (limits.maxStorageBuffersPerShaderStage < storage_bindings ||
++        limits.maxBindingsPerBindGroup < storage_bindings + 1) { return std::nullopt; }
++    auto pipeline = ctx->shader_lib->get_rms_scale_pipeline(inplace);
++    std::vector<uint32_t> params = {
++        source.element_offset, destination.element_offset,
++        uint32_t(plan.source->nb[1] / 4), uint32_t(plan.source->nb[2] / 4), uint32_t(plan.source->nb[3] / 4),
++        uint32_t(plan.output->nb[1] / 4), uint32_t(plan.output->nb[2] / 4), uint32_t(plan.output->nb[3] / 4),
++        uint32_t(plan.source->ne[0]), uint32_t(plan.source->ne[1]), uint32_t(plan.source->ne[2]), uint32_t(plan.source->ne[3]),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.rms, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 1)),
++    };
++    std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, source.buffer, source.offset, source.size),
++    };
++    if (!inplace) { entries.push_back(ggml_webgpu_make_bind_group_entry(1, destination.buffer, destination.offset, destination.size)); }
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, std::move(params), std::move(entries), x, y);
++    num_encoded_ops = 2;
++    return encoded;
+ }
+ 
+ static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
+@@ -3746,6 +3833,7 @@
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+                 return ggml_webgpu_rms_norm_mul(ctx, src0, node, mul_node->src[0], mul_node->src[1], mul_node);
+             } else {
++                if (auto fused = ggml_webgpu_rms_scale(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+                 return ggml_webgpu_row_norm(ctx, src0, node);
+             }
+         case GGML_OP_NORM:
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -7,6 +7,7 @@
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
++#include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -1370,6 +1371,7 @@
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+@@ -2048,6 +2050,19 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_rms_scale_pipeline(bool inplace) {
++        const int key = int(inplace);
++        auto it = rms_scale_pipelines.find(key);
++        if (it != rms_scale_pipelines.end()) { return it->second; }
++        std::vector<std::string> defines { "RMS_NORM", "SRC_F32", "DST_F32", "WG_SIZE=128", "POST_SCALE" };
++        std::string label = "rms_norm_scale_f32";
++        if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
++        const auto code = preprocessor.preprocess(wgsl_rms_norm_scale, defines);
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
++        rms_scale_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
+     webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
+         const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
+         auto it = scale_unary_pipelines.find(key);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+@@ -0,0 +1,82 @@
++#pragma once
++#include "ggml-impl.h"
++#include <cstdint>
++
++struct rms_scale_plan {
++    ggml_tensor * source = nullptr;
++    ggml_tensor * rms = nullptr;
++    ggml_tensor * output = nullptr;
++    uint64_t source_bytes = 0;
++    uint64_t output_bytes = 0;
++    uint32_t elements = 0;
++    uint32_t rows = 0;
++};
++
++// Contiguous F32 rows, with checked ordered, nonoverlapping higher strides.
++// Source views may retain padding between heads, tokens and sequences.
++inline bool rms_scale_layout(const ggml_tensor * tensor, bool dense, uint64_t & span,
++                             uint32_t & elements, uint32_t & rows) {
++    span = elements = rows = 0;
++    if (!tensor || tensor->type != GGML_TYPE_F32 || tensor->nb[0] != 4 ||
++        tensor->ne[0] <= 0 || tensor->ne[0] > UINT32_MAX - 127u) { return false; }
++    constexpr uint64_t max_bytes = uint64_t(UINT32_MAX) * 4;
++    uint64_t count = uint64_t(tensor->ne[0]);
++    uint64_t bytes = count * 4;
++    for (int axis = 1; axis < GGML_MAX_DIMS; ++axis) {
++        const uint64_t stride = tensor->nb[axis];
++        if (tensor->ne[axis] <= 0 || uint64_t(tensor->ne[axis]) > UINT32_MAX ||
++            stride % 4 || stride < bytes || stride > max_bytes ||
++            (dense && stride != count * 4) || uint64_t(tensor->ne[axis]) > UINT32_MAX / count) { return false; }
++        const uint64_t extra_rows = uint64_t(tensor->ne[axis]) - 1;
++        if (extra_rows > (max_bytes - bytes) / stride) { return false; }
++        bytes += extra_rows * stride;
++        count *= uint64_t(tensor->ne[axis]);
++    }
++    span = bytes; elements = uint32_t(count); rows = uint32_t(count / uint64_t(tensor->ne[0]));
++    return true;
++}
++
++inline bool plan_rms_scale(const ggml_cgraph * graph, int index, rms_scale_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2 ||
++        !ggml_can_fuse(graph, index, { GGML_OP_RMS_NORM, GGML_OP_SCALE })) { return false; }
++    auto * rms = graph->nodes[index];
++    auto * output = graph->nodes[index + 1];
++    auto * source = rms->src[0];
++    if (!source || rms->view_src || output->view_src || output->src[0] != rms ||
++        !ggml_are_same_shape(source, rms) || !ggml_are_same_shape(rms, output)) { return false; }
++    for (auto * node : { rms, output }) {
++        for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
++    }
++    if (source->view_src && (source->view_src == source || source->view_src->view_src ||
++                            source->view_src->type != GGML_TYPE_F32)) { return false; }
++    uint64_t source_bytes, rms_bytes, output_bytes;
++    uint32_t elements, rows, rms_elements, rms_rows, output_elements, output_rows;
++    if (!rms_scale_layout(source, false, source_bytes, elements, rows) ||
++        !rms_scale_layout(rms, true, rms_bytes, rms_elements, rms_rows) ||
++        !rms_scale_layout(output, true, output_bytes, output_elements, output_rows) ||
++        elements != rms_elements || elements != output_elements || rows != rms_rows || rows != output_rows) { return false; }
++    plan = { source, rms, output, source_bytes, output_bytes, elements, rows };
++    return true;
++}
++
++inline bool rms_scale_same_mapping(const ggml_tensor * a, const ggml_tensor * b) {
++    if (!ggml_are_same_shape(a, b)) { return false; }
++    for (int axis = 0; axis < GGML_MAX_DIMS; ++axis) {
++        if ((axis == 0 || a->ne[axis] > 1) && a->nb[axis] != b->nb[axis]) { return false; }
++    }
++    return true;
++}
++
++inline bool rms_scale_disjoint(uint64_t a, uint64_t an, uint64_t b, uint64_t bn) {
++    return an && bn && (a <= b ? an <= b - a : bn <= a - b);
++}
++
++inline bool rms_scale_grid(uint64_t rows, uint32_t limit, uint32_t & x, uint32_t & y) {
++    x = y = 0;
++    if (!rows || rows > UINT32_MAX || !limit) { return false; }
++    const uint64_t gy = (rows + limit - 1) / limit;
++    const uint64_t gx = (rows + gy - 1) / gy;
++    if (gx > limit || gy > limit || gx * gy > UINT32_MAX) { return false; }
++    x = uint32_t(gx); y = uint32_t(gy); return true;
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -33,7 +33,11 @@
+     ne2: u32,
+     ne3: u32,
+ 
+-    eps: f32
++    eps: f32,
++#ifdef POST_SCALE
++    post_scale: f32,
++    post_bias: f32,
++#endif
+ };
+ 
+ @group(0) @binding(0)
+@@ -147,10 +151,17 @@
+         let i_src = i_src_row + col;
+         let i_dst = i_dst_row + col;
+         let v = src[i_src];
++#ifdef POST_SCALE
++        // Preserve the original RMS result before applying the SCALE affine.
++        let normalized = scale * (v - mean_val);
++        let result = normalized * params.post_scale + params.post_bias;
++#else
++        let result = scale * (v - mean_val);
++#endif
+ #ifdef INPLACE
+-        src[i_dst] = scale * (v - mean_val);
++        src[i_dst] = result;
+ #else
+-        dst[i_dst] = scale * (v - mean_val);
++        dst[i_dst] = result;
+ #endif
+         col += WG_SIZE;
+     }

@@ -18,7 +18,7 @@ from test_webgpu_q8_short_overlay import function
 def prepare(upstream: Path, output: Path) -> None:
     source.prepare(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) != q8.OUTPUTS[header.name] or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
+    if copy.digest(header) != source.SSM_HEADER_OUTPUT_SHA256 or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
         raise ValueError('Unexpected integrated Q8 subgroup output')
 
 

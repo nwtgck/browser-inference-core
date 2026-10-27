@@ -172,6 +172,15 @@ commit with different bytes or invent a future artifact identity.
 - **Validation and limitations:** source-bound deferred queue tests exercise ordering, ranges, destination lifetime and failure paths; full source syntax checks use the pinned headers. These checks do not establish browser correctness, device-loss recovery or target-device speedup. The queue-order assumption must be validated on the target browser and GPU.
 - **Removal:** upstream provides equivalent behavior or the owner drops this optimization; remove the patch, preparation, build wiring, tests and provenance entry together.
 
+## Ordered WebGPU async tensor copies
+
+- **Patch:** `ggml-webgpu-async-tensor-copy.patch`.
+- **Scope:** implement the existing optional copy hook for checked same-queue WebGPU copies and CPU-to-WebGPU uploads. CPU producers are synchronized before their host bytes are uploaded; unsupported devices, layouts, ranges, aliases or usages retain generic fallback. Queue ordering and the existing buffer-copy checks remain in force.
+- **Integration:** apply in the checked build-tree WebGPU translation unit for WebGPU profiles; pin the generic backend, buffer and scheduler contracts, patch, composition input and output. CPU profiles and upstream source are unchanged.
+- **Validation and limits:** source-bound CPU queue and scheduler fixtures cover accepted and rejected paths, producer completion, offsets, alias and fallback, with full source syntax checks against pinned headers. Software GPU checks do not establish browser correctness or target-device speedup.
+- **No-patch alternative:** use the existing generic copy fallback or wait for equivalent upstream support.
+- **Removal:** upstream supplies equivalent behavior or the owner drops the optimization; remove patch, preparation, build wiring, tests and provenance together.
+
 ## Bounded WebGPU bind-group reuse
 
 - **Patch:** `ggml-webgpu-bind-group-cache.patch`.
@@ -361,14 +370,34 @@ not establish target-device speed.
 - **No-patch alternative:** use the existing separate dispatches or wait for upstream fusion.
 - **Removal:** equivalent upstream fusion or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Fused WebGPU RMS normalization and scale
+
+- **Patch:** `ggml-webgpu-rms-scale.patch`.
+- **Scope:** fuse eligible F32 RMS normalization followed by scale into one dispatch, retaining upstream reduction and normalization before the scale. Existing RMS-multiply fusion keeps priority. If the following scale begins an eligible scale-unary-scale chain, RMS fusion declines so the existing three-operation fusion remains available; RMS-scale takes priority over the two-operation scale-unary case. Unsupported graphs, layouts and binding ranges retain upstream behavior.
+- **Integration:** compose the checked host and shader overlays in every WebGPU profile. Embed the modified row-normalization shader separately so the canonical upstream shader remains authoritative for other paths. Pin graph, allocator, shader and backend contracts, stage identities and generated header. CPU profiles and upstream source are unchanged.
+- **Validation and limits:** source-bound graph, allocator, alias and dispatch tests and 128 software WebGPU cases passed. These checks do not establish production model quality or target-device throughput.
+- **No-patch alternative:** retain separate RMS and scale dispatches or wait for upstream fusion.
+- **Removal:** equivalent upstream fusion or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
+
 ## Fixed-subgroup Q8_0 matvec
 
 - **Patch:** `ggml-webgpu-q8-subgroup-matvec.patch`.
 - **Scope:** for guarded long-K Q8_0 x F32 single-column matvecs with a fixed reported subgroup size, assign output rows to independent subgroups in one workgroup. Preserve the pinned upstream Q8 decoder and accumulator; unsupported shapes, device limits and varying subgroup ranges use the existing path. No model-specific selection is added.
 - **Integration:** compose after scale/unary fusion in the shared WebGPU header, emitting an isolated shader header using the pinned upstream include expander. Patch, both intermediate inputs and final outputs, and upstream shader/host contracts are pinned. CPU profiles and upstream source are unchanged.
-- **Validation and limits:** source-bound selector, cache key and dispatcher tests and 27 software WebGPU cases with subgroup widths 4, 8 and 16 passed. Observed normalized error reached approximately 1e-7 and RMSE increased relative to the baseline in the checked cases. Arithmetic and reduction order differ; bitwise equality, production model quality and target-device speedup are not established.
+- **Partial subgroups:** even with a fixed reported width, a subgroup can be partial. Each active invocation covers additional logical lanes, preserving coverage without shared scratch; the full-packed path retains its previous calculation. Geometry probing and readback are test-only and add no production CPU readback.
+- **Validation and limits:** source-bound selector, cache key and dispatcher tests passed. Software WebGPU tests covered partial geometries at reported widths 32/64 and compared full-packed widths 4/8/16 to the previous subgroup shader bit for bit. Earlier checked cases reached approximately 1e-7 normalized error, with increased RMSE relative to baseline. Arithmetic and reduction order differ from the upstream baseline; production model quality and target-device speedup are not established.
 - **No-patch alternative:** retain the existing matvec path or wait for equivalent upstream support.
 - **Removal:** equivalent upstream implementation or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
+
+## Fixed-subgroup indexed IQ3_S matvec
+
+- **Patch:** `ggml-webgpu-iq3s-id-subgroup.patch`.
+- **Scope:** assign rows of eligible single-token IQ3_S indexed matvecs to independent fixed-width subgroups. Shape, strides, complete blocks, binding ranges, device limits and subgroup width are checked; unsupported cases retain the upstream path. The upstream quantization loaders and accumulator are reused, and selection is independent of model identity.
+- **Integration:** compose the checked WebGPU host and shader overlays after the other WebGPU changes. Embed the dedicated shader with the pinned upstream include expander; retain canonical upstream shader sources for other paths. Upstream contracts, patch, composition stages and generated header are pinned. CPU profiles and upstream source are unchanged.
+- **Partial subgroups:** even with a fixed reported width, a subgroup can be partial. Active invocations cover additional logical lanes; the full-packed path retains its previous calculation without extra shared scratch. Geometry probing and readback are test-only and add no production CPU readback.
+- **Validation and limits:** source-bound selector, cache and dispatch checks and software GPU numerical fixtures cover accepted and rejected cases, including partial geometries at reported widths 32/64. A full-packed width 16 matched the previous subgroup shader bit for bit in the tested cases. Reduction order differs from the upstream baseline; production model quality and target-device speed are not established.
+- **No-patch alternative:** retain the existing indexed matvec path or wait for upstream support.
+- **Removal:** equivalent upstream support or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 

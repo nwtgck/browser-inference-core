@@ -1,7 +1,7 @@
 // Record only device/resource boundaries; execute the actual prepared dispatchers.
 #define CEIL_DIV(x,y) (((x)+(y)-1)/(y))
-namespace wgpu { struct BindGroupEntry {uint32_t binding;uintptr_t buffer;size_t offset,size;}; }
-struct RecordedLimits {uint32_t maxComputeInvocationsPerWorkgroup=256,maxComputeWorkgroupsPerDimension=65535;};
+namespace wgpu { struct Buffer {uintptr_t id; Buffer(uintptr_t value):id(value){} uint64_t GetSize() const{return UINT32_MAX;}}; struct BindGroupEntry {uint32_t binding;Buffer buffer;size_t offset,size;}; }
+struct RecordedLimits {uint32_t maxComputeInvocationsPerWorkgroup=256,maxComputeWorkgroupsPerDimension=65535;uint64_t maxStorageBufferBindingSize=UINT32_MAX;};
 struct RecordedCapabilities {
     bool supports_subgroups=true,supports_dot_product=false,supports_subgroup_matrix=false;
     uint32_t min_subgroup_size=32,max_subgroup_size=32,sg_mat_m=0,sg_mat_n=0,sg_mat_k=0;

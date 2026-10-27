@@ -114,6 +114,10 @@ int main(int argc, char ** argv) {
             require(pipeline.wgsl.find("workgroupBarrier")==std::string::npos && pipeline.wgsl.find("var<workgroup>")==std::string::npos,"shared reduction retained");
             require(pipeline.wgsl.find("block += "+std::to_string(sg)+" / 4")!=std::string::npos,"accumulator subgroup stride specialization");
             require(pipeline.wgsl.find("accumulate_vec_dot(subgroup_invocation_id,")!=std::string::npos,"subgroup lane mapping");
+            require(pipeline.wgsl.find("if (num_subgroups == expected_subgroups)")!=std::string::npos,"full-packed fast path");
+            require(pipeline.wgsl.find("let active_count = subgroupAdd(1u)")!=std::string::npos,"partial active width");
+            require(pipeline.wgsl.find("virtual_tid += active_count")!=std::string::npos,"partial logical lane completion");
+            require(pipeline.wgsl.find("if (owns_rows && subgroup_invocation_id == 0u")!=std::string::npos,"extra subgroup output guard");
             require(pipeline.wgsl.find("subgroupAdd(acc[0][row])")!=std::string::npos,"single subgroup reduction per row");
             require(lib.get_mul_mat_vec_pipeline(f.c,false).id==pipeline.id,"repeat tuned cache hit");
             // Execute the production decision-to-dispatch calculation, including

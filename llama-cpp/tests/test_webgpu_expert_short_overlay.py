@@ -22,11 +22,12 @@ def build_host(upstream, prepared, output):
     here = ROOT / 'tests/webgpu-expert-short'
     factory_start = '    webgpu_pipeline get_mul_mat_id_vec_pipeline('
     factory_end = '    webgpu_pipeline get_unary_pipeline('
-    chunks = [(here / 'host-prefix.cpp').read_text(),
+    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',
               function(text, 'inline uint32_t ggml_webgpu_expert_short_workgroup('),
               function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
+              function(text, 'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size('),
               function(text, 'struct ggml_webgpu_mul_mat_vec_shader_decisions {') + ';',
               text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')]]
     for name, body in [('RecordingLibrary', text), ('ReferenceLibrary', original)]:
@@ -52,7 +53,7 @@ def build_host(upstream, prepared, output):
     exe = output / 'host'
     subprocess.run(['g++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror',
                     '-I' + str(upstream / 'ggml/include'), '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
-                    '-I' + str(output), str(code), '-o', str(exe)], check=True)
+                    '-I' + str(prepared), '-I' + str(output), str(code), '-o', str(exe)], check=True)
     return exe
 
 
