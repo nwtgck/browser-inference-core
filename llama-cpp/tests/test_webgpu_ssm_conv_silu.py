@@ -95,8 +95,11 @@ class SsmConvSilu(unittest.TestCase):
         self.assertFalse((self.prepared / 'ggml-wgsl-shaders.hpp').exists())
         for name, expected in fusion.CONTRACT_INPUTS.items():
             self.assertEqual(hashlib.sha256((self.upstream / name).read_bytes()).hexdigest(), expected)
-        for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-ssm-conv-silu.hpp'):
-            self.assertEqual(hashlib.sha256((self.prepared / name).read_bytes()).hexdigest(), (source.SSM_HEADER_OUTPUT_SHA256 if name == 'ggml-webgpu-shader-lib.hpp' else fusion.OUTPUTS[name]))
+        final = {'ggml-webgpu.cpp': source.OUTPUT_SHA256,
+                 'ggml-webgpu-shader-lib.hpp': source.SSM_HEADER_OUTPUT_SHA256,
+                 'ggml-webgpu-ssm-conv-silu.hpp': fusion.OUTPUTS['ggml-webgpu-ssm-conv-silu.hpp']}
+        for name, expected in final.items():
+            self.assertEqual(hashlib.sha256((self.prepared / name).read_bytes()).hexdigest(), expected)
         self.assertEqual(hashlib.sha256((self.prepared / fusion.HEADER_NAME).read_bytes()).hexdigest(), fusion.HEADER_SHA256)
         embedded = (self.prepared / fusion.HEADER_NAME).read_text().split('R"wgsl(', 1)[1].split(')wgsl"', 1)[0]
         original = (self.upstream / fusion.BASE / 'wgsl-shaders/ssm_conv.wgsl').read_text()

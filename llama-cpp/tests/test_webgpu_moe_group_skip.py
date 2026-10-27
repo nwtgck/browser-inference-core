@@ -30,15 +30,19 @@ class MoeGroupSkip(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
+        with patch.object(source.router_tail, 'prepare', return_value={}), \
+                patch.object(source, 'OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu.cpp']), \
+                patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
+            cls.group_stage = source.prepare(cls.upstream, cls.directory / 'group-stage').parent
 
     def test_exact_matrix_change_and_canonical_sources(self):
         identity = json.loads((HERE / 'inputs.json').read_text())
         self.assertEqual(hashlib.sha256((ROOT / 'scripts/prepare_webgpu_moe_group_skip.py').read_bytes()).hexdigest(), identity['module_sha256'])
         for relative, expected in group.CONTRACT_INPUTS.items():
             self.assertEqual(hashlib.sha256((self.upstream / relative).read_bytes()).hexdigest(), expected)
-        self.assertEqual(hashlib.sha256((self.prepared / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), group.INPUTS['ggml-webgpu.cpp'])
-        self.assertEqual(hashlib.sha256((self.prepared / 'ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(), group.OUTPUTS['ggml-webgpu-shader-lib.hpp'])
-        self.assertFalse((self.prepared / 'ggml-wgsl-shaders.hpp').exists())
+        self.assertEqual(hashlib.sha256((self.group_stage / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), group.INPUTS['ggml-webgpu.cpp'])
+        self.assertEqual(hashlib.sha256((self.group_stage / 'ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(), group.OUTPUTS['ggml-webgpu-shader-lib.hpp'])
+        self.assertFalse((self.group_stage / 'ggml-wgsl-shaders.hpp').exists())
         emitter = importlib.util.spec_from_file_location('moe_group_upstream_emitter', self.upstream / group.BASE / 'wgsl-shaders/embed_wgsl.py')
         module = importlib.util.module_from_spec(emitter)
         emitter.loader.exec_module(module)
@@ -47,12 +51,12 @@ class MoeGroupSkip(unittest.TestCase):
                           '        if (is_valid && output_col_base < rest_token_n) {\n            let k_end')
         self.assertEqual(hashlib.sha256(new.encode()).hexdigest(), group.OUTPUTS['wgsl-shaders/' + group.SHADER_NAME])
         expected = module.expand_includes(new, str(self.upstream / group.BASE / 'wgsl-shaders'))
-        header = (self.prepared / group.HEADER_NAME).read_text()
+        header = (self.group_stage / group.HEADER_NAME).read_text()
         chunks = re.findall(r'R"(wgsl(?:_x)*)\((.*?)\)\1"', header, re.S)
         self.assertTrue(chunks)
         self.assertEqual(''.join(text for _, text in chunks), expected)
         self.assertEqual(hashlib.sha256(header.encode()).hexdigest(), group.HEADER_SHA256)
-        library = (self.prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+        library = (self.group_stage / 'ggml-webgpu-shader-lib.hpp').read_text()
         # Reversing the two linking edits gives the exact previous shared header,
         # including every matvec factory, key, specialization and canonical include.
         before = library.replace('#include "' + group.HEADER_NAME + '"\n', '').replace(
@@ -88,7 +92,7 @@ class MoeGroupSkip(unittest.TestCase):
                     for name in group.INPUTS:
                         target = work / group.BASE / name
                         target.parent.mkdir(parents=True, exist_ok=True)
-                        payload = (self.prepared / name).read_bytes()
+                        payload = (self.group_stage / name).read_bytes()
                         if name == 'ggml-webgpu-shader-lib.hpp':
                             payload = payload.replace(('#include "' + group.HEADER_NAME + '"\n').encode(), b'').replace(
                                 b'preprocessor.preprocess(wgsl_mul_mat_id_group, defines)',

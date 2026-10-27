@@ -259,6 +259,24 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/quant_inner_loops.tmpl")
 
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_router_tail.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-router-tail.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-impl.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-graph.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/pre_wgsl.hpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/sum_rows.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/binary.wgsl"
+)
+
 # The diagnostic is a final profile-only stage. Normal overlay bytes stay unchanged.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_diagnostic.py"

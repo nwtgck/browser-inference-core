@@ -24,6 +24,7 @@ import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
+import prepare_webgpu_router_tail as router_tail
 import prepare_webgpu_q8_diagnostic as q8_diagnostic
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,14 +32,14 @@ SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = 'a53ea652fa4bbaec5c8ba503dcf852c672e433086909846fb55f0dc3ede81bfd'
+OUTPUT_SHA256 = '17a4296ce72ad1acf281f87435dd53f3cb6296578be35675cb374213d41139ac'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
 # Historical name retained for consumers of the final shared shader library.
-SSM_HEADER_OUTPUT_SHA256 = 'bd8f3e7a39cec314c47fc6753eb044dbc5b4411ad20c195345879e003a6040da'
+SSM_HEADER_OUTPUT_SHA256 = '84667b9b4afaebbee6c4ebb287a26256d909895eeefc2814eca01dabfdebc8fa'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -123,6 +124,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(host_input_snapshot.prepare(work, source, patch_root, env))
         hc_headers.update(ssm_conv_silu.prepare(work, source, patch_root, env))
         hc_headers.update(moe_group_skip.prepare(work, source, patch_root, env))
+        hc_headers.update(router_tail.prepare(work, source, patch_root, env))
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')

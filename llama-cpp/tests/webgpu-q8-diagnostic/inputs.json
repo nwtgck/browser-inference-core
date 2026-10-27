@@ -15,11 +15,11 @@
     "functions.d.ts": "46d52b6d6d34505a8dd0af2524dbf34c45182933c01e6e356c981ce117772087"
   },
   "public_source_sha256": {
-    "scripts/prepare_webgpu_q8_diagnostic.py": "e32a61fd5b00fa64c900fffe6342426cf9420d9f55930b7f5efa57f22c094fdc",
+    "scripts/prepare_webgpu_q8_diagnostic.py": "d8bc02f696acb987722ba434085fbd6f6653e1599b15ef32a4993e5357d76d46",
     "scripts/generate_webgpu_q8_diagnostic.py": "9f6a5e6a15f5edf4666f1ae6470653834c52b981dd94920987168b6211129e57",
     "bridge/webgpu-q8-diagnostic.h": "55923a7e5e1f5b96abbe8185e1499280d9a99c36c5c45887d42e54005d9c0bbc",
     "bridge/webgpu-q8-diagnostic.cpp": "5b71bea4b263c2a03c0127d57a59f3fbcffb9941e24f2e7b4661728b5760ec0d",
-    "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch": "6ac12c15ad647bca0eb75c2ac2bc5bee504b287e45e46a9e2cb132224520456a"
+    "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch": "a27bdcdbd74dd7c3b39b9bd94075adfda59e2803729dae9ee9d72383b4691ab7"
   },
   "base_generated_normalization": "Only the known ggml_opt_optimizer_params adamw/sgd anonymous struct cType locations use <upstream> and common unnamed spelling; relative header path, line and column remain exact. Raw schema fingerprints must match bindings.cpp and schema.mjs before normalization."
 }

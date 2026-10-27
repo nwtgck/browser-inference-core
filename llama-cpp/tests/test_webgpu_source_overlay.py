@@ -319,7 +319,8 @@ class WebgpuSourceOverlay(unittest.TestCase):
                                (source.rms_scale, 'scripts/prepare_webgpu_rms_scale.py'),
                                (source.iq3s_subgroup, 'scripts/prepare_webgpu_iq3s_subgroup.py'),
                                (source.ssm_conv_silu, 'scripts/prepare_webgpu_ssm_conv_silu.py'),
-                               (source.moe_group_skip, 'scripts/prepare_webgpu_moe_group_skip.py')):
+                               (source.moe_group_skip, 'scripts/prepare_webgpu_moe_group_skip.py'),
+                               (source.router_tail, 'scripts/prepare_webgpu_router_tail.py')):
             self.assertIn(script, cmake)
             self.assertIn(module.PATCH_NAME, cmake)
             for relative in module.CONTRACT_INPUTS:

@@ -36,6 +36,7 @@ class Iq3sSubgroup(unittest.TestCase):
         with patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                 patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                 patch.object(source.moe_group_skip, 'prepare', return_value={}), \
+                patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', source.host_input_snapshot.INPUT_SHA256), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.ssm_conv_silu.INPUTS['ggml-webgpu-shader-lib.hpp']):
             factory.prepare_base(self.upstream, base)

@@ -466,6 +466,17 @@ not establish target-device speed.
   withdraws it; remove the patch, preparation, dedicated embedding, build wiring,
   tests and provenance entry together.
 
+## Fused WebGPU gather normalization tail
+
+- **Patch:** `ggml-webgpu-router-tail.patch`.
+- **Approval and scope:** the owner's continuing performance investigation explicitly authorizes this generic F32 GET_ROWS/RESHAPE/SUM_ROWS/CLAMP/DIV/RESHAPE fusion. Preserve the selected IDs, original maximum-workgroup reduction tree, clamp and direct division. No softmax, sorting, quantization or model-specific behavior changes.
+- **Aliasing:** disjoint bindings use three storage buffers. Only one-token, one-workgroup execution may merge overlapping probability/output ranges into one storage binding; all selected loads precede a uniform storage barrier and every store. IDs stay disjoint from the full union. Multi-token overlap retains the existing staged path, with no extra model scratch or weight copy.
+- **Integration:** compose at the end of the ordinary WebGPU source preparation, before the optional profile-only Q8 diagnostic. Emit only dedicated helper/shader headers. CPU profiles and the base bindings/schema remain unchanged.
+- **Coupling:** pin the six-node graph and view/use-count contracts, allocator behavior, typed buffers/device limits, four baseline WGSL sources, shader preprocessor/emitter, host/header inputs, patch and outputs. Reject intermediate OUTPUT/side users, unsupported views, callback subgraphs and invalid or overlapping ranges before pipeline creation.
+- **No-patch alternative:** retain the four staged dispatches or wait for equivalent upstream graph fusion.
+- **Validation and limits:** actual-ggml graph/allocator and extracted dispatcher/factory tests, normal/profile syntax checks and synthetic software-GPU byte comparisons cover the guarded paths. These do not establish target-device speed or full-model quality. See `tests/webgpu-router-tail/README.md`.
+- **Removal:** remove the stage when upstream provides equivalent ordered gather normalization and alias handling, or the owner drops the optimization.
+
 ## Profile-only Q8 kernel diagnostic
 
 - **Patch:** `ggml-webgpu-q8-diagnostic.patch`.
