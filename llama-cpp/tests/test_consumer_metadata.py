@@ -238,6 +238,7 @@ class OverlayProvenance(unittest.TestCase):
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).parent.mkdir(parents=True)
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
+        (self.vendor / provenance.host_input_snapshot.BACKEND_SOURCE_PATH).write_text('Backend provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.tensor_copy.PATCH_NAME)
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.PARAM_PATCH_NAME,
@@ -253,8 +254,20 @@ class OverlayProvenance(unittest.TestCase):
                      self.root / provenance.PATCH_DIRECTORY / provenance.moe_sum.PATCH_NAME)
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.expert_short.PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.expert_short.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.ordered_readback.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.ordered_readback.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.bind_group_cache.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.bind_group_cache.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.q4_short.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.q4_short.PATCH_NAME)
+        shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.sampler_single_sync.PATCH_NAME,
+                     self.root / provenance.PATCH_DIRECTORY / provenance.sampler_single_sync.PATCH_NAME)
+        for module in (provenance.scale_unary, provenance.q8_subgroup, provenance.rms_scale, provenance.async_tensor_copy, provenance.iq3s_subgroup, provenance.host_input_snapshot, provenance.ssm_conv_silu, provenance.moe_group_skip, provenance.router_tail, provenance.q8_diagnostic):
+            shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / module.PATCH_NAME,
+                         self.root / provenance.PATCH_DIRECTORY / module.PATCH_NAME)
         (self.vendor / 'src').mkdir()
         (self.vendor / provenance.webgpu_source.LOADER_PATH).write_text('Loader provenance fixture\n')
+        (self.vendor / provenance.sampler_single_sync.SOURCE_PATH).write_text('Sampler provenance fixture\n')
         shutil.copy2(ROOT / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME,
                      self.root / provenance.PATCH_DIRECTORY / provenance.webgpu_source.LOADER_PATCH_NAME)
         (self.root / 'tests/file-backed-rows').mkdir(parents=True)
@@ -264,7 +277,7 @@ class OverlayProvenance(unittest.TestCase):
         for path in ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
                      'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']:
             (self.root / path).write_text('file-backed rows provenance fixture\n')
-        for path in ['scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md', 'scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md', 'scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md',
+        for path in ['CMakeLists.txt', 'scripts/prepare_webgpu_q8_diagnostic.py', 'scripts/generate_webgpu_q8_diagnostic.py', 'bridge/webgpu-q8-diagnostic.h', 'bridge/webgpu-q8-diagnostic.cpp', 'scripts/prepare_webgpu_router_tail.py', 'scripts/prepare_webgpu_moe_group_skip.py', 'scripts/prepare_webgpu_ssm_conv_silu.py', 'scripts/prepare_webgpu_host_input_snapshot.py', 'scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_rms_scale.py', 'scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_scale_unary.py', 'scripts/prepare_webgpu_q8_subgroup.py', 'scripts/prepare_sampler_single_sync.py', 'scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_q4_short.py', 'scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md', 'scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md', 'scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md',
                      'scripts/prepare_webgpu_hc.py', 'docs/webgpu-hc-pre-post.md', 'scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
                      'docs/webgpu-tensor-copy.md', 'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md',
@@ -289,11 +302,30 @@ class OverlayProvenance(unittest.TestCase):
         self.prepared = self.root / 'prepared.cpp'
         self.prepared.write_bytes(b'combined source fixture')
         (self.prepared.parent / 'llama-model-loader.cpp').write_bytes(b'loader source fixture')
+        (self.prepared.parent / 'llama-sampler.cpp').write_bytes(b'sampler source fixture')
+        (self.prepared.parent / 'ggml-backend.cpp').write_bytes(b'prepared backend source fixture')
+        (self.prepared.parent / 'ggml-backend-host-snapshot.h').write_bytes(b'private snapshot header fixture')
         (self.prepared.parent / 'ggml-webgpu-shader-lib.hpp').write_bytes(b'SSM header source fixture')
         (self.prepared.parent / 'ggml-webgpu-hc.hpp').write_bytes(b'HC host fixture')
         (self.prepared.parent / provenance.hc.HEADER_NAME).write_bytes(b'HC shader fixture')
         (self.prepared.parent / 'ggml-webgpu.cpp').write_bytes(b'combined source fixture')
         (self.prepared.parent / 'ggml-webgpu-moe-sum.hpp').write_bytes(b'MoE host fixture')
+        (self.prepared.parent / 'ggml-webgpu-scale-unary.hpp').write_bytes(b'scale unary host fixture')
+        (self.prepared.parent / provenance.scale_unary.HEADER_NAME).write_bytes(b'scale unary shader fixture')
+        (self.prepared.parent / provenance.q8_subgroup.HEADER_NAME).write_bytes(b'Q8 subgroup shader fixture')
+        (self.prepared.parent / 'ggml-webgpu-rms-scale.hpp').write_bytes(b'RMS scale host fixture')
+        (self.prepared.parent / 'ggml-webgpu-ssm-conv-silu.hpp').write_bytes(b'SSM convolution SiLU host fixture')
+        (self.prepared.parent / provenance.ssm_conv_silu.HEADER_NAME).write_bytes(b'SSM convolution SiLU shader fixture')
+        (self.prepared.parent / provenance.moe_group_skip.HEADER_NAME).write_bytes(b'MoE matrix group shader fixture')
+        (self.prepared.parent / provenance.router_tail.HEADER_NAME).write_bytes(b'router tail shader fixture')
+        (self.prepared.parent / 'ggml-webgpu-router-tail.hpp').write_bytes(b'router tail helper fixture')
+        (self.vendor / provenance.router_tail.BASE / 'wgsl-shaders').mkdir(parents=True, exist_ok=True)
+        (self.vendor / provenance.router_tail.BASE / 'wgsl-shaders/sum_rows.wgsl').write_bytes(b'upstream router sum fixture')
+        moe_shader = self.vendor / provenance.moe_group_skip.BASE / 'wgsl-shaders/mul_mat_id.wgsl'
+        moe_shader.parent.mkdir(parents=True, exist_ok=True)
+        moe_shader.write_bytes(b'Canonical MoE matrix shader fixture')
+        (self.prepared.parent / provenance.rms_scale.HEADER_NAME).write_bytes(b'RMS scale shader fixture')
+        (self.prepared.parent / provenance.iq3s_subgroup.HEADER_NAME).write_bytes(b'IQ3 subgroup shader fixture')
         (self.prepared.parent / provenance.moe_sum.HEADER_NAME).write_bytes(b'MoE shader fixture')
         source_prepare = patch.object(provenance.webgpu_source, 'prepare', return_value=self.prepared)
         source_prepare.start()
@@ -359,9 +391,9 @@ class OverlayProvenance(unittest.TestCase):
     def test_retained_overlays_are_independent_and_use_only_the_renamed_directory(self):
         report = provenance.collect(self.root, self.manifest)
         self.assertEqual({item['id'] for item in report['sourceOverlays']}, {
-            'webgpu-expert-short-workgroup', 'webgpu-moe-expert-sum', 'webgpu-q8-short-workgroup', 'webgpu-hc-pre-post', 'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
-            'webgpu-same-device-tensor-copy',
-            'webgpu-parameter-upload-batching', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
+            'webgpu-q8-kernel-diagnostic-v1', 'webgpu-host-input-snapshot', 'webgpu-iq3s-indexed-subgroup-matvec', 'webgpu-rms-scale-fusion', 'webgpu-ssm-conv-silu-fusion', 'webgpu-async-tensor-copy', 'webgpu-scale-unary-fusion', 'webgpu-q8-fixed-subgroup-matvec', 'webgpu-q4-short-workgroup', 'webgpu-expert-short-workgroup', 'webgpu-moe-expert-sum', 'webgpu-q8-short-workgroup', 'webgpu-hc-pre-post', 'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
+            'webgpu-same-device-tensor-copy', 'webgpu-moe-matrix-group-skip', 'webgpu-router-tail-fusion',
+            'webgpu-parameter-upload-batching', 'webgpu-ordered-readback', 'webgpu-bind-group-cache', 'webgpu-sampler-single-sync', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
             'qwen4exp-file-backed-rows', 'qsa-all-pools-selection'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
@@ -418,6 +450,90 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual(item['reviewedInputs'], provenance.expert_short.CONTRACT_INPUTS)
         self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
         self.assertIn('scripts/prepare_webgpu_expert_short.py', item['supportingFiles'])
+
+    def test_q4_short_inventory_tracks_final_header_and_activation(self):
+        off = provenance.collect(self.root, self.manifest)
+        item = next(x for x in off['sourceOverlays'] if x['id'] == 'webgpu-q4-short-workgroup')
+        self.assertIsNone(item['compiledCopy'])
+        self.assertEqual(item['application']['enabledProfileVariants'], [])
+        self.assertNotIn(item['patch']['path'], off['otherPatchFiles'])
+        active = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+        active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=OFF', '-DLCB_WEBGPU=ON') for arg in active['cmakeCommand']]
+        on = provenance.collect(self.root, self.manifest)
+        item = next(x for x in on['sourceOverlays'] if x['id'] == 'webgpu-q4-short-workgroup')
+        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser'])
+        self.assertEqual(item['compiledCopy']['sha256'], hashlib.sha256(b'SSM header source fixture').hexdigest())
+        self.assertEqual(item['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/browser'], item['compiledCopy'])
+        self.assertEqual(item['reviewedInputs'], provenance.q4_short.CONTRACT_INPUTS)
+        self.assertEqual(item['patch']['sha256'], provenance.q4_short.PATCH_SHA256)
+        self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
+
+    def test_q8_diagnostic_and_shared_final_tus_have_profile_specific_identities(self):
+        active = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']
+        for name, info in active.items():
+            info['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=OFF', '-DLCB_WEBGPU=ON') for arg in info['cmakeCommand']]
+            info['cmakeCommand'].append('-DGGML_WEBGPU_GPU_PROFILE=' + ('ON' if name == 'test' else 'OFF'))
+        profiled = self.root / 'profiled'; profiled.mkdir()
+        for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
+            (profiled / name).write_text('profile-only final fixture: ' + name)
+        def prepare_variant(*args, **kwargs):
+            return profiled / 'ggml-webgpu.cpp' if kwargs.get('gpu_profile') else self.prepared
+        with patch.object(provenance.webgpu_source, 'prepare', side_effect=prepare_variant):
+            report = provenance.collect(self.root, self.manifest)
+        items = {item['id']: item for item in report['sourceOverlays']}
+        diagnostic = items['webgpu-q8-kernel-diagnostic-v1']
+        self.assertEqual(diagnostic['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/test'])
+        self.assertEqual(diagnostic['compiledCopies']['ggml-webgpu.cpp'], provenance.file_identity(profiled / 'ggml-webgpu.cpp'))
+        for key in ('webgpu-same-device-tensor-copy', 'webgpu-rms-scale-fusion', 'webgpu-q8-fixed-subgroup-matvec'):
+            item = items[key]
+            field = 'compiledCopies' if 'compiledCopies' in item else 'compiledCopy'
+            self.assertIsNone(item[field])
+            copies = item['compiledCopiesByProfileVariant']
+            self.assertNotEqual(copies['webgpu-wasm64-jspi/browser'], copies['webgpu-wasm64-jspi/test'])
+        single = items['webgpu-same-device-tensor-copy']['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/test']
+        self.assertEqual(single['sha256'], provenance.file_identity(profiled / 'ggml-webgpu.cpp')['sha256'])
+        self.assertIn('GGML_WEBGPU_GPU_PROFILE=1', single['compileDefinitions'])
+
+    def test_fusion_and_q8_subgroup_inventory_track_compiled_copies(self):
+        for module, overlay in ((provenance.router_tail, 'webgpu-router-tail-fusion'),
+                                (provenance.moe_group_skip, 'webgpu-moe-matrix-group-skip'),
+                                (provenance.ssm_conv_silu, 'webgpu-ssm-conv-silu-fusion'),
+                                (provenance.iq3s_subgroup, 'webgpu-iq3s-indexed-subgroup-matvec'),
+                                (provenance.rms_scale, 'webgpu-rms-scale-fusion'),
+                                (provenance.scale_unary, 'webgpu-scale-unary-fusion'),
+                                (provenance.q8_subgroup, 'webgpu-q8-fixed-subgroup-matvec')):
+            off = provenance.collect(self.root, self.manifest)
+            item = next(x for x in off['sourceOverlays'] if x['id'] == overlay)
+            self.assertIsNone(item['compiledCopies'])
+            self.assertNotIn(item['patch']['path'], off['otherPatchFiles'])
+            active = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+            active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=OFF', '-DLCB_WEBGPU=ON') for arg in active['cmakeCommand']]
+            on = provenance.collect(self.root, self.manifest)
+            item = next(x for x in on['sourceOverlays'] if x['id'] == overlay)
+            self.assertEqual(item['patch']['sha256'], module.PATCH_SHA256)
+            self.assertEqual(item['reviewedInputs'], module.CONTRACT_INPUTS)
+            self.assertEqual(item['compiledCopies'][module.HEADER_NAME]['sha256'], provenance.file_identity(self.prepared.parent / module.HEADER_NAME)['sha256'])
+            self.assertEqual(item['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/browser'], item['compiledCopies'])
+            self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
+            active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=ON', '-DLCB_WEBGPU=OFF') for arg in active['cmakeCommand']]
+
+    def test_host_snapshot_inventory_tracks_both_translation_units_and_private_header(self):
+        off = provenance.collect(self.root, self.manifest)
+        item = next(x for x in off['sourceOverlays'] if x['id'] == 'webgpu-host-input-snapshot')
+        self.assertIsNone(item['compiledCopies'])
+        self.assertEqual(item['application']['enabledProfileVariants'], [])
+        self.assertNotIn(item['patch']['path'], off['otherPatchFiles'])
+        active = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['browser']
+        active['cmakeCommand'] = [arg.replace('-DLCB_WEBGPU=OFF', '-DLCB_WEBGPU=ON') for arg in active['cmakeCommand']]
+        on = provenance.collect(self.root, self.manifest)
+        item = next(x for x in on['sourceOverlays'] if x['id'] == 'webgpu-host-input-snapshot')
+        self.assertEqual(item['patch']['sha256'], provenance.host_input_snapshot.PATCH_SHA256)
+        self.assertEqual(item['reviewedInputs'], provenance.host_input_snapshot.CONTRACT_INPUTS)
+        self.assertEqual(set(item['compiledCopies']), {'ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h'})
+        for name, identity in item['compiledCopies'].items():
+            self.assertEqual(identity, provenance.file_identity(self.prepared.parent / name))
+        self.assertEqual(item['compiledCopiesByProfileVariant']['webgpu-wasm64-jspi/browser'], item['compiledCopies'])
+        self.assertNotIn(item['patch']['path'], on['otherPatchFiles'])
 
     def test_moe_sum_inventory_tracks_active_compiled_copies_and_not_unclassified(self):
         off = provenance.collect(self.root, self.manifest)
@@ -586,7 +702,7 @@ class OverlayProvenance(unittest.TestCase):
         with patch.object(provenance.webgpu_source, 'prepare') as prepare:
             report = provenance.collect(self.root, self.manifest)
         prepare.assert_not_called()
-        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching', 'chunked-model-upload', 'ssm-conv-single-token'):
+        for suffix in ('same-device-tensor-copy', 'async-tensor-copy', 'parameter-upload-batching', 'ordered-readback', 'bind-group-cache', 'sampler-single-sync', 'chunked-model-upload', 'ssm-conv-single-token'):
             item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-' + suffix)
             self.assertIsNone(item['compiledCopy'])
             self.assertEqual(item['application']['enabledProfileVariants'], [])
@@ -596,7 +712,7 @@ class OverlayProvenance(unittest.TestCase):
         for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
             variant['cmakeCommand'] = [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON') for a in variant['cmakeCommand']]
         report = provenance.collect(self.root, self.manifest)
-        for suffix in ('same-device-tensor-copy', 'parameter-upload-batching'):
+        for suffix in ('same-device-tensor-copy', 'async-tensor-copy', 'parameter-upload-batching', 'ordered-readback', 'bind-group-cache'):
             item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-' + suffix)
             self.assertEqual(item['compiledCopy']['sha256'], provenance.file_identity(self.prepared)['sha256'])
             self.assertEqual(item['compiledCopy']['compileDefinitions'], ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'])
@@ -604,6 +720,19 @@ class OverlayProvenance(unittest.TestCase):
             self.assertEqual(item['application']['enabledProfileVariants'],
                              ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
             self.assertEqual(len(item['compiledCopiesByProfileVariant']), 2)
+            if suffix == 'ordered-readback':
+                self.assertEqual(item['patch']['sha256'], provenance.ordered_readback.PATCH_SHA256)
+                self.assertEqual(item['reviewedInputs'], provenance.ordered_readback.CONTRACT_INPUTS)
+                self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+            if suffix == 'bind-group-cache':
+                self.assertEqual(item['patch']['sha256'], provenance.bind_group_cache.PATCH_SHA256)
+                self.assertEqual(item['reviewedInputs'], provenance.bind_group_cache.CONTRACT_INPUTS)
+                self.assertTrue(item['compiledCopy']['bindGroupCache'])
+                self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
+            if suffix == 'async-tensor-copy':
+                self.assertEqual(item['patch']['sha256'], provenance.async_tensor_copy.PATCH_SHA256)
+                self.assertEqual(item['reviewedInputs'], provenance.async_tensor_copy.CONTRACT_INPUTS)
+                self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
 
     def test_webgpu_loader_provenance_records_separate_compiled_source(self):
         for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
@@ -615,6 +744,18 @@ class OverlayProvenance(unittest.TestCase):
         self.assertEqual(loader['application']['enabledProfileVariants'],
                          ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
         self.assertNotIn(loader['patch']['path'], report['otherPatchFiles'])
+
+    def test_webgpu_sampler_provenance_records_separate_compiled_source(self):
+        for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():
+            variant['cmakeCommand'] = [a.replace('LCB_WEBGPU=OFF', 'LCB_WEBGPU=ON') for a in variant['cmakeCommand']]
+        report = provenance.collect(self.root, self.manifest)
+        item = next(e for e in report['sourceOverlays'] if e['id'] == 'webgpu-sampler-single-sync')
+        self.assertEqual(item['compiledCopy']['sha256'], provenance.file_identity(self.prepared.parent / 'llama-sampler.cpp')['sha256'])
+        self.assertEqual(item['patch']['sha256'], provenance.sampler_single_sync.PATCH_SHA256)
+        self.assertEqual(item['reviewedInputs'], provenance.sampler_single_sync.CONTRACT_INPUTS)
+        self.assertEqual(item['application']['enabledProfileVariants'], ['webgpu-wasm64-jspi/browser', 'webgpu-wasm64-jspi/test'])
+        self.assertEqual(len(item['compiledCopiesByProfileVariant']), 2)
+        self.assertNotIn(item['patch']['path'], report['otherPatchFiles'])
 
     def test_webgpu_ssm_header_provenance_preserves_independent_cpp_identity(self):
         for variant in self.manifest['profiles']['webgpu-wasm64-jspi']['variants'].values():

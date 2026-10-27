@@ -1,0 +1,130 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -10,6 +10,7 @@
+ #include "ggml-webgpu-rms-scale.hpp"
+ 
+ #include "ggml-backend-impl.h"
++#include "ggml-backend-host-snapshot.h"
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-shader-lib.hpp"
+ #include "ggml.h"
+@@ -4221,6 +4222,22 @@
+     ggml_backend_synchronize(backend_src);
+     ggml_backend_tensor_set(dst, src->data, 0, size);
+     return true;
++}
++
++static bool ggml_backend_webgpu_copy_host_input_snapshot_v1(ggml_backend_t backend_src,
++                                                            ggml_backend_t backend_dst,
++                                                            const ggml_tensor * src,
++                                                            ggml_tensor * dst) {
++    if (!backend_src || !src) { return false; }
++    ggml_backend_dev_t device = ggml_backend_get_device(backend_src);
++    ggml_backend_buffer_t buffer = src->view_src ? src->view_src->buffer : src->buffer;
++    if (!device || ggml_backend_dev_type(device) != GGML_BACKEND_DEVICE_TYPE_CPU ||
++        !buffer || !buffer->buft || !ggml_backend_buffer_is_host(buffer) ||
++        ggml_backend_buffer_get_usage(buffer) == GGML_BACKEND_BUFFER_USAGE_WEIGHTS) { return false; }
++    // The checked CPU path synchronizes the producer before WriteBuffer consumes
++    // its host bytes. Destination identity, queue, layout and physical ranges
++    // are revalidated on every call; the GPU-to-GPU path is not exposed here.
++    return ggml_backend_webgpu_cpy_tensor_async(backend_src, backend_dst, src, dst);
+ }
+ 
+ static void ggml_backend_webgpu_get_tensor_async(ggml_backend_t backend,
+@@ -5440,11 +5457,21 @@
+     return &device;
+ }
+ 
++static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
++    GGML_UNUSED(reg);
++    if (name && strcmp(name, GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1) == 0) {
++        // The typed assignment fixes the signature of this versioned contract.
++        ggml_backend_copy_host_input_snapshot_v1_t copy = ggml_backend_webgpu_copy_host_input_snapshot_v1;
++        return reinterpret_cast<void *>(copy);
++    }
++    return nullptr;
++}
++
+ static const struct ggml_backend_reg_i ggml_backend_webgpu_reg_i = {
+     /* .get_name         = */ ggml_backend_webgpu_reg_get_name,
+     /* .get_device_count = */ ggml_backend_webgpu_reg_get_device_count,
+     /* .get_device       = */ ggml_backend_webgpu_reg_get_device,
+-    /* .get_proc_address = */ NULL,
++    /* .get_proc_address = */ ggml_backend_webgpu_reg_get_proc_address,
+ };
+ 
+ /* End GGML Backend Registration Interface */
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -10,6 +10,7 @@
+ 
+ #include "ggml-backend.h"
+ #include "ggml-backend-impl.h"
++#include "ggml-backend-host-snapshot.h"
+ #include "ggml-alloc.h"
+ #include "ggml-impl.h"
+ 
+@@ -930,6 +931,7 @@
+     int n_backends;
+ 
+     ggml_backend_t backends[GGML_SCHED_MAX_BACKENDS];
++    ggml_backend_copy_host_input_snapshot_v1_t host_input_snapshot[GGML_SCHED_MAX_BACKENDS];
+     ggml_backend_buffer_type_t bufts[GGML_SCHED_MAX_BACKENDS];
+     ggml_gallocr_t galloc;
+ 
+@@ -1826,6 +1828,19 @@
+     ggml_backend_t input_backend = ggml_backend_sched_get_tensor_backend(sched, input);
+     struct ggml_tensor * input_cpy = tensor_copy(input, split_backend_id, sched->cur_copy);
+ 
++    // Only an explicit opt-in can consume host bytes immediately while ordering
++    // destination reuse on its compute queue. Ordinary async-copy support alone
++    // does not provide that contract. Keep parallel-copy events and host-weight
++    // callbacks on their existing synchronization paths. The first input keeps
++    // the original destination wait, bounding queued work across splits even
++    // when repeated prefill calls do not request any output readback.
++    const auto snapshot = sched->host_input_snapshot[split_backend_id];
++    if (input != split->inputs[0] && snapshot && sched->n_copies == 1 &&
++        sched->events[split_backend_id][sched->cur_copy] == NULL &&
++        !ggml_backend_sched_is_host_weight(input) && snapshot(input_backend, split_backend, input, input_cpy)) {
++        return;
++    }
++
+     if (input->flags & GGML_TENSOR_FLAG_INPUT) {
+         // inputs from the user must be copied immediately to prevent the user overwriting the data before the copy is done
+         if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
+@@ -2002,6 +2017,15 @@
+         sched->backends[b] = backends[b];
+         sched->bufts[b] = bufts ? bufts[b] : ggml_backend_get_default_buffer_type(backends[b]);
+         GGML_ASSERT(ggml_backend_supports_buft(backends[b], sched->bufts[b]));
++
++        if (sched->n_copies == 1) {
++            ggml_backend_dev_t device = ggml_backend_get_device(backends[b]);
++            ggml_backend_reg_t reg = device ? ggml_backend_dev_backend_reg(device) : nullptr;
++            if (reg) {
++                sched->host_input_snapshot[b] = reinterpret_cast<ggml_backend_copy_host_input_snapshot_v1_t>(
++                    ggml_backend_reg_get_proc_address(reg, GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1));
++            }
++        }
+ 
+         if (sched->n_copies > 1) {
+             for (int c = 0; c < sched->n_copies; c++) {
+--- /dev/null
++++ b/ggml/src/ggml-backend-host-snapshot.h
+@@ -0,0 +1,17 @@
++#pragma once
++#include "ggml-backend.h"
++
++// Optional registry extension; no backend interface or public structure changes.
++// true: the source producer has completed, host bytes have been consumed before
++// returning, and the copy is ordered after all prior destination compute readers
++// and before subsequent work on that backend. The caller may immediately reuse
++// the source bytes without waiting for destination completion.
++// false: unsupported, with no synchronization, enqueue, or tensor mutation.
++// Producer or upload failures retain their normal error behavior; they are not
++// an unsupported false result.
++// This is stronger than cpy_tensor_async. It does not report GPU completion and
++// does not replace explicit synchronization, readback, or error observation.
++#define GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1 "ggml_backend_copy_host_input_snapshot_v1"
++typedef bool (*ggml_backend_copy_host_input_snapshot_v1_t)(
++    ggml_backend_t source_backend, ggml_backend_t destination_backend,
++    const struct ggml_tensor * source, struct ggml_tensor * destination);

@@ -1,0 +1,204 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -5,7 +5,8 @@
+ #include "ggml-wgsl-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
++#include "ggml-webgpu-q8-subgroup-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -197,6 +198,36 @@
+         workgroup *= 2;
+     }
+     return workgroup <= context.max_wg_size ? workgroup : fallback;
++}
++
++// Each subgroup owns four output rows and reuses the upstream Q8_0 decoder.
++// A fixed reported subgroup width is required: WG_SIZE specializes its stride.
++inline uint32_t ggml_webgpu_q8_matvec_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                  bool use_mmvq, bool src_overlap) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    const uint32_t sg = context.min_subgroup_size;
++    if (!a || !x || !dst || context.src2 || !context.supports_subgroups ||
++        context.max_wg_size < 128 || use_mmvq || src_overlap ||
++        sg != context.max_subgroup_size || sg < 4 || sg > 64 || (sg & (sg - 1)) != 0 ||
++        a->type != GGML_TYPE_Q8_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] < 2048 || a->ne[0] > 8192 || a->ne[0] % 32 != 0 ||
++        a->ne[1] < 1024 || a->ne[1] > UINT32_MAX - 127u ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
++        return 0;
++    }
++    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
++    for (int axis = 2; axis < 4; ++axis) {
++        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
++            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
++            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
++            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
++            return 0;
++        }
++        output_elements *= static_cast<uint64_t>(x->ne[axis]);
++    }
++    return sg;
+ }
+ 
+ struct webgpu_pipeline {
+@@ -1068,13 +1099,14 @@
+     int       vectorized;
+     uint32_t  num_cols;
+     uint32_t  workgroup_size;
++    uint32_t  subgroup_size;
+     bool      use_mmvq;
+     bool      src_overlap;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+-               use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
++               subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
+     }
+ };
+ 
+@@ -1086,6 +1118,7 @@
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         ggml_webgpu_hash_combine(seed, key.num_cols);
+         ggml_webgpu_hash_combine(seed, key.workgroup_size);
++        ggml_webgpu_hash_combine(seed, key.subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.use_mmvq);
+         ggml_webgpu_hash_combine(seed, key.src_overlap);
+         return seed;
+@@ -2157,7 +2190,8 @@
+         key.use_mmvq =
+             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.supports_dot_product, context.vendor);
+         key.src_overlap = src_overlap;
+-        key.workgroup_size = context.src0->type == GGML_TYPE_Q4_K ?
++        key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
++        key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
+ 
+@@ -2291,12 +2325,21 @@
+             variant += "_src_overlap";
+         }
+ 
+-        defines.push_back(std::string("WG_SIZE=") + std::to_string(wg_size));
++        defines.push_back(std::string("WG_SIZE=") + std::to_string(key.subgroup_size ? key.subgroup_size : wg_size));
+         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
+-        defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+-        variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
+-        if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
+-            variant += "_wg" + std::to_string(wg_size);
++        if (key.subgroup_size) {
++            shader_src = wgsl_q8_subgroup_matvec;
++            defines.push_back("Q8_SUBGROUP_WORKGROUP_SIZE=128");
++            variant += "_independent_sg" + std::to_string(key.subgroup_size) + "_wg128";
++            // The accumulator macro describes rows per subgroup; dispatch decisions
++            // describe all output rows covered by the actual workgroup.
++            outputs_per_wg *= wg_size / key.subgroup_size;
++        } else {
++            defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
++            variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
++            if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
++                variant += "_wg" + std::to_string(wg_size);
++            }
+         }
+         if (key.vectorized) {
+             variant += "_vectorized";
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
+@@ -0,0 +1,92 @@
++enable subgroups;
++enable f16;
++
++// WG_SIZE is the checked fixed subgroup width for the unchanged accumulator.
++// The actual workgroup has Q8_SUBGROUP_WORKGROUP_SIZE invocations.
++#define DECLARE_BYTE_LOADERS_SRC0
++#include "common_decls.tmpl"
++#include "mul_mat_vec_acc.tmpl"
++
++struct MulMatParams {
++    offset_src0: u32,
++    offset_src1: u32,
++    offset_dst: u32,
++    m: u32,
++    n: u32,
++    k: u32,
++    stride_01: u32,
++    stride_11: u32,
++    stride_02: u32,
++    stride_12: u32,
++    stride_03: u32,
++    stride_13: u32,
++    bs02: u32,
++    bs03: u32,
++    broadcast2: u32,
++    broadcast3: u32
++};
++
++@group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>;
++@group(0) @binding(1) var<storage, read_write> src1: array<SRC1_TYPE>;
++@group(0) @binding(2) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(3) var<uniform> params: MulMatParams;
++
++@compute @workgroup_size(Q8_SUBGROUP_WORKGROUP_SIZE)
++fn main(
++    @builtin(workgroup_id) wg_id: vec3<u32>,
++    @builtin(num_workgroups) num_wg: vec3<u32>,
++    @builtin(subgroup_id) subgroup_id: u32,
++    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32,
++    @builtin(num_subgroups) num_subgroups: u32
++) {
++    let rows_per_wg: u32 = (Q8_SUBGROUP_WORKGROUP_SIZE / WG_SIZE) * OUTPUTS_PER_WG;
++    let output_groups = (params.m + rows_per_wg - 1u) / rows_per_wg;
++    let wg_linear = wg_id.y * num_wg.x + wg_id.x;
++    let batch_idx = wg_linear / output_groups;
++    let total_batches = params.bs02 * params.broadcast2 * params.bs03 * params.broadcast3;
++    if (batch_idx >= total_batches) {
++        return;
++    }
++    let row_base = (wg_linear % output_groups) * rows_per_wg + subgroup_id * OUTPUTS_PER_WG;
++
++    let dst2_stride = params.m * params.n;
++    let dst2_idx = batch_idx % (params.bs02 * params.broadcast2);
++    let dst3_stride = dst2_stride * params.bs02 * params.broadcast2;
++    let dst3_idx = batch_idx / (params.bs02 * params.broadcast2);
++    let src03_idx = dst3_idx / params.broadcast3;
++    let src02_idx = dst2_idx / params.broadcast2;
++    let src0_batch_offset = params.offset_src0 + src03_idx * params.stride_03 + src02_idx * params.stride_02;
++    let src1_idx_base = params.offset_src1 + dst3_idx * params.stride_13 + dst2_idx * params.stride_12;
++    let dst_idx_base = params.offset_dst + dst3_idx * dst3_stride + dst2_idx * dst2_stride + row_base;
++
++    let expected_subgroups: u32 = Q8_SUBGROUP_WORKGROUP_SIZE / WG_SIZE;
++    let owns_rows = subgroup_id < expected_subgroups;
++    var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
++    if (num_subgroups == expected_subgroups) {
++        // All workgroup invocations fit exactly in full subgroups. Preserve
++        // the original accumulator call and floating-point operation order.
++        acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++    } else {
++        // subgroup_size is a maximum: legal partial subgroups may have fewer
++        // active invocations. Compute-stage lane IDs are dense from zero.
++        let active_count = subgroupAdd(1u);
++        if (owns_rows) {
++            for (var virtual_tid = subgroup_invocation_id; virtual_tid < WG_SIZE; virtual_tid += active_count) {
++                let partial = accumulate_vec_dot(virtual_tid, row_base, src0_batch_offset, src1_idx_base);
++                for (var col = 0u; col < NUM_COLS; col++) {
++                    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                        acc[col][row] += partial[col][row];
++                    }
++                }
++            }
++        }
++    }
++    // Extra partial subgroups still reach every collective in uniform flow;
++    // only the expected subgroups access source rows or write output rows.
++    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++        let total = subgroupAdd(acc[0][row]);
++        if (owns_rows && subgroup_invocation_id == 0u && row_base + row < params.m) {
++            dst[dst_idx_base + row] = total;
++        }
++    }
++}

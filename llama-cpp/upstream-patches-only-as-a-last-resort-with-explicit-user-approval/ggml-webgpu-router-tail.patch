@@ -1,0 +1,368 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -9,6 +9,7 @@
+ #include "ggml-webgpu-scale-unary.hpp"
+ #include "ggml-webgpu-rms-scale.hpp"
+ #include "ggml-webgpu-ssm-conv-silu.hpp"
++#include "ggml-webgpu-router-tail.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-backend-host-snapshot.h"
+@@ -3656,6 +3657,104 @@
+ 
+ static void * ggml_backend_webgpu_buffer_get_base(ggml_backend_buffer_t buffer);
+ 
++struct webgpu_router_tail_binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0, size = 0, tensor_offset = 0, tensor_size = 0;
++    uint32_t element_offset = 0;
++};
++
++static bool ggml_webgpu_router_tail_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                                            uint64_t bytes, webgpu_router_tail_binding & binding) {
++    auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base || !tensor->data) { return false; }
++    auto * buffer_ctx = (ggml_backend_webgpu_buffer_context *) buffer->context;
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer ||
++        (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) { return false; }
++    const auto * root = tensor->view_src ? tensor->view_src : tensor;
++    if (root->view_src || root->view_offs || root->buffer != buffer || !root->data) { return false; }
++    const uint64_t base = reinterpret_cast<uintptr_t>(ggml_backend_webgpu_buffer_get_base(buffer));
++    const uint64_t root_data = reinterpret_cast<uintptr_t>(root->data);
++    if (root_data < base || tensor->view_offs > UINT64_MAX - root_data ||
++        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs) { return false; }
++    uint64_t root_bytes;
++    if (!router_tail_span(root, tensor->type, false, root_bytes) ||
++        tensor->view_offs > root_bytes || bytes > root_bytes - tensor->view_offs) { return false; }
++    const uint64_t root_offset = root_data - base;
++    const uint64_t physical_size = buffer_ctx->buffer.GetSize();
++    if (root_offset > buffer->size || root_bytes > buffer->size - root_offset ||
++        root_offset > physical_size || root_bytes > physical_size - root_offset) { return false; }
++    const uint64_t alignment = ctx->global_ctx->capabilities.limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1))) { return false; }
++    const uint64_t offset = ggml_webgpu_tensor_offset(tensor);
++    if (offset % 4 || offset > buffer->size || bytes > buffer->size - offset ||
++        offset > physical_size || bytes > physical_size - offset) { return false; }
++    const uint64_t aligned_offset = offset & ~(alignment - 1), prefix = offset - aligned_offset;
++    if (prefix > uint64_t(UINT32_MAX) * 4 || bytes > uint64_t(UINT32_MAX) * 4 - prefix) { return false; }
++    const uint64_t size = prefix + bytes;
++    if (!size || size > ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize || size % 4) { return false; }
++    binding = { buffer_ctx->buffer, aligned_offset, size, offset, bytes, uint32_t(prefix / 4) };
++    return true;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_router_tail(webgpu_context & ctx,
++                                                               ggml_cgraph * graph, int index,
++                                                               int & num_encoded_ops) {
++    router_tail_plan plan;
++    if (!plan_router_tail(graph, index, plan)) { return std::nullopt; }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint32_t wg = limits.maxComputeInvocationsPerWorkgroup;
++    if (!wg || (wg & (wg - 1)) || plan.used > wg || limits.maxComputeWorkgroupSizeX < wg ||
++        uint64_t(wg) * 4 > limits.maxComputeWorkgroupStorageSize ||
++        plan.tokens > limits.maxComputeWorkgroupsPerDimension ||
++        limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) { return std::nullopt; }
++    webgpu_router_tail_binding bindings[3];
++    if (!ggml_webgpu_router_tail_binding(ctx, plan.probs, plan.probs_bytes, bindings[0]) ||
++        !ggml_webgpu_router_tail_binding(ctx, plan.ids, plan.ids_bytes, bindings[1]) ||
++        !ggml_webgpu_router_tail_binding(ctx, plan.output, plan.output_bytes, bindings[2])) { return std::nullopt; }
++    const bool merged = bindings[0].buffer.Get() == bindings[2].buffer.Get() &&
++                        !router_tail_disjoint(bindings[0].offset, bindings[0].size, bindings[2].offset, bindings[2].size);
++    uint64_t union_offset = 0, union_size = 0;
++    if (merged) {
++        // Only one workgroup can snapshot every selected source before writing
++        // an overlapping output. Multiple tokens retain the disjoint contract.
++        if (plan.tokens != 1) { return std::nullopt; }
++        union_offset = std::min(bindings[0].offset, bindings[2].offset);
++        const uint64_t union_end = std::max(bindings[0].offset + bindings[0].size, bindings[2].offset + bindings[2].size);
++        union_size = union_end - union_offset;
++        if (union_size > limits.maxStorageBufferBindingSize || union_size / 4 > UINT32_MAX ||
++            (bindings[0].buffer.Get() == bindings[1].buffer.Get() &&
++             !router_tail_disjoint(union_offset, union_size, bindings[1].offset, bindings[1].size))) { return std::nullopt; }
++    } else {
++        // Reject full aligned-binding overlap, including the two read inputs.
++        for (int a = 0; a < 3; ++a) {
++            for (int b = a + 1; b < 3; ++b) {
++                if (bindings[a].buffer.Get() == bindings[b].buffer.Get() &&
++                    !router_tail_disjoint(bindings[a].offset, bindings[a].size, bindings[b].offset, bindings[b].size)) { return std::nullopt; }
++            }
++        }
++    }
++    std::vector<uint32_t> params = { bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset,
++                                    plan.experts, plan.ids_stride, plan.used, plan.used, plan.tokens,
++                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.clamp, 0)),
++                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.clamp, 1)) };
++    std::vector<wgpu::BindGroupEntry> entries;
++    if (merged) {
++        params[0] = uint32_t((bindings[0].tensor_offset - union_offset) / 4);
++        params[2] = uint32_t((bindings[2].tensor_offset - union_offset) / 4);
++        entries.push_back(ggml_webgpu_make_bind_group_entry(0, bindings[0].buffer, union_offset, union_size));
++        entries.push_back(ggml_webgpu_make_bind_group_entry(1, bindings[1].buffer, bindings[1].offset, bindings[1].size));
++    } else {
++        for (uint32_t i = 0; i < 3; ++i) {
++            entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
++        }
++    }
++    auto pipeline = ctx->shader_lib->get_router_tail_pipeline(wg, merged);
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, plan.tokens, 1);
++    num_encoded_ops = 6;
++    return encoded;
++}
++
+ struct webgpu_ssm_conv_silu_binding {
+     wgpu::Buffer buffer;
+     uint64_t offset = 0, size = 0, tensor_offset = 0, tensor_size = 0;
+@@ -3898,6 +3997,7 @@
+         case GGML_OP_SET_ROWS:
+             return ggml_webgpu_set_rows(ctx, src0, src1, node);
+         case GGML_OP_GET_ROWS:
++            if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -9,6 +9,7 @@
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
++#include "ggml-webgpu-router-tail-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+ #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+ #include "ggml.h"
+@@ -1457,6 +1458,7 @@
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+@@ -2139,6 +2141,17 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_router_tail_pipeline(uint32_t wg_size, bool merged) {
++        const uint64_t key = (uint64_t(wg_size) << 1) | uint64_t(merged);
++        auto it = router_tail_pipelines.find(key);
++        if (it != router_tail_pipelines.end()) { return it->second; }
++        std::vector<std::string> defines = { "WG_SIZE=" + std::to_string(wg_size) };
++        const std::string code = preprocessor.preprocess(merged ? wgsl_router_tail_merged : wgsl_router_tail, defines);
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, "router_tail_f32_wg" + std::to_string(wg_size) + (merged ? "_merged" : ""));
++        router_tail_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
+     webgpu_pipeline get_rms_scale_pipeline(bool inplace) {
+         const int key = int(inplace);
+         auto it = rms_scale_pipelines.find(key);
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
+@@ -0,0 +1,90 @@
++#pragma once
++#include "ggml-impl.h"
++#include <cstdint>
++
++struct router_tail_plan {
++    ggml_tensor * probs = nullptr;
++    ggml_tensor * ids = nullptr;
++    ggml_tensor * gather = nullptr;
++    ggml_tensor * flattened = nullptr;
++    ggml_tensor * sum = nullptr;
++    ggml_tensor * clamp = nullptr;
++    ggml_tensor * div = nullptr;
++    ggml_tensor * output = nullptr;
++    uint64_t probs_bytes = 0, ids_bytes = 0, output_bytes = 0;
++    uint32_t experts = 0, used = 0, tokens = 0, ids_stride = 0;
++};
++
++// Validate logical spans before ggml_nbytes or WGSL narrowing. Higher axes can
++// have padding, but may not overlap; dense tensors have the canonical strides.
++inline bool router_tail_span(const ggml_tensor * tensor, ggml_type type, bool dense, uint64_t & bytes) {
++    bytes = 0;
++    if (!tensor || tensor->type != type || (type != GGML_TYPE_F32 && type != GGML_TYPE_I32) || tensor->nb[0] != 4) { return false; }
++    constexpr uint64_t max_bytes = uint64_t(UINT32_MAX) * 4;
++    uint64_t count = 1, span = 4;
++    for (int axis = 0; axis < GGML_MAX_DIMS; ++axis) {
++        if (tensor->ne[axis] <= 0 || uint64_t(tensor->ne[axis]) > UINT32_MAX ||
++            tensor->nb[axis] % 4 || tensor->nb[axis] < span || tensor->nb[axis] > max_bytes ||
++            (dense && tensor->nb[axis] != count * 4) || uint64_t(tensor->ne[axis]) > UINT32_MAX / count) { return false; }
++        const uint64_t extra = uint64_t(tensor->ne[axis]) - 1;
++        if (extra > (max_bytes - span) / tensor->nb[axis]) { return false; }
++        span += extra * tensor->nb[axis];
++        count *= uint64_t(tensor->ne[axis]);
++    }
++    bytes = span;
++    return true;
++}
++
++inline bool router_tail_shape(const ggml_tensor * tensor, int64_t a, int64_t b, int64_t c, int64_t d) {
++    return tensor && tensor->ne[0] == a && tensor->ne[1] == b && tensor->ne[2] == c && tensor->ne[3] == d;
++}
++
++inline bool plan_router_tail(const ggml_cgraph * graph, int index, router_tail_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 6) { return false; }
++    ggml_tensor * node[6];
++    for (int i = 0; i < 6; ++i) { node[i] = graph->nodes[index + i]; if (!node[i]) { return false; } }
++    auto * gather = node[0]; auto * flattened = node[1]; auto * sum = node[2];
++    auto * clamp = node[3]; auto * div = node[4]; auto * output = node[5];
++    auto * probs = gather->src[0]; auto * ids = gather->src[1];
++    if (!probs || !ids || gather->view_src || sum->view_src || clamp->view_src || div->view_src ||
++        gather->view_offs || sum->view_offs || clamp->view_offs || div->view_offs ||
++        flattened->src[0] != gather || flattened->view_src != gather || flattened->view_offs ||
++        sum->src[0] != flattened || clamp->src[0] != sum ||
++        div->src[0] != flattened || div->src[1] != clamp ||
++        output->src[0] != div || output->view_src != div || output->view_offs) { return false; }
++    for (int i = 0; i < 6; ++i) {
++        if (probs == node[i] || ids == node[i]) { return false; }
++        for (int s = (i == 0 || i == 4 ? 2 : 1); s < GGML_MAX_SRC; ++s) {
++            if (node[i]->src[s]) { return false; }
++        }
++    }
++    uint64_t probs_bytes, ids_bytes, output_bytes, ignored;
++    if (!router_tail_span(probs, GGML_TYPE_F32, true, probs_bytes) ||
++        !router_tail_span(ids, GGML_TYPE_I32, false, ids_bytes) ||
++        probs->ne[0] != 1 || probs->ne[3] != 1 || ids->ne[2] != 1 || ids->ne[3] != 1 ||
++        ids->ne[0] > probs->ne[1] || ids->ne[1] != probs->ne[2]) { return false; }
++    const int64_t experts = probs->ne[1], used = ids->ne[0], tokens = ids->ne[1];
++    if (!router_tail_shape(gather, 1, used, tokens, 1) || !router_tail_shape(flattened, used, tokens, 1, 1) ||
++        !router_tail_shape(sum, 1, tokens, 1, 1) || !router_tail_shape(clamp, 1, tokens, 1, 1) ||
++        !router_tail_shape(div, used, tokens, 1, 1) || !router_tail_shape(output, 1, used, tokens, 1)) { return false; }
++    for (auto * tensor : node) {
++        if (!router_tail_span(tensor, GGML_TYPE_F32, true, ignored)) { return false; }
++    }
++    if (!router_tail_span(output, GGML_TYPE_F32, true, output_bytes) || ids->nb[1] / 4 > UINT32_MAX) { return false; }
++    const float low = ggml_get_op_params_f32(clamp, 0), high = ggml_get_op_params_f32(clamp, 1);
++    if (!(low <= high)) { return false; }
++    const int indices[] = { index, index + 1, index + 2, index + 3, index + 4, index + 5 };
++    const ggml_op ops[] = { GGML_OP_GET_ROWS, GGML_OP_RESHAPE, GGML_OP_SUM_ROWS, GGML_OP_CLAMP, GGML_OP_DIV, GGML_OP_RESHAPE };
++    const int outputs[] = { index + 5 };
++    // Includes COMPUTE, OUTPUT, outside users and intermediate parent-view checks.
++    // Full raw adjacency also preserves scheduler callback/subgraph boundaries.
++    if (!ggml_can_fuse_subgraph_ext(graph, indices, 6, ops, outputs, 1)) { return false; }
++    plan = { probs, ids, gather, flattened, sum, clamp, div, output, probs_bytes, ids_bytes, output_bytes,
++             uint32_t(experts), uint32_t(used), uint32_t(tokens), uint32_t(ids->nb[1] / 4) };
++    return true;
++}
++
++inline bool router_tail_disjoint(uint64_t a, uint64_t an, uint64_t b, uint64_t bn) {
++    return an && bn && (a <= b ? an <= b - a : bn <= a - b);
++}
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl
+@@ -0,0 +1,55 @@
++@group(0) @binding(0)
++var<storage, read_write> probs: array<f32>;
++@group(0) @binding(1)
++var<storage, read_write> ids: array<i32>;
++@group(0) @binding(2)
++var<storage, read_write> dst: array<f32>;
++
++struct Params {
++    offset_probs: u32,
++    offset_ids: u32,
++    offset_dst: u32,
++    stride_probs: u32,
++    stride_ids: u32,
++    stride_dst: u32,
++    used: u32,
++    tokens: u32,
++    clamp_min: f32,
++    clamp_max: f32,
++};
++@group(0) @binding(3)
++var<uniform> params: Params;
++var<workgroup> shared_sum: array<f32, WG_SIZE>;
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) wid: vec3<u32>,
++        @builtin(local_invocation_id) lid: vec3<u32>) {
++    // The admitted dispatch is exactly (tokens,1,1), matching the baseline sum.
++    let token = wid.x;
++    if (token >= params.tokens) { return; }
++    var selected: f32 = 0.0;
++    if (lid.x < params.used) {
++        let expert = u32(ids[params.offset_ids + token * params.stride_ids + lid.x]);
++        selected = probs[params.offset_probs + token * params.stride_probs + expert];
++    }
++    var local_sum: f32 = 0.0;
++    for (var col = lid.x; col < params.used; col += WG_SIZE) {
++        local_sum += selected;
++    }
++    shared_sum[lid.x] = local_sum;
++    workgroupBarrier();
++    // reduce within workgroup
++    var offset: u32 = WG_SIZE >> 1;
++    while (offset > 0) {
++        if (lid.x < offset) {
++            shared_sum[lid.x] = shared_sum[lid.x] + shared_sum[lid.x + offset];
++        }
++        workgroupBarrier();
++        offset >>= 1;
++    }
++
++    if (lid.x < params.used) {
++        let denominator = clamp(shared_sum[0], f32(params.clamp_min), f32(params.clamp_max));
++        dst[params.offset_dst + token * params.stride_dst + lid.x] = selected / denominator;
++    }
++}
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl
+@@ -0,0 +1,55 @@
++@group(0) @binding(0)
++var<storage, read_write> probs: array<f32>;
++@group(0) @binding(1)
++var<storage, read_write> ids: array<i32>;
++
++struct Params {
++    offset_probs: u32,
++    offset_ids: u32,
++    offset_dst: u32,
++    stride_probs: u32,
++    stride_ids: u32,
++    stride_dst: u32,
++    used: u32,
++    tokens: u32,
++    clamp_min: f32,
++    clamp_max: f32,
++};
++@group(0) @binding(2)
++var<uniform> params: Params;
++var<workgroup> shared_sum: array<f32, WG_SIZE>;
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) wid: vec3<u32>,
++        @builtin(local_invocation_id) lid: vec3<u32>) {
++    // The admitted dispatch is exactly (tokens,1,1), matching the baseline sum.
++    let token = wid.x;
++    if (token >= params.tokens) { return; }
++    var selected: f32 = 0.0;
++    if (lid.x < params.used) {
++        let expert = u32(ids[params.offset_ids + token * params.stride_ids + lid.x]);
++        selected = probs[params.offset_probs + token * params.stride_probs + expert];
++    }
++    // Every selected source load precedes any overlapping output store.
++    storageBarrier();
++    var local_sum: f32 = 0.0;
++    for (var col = lid.x; col < params.used; col += WG_SIZE) {
++        local_sum += selected;
++    }
++    shared_sum[lid.x] = local_sum;
++    workgroupBarrier();
++    // reduce within workgroup
++    var offset: u32 = WG_SIZE >> 1;
++    while (offset > 0) {
++        if (lid.x < offset) {
++            shared_sum[lid.x] = shared_sum[lid.x] + shared_sum[lid.x + offset];
++        }
++        workgroupBarrier();
++        offset >>= 1;
++    }
++
++    if (lid.x < params.used) {
++        let denominator = clamp(shared_sum[0], f32(params.clamp_min), f32(params.clamp_max));
++        probs[params.offset_dst + token * params.stride_dst + lid.x] = selected / denominator;
++    }
++}

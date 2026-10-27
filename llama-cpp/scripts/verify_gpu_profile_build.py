@@ -19,3 +19,13 @@ def verify(database: Path, *, webgpu: bool, enabled: bool) -> None:
         if definitions != expected:
             # #ifdef treats even a definition with value 0 as enabled.
             raise ValueError(f'GPU profiling compile definition mismatch: expected {expected}, got {definitions}')
+
+    for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp'):
+        diagnostic = [entry for entry in entries if Path(entry['file']).name == name]
+        if len(diagnostic) != (1 if enabled else 0):
+            raise ValueError('Unexpected Q8 diagnostic translation units: ' + name)
+        for entry in diagnostic:
+            arguments = entry.get('arguments') or shlex.split(entry['command'])
+            definitions = [arg for arg in arguments if arg.startswith('-DLCB_WEBGPU_Q8_DIAGNOSTIC')]
+            if definitions != ['-DLCB_WEBGPU_Q8_DIAGNOSTIC=1']:
+                raise ValueError('Q8 diagnostic compile definition mismatch: ' + name)

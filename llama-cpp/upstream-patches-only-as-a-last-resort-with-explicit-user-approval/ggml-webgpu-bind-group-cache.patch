@@ -1,0 +1,182 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -195,6 +195,123 @@
+     std::pair<uint32_t, uint32_t>     workgroups = { 1, 1 };
+ };
+ 
++// Retain exact bind groups by dispatch position across repeated graph encodes.
++// This bounds entry count, not the size of resources retained by WebGPU objects.
++struct webgpu_bind_group_cache {
++    static constexpr size_t max_slots = 8192;
++    static constexpr size_t max_buffer_entries = 16;
++
++    struct binding {
++        uint32_t binding_index;
++        wgpu::Buffer buffer;
++        uint64_t offset;
++        uint64_t size;
++    };
++    struct slot {
++        wgpu::ComputePipeline pipeline;
++        uint32_t group_index = 0;
++        std::vector<binding> bindings;
++        wgpu::BindGroup group;
++    };
++
++    std::vector<slot> slots;
++    size_t cursor = 0;
++    uint64_t generation = 0;
++
++    void check_generation(uint64_t current_generation) {
++        if (generation != current_generation) {
++            slots.clear();
++            generation = current_generation;
++        }
++    }
++
++    void begin_graph(uint64_t current_generation) {
++        check_generation(current_generation);
++        cursor = 0;
++    }
++
++    void end_graph() {
++        if (cursor < slots.size()) {
++            slots.resize(cursor);
++        }
++    }
++
++    static wgpu::BindGroup create(wgpu::Device & device,
++                                   const wgpu::ComputePipeline & pipeline,
++                                   uint32_t group_index,
++                                   const std::vector<wgpu::BindGroupEntry> & entries,
++                                   const char * label) {
++        wgpu::BindGroupDescriptor descriptor;
++        descriptor.layout = pipeline.GetBindGroupLayout(group_index);
++        descriptor.entryCount = entries.size();
++        descriptor.entries = entries.data();
++        descriptor.label = label;
++        return device.CreateBindGroup(&descriptor);
++    }
++
++    wgpu::BindGroup get(wgpu::Device & device,
++                         const wgpu::ComputePipeline & pipeline,
++                         uint32_t group_index,
++                         const std::vector<wgpu::BindGroupEntry> & entries,
++                         const char * label,
++                         uint64_t current_generation) {
++        check_generation(current_generation);
++        const size_t position = cursor;
++        if (cursor < max_slots) {
++            ++cursor;
++        }
++
++        bool cacheable = position < max_slots && entries.size() <= max_buffer_entries && pipeline;
++        for (const auto & entry : entries) {
++            if (entry.nextInChain || !entry.buffer || entry.sampler || entry.textureView) {
++                cacheable = false;
++                break;
++            }
++        }
++        if (!cacheable) {
++            if (position < slots.size()) {
++                slots[position] = {};
++            }
++            return create(device, pipeline, group_index, entries, label);
++        }
++
++        if (position < slots.size()) {
++            const slot & cached = slots[position];
++            bool matches = cached.group && cached.pipeline.Get() == pipeline.Get() &&
++                           cached.group_index == group_index && cached.bindings.size() == entries.size();
++            for (size_t i = 0; matches && i < entries.size(); ++i) {
++                const auto & key = cached.bindings[i];
++                const auto & entry = entries[i];
++                matches = key.binding_index == entry.binding && key.buffer.Get() == entry.buffer.Get() &&
++                          key.offset == entry.offset && key.size == entry.size;
++            }
++            if (matches) {
++                return cached.group;
++            }
++        }
++
++        slot replacement;
++        replacement.pipeline = pipeline;
++        replacement.group_index = group_index;
++        replacement.bindings.reserve(entries.size());
++        for (const auto & entry : entries) {
++            replacement.bindings.push_back({ entry.binding, entry.buffer, entry.offset, entry.size });
++        }
++        replacement.group = create(device, pipeline, group_index, entries, label);
++        if (!replacement.group) {
++            if (position < slots.size()) {
++                slots[position] = {};
++            }
++            return replacement.group;
++        }
++        if (position >= slots.size()) {
++            slots.resize(position + 1);
++        }
++        slots[position] = std::move(replacement);
++        return slots[position].group;
++    }
++};
++
+ struct webgpu_capabilities {
+     wgpu::Limits limits;
+     bool         supports_subgroups       = false;
+@@ -219,6 +336,7 @@
+     wgpu::Queue    queue;
+     uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
+     uint32_t       max_inflight_batches      = UINT32_MAX;
++    std::atomic<uint64_t> buffer_generation{0};
+ 
+     webgpu_capabilities  capabilities;
+     // Shared buffer to move data from device to host
+@@ -276,6 +394,7 @@
+     std::unique_ptr<ggml_webgpu_shader_lib> shader_lib;
+ 
+     webgpu_param_arena       param_arena;
++    webgpu_bind_group_cache  bind_group_cache;
+     wgpu::Buffer             set_rows_dev_error_buf;
+     wgpu::Buffer             set_rows_host_error_buf;
+     wgpu::CommandEncoder     active_command_encoder;
+@@ -624,12 +743,9 @@
+         entries.push_back(ggml_webgpu_make_bind_group_entry(params_binding_num, ctx->param_arena.buffer, param_offset,
+                                                             ctx->param_arena.slot_size));
+ 
+-        wgpu::BindGroupDescriptor bind_group_desc;
+-        bind_group_desc.layout     = dispatch.pipeline.pipeline.GetBindGroupLayout(0);
+-        bind_group_desc.entryCount = entries.size();
+-        bind_group_desc.entries    = entries.data();
+-        bind_group_desc.label      = dispatch.pipeline.name.c_str();
+-        bind_groups.push_back(ctx->global_ctx->device.CreateBindGroup(&bind_group_desc));
++        bind_groups.push_back(ctx->bind_group_cache.get(ctx->global_ctx->device, dispatch.pipeline.pipeline, 0,
++                                                        entries, dispatch.pipeline.name.c_str(),
++                                                        ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed)));
+         param_offsets.push_back(param_offset);
+     }
+ 
+@@ -3682,6 +3798,7 @@
+     webgpu_context                ctx         = backend_ctx->webgpu_ctx;
+ 
+     WEBGPU_CPU_PROFILE_TOTAL_START(graph_compute);
++    ctx->bind_group_cache.begin_graph(ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed));
+ 
+     std::vector<webgpu_encoded_op> commands;
+ 
+@@ -3772,6 +3889,7 @@
+         ggml_backend_webgpu_check_set_rows(ctx, num_inflight_batches);
+     }
+ 
++    ctx->bind_group_cache.end_graph();
+     WEBGPU_CPU_PROFILE_TOTAL_END(graph_compute, ctx->global_ctx);
+     return GGML_STATUS_SUCCESS;
+ }
+@@ -3915,6 +4033,7 @@
+ static void ggml_backend_webgpu_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     ggml_backend_webgpu_buffer_context * ctx = static_cast<ggml_backend_webgpu_buffer_context *>(buffer->context);
+     if (ctx != nullptr && ctx->buffer != nullptr) {
++        ctx->global_ctx->buffer_generation.fetch_add(1, std::memory_order_relaxed);
+         ctx->buffer.Destroy();
+         delete ctx;
+     }

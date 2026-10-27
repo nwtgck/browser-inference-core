@@ -129,6 +129,36 @@ if(EMSCRIPTEN AND LCB_ASYNCIFY)
     set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "${LCB_WEBGPU_LINK_OPTIONS}")
 endif()
 
+# Keep the common generated ABI byte-identical across every profile. The optional
+# extension has its own schema, layout queries and link-only export lists.
+set(LCB_LINK_EXPORTS "${LCB_GENERATED}/exports.json")
+set(LCB_LINK_JSPI_EXPORTS "${LCB_GENERATED}/jspi-exports.json")
+if(GGML_WEBGPU_GPU_PROFILE)
+    if(EMSCRIPTEN AND NOT LCB_JSPI)
+        message(FATAL_ERROR "The Q8 diagnostic bridge requires JSPI in WebAssembly builds")
+    endif()
+    if(NOT LCB_WEBGPU)
+        message(FATAL_ERROR "Q8 diagnostics require the WebGPU GPU-profile build")
+    endif()
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_webgpu_q8_diagnostic.py"
+        --source "${LCB_LLAMA_SOURCE}" --contract-header "${CMAKE_CURRENT_SOURCE_DIR}/bridge/webgpu-q8-diagnostic.h"
+        --base-exports "${LCB_GENERATED}/exports.json" --base-jspi "${LCB_GENERATED}/jspi-exports.json"
+        --output "${LCB_GENERATED}" --clang "${LCB_CLANG}" COMMAND_ERROR_IS_FATAL ANY)
+    set(LCB_LINK_EXPORTS "${LCB_GENERATED}/q8-diagnostic-exports.json")
+    set(LCB_LINK_JSPI_EXPORTS "${LCB_GENERATED}/q8-diagnostic-jspi-exports.json")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime")
+    foreach(LCB_Q8_FILE q8-diagnostic-v1.schema.json q8-diagnostic-v1.functions.d.ts)
+        configure_file("${LCB_GENERATED}/${LCB_Q8_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/runtime/${LCB_Q8_FILE}" COPYONLY)
+    endforeach()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/bridge/webgpu-q8-diagnostic.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_webgpu_q8_diagnostic.py")
+else()
+    # A cache switched back to normal must not package stale diagnostic assets.
+    file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/runtime/q8-diagnostic-v1.schema.json"
+                "${CMAKE_CURRENT_BINARY_DIR}/runtime/q8-diagnostic-v1.functions.d.ts")
+endif()
+
 if(LCB_NATIVE_CHECK)
     add_library(core SHARED "${LCB_GENERATED}/bindings.cpp")
     if(UNIX AND NOT APPLE)
@@ -144,7 +174,7 @@ else()
         "-sMAXIMUM_MEMORY=${LCB_MAXIMUM_MEMORY}" -sINITIAL_HEAP=33554432
         -sSTACK_SIZE=2097152 -sWASM_BIGINT=1 -sALLOW_TABLE_GROWTH=1
         -sFORCE_FILESYSTEM=1 "-sASSERTIONS=${LCB_ASSERTIONS}" -sEXIT_RUNTIME=0
-        "-sEXPORTED_FUNCTIONS=@${LCB_GENERATED}/exports.json"
+        "-sEXPORTED_FUNCTIONS=@${LCB_LINK_EXPORTS}"
         "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','FS','WORKERFS','addFunction','removeFunction','UTF8ToString','stringToUTF8','lengthBytesUTF8','ccall','cwrap']"
         "-sINCOMING_MODULE_JS_API=['locateFile','wasmBinary','wasmMemory','instantiateWasm','print','printErr','onAbort','preRun','postRun','noInitialRun','mainScriptUrlOrBlob']"
         -lworkerfs.js)
@@ -158,7 +188,7 @@ else()
         set_property(TARGET core APPEND PROPERTY LINK_DEPENDS "${LCB_HOST_NAVIGATOR_PRE_JS}")
     endif()
     if(LCB_JSPI)
-        target_link_options(core PRIVATE -sJSPI=1 "-sJSPI_EXPORTS=@${LCB_GENERATED}/jspi-exports.json")
+        target_link_options(core PRIVATE -sJSPI=1 "-sJSPI_EXPORTS=@${LCB_LINK_JSPI_EXPORTS}")
     elseif(LCB_ASYNCIFY)
         # Keep indirect-call instrumentation: backend dispatch can suspend through
         # function pointers. Leave async import discovery to the linked port/runtime.
@@ -171,4 +201,10 @@ target_link_libraries(core PRIVATE llama-common mtmd llama)
 
 if(LCB_FILE_BACKED_PLE)
     target_compile_definitions(core PRIVATE LCB_FILE_BACKED_PLE)
+endif()
+
+if(LCB_WEBGPU AND GGML_WEBGPU_GPU_PROFILE)
+    target_sources(core PRIVATE bridge/webgpu-q8-diagnostic.cpp "${LCB_GENERATED}/q8-diagnostic-metadata.cpp")
+    target_compile_definitions(core PRIVATE LCB_WEBGPU_Q8_DIAGNOSTIC=1)
+    target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bridge")
 endif()

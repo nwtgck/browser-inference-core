@@ -1,0 +1,9 @@
+# SSM convolution and SiLU fusion checks
+
+Run `python3 -m unittest discover -s tests -p test_webgpu_ssm_conv_silu.py -v` from the runtime directory. All checks are native CPU checks. No browser or GPU is started.
+
+The tests prepare the actual checked overlay, extract its unchanged runtime binding helpers, convolution encoder, fusion encoder, pipeline key/hash and factory, and compile them against minimal device API records. Admission uses the real shared graph fusion helper. A native `ggml-base` library exercises actual graph construction, use counts, graph slices and allocator reuse of convolution storage for the final unary result. `LCB_TEST_GGML_BASE_LIBRARY` can provide an existing native static library; otherwise only that library target is built with two jobs.
+
+Cases cover scalar and four-element convolution kernels; single and multiple tokens; channels around workgroup boundaries; multiple sequences; padded source/weight views and offsets; intermediate outputs, extra uses and observer views; callback-style truncated graph slices; same allocation for convolution and final output; physical and binding-only overlap; foreign buffers and devices; storage usage, physical/logical sizes, u32/span and device/grid bounds. Failed admission must leave the encoded operation count, factory and encoder untouched. The actual factory emits eight variants in both cache orders, and each fused shader must equal the corresponding canonical shader plus the final SiLU expression. Full prepared translation units are syntax checked with and without optional CPU/GPU profiling against pinned Dawn headers.
+
+The module, upstream contracts, patch, stage outputs and embedded shader are pinned. These tests verify source composition and native control flow; they do not establish WebGPU shader execution, model quality or target-device speed.

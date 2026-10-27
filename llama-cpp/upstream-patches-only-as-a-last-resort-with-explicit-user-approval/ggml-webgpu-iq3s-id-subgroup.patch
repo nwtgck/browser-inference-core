@@ -1,0 +1,297 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -7,7 +7,8 @@
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
++#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -88,6 +89,12 @@
+     ggml_tensor * dst_fuse;
+ 
+     uint32_t    max_wg_size;
++    uint32_t    max_workgroups_per_dim = 0;
++    uint64_t    max_storage_binding_bytes = 0;
++    // Actual aligned bindings, ordered as weights, input, IDs, output.
++    uint64_t    indexed_prefix_bytes[4] = {};
++    uint64_t    indexed_binding_bytes[4] = {};
++    uint64_t    indexed_buffer_remaining[4] = {};
+     size_t      wg_mem_limit_bytes       = 0;
+     bool        supports_subgroups       = false;
+     bool        supports_subgroup_matrix = false;
+@@ -229,6 +236,79 @@
+         output_elements *= static_cast<uint64_t>(x->ne[axis]);
+     }
+     return sg;
++}
++
++// IQ3_S needs sixteen logical lanes per 256-weight block. Fixed subgroup
++// widths below sixteen would make the unchanged accumulator's stride zero.
++inline uint32_t ggml_webgpu_iq3s_id_subgroup_size(const ggml_webgpu_shader_lib_context & context) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * ids = context.src2;
++    const auto * dst = context.dst;
++    const uint32_t sg = context.min_subgroup_size;
++    if (!a || !x || !ids || !dst || a->type != GGML_TYPE_IQ3_S ||
++        x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
++        !context.supports_subgroups || context.max_wg_size < 128 ||
++        sg != context.max_subgroup_size || (sg != 16 && sg != 32 && sg != 64) ||
++        context.max_workgroups_per_dim == 0 || context.max_storage_binding_bytes == 0 ||
++        a->ne[0] < 2048 || a->ne[0] > 4096 || a->ne[0] % 256 != 0 ||
++        a->ne[1] < 256 || a->ne[1] > UINT32_MAX - 31u ||
++        a->ne[2] <= 0 || a->ne[2] > UINT32_MAX || dst->ne[1] <= 0 || dst->ne[1] > a->ne[2] ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || ids->ne[0] != dst->ne[1] ||
++        (x->ne[1] != 1 && x->ne[1] != dst->ne[1]) ||
++        x->ne[2] != 1 || dst->ne[2] != 1 || ids->ne[1] != 1 || ids->ne[2] != 1 ||
++        a->ne[3] != 1 || x->ne[3] != 1 || dst->ne[3] != 1 || ids->ne[3] != 1) {
++        return 0;
++    }
++    const uint64_t k = static_cast<uint64_t>(a->ne[0]);
++    const uint64_t m = static_cast<uint64_t>(a->ne[1]);
++    const uint64_t experts = static_cast<uint64_t>(a->ne[2]);
++    const uint64_t slots = static_cast<uint64_t>(dst->ne[1]);
++    // Reserve u32 byte-index headroom for the inherited neighboring-word calculation; the final
++    // unused aligned hi word may still lie beyond the binding, as in the upstream loader.
++    constexpr uint64_t address_limit = UINT32_MAX - 8u;
++    if (a->nb[0] != 110 || x->nb[0] != 4 || ids->nb[0] != 4 || dst->nb[0] != 4 ||
++        a->nb[1] % 110 != 0 || a->nb[2] % 110 != 0 ||
++        a->nb[1] / 110 > UINT32_MAX || a->nb[2] / 110 > UINT32_MAX ||
++        x->nb[1] % 4 != 0 || x->nb[2] % 4 != 0 ||
++        x->nb[1] / 4 > UINT32_MAX || x->nb[2] / 4 > UINT32_MAX ||
++        a->nb[1] < (k / 256) * 110 || x->nb[1] < k * 4 || dst->nb[1] != m * 4 ||
++        slots > address_limit / (m * 4)) {
++        return 0;
++    }
++    uint64_t spans[4] = {(k / 256) * 110, k * 4, slots * 4, m * slots * 4};
++    const auto add_extent = [](uint64_t & span, uint64_t count, uint64_t stride) {
++        if (stride == 0 || span > address_limit || count > (address_limit - span) / stride) {
++            return false;
++        }
++        span += count * stride;
++        return true;
++    };
++    if (!add_extent(spans[0], m - 1, a->nb[1]) || a->nb[2] < spans[0] ||
++        !add_extent(spans[0], experts - 1, a->nb[2]) ||
++        !add_extent(spans[1], static_cast<uint64_t>(x->ne[1]) - 1, x->nb[1])) {
++        return 0;
++    }
++    const uint64_t block_bytes[4] = {110, 4, 4, 4};
++    for (unsigned i = 0; i < 4; ++i) {
++        const uint64_t prefix = context.indexed_prefix_bytes[i];
++        const uint64_t binding = context.indexed_binding_bytes[i];
++        if (prefix % block_bytes[i] != 0 || spans[i] > address_limit || prefix > address_limit - spans[i] ||
++            prefix + spans[i] > binding || binding > context.max_storage_binding_bytes ||
++            binding > context.indexed_buffer_remaining[i]) {
++            return 0;
++        }
++    }
++    const uint64_t rows = 4 * (128 / sg);
++    const uint64_t output_groups = (m + rows - 1) / rows;
++    const uint64_t total = output_groups * slots;
++    const uint64_t maximum = context.max_workgroups_per_dim;
++    if (total > UINT32_MAX - (maximum - 1)) {
++        return 0;
++    }
++    const uint64_t y = (total + maximum - 1) / maximum;
++    const uint64_t width = (total + y - 1) / y;
++    return y <= maximum && width <= maximum ? sg : 0;
+ }
+ 
+ struct webgpu_pipeline {
+@@ -1217,11 +1297,12 @@
+     uint32_t  n_experts;
+     uint32_t  num_cols;
+     uint32_t  workgroup_size;
++    uint32_t  subgroup_size;
+     int       vectorized;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+-               num_cols == other.num_cols && workgroup_size == other.workgroup_size && vectorized == other.vectorized;
++               num_cols == other.num_cols && workgroup_size == other.workgroup_size && subgroup_size == other.subgroup_size && vectorized == other.vectorized;
+     }
+ };
+ 
+@@ -1233,6 +1314,7 @@
+         ggml_webgpu_hash_combine(seed, key.n_experts);
+         ggml_webgpu_hash_combine(seed, key.num_cols);
+         ggml_webgpu_hash_combine(seed, key.workgroup_size);
++        ggml_webgpu_hash_combine(seed, key.subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         return seed;
+     }
+@@ -2715,7 +2797,8 @@
+                              1 :
+                              0;
+ 
+-        key.workgroup_size = context.src0->type == GGML_TYPE_Q4_K ?
++        key.subgroup_size = ggml_webgpu_iq3s_id_subgroup_size(context);
++        key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
+                                  ggml_webgpu_q4_short_workgroup(context, true, false, false) :
+                                  ggml_webgpu_expert_short_workgroup(context);
+ 
+@@ -2816,12 +2899,19 @@
+         // variant suffix for src1 type
+         variant += std::string("_") + (context.src1->type == GGML_TYPE_F32 ? "f32" : "f16");
+ 
+-        defines.push_back(std::string("WG_SIZE=") + std::to_string(wg_size));
++        defines.push_back(std::string("WG_SIZE=") + std::to_string(key.subgroup_size ? key.subgroup_size : wg_size));
+         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
+         defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+-        variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
+-        if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
+-            variant += "_wg" + std::to_string(wg_size);
++        if (key.subgroup_size) {
++            shader_src = wgsl_iq3s_id_subgroup;
++            defines.push_back("HARDWARE_WG_SIZE=128");
++            variant += "_independent_sg" + std::to_string(key.subgroup_size) + "_wg128";
++            outputs_per_wg *= wg_size / key.subgroup_size;
++        } else {
++            variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
++            if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
++                variant += "_wg" + std::to_string(wg_size);
++            }
+         }
+         if (key.vectorized) {
+             variant += "_vectorized";
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -1926,7 +1926,6 @@
+     shader_lib_ctx.min_subgroup_size = ctx->global_ctx->capabilities.min_subgroup_size;
+     shader_lib_ctx.max_subgroup_size = ctx->global_ctx->capabilities.max_subgroup_size;
+ 
+-    webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx);
+ 
+     std::vector<uint32_t> params = {
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type)),
+@@ -1954,6 +1953,24 @@
+         ggml_webgpu_make_bind_group_entry(3, ggml_webgpu_tensor_buf(dst), ggml_webgpu_tensor_align_offset(ctx, dst),
+                                           ggml_webgpu_tensor_binding_size(ctx, dst)),
+     };
++
++    if (src0->type == GGML_TYPE_IQ3_S && src1->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32 &&
++        src2->type == GGML_TYPE_I32 && src0->ne[0] >= 2048 && src0->ne[0] <= 4096 && src0->ne[0] % 256 == 0 &&
++        src0->ne[1] >= 256 && dst->ne[2] == 1 && shader_lib_ctx.supports_subgroups && shader_lib_ctx.max_wg_size >= 128 &&
++        shader_lib_ctx.min_subgroup_size == shader_lib_ctx.max_subgroup_size &&
++        (shader_lib_ctx.min_subgroup_size == 16 || shader_lib_ctx.min_subgroup_size == 32 || shader_lib_ctx.min_subgroup_size == 64)) {
++        shader_lib_ctx.max_workgroups_per_dim = ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension;
++        shader_lib_ctx.max_storage_binding_bytes = ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize;
++        const ggml_tensor * tensors[4] = {src0, src1, src2, dst};
++        for (unsigned i = 0; i < 4; ++i) {
++            const auto & entry = entries[i];
++            const uint64_t physical = entry.buffer.GetSize();
++            shader_lib_ctx.indexed_prefix_bytes[i] = ggml_webgpu_tensor_misalignment(ctx, tensors[i]);
++            shader_lib_ctx.indexed_binding_bytes[i] = entry.size;
++            shader_lib_ctx.indexed_buffer_remaining[i] = entry.offset <= physical ? physical - entry.offset : 0;
++        }
++    }
++    webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx);
+ 
+     uint32_t wg_x = 1;
+     uint32_t wg_y = 1;
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
+@@ -0,0 +1,99 @@
++#ifdef USE_SUBGROUP_REDUCTION
++enable subgroups;
++#endif
++enable f16;
++
++#define DECLARE_BYTE_LOADERS_SRC0
++#include "common_decls.tmpl"
++
++#include "mul_mat_vec_acc.tmpl"
++
++struct MulMatIdVecParams {
++    offset_src0: u32,
++    offset_src1: u32,
++    offset_ids: u32,
++    offset_dst: u32,
++
++    k: u32,
++    m: u32,
++    n_expert: u32,
++    n_expert_used: u32,
++    b_ne1: u32,
++
++    stride_01: u32,
++    stride_11: u32,
++    stride_02: u32,
++    stride_12: u32,
++};
++
++@group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>; // [cols, rows, n_expert]
++@group(0) @binding(1) var<storage, read_write> src1: array<SRC1_TYPE>; // [cols, b_ne1, n_tokens(1)]
++@group(0) @binding(2) var<storage, read_write> ids: array<u32>;        // [n_experd_used, n_tokens(1)]
++@group(0) @binding(3) var<storage, read_write> dst: array<f32>;   // [rows, n_expert_used, n_tokens(1)]
++
++// "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
++@group(0) @binding(4) var<uniform> params: MulMatIdVecParams;
++
++@compute @workgroup_size(HARDWARE_WG_SIZE)
++fn main(
++    @builtin(local_invocation_id) local_id: vec3<u32>,
++    @builtin(workgroup_id) wg_id: vec3<u32>,
++    @builtin(num_workgroups) num_wg: vec3<u32>
++#ifdef USE_SUBGROUP_REDUCTION
++  , @builtin(subgroup_id) subgroup_id: u32,
++    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32,
++    @builtin(num_subgroups) num_subgroups: u32,
++    @builtin(subgroup_size) subgroup_size: u32
++#endif
++) {
++
++    let thread_id = local_id.x;
++
++    let rows_per_wg: u32 = (HARDWARE_WG_SIZE / WG_SIZE) * OUTPUTS_PER_WG;
++    let output_groups: u32 = (params.m + rows_per_wg - 1u) / rows_per_wg;
++    let wg_linear = wg_id.y * num_wg.x + wg_id.x;
++
++    if (wg_linear >= output_groups * params.n_expert_used) {
++        return;
++    }
++
++    let slot       = wg_linear / output_groups;
++    let own_expert = ids[params.offset_ids + slot];
++    let row_base   = (wg_linear % output_groups) * rows_per_wg + subgroup_id * OUTPUTS_PER_WG;
++
++    let src0_batch_offset = params.offset_src0 + own_expert * params.stride_02;
++    let src1_idx_base     = params.offset_src1 + (slot % params.b_ne1) * params.stride_11;
++    let dst_idx_base      = params.offset_dst + slot * params.m + row_base;
++
++    let expected_subgroups: u32 = HARDWARE_WG_SIZE / WG_SIZE;
++    let owns_rows = subgroup_id < expected_subgroups;
++    var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
++    if (num_subgroups == expected_subgroups) {
++        // All workgroup invocations fit exactly in full subgroups. Preserve
++        // the original accumulator call and floating-point operation order.
++        acc = accumulate_vec_dot(subgroup_invocation_id, row_base, src0_batch_offset, src1_idx_base);
++    } else {
++        // subgroup_size is a maximum: legal partial subgroups may have fewer
++        // active invocations. Compute-stage lane IDs are dense from zero.
++        let active_count = subgroupAdd(1u);
++        if (owns_rows) {
++            for (var virtual_tid = subgroup_invocation_id; virtual_tid < WG_SIZE; virtual_tid += active_count) {
++                let partial = accumulate_vec_dot(virtual_tid, row_base, src0_batch_offset, src1_idx_base);
++                for (var col = 0u; col < NUM_COLS; col++) {
++                    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                        acc[col][row] += partial[col][row];
++                    }
++                }
++            }
++        }
++    }
++    // Extra partial subgroups still reach every collective in uniform flow;
++    // only the expected subgroups access source rows or write output rows.
++
++    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++        let total = subgroupAdd(acc[0][row]);
++        if (owns_rows && subgroup_invocation_id == 0u && row_base + row < params.m) {
++            dst[dst_idx_base + row] = total;
++        }
++    }
++}

@@ -1,0 +1,261 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -6,6 +6,7 @@
+ #include "ggml-webgpu.h"
+ #include "ggml-webgpu-hc.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
++#include "ggml-webgpu-scale-unary.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-impl.h"
+@@ -3465,6 +3466,85 @@
+     uint32_t total_wg = total_sum ? 1 : ggml_nrows(dst);
+     compute_2d_workgroups(total_wg, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, wg_x, wg_y);
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
++}
++
++static void * ggml_backend_webgpu_buffer_get_base(ggml_backend_buffer_t buffer);
++
++struct webgpu_scale_unary_binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0;
++    uint64_t size = 0;
++    uint32_t element_offset = 0;
++};
++
++static bool ggml_webgpu_scale_unary_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                                            webgpu_scale_unary_binding & binding) {
++    ggml_backend_buffer_t buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base || !tensor->data) { return false; }
++    auto * buffer_ctx = (ggml_backend_webgpu_buffer_context *) buffer->context;
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer ||
++        (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) { return false; }
++    const uint64_t alignment = ctx->global_ctx->capabilities.limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1))) { return false; }
++    const uint64_t offset = ggml_webgpu_tensor_offset(tensor);
++    const uint64_t bytes = ggml_nbytes(tensor);
++    if (offset % 4 || offset > buffer->size || bytes > buffer->size - offset ||
++        offset > buffer_ctx->buffer.GetSize() || bytes > buffer_ctx->buffer.GetSize() - offset) { return false; }
++    const uint64_t aligned_offset = offset & ~(alignment - 1);
++    const uint64_t prefix = offset - aligned_offset;
++    const uint64_t binding_size = prefix + bytes;
++    if (binding_size > ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize ||
++        binding_size / 4 > UINT32_MAX) { return false; }
++    binding = { buffer_ctx->buffer, aligned_offset, binding_size, uint32_t(prefix / 4) };
++    return true;
++}
++
++// Leave the ordinary path untouched until every graph, lifetime and binding guard succeeds.
++static std::optional<webgpu_encoded_op> ggml_webgpu_scale_unary(webgpu_context & ctx,
++                                                               ggml_cgraph * graph, int index,
++                                                               int & num_encoded_ops) {
++    for (int operations : { 3, 2 }) {
++        scale_unary_plan plan;
++        if (!plan_scale_unary(graph, index, operations, plan)) { continue; }
++        const auto & limits = ctx->global_ctx->capabilities.limits;
++        uint32_t x, y;
++        if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
++            limits.maxUniformBuffersPerShaderStage < 1 ||
++            !scale_unary_grid(plan.elements, limits.maxComputeWorkgroupsPerDimension, x, y)) { continue; }
++        webgpu_scale_unary_binding source, destination;
++        if (!ggml_webgpu_scale_unary_binding(ctx, plan.source, source) ||
++            !ggml_webgpu_scale_unary_binding(ctx, plan.output, destination)) { continue; }
++        const uint64_t source_offset = ggml_webgpu_tensor_offset(plan.source);
++        const uint64_t destination_offset = ggml_webgpu_tensor_offset(plan.output);
++        const uint64_t bytes = ggml_nbytes(plan.source);
++        const bool same_buffer = source.buffer.Get() == destination.buffer.Get();
++        const bool inplace = same_buffer && source_offset == destination_offset;
++        if (same_buffer && !inplace &&
++            (!scale_unary_disjoint(source_offset, bytes, destination_offset, bytes) ||
++             !scale_unary_disjoint(source.offset, source.size, destination.offset, destination.size))) { continue; }
++        const uint32_t storage_bindings = inplace ? 1 : 2;
++        if (limits.maxStorageBuffersPerShaderStage < storage_bindings ||
++            limits.maxBindingsPerBindGroup < storage_bindings + 1) { continue; }
++        const bool sigmoid = ggml_get_unary_op(plan.unary) == GGML_UNARY_OP_SIGMOID;
++        auto pipeline = ctx->shader_lib->get_scale_unary_pipeline(sigmoid, operations == 3, inplace);
++        std::vector<uint32_t> params = {
++            plan.elements, source.element_offset, destination.element_offset, 0,
++            ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.first_scale, 0)),
++            ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.first_scale, 1)),
++            ggml_webgpu_u32_from_f32(plan.final_scale ? ggml_get_op_params_f32(plan.final_scale, 0) : 1.0f),
++            ggml_webgpu_u32_from_f32(plan.final_scale ? ggml_get_op_params_f32(plan.final_scale, 1) : 0.0f),
++        };
++        std::vector<wgpu::BindGroupEntry> entries = {
++            ggml_webgpu_make_bind_group_entry(0, source.buffer, source.offset, source.size),
++        };
++        if (!inplace) {
++            entries.push_back(ggml_webgpu_make_bind_group_entry(1, destination.buffer, destination.offset, destination.size));
++        }
++        auto encoded = ggml_backend_webgpu_build(ctx, pipeline, std::move(params), std::move(entries), x, y);
++        num_encoded_ops = operations;
++        return encoded;
++    }
++    return std::nullopt;
+ }
+ 
+ static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
+@@ -3676,6 +3756,7 @@
+         case GGML_OP_GLU:
+             return ggml_webgpu_glu(ctx, src0, src1, node);
+         case GGML_OP_SCALE:
++            if (auto fused = ggml_webgpu_scale_unary(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_scale(ctx, src0, node);
+         case GGML_OP_SOFT_MAX:
+             return ggml_webgpu_soft_max(ctx, src0, src1, src2, node);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -5,6 +5,7 @@
+ #include "ggml-wgsl-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
++#include "ggml-webgpu-scale-unary-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -1336,6 +1337,7 @@
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is fixed, no variants yet
+@@ -2013,6 +2015,21 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
++        const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
++        auto it = scale_unary_pipelines.find(key);
++        if (it != scale_unary_pipelines.end()) { return it->second; }
++        std::vector<std::string> defines;
++        std::string label = sigmoid ? "scale_sigmoid" : "scale_silu";
++        if (sigmoid) { defines.push_back("SIGMOID"); }
++        if (final_scale) { defines.push_back("FINAL_SCALE"); label += "_scale"; }
++        if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
++        const auto code = preprocessor.preprocess(wgsl_scale_unary, defines);
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
++        scale_unary_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
+     webgpu_pipeline get_moe_sum_pipeline(uint32_t experts) {
+         auto it = moe_sum_pipelines.find(experts);
+         if (it != moe_sum_pipelines.end()) { return it->second; }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+@@ -0,0 +1,62 @@
++#pragma once
++#include "ggml-impl.h"
++#include <cstdint>
++
++struct scale_unary_plan {
++    ggml_tensor * source = nullptr;
++    ggml_tensor * output = nullptr;
++    ggml_tensor * first_scale = nullptr;
++    ggml_tensor * unary = nullptr;
++    ggml_tensor * final_scale = nullptr;
++    uint32_t elements = 0;
++    int operations = 0;
++};
++
++inline bool scale_unary_dense(const ggml_tensor * tensor) {
++    if (!tensor || tensor->type != GGML_TYPE_F32 || tensor->view_src) { return false; }
++    uint64_t bytes = 4;
++    for (int i = 0; i < GGML_MAX_DIMS; ++i) {
++        if (tensor->ne[i] <= 0 || uint64_t(tensor->ne[i]) > UINT32_MAX || tensor->nb[i] != bytes ||
++            bytes > uint64_t(UINT32_MAX) * 4 / uint64_t(tensor->ne[i])) { return false; }
++        bytes *= uint64_t(tensor->ne[i]);
++    }
++    return true;
++}
++
++inline bool plan_scale_unary(const ggml_cgraph * graph, int index, int operations, scale_unary_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || (operations != 2 && operations != 3) ||
++        operations > graph->n_nodes - index) { return false; }
++    const ggml_op ops[] = { GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE };
++    if (!ggml_can_fuse(graph, index, ops, operations)) { return false; }
++    ggml_tensor * first = graph->nodes[index];
++    ggml_tensor * unary = graph->nodes[index + 1];
++    ggml_tensor * source = first->src[0];
++    if (!scale_unary_dense(source) || !ggml_are_same_shape(source, first) ||
++        (ggml_get_unary_op(unary) != GGML_UNARY_OP_SILU && ggml_get_unary_op(unary) != GGML_UNARY_OP_SIGMOID)) {
++        return false;
++    }
++    for (int i = 0; i < operations; ++i) {
++        ggml_tensor * node = graph->nodes[index + i];
++        if (!scale_unary_dense(node) || node->src[0] != (i ? graph->nodes[index + i - 1] : source)) { return false; }
++        for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
++    }
++    plan = { source, graph->nodes[index + operations - 1], first, unary,
++             operations == 3 ? graph->nodes[index + 2] : nullptr,
++             uint32_t(ggml_nelements(source)), operations };
++    return true;
++}
++
++inline bool scale_unary_disjoint(uint64_t offset_a, uint64_t size_a, uint64_t offset_b, uint64_t size_b) {
++    return size_a && size_b && (offset_a <= offset_b ? size_a <= offset_b - offset_a : size_b <= offset_a - offset_b);
++}
++
++inline bool scale_unary_grid(uint64_t elements, uint32_t limit, uint32_t & x, uint32_t & y) {
++    x = y = 0;
++    if (!elements || !limit || elements > UINT32_MAX) { return false; }
++    const uint64_t groups = (elements + 127) / 128;
++    const uint64_t gy = (groups + limit - 1) / limit;
++    const uint64_t gx = (groups + gy - 1) / gy;
++    if (gx > limit || gy > limit || gx * gy > UINT32_MAX / 128u) { return false; }
++    x = uint32_t(gx); y = uint32_t(gy); return true;
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
+@@ -0,0 +1,45 @@
++@group(0) @binding(0)
++var<storage, read_write> src: array<f32>;
++#ifdef INPLACE
++#define PARAMS_BINDING 1
++#else
++@group(0) @binding(1)
++var<storage, read_write> dst: array<f32>;
++#define PARAMS_BINDING 2
++#endif
++
++struct Params {
++    ne: u32,
++    offset_src: u32,
++    offset_dst: u32,
++    padding: u32,
++    scale: f32,
++    bias: f32,
++    final_scale: f32,
++    final_bias: f32,
++};
++@group(0) @binding(PARAMS_BINDING)
++var<uniform> params: Params;
++
++@compute @workgroup_size(128)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let i = gid.x + num_wg.x * 128u * gid.y;
++    if (i >= params.ne) { return; }
++    let scaled = src[params.offset_src + i] * params.scale + params.bias;
++#ifdef SIGMOID
++    let activated = 1.0 / (1.0 + exp(-scaled));
++#else
++    let activated = scaled / (1.0 + exp(-scaled));
++#endif
++#ifdef FINAL_SCALE
++    let result = activated * params.final_scale + params.final_bias;
++#else
++    let result = activated;
++#endif
++#ifdef INPLACE
++    src[params.offset_src + i] = result;
++#else
++    dst[params.offset_dst + i] = result;
++#endif
++}

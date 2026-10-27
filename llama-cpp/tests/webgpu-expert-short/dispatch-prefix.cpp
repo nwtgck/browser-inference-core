@@ -1,8 +1,8 @@
 // Only the device boundary and tensor-address helpers are recorded. The entire
 // source-bound expert dispatcher and its pipeline factory are executed below.
 #define CEIL_DIV(x,y) (((x)+(y)-1)/(y))
-namespace wgpu { struct BindGroupEntry {uint32_t binding;uintptr_t buffer;size_t offset,size;}; }
-struct RecordedLimits {uint32_t maxComputeInvocationsPerWorkgroup=256,maxComputeWorkgroupsPerDimension=65535;};
+namespace wgpu { struct Buffer {uintptr_t id; Buffer(uintptr_t value):id(value){} uint64_t GetSize() const{return UINT32_MAX;}}; struct BindGroupEntry {uint32_t binding;Buffer buffer;size_t offset,size;}; }
+struct RecordedLimits {uint32_t maxComputeInvocationsPerWorkgroup=256,maxComputeWorkgroupsPerDimension=65535;uint64_t maxStorageBufferBindingSize=UINT32_MAX;};
 struct RecordedCapabilities {bool supports_subgroups=true;uint32_t min_subgroup_size=32,max_subgroup_size=32;RecordedLimits limits;};
 struct RecordedGlobal {RecordedCapabilities capabilities;};
 struct RecordedContext {std::shared_ptr<RecordedGlobal> global_ctx=std::make_shared<RecordedGlobal>();std::shared_ptr<RecordingLibrary> shader_lib=std::make_shared<RecordingLibrary>();};
