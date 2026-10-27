@@ -66,7 +66,9 @@ int main(int argc, char ** argv) {
             a.ne[0]=b.ne[0]=k; a.ne[1]=dst.ne[0]=m; b.ne[1]=dst.ne[1]=n;
             return lib.get_mul_mat_vec_pipeline(c,overlap);
         };
-        const auto p64=get(320),p128=get(640),p256=get(2560),p32=get(256);
+        // K=1056 stays on the generic WG256 path after the separate long-K
+        // fixed-subgroup specialization is enabled.
+        const auto p64=get(320),p128=get(640),p256=get(1056),p32=get(256);
         for (const auto & p : {p32,p64,p128,p256}) {
             const auto decision=static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(p.context.get());
             require(p.wgsl.find("@workgroup_size("+std::to_string(decision->wg_size)+")")!=std::string::npos,"compiled size differs from decision");

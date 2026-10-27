@@ -31,9 +31,11 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-ordered-readback.patch',
             'ggml-webgpu-bind-group-cache.patch',
+            'ggml-webgpu-scale-unary.patch', 'ggml-webgpu-q8-subgroup-matvec.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'ggml-webgpu-moe-expert-sum.patch', 'ggml-webgpu-hc-pre-post.patch',
             'ggml-webgpu-q8-short-workgroup.patch', 'ggml-webgpu-expert-short-workgroup.patch', 'ggml-webgpu-q4-short-workgroup.patch',
             'llama-model-loader-webgpu-chunked-upload.patch',
+            'llama-sampler-single-sync.patch',
             'ggml-webgpu-ssm-conv-single-token.patch', 'qwen4exp-file-backed-rows.patch',
             'qwen4exp-all-pools-selection.patch'})
         for patch in directory.glob('*.patch'):

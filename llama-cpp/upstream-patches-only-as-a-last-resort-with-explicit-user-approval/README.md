@@ -182,6 +182,15 @@ commit with different bytes or invent a future artifact identity.
 - **Validation and limits:** source-extracted CPU queue and lifetime fixtures cover key equality, position, generation, bounds, fallback and parameter uploads, and the complete composed source is syntax-checked against pinned headers. These checks do not establish browser correctness, actual model hit rate, VRAM savings or target-device speedup.
 - **Removal:** upstream supplies equivalent reuse or the owner drops this optimization; remove patch, preparation, build wiring, tests and provenance entry together.
 
+## Single synchronization for WebGPU sampler reads
+
+- **Patch:** `llama-sampler-single-sync.patch`.
+- **Scope:** in `llama_sampler_sample`, synchronize the context once before reading its internal sampled outputs and counts. If sampled logits are absent, use the existing ordinary logits fallback after that synchronization. Public getters keep their original behavior. CPU profiles retain the upstream sampler.
+- **Integration:** for every WebGPU profile, prepare a checked build-tree sampler translation unit and replace its source on the existing llama target. Input, patch and output hashes and the upstream context, sampler and backend contracts are pinned. The sampler remains independent of the model, loader and mtmd overlays; upstream source is unchanged.
+- **Evidence and limits:** the baseline tiny-model Wasm observation found five queue-completion calls during one sampling operation with no intervening enqueue. Source-extracted CPU tests exercise 107 output, sampler and scheduler cases, including public getters and the logits fallback; the full prepared source is syntax-checked with upstream headers. These checks do not establish target-browser correctness, model quality or throughput improvement.
+- **No-patch alternative:** retain the upstream public getter synchronization behavior or wait for an equivalent upstream implementation.
+- **Removal:** upstream provides equivalent synchronization or the owner drops the optimization; remove patch, preparation, target replacement, tests and provenance entry together.
+
 ## Bounded synchronous WebGPU model upload
 
 - **Patch:** `llama-model-loader-webgpu-chunked-upload.patch`.
@@ -342,6 +351,24 @@ not establish target-device speed.
 - **No-patch alternative:** retain the upstream fixed workgroup or wait for upstream shape-dependent selection.
 - **Validation and limits:** source-bound factory and dispatcher tests exercise selection, cache keys and fallback. The opt-in standalone GPU fixture compares actual generated shaders with the upstream path and an independent CPU reference. These checks do not establish browser model quality or target-device performance.
 - **Removal:** upstream supplies equivalent selection or the owner drops the optimization; remove its patch, preparation, build wiring, tests and provenance entry together.
+
+## Fused WebGPU scale and unary operations
+
+- **Patch:** `ggml-webgpu-scale-unary.patch`.
+- **Scope:** fuse eligible contiguous F32 scale followed by SILU or sigmoid, with an optional final scale, into one dispatch. Admission checks graph usage, supported layout and binding ranges; unsupported or unsafe combinations retain upstream dispatches. The fusion preserves the operation order and does not change model construction.
+- **Integration:** compose after existing WebGPU host overlays in every WebGPU profile, generating an isolated shader header and host helper. Reviewed graph, allocator, backend and upstream shader contracts, patch and stage output identities are pinned. CPU profiles and upstream source are unchanged.
+- **Validation and limits:** source-bound graph, allocator, dispatch and shader factory tests cover accepted and rejected graphs and fallback. Software GPU checks do not establish model quality or target-device speedup.
+- **No-patch alternative:** use the existing separate dispatches or wait for upstream fusion.
+- **Removal:** equivalent upstream fusion or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
+
+## Fixed-subgroup Q8_0 matvec
+
+- **Patch:** `ggml-webgpu-q8-subgroup-matvec.patch`.
+- **Scope:** for guarded long-K Q8_0 x F32 single-column matvecs with a fixed reported subgroup size, assign output rows to independent subgroups in one workgroup. Preserve the pinned upstream Q8 decoder and accumulator; unsupported shapes, device limits and varying subgroup ranges use the existing path. No model-specific selection is added.
+- **Integration:** compose after scale/unary fusion in the shared WebGPU header, emitting an isolated shader header using the pinned upstream include expander. Patch, both intermediate inputs and final outputs, and upstream shader/host contracts are pinned. CPU profiles and upstream source are unchanged.
+- **Validation and limits:** source-bound selector, cache key and dispatcher tests and 27 software WebGPU cases with subgroup widths 4, 8 and 16 passed. Observed normalized error reached approximately 1e-7 and RMSE increased relative to the baseline in the checked cases. Arithmetic and reduction order differ; bitwise equality, production model quality and target-device speedup are not established.
+- **No-patch alternative:** retain the existing matvec path or wait for equivalent upstream support.
+- **Removal:** equivalent upstream implementation or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 

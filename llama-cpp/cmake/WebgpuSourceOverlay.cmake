@@ -29,8 +29,8 @@ target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 # already implements direct selected-slot MoE dispatch; no direct-slot shader replacement remains.
 # Keep sibling headers available after relocating the translation unit.
 target_include_directories(ggml-webgpu PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
-# Replace only the model loader on the existing llama target. Other core sources
-# and independent mtmd overlays retain their original target ownership.
+# Replace the model loader and sampler on the existing llama target. Independent
+# model and mtmd overlays retain their original target ownership.
 get_target_property(LCB_LOADER_SOURCES llama SOURCES)
 set(LCB_LOADER_MATCHES 0)
 foreach(LCB_LOADER_SOURCE IN LISTS LCB_LOADER_SOURCES)
@@ -46,7 +46,36 @@ list(APPEND LCB_LOADER_SOURCES "${LCB_SOURCE_OVERLAY}/llama-model-loader.cpp")
 set_property(TARGET llama PROPERTY SOURCES "${LCB_LOADER_SOURCES}")
 set_source_files_properties("${LCB_SOURCE_OVERLAY}/llama-model-loader.cpp"
     TARGET_DIRECTORY llama PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+get_target_property(LCB_SAMPLER_SOURCES llama SOURCES)
+set(LCB_SAMPLER_MATCHES 0)
+set(LCB_SAMPLER_REPLACED "")
+foreach(LCB_SAMPLER_SOURCE IN LISTS LCB_SAMPLER_SOURCES)
+    if(LCB_SAMPLER_SOURCE STREQUAL "llama-sampler.cpp")
+        math(EXPR LCB_SAMPLER_MATCHES "${LCB_SAMPLER_MATCHES} + 1")
+        list(APPEND LCB_SAMPLER_REPLACED "${LCB_SOURCE_OVERLAY}/llama-sampler.cpp")
+    else()
+        list(APPEND LCB_SAMPLER_REPLACED "${LCB_SAMPLER_SOURCE}")
+    endif()
+endforeach()
+if(NOT LCB_SAMPLER_MATCHES EQUAL 1)
+    message(FATAL_ERROR "Upstream sampler source layout changed; review source overlay")
+endif()
+set_property(TARGET llama PROPERTY SOURCES "${LCB_SAMPLER_REPLACED}")
+set_source_files_properties("${LCB_SOURCE_OVERLAY}/llama-sampler.cpp"
+    TARGET_DIRECTORY llama PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 target_include_directories(llama PRIVATE "${LCB_LLAMA_SOURCE}/src")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_sampler_single_sync.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/llama-sampler-single-sync.patch"
+    "${LCB_LLAMA_SOURCE}/src/llama-sampler.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-sampler.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-vocab.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-model.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-vocab.cpp"
+    "${LCB_LLAMA_SOURCE}/include/llama.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/binary.wgsl"
@@ -94,6 +123,27 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_bind_group_cache.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-bind-group-cache.patch")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_scale_unary.py"
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_subgroup.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-scale-unary.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-subgroup-matvec.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/ggml-webgpu.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/pre_wgsl.hpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/scale.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-impl.h")
 
 # Short Q4 uses the upstream generated shaders with a checked host selector.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

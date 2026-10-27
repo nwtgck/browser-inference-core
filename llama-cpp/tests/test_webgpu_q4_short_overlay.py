@@ -26,11 +26,12 @@ def build_host(upstream, prepared, output):
     text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
     original = (upstream / q4.HEADER_PATH).read_text()
     here = ROOT / 'tests/webgpu-q4-short'
-    chunks = [(here / 'host-prefix.cpp').read_text(),
+    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-q8-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';']
     for name in ('q8', 'expert', 'q4'):
         chunks.append(function(text, 'inline uint32_t ggml_webgpu_' + name + '_short_workgroup('))
+    chunks.append(function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('))
     chunks += [text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')],
                function(text, 'inline bool ggml_webgpu_can_use_mmvq(')]
@@ -64,6 +65,7 @@ def build_host(upstream, prepared, output):
     exe = output / 'host'
     subprocess.run(['g++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror',
                     '-I' + str(upstream / 'ggml/include'), '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
+                    '-I' + str(prepared),
                     '-I' + str(output), str(code), '-o', str(exe)], check=True)
     return exe
 
@@ -80,7 +82,7 @@ class Q4ShortOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             prepare(self.upstream, out)
-            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), q4.OUTPUT_SHA256)
+            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             stamp = (out / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             prepare(self.upstream, out)
@@ -103,7 +105,7 @@ class Q4ShortOverlay(unittest.TestCase):
         self.assertIn('scripts/prepare_webgpu_q4_short.py', text)
         for path in q4.CONTRACT_INPUTS:
             self.assertIn('${LCB_LLAMA_SOURCE}/' + path, text)
-        self.assertEqual(source.SSM_HEADER_OUTPUT_SHA256, q4.OUTPUT_SHA256)
+        self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu-shader-lib.hpp'], q4.OUTPUT_SHA256)
         with tempfile.TemporaryDirectory() as tmp:
             prepare(self.upstream, Path(tmp))
             prepared = (Path(tmp) / 'ggml-webgpu-shader-lib.hpp').read_text()

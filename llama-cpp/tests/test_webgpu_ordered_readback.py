@@ -62,7 +62,7 @@ class OrderedReadback(unittest.TestCase):
         self.assertEqual(IDENTITY['patch_sha256'], ordered_readback.PATCH_SHA256)
         self.assertEqual(IDENTITY['dawn_header_sha256'], source.tensor_copy.DAWN_HEADERS)
         self.assertEqual(source.bind_group_cache.INPUT_SHA256, ordered_readback.OUTPUT_SHA256)
-        self.assertEqual(source.OUTPUT_SHA256, source.bind_group_cache.OUTPUT_SHA256)
+        self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu.cpp'], source.bind_group_cache.OUTPUT_SHA256)
 
     @unittest.skipUnless(shutil.which('c++'), 'C++ compiler required')
     def test_actual_order_call_counts_ranges_errors_and_destination_lifetime(self):

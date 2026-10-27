@@ -56,7 +56,8 @@ class BindGroupCache(unittest.TestCase):
         before = (self.upstream / source.SOURCE_PATH).read_bytes()
         with tempfile.TemporaryDirectory(prefix='bind-group-cache-') as temporary:
             result = self.prepare(Path(temporary))
-            self.assertEqual(tensor_copy.digest(result), cache.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(result), source.OUTPUT_SHA256)
+            self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu.cpp'], cache.OUTPUT_SHA256)
             actual = result.read_text()
             graph = function(actual, 'ggml_backend_webgpu_graph_compute')
             self.assertEqual(graph.count('bind_group_cache.begin_graph('), 1)
@@ -72,7 +73,10 @@ class BindGroupCache(unittest.TestCase):
             root = Path(temporary)
             # Construct and verify the actual preceding composition stage, while
             # retaining the final production identity guard in normal operation.
-            with patch.object(cache, 'prepare'), patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256):
+            with patch.object(cache, 'prepare'), patch.object(source.scale_unary, 'prepare', return_value={}), \
+                    patch.object(source.q8_subgroup, 'prepare', return_value={}), \
+                    patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256), \
+                    patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.q4_short.OUTPUT_SHA256):
                 baseline = source.prepare(self.upstream, root / 'base')
             self.assertEqual(tensor_copy.digest(baseline), cache.INPUT_SHA256)
             upstream = root / 'upstream'

@@ -25,10 +25,12 @@ def build_host(upstream, prepared, output):
     here = ROOT / 'tests/webgpu-q8-short'
     chunks = [
         (here / 'host-prefix.cpp').read_text(),
+        '#include "ggml-webgpu-q8-subgroup-shaders.hpp"',
         function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
         function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',
         function(text, 'inline uint32_t ggml_webgpu_q8_short_workgroup('),
         function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
+        function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('),
         text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):
              text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
         function(text, 'inline bool ggml_webgpu_can_use_mmvq('),
@@ -54,6 +56,7 @@ def build_host(upstream, prepared, output):
     subprocess.run(['g++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror',
                     '-I' + str(upstream / 'ggml/include'),
                     '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
+                    '-I' + str(prepared),
                     '-I' + str(output), str(code), '-o', str(exe)], check=True)
     return exe
 
