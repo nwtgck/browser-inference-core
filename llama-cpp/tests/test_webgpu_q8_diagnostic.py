@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,35 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
 import prepare_webgpu_q8_diagnostic as diagnostic
 import generate_webgpu_q8_diagnostic as extension
+
+
+def normalized_base_generation(outputs, upstream):
+    schema_text = outputs['schema.json']
+    schema = json.loads(schema_text)
+    fingerprint = hashlib.sha256(schema_text.encode()).hexdigest()
+    module = 'export default ' + json.dumps({**schema, 'schemaSha256': fingerprint}, separators=(',', ':')) + ';\n'
+    if outputs['schema.mjs'] != module:
+        raise AssertionError('Base module does not match the raw schema and fingerprint')
+    marker = 'uint64_t lcb_schema_hash(void) { return (uint64_t)(uintptr_t)"' + fingerprint + '"; }'
+    if outputs['bindings.cpp'].count(marker) != 1:
+        raise AssertionError('Base bindings do not embed the raw schema fingerprint exactly once')
+    for record in schema['records']:
+        if record['name'] != 'ggml_opt_optimizer_params':
+            continue
+        for field in record['fields']:
+            if field['name'] not in ('adamw', 'sgd'):
+                continue
+            location = re.fullmatch(r'struct \(unnamed(?: struct)? at ' + re.escape(str(upstream)) +
+                                    r'/(ggml/include/ggml-opt\.h:[0-9]+:[0-9]+)\)', field['cType'])
+            if location:
+                field['cType'] = 'struct (unnamed at <upstream>/' + location[1] + ')'
+    canonical = json.dumps(schema, indent=2) + '\n'
+    canonical_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+    result = dict(outputs)
+    result['schema.json'] = canonical
+    result['schema.mjs'] = 'export default ' + json.dumps({**schema, 'schemaSha256': canonical_fingerprint}, separators=(',', ':')) + ';\n'
+    result['bindings.cpp'] = outputs['bindings.cpp'].replace(marker, marker.replace(fingerprint, canonical_fingerprint), 1)
+    return result
 
 
 def function(text, marker):
@@ -212,10 +242,58 @@ class Q8Diagnostic(unittest.TestCase):
         generate_bindings.generate(self.upstream, directory, 'clang')
         baseline = ROOT / 'tests/webgpu-q8-diagnostic/inputs.json'
         identity = json.loads(baseline.read_text())
-        for name, expected in identity['base_generated_sha256'].items():
-            self.assertEqual(hashlib.sha256((directory / name).read_bytes()).hexdigest(), expected)
+        outputs = {name: (directory / name).read_text() for name in identity['base_generated_normalized_sha256']}
+        normalized = normalized_base_generation(outputs, self.upstream)
+        for name, expected in identity['base_generated_normalized_sha256'].items():
+            self.assertEqual(hashlib.sha256(normalized[name].encode()).hexdigest(), expected, name)
         schema = json.loads((directory / 'schema.json').read_text())
         self.assertFalse(any('diagnostic' in entry['name'] for entry in schema['functions']))
+
+    def test_base_generation_normalizes_only_known_anonymous_locations(self):
+        import generate_bindings
+        directory = self.directory / 'base-portability'
+        generate_bindings.generate(self.upstream, directory, 'clang')
+        names = json.loads((HERE / 'inputs.json').read_text())['base_generated_normalized_sha256']
+        outputs = {name: (directory / name).read_text() for name in names}
+        expected = normalized_base_generation(outputs, self.upstream)
+        raw_fingerprint = hashlib.sha256(outputs['schema.json'].encode()).hexdigest()
+
+        def with_schema(schema):
+            text = json.dumps(schema, indent=2) + '\n'
+            fingerprint = hashlib.sha256(text.encode()).hexdigest()
+            return {**outputs, 'schema.json': text,
+                    'schema.mjs': 'export default ' + json.dumps({**schema, 'schemaSha256': fingerprint}, separators=(',', ':')) + ';\n',
+                    'bindings.cpp': outputs['bindings.cpp'].replace('"' + raw_fingerprint + '"', '"' + fingerprint + '"')}
+
+        for root in (Path('/fixture/checkout-one/upstream'), Path('/other/checkout-two/upstream')):
+            for spelling in ('unnamed struct', 'unnamed'):
+                schema = json.loads(outputs['schema.json'])
+                fields = next(record['fields'] for record in schema['records'] if record['name'] == 'ggml_opt_optimizer_params')
+                for field in fields:
+                    field['cType'] = re.sub(r'struct \(unnamed(?: struct)? at ' + re.escape(str(self.upstream)),
+                                           'struct (' + spelling + ' at ' + str(root), field['cType'])
+                relocated = with_schema(schema)
+                with self.subTest(root=root, spelling=spelling):
+                    self.assertNotEqual(relocated['schema.json'], outputs['schema.json'])
+                    self.assertEqual(normalized_base_generation(relocated, root), expected)
+
+        for change in ('field-type', 'record-name', 'source-line', 'exports'):
+            schema = json.loads(outputs['schema.json'])
+            record = next(record for record in schema['records'] if record['name'] == 'ggml_opt_optimizer_params')
+            if change == 'field-type': record['fields'][0]['cType'] = 'float'
+            if change == 'record-name': record['name'] = 'ggml_unexpected_record'
+            if change == 'source-line': record['fields'][0]['cType'] = record['fields'][0]['cType'].replace(':86:9)', ':87:9)')
+            mutated = with_schema(schema)
+            if change == 'exports': mutated['exports.json'] = json.dumps(json.loads(mutated['exports.json']) + ['_lcb_unapproved_export'], indent=2) + '\n'
+            with self.subTest(change=change):
+                self.assertNotEqual(normalized_base_generation(mutated, self.upstream), expected)
+
+        for name in ('schema.json', 'schema.mjs', 'bindings.cpp'):
+            corrupted = dict(outputs)
+            corrupted[name] = (outputs[name] + '\n' if name == 'schema.json' else
+                               outputs[name].replace(raw_fingerprint, '0' * 64))
+            with self.subTest(corrupted=name), self.assertRaisesRegex(AssertionError, 'raw schema'):
+                normalized_base_generation(corrupted, self.upstream)
 
     def test_full_prepared_normal_and_profile_cpp_and_bridge_syntax(self):
         dawn = Path(os.environ.get('LCB_TEST_DAWN_PACKAGE', ROOT.parent / '.tools/emdawnwebgpu_pkg'))

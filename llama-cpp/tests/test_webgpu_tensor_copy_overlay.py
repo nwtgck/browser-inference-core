@@ -100,6 +100,9 @@ class TensorCopyBuildCommand(unittest.TestCase):
                     module.write_bytes(b'function findWasmBinary(){if(Module["locateFile"]){return locateFile("core.wasm")}return new URL("core.wasm",import.meta.url).href}')
                     macro = ' -DGGML_WEBGPU_GPU_PROFILE=1' if config.get('gpuProfile') else ''
                     commands = [{'file': 'ggml-webgpu.cpp', 'command': 'c++ -c ggml-webgpu.cpp' + macro}] if config['webgpu'] else []
+                    if config.get('gpuProfile'):
+                        commands += [{'file': name, 'command': 'c++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c ' + name}
+                                     for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     argv = ['build.py', '--profile', profile, '--variant', variant]
                     with self.subTest(profile=profile, variant=variant), patch.object(builder, 'ROOT', root), \

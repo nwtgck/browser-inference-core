@@ -34,6 +34,8 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'ggml-webgpu-scale-unary.patch', 'ggml-webgpu-q8-subgroup-matvec.patch',
             'ggml-webgpu-rms-scale.patch', 'ggml-webgpu-async-tensor-copy.patch',
             'ggml-webgpu-host-input-snapshot.patch',
+            'ggml-webgpu-ssm-conv-silu.patch', 'ggml-webgpu-moe-group-skip.patch',
+            'ggml-webgpu-q8-diagnostic.patch',
             'ggml-webgpu-iq3s-id-subgroup.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'ggml-webgpu-moe-expert-sum.patch', 'ggml-webgpu-hc-pre-post.patch',
             'ggml-webgpu-q8-short-workgroup.patch', 'ggml-webgpu-expert-short-workgroup.patch', 'ggml-webgpu-q4-short-workgroup.patch',

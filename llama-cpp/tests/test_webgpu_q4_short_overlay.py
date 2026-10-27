@@ -114,7 +114,10 @@ class Q4ShortOverlay(unittest.TestCase):
         def matrix_factory(body):
             start = body.index('    webgpu_pipeline get_mul_mat_id_pipeline(')
             return body[start:body.index('    webgpu_pipeline get_mul_mat_id_vec_pipeline(', start)]
-        self.assertEqual(matrix_factory(prepared), matrix_factory(original))
+        # The later matrix-only group overlay changes this shader selection.
+        self.assertEqual(matrix_factory(prepared), matrix_factory(original).replace(
+            'preprocessor.preprocess(wgsl_mul_mat_id, defines)',
+            'preprocessor.preprocess(wgsl_mul_mat_id_group, defines)'))
 
     def test_runner_rejects_invalid_commands_and_overlapping_work(self):
         runner = ROOT / 'tests/webgpu-q4-short/check_gpu.py'

@@ -62,6 +62,10 @@ class ProfileConfiguration(unittest.TestCase):
                     commands = ([{'file': '/build/generated/ggml-webgpu.cpp',
                                   'command': 'em++ -c /build/generated/ggml-webgpu.cpp' + macro}]
                                 if profiles[profile]['webgpu'] else [])
+                    if profiles[profile].get('gpuProfile'):
+                        commands += [{'file': '/build/generated/' + name,
+                                      'command': 'em++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c /build/generated/' + name}
+                                     for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     with self.subTest(profile=profile, variant=variant), \
                          patch.object(build, 'ROOT', root), \
