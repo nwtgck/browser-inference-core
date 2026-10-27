@@ -1209,6 +1209,10 @@ interface WasmModule {
   _ggml_pool_2d(_0: BigInt, _1: BigInt, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number): Promise<BigInt>;
   _lcb_ggml_pool_2d_back(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number): Promise<BigInt>;
   _ggml_pool_2d_back(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number): Promise<BigInt>;
+  _lcb_ggml_prec_get_acc(_0: BigInt): Promise<number>;
+  _ggml_prec_get_acc(_0: BigInt): Promise<number>;
+  _lcb_ggml_prec_get_src(_0: BigInt, _1: number): Promise<number>;
+  _ggml_prec_get_src(_0: BigInt, _1: number): Promise<number>;
   _lcb_ggml_prec_set_acc(_0: BigInt, _1: number): Promise<number>;
   _ggml_prec_set_acc(_0: BigInt, _1: number): Promise<number>;
   _lcb_ggml_prec_set_src(_0: BigInt, _1: number, _2: number): Promise<number>;
@@ -1449,6 +1453,8 @@ interface WasmModule {
   _ggml_timestep_embedding(_0: BigInt, _1: BigInt, _2: number, _3: number): Promise<BigInt>;
   _lcb_ggml_top_k(_0: BigInt, _1: BigInt, _2: number): Promise<BigInt>;
   _ggml_top_k(_0: BigInt, _1: BigInt, _2: number): Promise<BigInt>;
+  _lcb_ggml_top_k_mask(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<BigInt>;
+  _ggml_top_k_mask(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<BigInt>;
   _lcb_ggml_transpose(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _ggml_transpose(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_ggml_tri(_0: BigInt, _1: BigInt, _2: number): Promise<BigInt>;
@@ -2053,6 +2059,26 @@ interface WasmModule {
   _llama_vocab_sep(_0: BigInt): Promise<number>;
   _lcb_llama_vocab_type(_0: BigInt): Promise<number>;
   _llama_vocab_type(_0: BigInt): Promise<number>;
+  _lcb_mtmd_audio_stream_flush(_0: BigInt, _1: number): Promise<number>;
+  _mtmd_audio_stream_flush(_0: BigInt, _1: number): Promise<number>;
+  _lcb_mtmd_audio_stream_free(_0: BigInt): Promise<void>;
+  _mtmd_audio_stream_free(_0: BigInt): Promise<void>;
+  _lcb_mtmd_audio_stream_get_n_rows(_0: BigInt): Promise<BigInt>;
+  _mtmd_audio_stream_get_n_rows(_0: BigInt): Promise<BigInt>;
+  _lcb_mtmd_audio_stream_get_n_rows_flushed(_0: BigInt): Promise<BigInt>;
+  _mtmd_audio_stream_get_n_rows_flushed(_0: BigInt): Promise<BigInt>;
+  _lcb_mtmd_audio_stream_get_output_embd(_0: BigInt): Promise<BigInt>;
+  _mtmd_audio_stream_get_output_embd(_0: BigInt): Promise<BigInt>;
+  _lcb_mtmd_audio_stream_init(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _mtmd_audio_stream_init(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _lcb_mtmd_audio_stream_is_seq_start(_0: BigInt): Promise<number>;
+  _mtmd_audio_stream_is_seq_start(_0: BigInt): Promise<number>;
+  _lcb_mtmd_audio_stream_params_default(_0: BigInt): Promise<void>;
+  _mtmd_audio_stream_params_default(_0: BigInt): Promise<void>;
+  _lcb_mtmd_audio_stream_push(_0: BigInt, _1: BigInt, _2: BigInt): Promise<number>;
+  _mtmd_audio_stream_push(_0: BigInt, _1: BigInt, _2: BigInt): Promise<number>;
+  _lcb_mtmd_audio_stream_step(_0: BigInt, _1: number): Promise<number>;
+  _mtmd_audio_stream_step(_0: BigInt, _1: number): Promise<number>;
   _lcb_mtmd_batch_add_chunk(_0: BigInt, _1: BigInt): Promise<number>;
   _mtmd_batch_add_chunk(_0: BigInt, _1: BigInt): Promise<number>;
   _lcb_mtmd_batch_encode(_0: BigInt): Promise<number>;
@@ -2101,10 +2127,18 @@ interface WasmModule {
   _mtmd_free(_0: BigInt): Promise<void>;
   _lcb_mtmd_gen_audio_get_info(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_gen_audio_get_info(_0: BigInt, _1: BigInt): Promise<void>;
-  _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt): Promise<number>;
-  _mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt): Promise<number>;
+  _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
+  _mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
   _lcb_mtmd_gen_inp_default(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_gen_inp_default(_0: BigInt, _1: BigInt): Promise<void>;
+  _lcb_mtmd_gen_state_free(_0: BigInt): Promise<void>;
+  _mtmd_gen_state_free(_0: BigInt): Promise<void>;
+  _lcb_mtmd_gen_state_init(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _mtmd_gen_state_init(_0: BigInt, _1: number): Promise<BigInt>;
+  _lcb_mtmd_gen_state_params_default(_0: BigInt): Promise<void>;
+  _mtmd_gen_state_params_default(): Promise<number>;
+  _lcb_mtmd_gen_state_reset(_0: BigInt): Promise<void>;
+  _mtmd_gen_state_reset(_0: BigInt): Promise<void>;
   _lcb_mtmd_get_audio_sample_rate(_0: BigInt): Promise<number>;
   _mtmd_get_audio_sample_rate(_0: BigInt): Promise<number>;
   _lcb_mtmd_get_cap_from_file(_0: BigInt, _1: BigInt): Promise<void>;
@@ -2113,6 +2147,8 @@ interface WasmModule {
   _mtmd_get_marker(_0: BigInt): Promise<BigInt>;
   _lcb_mtmd_get_output_embd(_0: BigInt): Promise<BigInt>;
   _mtmd_get_output_embd(_0: BigInt): Promise<BigInt>;
+  _lcb_mtmd_helper_audio_stream_get_logit_bias(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): Promise<number>;
+  _mtmd_helper_audio_stream_get_logit_bias(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): Promise<number>;
   _lcb_mtmd_helper_bitmap_init_from_buf(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: number, _5: BigInt): Promise<void>;
   _mtmd_helper_bitmap_init_from_buf(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: number, _5: BigInt): Promise<void>;
   _lcb_mtmd_helper_bitmap_init_from_file(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: BigInt): Promise<void>;
@@ -2123,12 +2159,20 @@ interface WasmModule {
   _mtmd_helper_eval_chunk_single(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: number, _5: number, _6: number, _7: BigInt): Promise<number>;
   _lcb_mtmd_helper_eval_chunks(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: number, _5: number, _6: number, _7: BigInt): Promise<number>;
   _mtmd_helper_eval_chunks(_0: BigInt, _1: BigInt, _2: BigInt, _3: number, _4: number, _5: number, _6: number, _7: BigInt): Promise<number>;
+  _lcb_mtmd_helper_gen_audio_flush(_0: BigInt): Promise<number>;
+  _mtmd_helper_gen_audio_flush(_0: BigInt): Promise<number>;
   _lcb_mtmd_helper_gen_audio_free(_0: BigInt): Promise<void>;
   _mtmd_helper_gen_audio_free(_0: BigInt): Promise<void>;
+  _lcb_mtmd_helper_gen_audio_get_logit_bias(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _mtmd_helper_gen_audio_get_logit_bias(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_mtmd_helper_gen_audio_get_output(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<number>;
   _mtmd_helper_gen_audio_get_output(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<number>;
   _lcb_mtmd_helper_gen_audio_init(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _mtmd_helper_gen_audio_init(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _lcb_mtmd_helper_gen_audio_inp_default(_0: BigInt): Promise<void>;
+  _mtmd_helper_gen_audio_inp_default(_0: BigInt): Promise<void>;
+  _lcb_mtmd_helper_gen_audio_next_is_text(_0: BigInt): Promise<number>;
+  _mtmd_helper_gen_audio_next_is_text(_0: BigInt): Promise<number>;
   _lcb_mtmd_helper_gen_audio_reset(_0: BigInt): Promise<void>;
   _mtmd_helper_gen_audio_reset(_0: BigInt): Promise<void>;
   _lcb_mtmd_helper_gen_audio_set_input(_0: BigInt, _1: BigInt): Promise<number>;
@@ -2137,6 +2181,8 @@ interface WasmModule {
   _mtmd_helper_gen_audio_step_gen(_0: BigInt, _1: number, _2: BigInt, _3: BigInt, _4: BigInt): Promise<number>;
   _lcb_mtmd_helper_gen_audio_step_prompt(_0: BigInt, _1: number): Promise<number>;
   _mtmd_helper_gen_audio_step_prompt(_0: BigInt, _1: number): Promise<number>;
+  _lcb_mtmd_helper_get_capabilities(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
+  _mtmd_helper_get_capabilities(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_mtmd_helper_get_n_pos(_0: BigInt): Promise<number>;
   _mtmd_helper_get_n_pos(_0: BigInt): Promise<number>;
   _lcb_mtmd_helper_get_n_tokens(_0: BigInt): Promise<BigInt>;
@@ -2197,6 +2243,8 @@ interface WasmModule {
   _mtmd_log_set(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_mtmd_support_audio(_0: BigInt): Promise<number>;
   _mtmd_support_audio(_0: BigInt): Promise<number>;
+  _lcb_mtmd_support_audio_stream(_0: BigInt): Promise<number>;
+  _mtmd_support_audio_stream(_0: BigInt): Promise<number>;
   _lcb_mtmd_support_vision(_0: BigInt): Promise<number>;
   _mtmd_support_vision(_0: BigInt): Promise<number>;
   _lcb_mtmd_test_create_input_chunks(): Promise<BigInt>;
@@ -2414,6 +2462,8 @@ export interface common_chat_msg_content_part extends ClassHandle {
   set type(value: EmbindString);
   get text(): string;
   set text(value: EmbindString);
+  get name(): string;
+  set name(value: EmbindString);
 }
 
 export interface common_chat_msg extends ClassHandle {
@@ -2429,6 +2479,8 @@ export interface common_chat_msg extends ClassHandle {
   set tool_name(value: EmbindString);
   get tool_call_id(): string;
   set tool_call_id(value: EmbindString);
+  get extra_json(): string;
+  set extra_json(value: EmbindString);
   to_json_oaicompat(_0: boolean): common_json;
   render_content(_0: EmbindString): string;
   empty(): boolean;
@@ -2442,6 +2494,7 @@ export interface common_chat_tool extends ClassHandle {
   set description(value: EmbindString);
   get parameters(): string;
   set parameters(value: EmbindString);
+  defer_loading: boolean;
 }
 
 export interface common_chat_msg_diff extends ClassHandle {
@@ -2567,6 +2620,7 @@ export interface common_chat_prompt_preset extends ClassHandle {
   set system(value: EmbindString);
   get user(): string;
   set user(value: EmbindString);
+  has_language: boolean;
 }
 
 export interface common_peg_arena extends ClassHandle {
@@ -2604,6 +2658,8 @@ export interface common_chat_templates extends ClassHandle {
   format_single(_0: common_chat_messages, _1: common_chat_msg, _2: boolean, _3: boolean): string;
   format_example(_0: boolean, _1: string_map): string;
   get_asr_prompt(): common_chat_prompt_preset;
+  get_asr_prompt_with_language(_0: EmbindString): common_chat_prompt_preset;
+  get_tts_prompt(_0: EmbindString, _1: EmbindString, _2: EmbindString): string;
 }
 
 interface EmbindModule {
