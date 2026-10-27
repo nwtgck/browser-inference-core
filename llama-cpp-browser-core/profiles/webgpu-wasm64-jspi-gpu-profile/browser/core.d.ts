@@ -2207,6 +2207,14 @@ interface WasmModule {
   _lcb_sizeof_field(_0: number, _1: number): BigInt;
   _lcb_constant(_0: number): BigInt;
   _lcb_schema_hash(): BigInt;
+  _lcb_webgpu_q8_diagnostic_version(_0: BigInt): number;
+  _lcb_webgpu_q8_diagnostic_run_v1(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: number): Promise<number>;
+  _lcb_webgpu_q8_diagnostic_schema_hash(): BigInt;
+  _lcb_webgpu_q8_diagnostic_sizeof_record(_0: number): BigInt;
+  _lcb_webgpu_q8_diagnostic_alignof_record(_0: number): BigInt;
+  _lcb_webgpu_q8_diagnostic_offsetof_field(_0: number, _1: number): BigInt;
+  _lcb_webgpu_q8_diagnostic_sizeof_field(_0: number, _1: number): BigInt;
+  _lcb_webgpu_q8_diagnostic_constant(_0: number): number;
 }
 
 type EmbindString = ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|string;

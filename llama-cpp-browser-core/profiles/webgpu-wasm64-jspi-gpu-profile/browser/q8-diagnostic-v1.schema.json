@@ -1,0 +1,264 @@
+{
+  "abiVersion": 1,
+  "extensionId": "webgpu-q8-diagnostic-v1",
+  "baseAbiVersion": 1,
+  "pointerRepresentation": "bigint-u64",
+  "versionExport": "_lcb_webgpu_q8_diagnostic_version",
+  "schemaHashExport": "_lcb_webgpu_q8_diagnostic_schema_hash",
+  "recordQueryNamespace": "_lcb_webgpu_q8_diagnostic_",
+  "functions": [
+    {
+      "name": "lcb_webgpu_q8_diagnostic_run_v1",
+      "export": "_lcb_webgpu_q8_diagnostic_run_v1",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "suspension": "jspi",
+      "parameters": [
+        {
+          "name": "backend",
+          "cType": "uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "dst",
+          "cType": "uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "request",
+          "cType": "uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "report",
+          "cType": "uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "report_capacity",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        }
+      ]
+    },
+    {
+      "name": "lcb_webgpu_q8_diagnostic_version",
+      "export": "_lcb_webgpu_q8_diagnostic_version",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
+      "suspension": "none",
+      "parameters": [
+        {
+          "name": "backend",
+          "cType": "uint64_t",
+          "kind": "u64"
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "name": "ggml_webgpu_q8_diagnostic_report_v1",
+      "cType": "struct ggml_webgpu_q8_diagnostic_report_v1",
+      "fields": [
+        {
+          "id": 0,
+          "name": "abi_version",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 1,
+          "name": "struct_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 2,
+          "name": "status",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 3,
+          "name": "requested_variant",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 4,
+          "name": "phase",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 5,
+          "name": "actual_algorithm",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 6,
+          "name": "workgroup_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 7,
+          "name": "logical_subgroup_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 8,
+          "name": "real_min_subgroup_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 9,
+          "name": "real_max_subgroup_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 10,
+          "name": "rows_per_tile",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 11,
+          "name": "outputs_per_workgroup",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 12,
+          "name": "cooperative_subgroup_reduction",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 13,
+          "name": "grid_x",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 14,
+          "name": "grid_y",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 15,
+          "name": "grid_z",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 16,
+          "name": "dispatches",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 17,
+          "name": "codegen_revision",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 18,
+          "name": "shader_identity_id",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 19,
+          "name": "reserved",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 20,
+          "name": "shader_sha256",
+          "cType": "uint8_t[32]",
+          "kind": "array"
+        }
+      ],
+      "id": 0
+    },
+    {
+      "name": "ggml_webgpu_q8_diagnostic_request_v1",
+      "cType": "struct ggml_webgpu_q8_diagnostic_request_v1",
+      "fields": [
+        {
+          "id": 0,
+          "name": "abi_version",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 1,
+          "name": "struct_size",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 2,
+          "name": "variant",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 3,
+          "name": "phase",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 4,
+          "name": "repetitions",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "id": 5,
+          "name": "reserved",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        }
+      ],
+      "id": 1
+    }
+  ],
+  "constants": [
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_COOPERATIVE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_INDEPENDENT_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_NONE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_AUTO_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BAD_REQUEST_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BUSY_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG128_R2_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG256_R4_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_EXECUTE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R1_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R2_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R4_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MIN_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MIN_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_PREPARE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_REPETITIONS_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNAVAILABLE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_VERSION_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_WEIGHT_BYTES_MAX_V1"
+  ],
+  "schemaSha256": "06990d0ca1aab352f2e06087e1231fa1cf02b2334c2e8feef5279ffc1c57fa94"
+}
