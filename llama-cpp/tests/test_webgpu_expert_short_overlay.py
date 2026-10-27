@@ -26,6 +26,7 @@ def build_host(upstream, prepared, output):
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',
               function(text, 'inline uint32_t ggml_webgpu_expert_short_workgroup('),
+              function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
               function(text, 'struct ggml_webgpu_mul_mat_vec_shader_decisions {') + ';',
               text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')]]
     for name, body in [('RecordingLibrary', text), ('ReferenceLibrary', original)]:
@@ -68,7 +69,9 @@ class ExpertShortOverlay(unittest.TestCase):
             out = Path(tmp)
             source.prepare(self.upstream, out)
             for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp'):
-                self.assertEqual(copy.digest(out / name), expert.COMPOSITION_OUTPUTS['ggml/src/ggml-webgpu/' + name])
+                expected = (source.OUTPUT_SHA256 if name == 'ggml-webgpu.cpp'
+                            else source.SSM_HEADER_OUTPUT_SHA256)
+                self.assertEqual(copy.digest(out / name), expected)
             stamp = (out / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             source.prepare(self.upstream, out)
             self.assertEqual(stamp, (out / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns)

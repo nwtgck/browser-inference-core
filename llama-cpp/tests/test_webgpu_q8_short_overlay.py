@@ -28,6 +28,7 @@ def build_host(upstream, prepared, output):
         function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
         function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',
         function(text, 'inline uint32_t ggml_webgpu_q8_short_workgroup('),
+        function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
         text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):
              text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
         function(text, 'inline bool ggml_webgpu_can_use_mmvq('),

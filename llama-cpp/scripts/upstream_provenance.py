@@ -18,6 +18,9 @@ import prepare_webgpu_hc as hc
 import prepare_webgpu_q8_short as q8_short
 import prepare_webgpu_moe_sum as moe_sum
 import prepare_webgpu_expert_short as expert_short
+import prepare_webgpu_ordered_readback as ordered_readback
+import prepare_webgpu_bind_group_cache as bind_group_cache
+import prepare_webgpu_q4_short as q4_short
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -178,7 +181,8 @@ def collect(root: Path, manifest: dict) -> dict:
                                              patch_root=root / PATCH_DIRECTORY)
             webgpu_compiled = {
                 'logicalUpstreamPath': webgpu_source.SOURCE_PATH, **file_identity(prepared),
-                'tensorCopy': True, 'parameterUploadBatching': True,
+                'tensorCopy': True, 'parameterUploadBatching': True, 'orderedReadback': True,
+                'bindGroupCache': True,
                 'compileDefinitions': ['GGML_WEBGPU_BATCH_PARAM_UPLOADS'],
             }
             hc_compiled = {'ggml-webgpu.cpp': file_identity(prepared),
@@ -282,7 +286,41 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake',
                                  'docs/webgpu-param-upload-batching.md']},
-            'behavior': 'Coalesce parameter writes only at existing graph submission boundaries. Slot padding increases transferred bytes; no measured performance claim. Both patches compose into one translation unit.',
+            'behavior': 'Coalesce parameter writes only at existing graph submission boundaries. Slot padding increases transferred bytes; no measured performance claim. The WebGPU overlays compose into one translation unit.',
+        }, {
+            'id': 'webgpu-ordered-readback',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SOURCE_PATH, **file_identity(vendor / webgpu_source.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / ordered_readback.PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedInputs': ordered_readback.CONTRACT_INPUTS,
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': tensor_copy.DAWN_HEADERS},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_source.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'For nonempty reads from the same WebGPU queue, skip the redundant preliminary queue wait and use the existing blocking copy and map; foreign and zero-byte reads retain the generic synchronization behavior. No measured speedup is claimed.',
+        }, {
+            'id': 'webgpu-bind-group-cache',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SOURCE_PATH, **file_identity(vendor / webgpu_source.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / bind_group_cache.PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedInputs': bind_group_cache.CONTRACT_INPUTS,
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': tensor_copy.DAWN_HEADERS},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_source.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Reuse exact buffer-only bind groups at matching dispatch positions across graph encodes; retain at most 8192 positions and 16 buffer entries per group, bypass unsupported entries and invalidate on buffer destruction. This bounds object counts, not retained resource bytes or VRAM; no target-device speedup is claimed.',
         }, {
             'id': 'webgpu-chunked-model-upload',
             'kind': 'build-tree-source-overlay',
@@ -384,6 +422,21 @@ def collect(root: Path, manifest: dict) -> dict:
                                ['scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md']},
             'behavior': 'Use 32/64/128-lane workgroups for subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least 1024 output rows. Upstream WGSL, quantization, tiling and lane-to-block mapping are unchanged. Include the workgroup size in the pipeline cache key; other paths retain 256 lanes. No target-device speed guarantee.',
         }, {
+            'id': 'webgpu-q4-short-workgroup',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / q4_short.PATCH_NAME)},
+            'compiledCopy': ssm_compiled,
+            'compiledCopiesByProfileVariant': {variant: ssm_compiled for variant in copy_enabled},
+            'reviewedInputs': q4_short.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_q4_short.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_q4_short.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Select existing 32, 64, 128 or 256 lane subgroup Q4_K single-column ordinary and indexed matvec workgroups when the shape, device and alias guards permit. Preserve upstream shader arithmetic, output tiling and dispatch grid; otherwise use the upstream workgroup. No target-device speedup is claimed.',
+        }, {
             'id': 'webgpu-expert-short-workgroup',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}',
@@ -411,7 +464,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

@@ -159,6 +159,29 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertFalse((output / 'llama-model-loader.cpp').exists())
                 self.assertFalse((output / 'ggml-webgpu-shader-lib.hpp').exists())
 
+    def test_ordered_readback_identity_guards_fail_before_publishing(self):
+        ordered = source.ordered_readback
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ('PATCH_SHA256', 'INPUT_SHA256', 'OUTPUT_SHA256'):
+                output = Path(tmp) / name
+                with self.subTest(guard=name), patch.object(ordered, name, '0' * 64):
+                    with self.assertRaisesRegex(ValueError, 'Ordered readback|ordered readback'):
+                        source.prepare(self.upstream, output)
+                self.assertFalse((output / 'ggml-webgpu.cpp').exists())
+                self.assertFalse((output / 'llama-model-loader.cpp').exists())
+            for relative in ordered.CONTRACT_INPUTS:
+                output = Path(tmp) / ('contract-' + str(list(ordered.CONTRACT_INPUTS).index(relative)))
+                inputs = {**ordered.CONTRACT_INPUTS, relative: '0' * 64}
+                with self.subTest(contract=relative), patch.object(ordered, 'CONTRACT_INPUTS', inputs):
+                    with self.assertRaisesRegex(ValueError, 'Ordered readback contract'):
+                        source.prepare(self.upstream, output)
+                self.assertFalse((output / 'ggml-webgpu.cpp').exists())
+        cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
+        self.assertIn('scripts/prepare_webgpu_ordered_readback.py', cmake)
+        self.assertIn(ordered.PATCH_NAME, cmake)
+        for relative in ordered.CONTRACT_INPUTS:
+            self.assertIn(relative, cmake)
+
     def test_webgpu_is_the_only_source_overlay_build_switch(self):
         text = (ROOT / 'CMakeLists.txt').read_text()
         self.assertIn('if(LCB_WEBGPU)\n    include(cmake/WebgpuSourceOverlay.cmake)', text)

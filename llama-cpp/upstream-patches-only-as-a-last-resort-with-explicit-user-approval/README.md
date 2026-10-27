@@ -163,6 +163,25 @@ commit with different bytes or invent a future artifact identity.
   a speedup claim. Source, patch and combined-output identities are checked.
 - **Tests, alternatives and removal:** [parameter upload batching](../docs/webgpu-param-upload-batching.md).
 
+## Same-queue blocking WebGPU readback
+
+- **Patch:** `ggml-webgpu-ordered-readback.patch`.
+- **Scope:** register a blocking `get_tensor_async` hook. For a nonempty read from a WebGPU buffer on the backend's own queue, skip the generic fallback's preliminary queue wait and use the existing copy, submit and blocking map. Foreign buffers and zero-byte reads retain the preliminary synchronization. The hook returns only after the destination has been filled; it is not a nonblocking readback API.
+- **Integration:** apply after the other WebGPU source overlays to the checked build-tree translation unit for every WebGPU profile. CPU profiles and the pristine upstream checkout are unchanged. The generic backend and queue contracts, reviewed source and package headers, patch, composition input and final output are pinned; drift requires review.
+- **No-patch alternative:** retain the existing extra synchronization before each async fallback read or wait for an equivalent upstream implementation.
+- **Validation and limitations:** source-bound deferred queue tests exercise ordering, ranges, destination lifetime and failure paths; full source syntax checks use the pinned headers. These checks do not establish browser correctness, device-loss recovery or target-device speedup. The queue-order assumption must be validated on the target browser and GPU.
+- **Removal:** upstream provides equivalent behavior or the owner drops this optimization; remove the patch, preparation, build wiring, tests and provenance entry together.
+
+## Bounded WebGPU bind-group reuse
+
+- **Patch:** `ggml-webgpu-bind-group-cache.patch`.
+- **Scope:** retain up to 8192 bind groups per backend context by graph dispatch position, with at most 16 buffer entries per group. Reuse requires matching pipeline, group index, every binding number, buffer identity, offset and size; the parameter arena binding is included. Unsupported or larger bindings bypass the cache, and parameter uploads and dispatches remain unchanged. Shorter graphs trim unused tail entries.
+- **Lifetime:** a device-global generation advances before backend buffer destruction; each context clears stale entries before its next lookup. Cache entries hold WebGPU references, but do not change the existing scheduler's obligation to keep in-flight resources valid. The limits bound counts, not retained GPU memory in bytes; references may keep resources alive until eviction, invalidation or context teardown. Device loss and allocation failure recovery are unchanged.
+- **Integration:** apply to the build-tree WebGPU translation unit after ordered readback. Reviewed upstream source and generic backend contracts, Dawn headers, patch and composition input/output hashes are pinned. CPU profiles and the upstream checkout are unchanged.
+- **No-patch alternative:** create a bind group for each dispatch as upstream does, or wait for equivalent upstream reuse.
+- **Validation and limits:** source-extracted CPU queue and lifetime fixtures cover key equality, position, generation, bounds, fallback and parameter uploads, and the complete composed source is syntax-checked against pinned headers. These checks do not establish browser correctness, actual model hit rate, VRAM savings or target-device speedup.
+- **Removal:** upstream supplies equivalent reuse or the owner drops this optimization; remove patch, preparation, build wiring, tests and provenance entry together.
+
 ## Bounded synchronous WebGPU model upload
 
 - **Patch:** `llama-model-loader-webgpu-chunked-upload.patch`.
@@ -314,6 +333,15 @@ not establish target-device speed.
 - Alternative: retain upstream staged ADDs; no model pipeline or variant changes.
 - Maintenance: pinned graph, allocator, fusion, scheduler and shader contracts.
 - Tests, limits and removal: [ordered sums](../docs/webgpu-moe-expert-sum.md).
+
+## Short Q4_K matvec workgroups
+
+- **Patch:** `ggml-webgpu-q4-short-workgroup.patch`.
+- **Scope:** choose an existing 32/64/128/256-lane subgroup workgroup for eligible Q4_K x F32 single-column ordinary and indexed matvecs with complete K blocks through 4096. Shape, subgroup, workgroup-limit, overlap and indexed-slot guards preserve the upstream 256-lane fallback elsewhere. WGSL arithmetic, quantization, output tiling and dispatch grid stay unchanged; existing pipeline keys include the selected width.
+- **Integration:** apply after the other WebGPU host overlays to the checked build-tree shader library for every WebGPU profile. Reviewed upstream shader/host contracts, patch, composition input and final header identities are pinned. No shader file or upstream checkout is rewritten.
+- **No-patch alternative:** retain the upstream fixed workgroup or wait for upstream shape-dependent selection.
+- **Validation and limits:** source-bound factory and dispatcher tests exercise selection, cache keys and fallback. The opt-in standalone GPU fixture compares actual generated shaders with the upstream path and an independent CPU reference. These checks do not establish browser model quality or target-device performance.
+- **Removal:** upstream supplies equivalent selection or the owner drops the optimization; remove its patch, preparation, build wiring, tests and provenance entry together.
 
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 

@@ -87,6 +87,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-batch-param-uploads.patch"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-same-device-tensor-copy.patch")
 
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_ordered_readback.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-ordered-readback.patch")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_bind_group_cache.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-bind-group-cache.patch")
+
+# Short Q4 uses the upstream generated shaders with a checked host selector.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q4_short.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch")
+
 # Re-run the checked short-Q8 selection when its upstream shader contract changes.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_short.py"
