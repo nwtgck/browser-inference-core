@@ -29,7 +29,7 @@ def prepare_base(upstream: Path, output: Path) -> None:
 def prepare(upstream: Path, output: Path) -> None:
     prepare_base(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) == iq3.OUTPUTS[header.name]:
+    if copy.digest(header) in (iq3.OUTPUTS[header.name], source.SSM_HEADER_OUTPUT_SHA256):
         if copy.digest(output / iq3.HEADER_NAME) != iq3.HEADER_SHA256:
             raise ValueError('Unexpected integrated IQ3_S embedding')
         return

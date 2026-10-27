@@ -22,19 +22,20 @@ import prepare_webgpu_rms_scale as rms_scale
 import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
+import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '0837380d874c570a0a787edc19b21816638b03527075ea8eb9c37c95e3ca5526'
+OUTPUT_SHA256 = 'a53ea652fa4bbaec5c8ba503dcf852c672e433086909846fb55f0dc3ede81bfd'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
-SSM_HEADER_OUTPUT_SHA256 = '9ce1f2986675d50f0b99b3a23877bf8f9dd673760f39e8822ba26655d3a83438'
+SSM_HEADER_OUTPUT_SHA256 = '86567b1e8d20063c7b8a6a12a8b2a10c379ab1c851a0eb18455ed76582fb7ba7'
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
@@ -117,6 +118,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         async_tensor_copy.prepare(work, source, patch_root, env)
         hc_headers.update(iq3s_subgroup.prepare(work, source, patch_root, env))
         hc_headers.update(host_input_snapshot.prepare(work, source, patch_root, env))
+        hc_headers.update(ssm_conv_silu.prepare(work, source, patch_root, env))
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')

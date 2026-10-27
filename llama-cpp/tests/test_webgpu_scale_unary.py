@@ -141,6 +141,7 @@ class ScaleUnary(unittest.TestCase):
                 patch.object(source.async_tensor_copy, 'prepare'), \
                 patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
                 patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
+                patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             stage = source.prepare(self.upstream, Path(temporary)).parent

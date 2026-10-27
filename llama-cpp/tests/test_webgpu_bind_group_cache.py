@@ -79,6 +79,7 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
+                    patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.q4_short.OUTPUT_SHA256):
                 baseline = source.prepare(self.upstream, root / 'base')

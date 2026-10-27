@@ -232,3 +232,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl"
 )
+
+# Preserve canonical SSM convolution and unary shaders; embed only the epilogue variant.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_ssm_conv_silu.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-ssm-conv-silu.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl")

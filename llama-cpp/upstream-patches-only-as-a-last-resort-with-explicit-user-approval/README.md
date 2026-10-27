@@ -427,3 +427,13 @@ not establish target-device speed.
 - Removal condition: upstream supplies equivalent guarded selection, or the user
   chooses to drop it; remove preparation, cache field if no longer needed,
   build/provenance plumbing and tests together, leaving other overlays independent.
+
+
+## Fused WebGPU SSM convolution and SiLU
+
+- **Patch:** `ggml-webgpu-ssm-conv-silu.patch`.
+- **Approval and scope:** the owner's continuing performance investigation explicitly authorizes this narrow fusion. Fuse only eligible adjacent F32 SSM_CONV/UNARY-SILU graphs with one use of the convolution result. Preserve canonical scalar/vec4 dot arithmetic, the SiLU expression and existing single-token workgroup specialization. No model graph or CPU behavior changes.
+- **Safety and integration:** compose after the other checked WebGPU overlays, for existing WebGPU profiles. Preserve intermediate observers, outputs and callback graph slices through shared fusion checks; validate shapes, u32/grid/device bounds, view roots, buffer ownership and disjoint payload/aligned bindings. The final SiLU may reuse the unused convolution allocation. A dedicated embedded shader keeps canonical sources unchanged; profiling uses only the existing optional profile.
+- **No-patch alternative:** retain the existing separate dispatches or wait for upstream fusion. There is no existing runtime setting for this epilogue.
+- **Maintenance and validation:** pin the graph, allocator, backend, shader, preprocessor, patch, stage outputs and embedding identities. Source-bound native tests exercise graph admission, actual allocator reuse, runtime bindings, dispatch, cache variants and both profile syntax configurations. These tests do not establish browser/model quality or target-device speed.
+- **Removal:** upstream implements equivalent guarded fusion or the owner withdraws it; remove the patch, preparation, build wiring, tests and provenance entry together.

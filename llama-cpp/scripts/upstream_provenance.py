@@ -28,6 +28,7 @@ import prepare_webgpu_rms_scale as rms_scale
 import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
+import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -188,6 +189,7 @@ def collect(root: Path, manifest: dict) -> dict:
         q8_subgroup_compiled = None
         rms_scale_compiled = None
         iq3s_subgroup_compiled = None
+        ssm_conv_silu_compiled = None
         host_snapshot_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
@@ -226,6 +228,9 @@ def collect(root: Path, manifest: dict) -> dict:
                                    'ggml-webgpu-rms-scale.hpp', rms_scale.HEADER_NAME]}
             iq3s_subgroup_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', iq3s_subgroup.HEADER_NAME]}
+            ssm_conv_silu_compiled = {name: file_identity(prepared.parent / name) for name in
+                                      ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                                       'ggml-webgpu-ssm-conv-silu.hpp', ssm_conv_silu.HEADER_NAME]}
             host_snapshot_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h']}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
@@ -516,6 +521,21 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Fuse eligible contiguous F32 scale, SILU or sigmoid, and optional final scale operations into one dispatch, retaining guarded fallback and upstream graph semantics. No target-device speedup is claimed.',
         }, {
+            'id': 'webgpu-ssm-conv-silu-fusion',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / ssm_conv_silu.PATCH_NAME)},
+            'compiledCopies': ssm_conv_silu_compiled,
+            'compiledCopiesByProfileVariant': {variant: ssm_conv_silu_compiled for variant in copy_enabled},
+            'reviewedInputs': ssm_conv_silu.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_ssm_conv_silu.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_ssm_conv_silu.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Fuse eligible F32 SSM convolution followed by SiLU, preserving scalar/vec4 accumulation and single-token workgroup selection. Guard graph visibility, layout, physical buffers and aligned binding overlap; retain staged fallback. No target-device speedup is claimed.',
+        }, {
             'id': 'webgpu-rms-scale-fusion',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}',
@@ -603,7 +623,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',
