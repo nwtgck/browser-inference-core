@@ -1,0 +1,412 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -9,6 +9,10 @@
+ #include "ggml-webgpu-scale-unary.hpp"
+ #include "ggml-webgpu-rms-scale.hpp"
+ #include "ggml-webgpu-ssm-conv-silu.hpp"
++#include "ggml-webgpu-q8-diagnostic.h"
++#ifndef GGML_WEBGPU_GPU_PROFILE
++#error "Q8 diagnostic overlay requires the GPU-profile build"
++#endif
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-backend-host-snapshot.h"
+@@ -404,6 +408,7 @@
+     wgpu::CommandEncoder     active_command_encoder;
+     wgpu::ComputePassEncoder active_compute_pass;
+     bool                     batch_compute_passes = true;
++    bool                     operation_in_progress = false;
+ 
+     size_t memset_bytes_per_thread;
+ 
+@@ -1779,17 +1784,9 @@
+     });
+ }
+ 
+-static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
+-                                             ggml_tensor *    src0,
+-                                             ggml_tensor *    src1,
+-                                             ggml_tensor *    dst) {
+-    // Determine if this is a mat-vec operation
+-    bool use_mat_vec = (dst->ne[1] <= 4);
+-
+-    // use MMVQ path for mat-vec
+-    bool use_mmvq = ggml_webgpu_can_use_mmvq(src0, src1, ctx->global_ctx->capabilities.supports_dot_product,
+-                                             ctx->global_ctx->vendor);
+-
++static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context(webgpu_context & ctx,
++                                                               ggml_tensor * src0, ggml_tensor * src1,
++                                                               ggml_tensor * dst) {
+     ggml_webgpu_shader_lib_context shader_lib_ctx = {};
+ 
+     shader_lib_ctx.src0                     = src0;
+@@ -1806,12 +1803,32 @@
+     shader_lib_ctx.supports_dot_product     = ctx->global_ctx->capabilities.supports_dot_product;
+     shader_lib_ctx.vendor                   = ctx->global_ctx->vendor;
+ 
++    return shader_lib_ctx;
++}
++
++template<bool Diagnostic>
++static webgpu_encoded_op ggml_webgpu_mul_mat_impl(webgpu_context & ctx,
++                                             ggml_tensor *    src0,
++                                             ggml_tensor *    src1,
++                                             ggml_tensor *    dst,
++                                             const webgpu_pipeline * explicit_pipeline = nullptr) {
++    // Determine if this is a mat-vec operation
++    bool use_mat_vec = (dst->ne[1] <= 4);
++
++    // use MMVQ path for mat-vec
++    bool use_mmvq = !Diagnostic && ggml_webgpu_can_use_mmvq(src0, src1, ctx->global_ctx->capabilities.supports_dot_product,
++                                             ctx->global_ctx->vendor);
++
++    auto shader_lib_ctx = ggml_webgpu_mat_context(ctx, src0, src1, dst);
++
+     // Get or create pipeline
+     webgpu_pipeline                   pipeline;
+     std::vector<webgpu_dispatch_desc> dispatches;
+     const bool src_overlap = ggml_webgpu_tensor_binding_overlap(ctx->global_ctx, src0, src1) && !use_mmvq;
+ 
+-    if (use_mat_vec) {
++    if constexpr (Diagnostic) {
++        pipeline = *explicit_pipeline;
++    } else if (use_mat_vec) {
+         if (use_mmvq) {
+             ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
+         }
+@@ -1909,6 +1926,11 @@
+     });
+ 
+     return ggml_backend_webgpu_build_multi(ctx, dispatches);
++}
++
++static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
++                                             ggml_tensor * src0, ggml_tensor * src1, ggml_tensor * dst) {
++    return ggml_webgpu_mul_mat_impl<false>(ctx, src0, src1, dst);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
+@@ -4054,7 +4076,17 @@
+ #endif
+ }
+ 
+-static ggml_status ggml_backend_webgpu_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
++struct webgpu_profile_operation_guard {
++    bool & busy;
++    bool acquired;
++    explicit webgpu_profile_operation_guard(bool & value) : busy(value), acquired(!value) { if (acquired) { busy = true; } }
++    ~webgpu_profile_operation_guard() { if (acquired) { busy = false; } }
++    webgpu_profile_operation_guard(const webgpu_profile_operation_guard &) = delete;
++    webgpu_profile_operation_guard & operator=(const webgpu_profile_operation_guard &) = delete;
++};
++
++template<class Encode>
++static ggml_status ggml_backend_webgpu_graph_compute_impl(ggml_backend_t backend, struct ggml_cgraph * cgraph, Encode encode) {
+     WEBGPU_LOG_DEBUG("ggml_backend_webgpu_graph_compute(" << cgraph->n_nodes << " nodes)");
+ 
+     ggml_backend_webgpu_context * backend_ctx = (ggml_backend_webgpu_context *) backend->context;
+@@ -4085,7 +4117,7 @@
+         if (cgraph->nodes[node_idx]->op == GGML_OP_SET_ROWS) {
+             contains_set_rows = true;
+         }
+-        if (auto cmd = ggml_webgpu_encode(ctx, cgraph, node_idx, num_encoded_ops)) {
++        if (auto cmd = encode(ctx, cgraph, node_idx, num_encoded_ops)) {
+             commands.push_back(*cmd);
+             num_batched_kernels += cmd.value().num_kernels;
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+@@ -4155,6 +4187,13 @@
+     ctx->bind_group_cache.end_graph();
+     WEBGPU_CPU_PROFILE_TOTAL_END(graph_compute, ctx->global_ctx);
+     return GGML_STATUS_SUCCESS;
++}
++
++static ggml_status ggml_backend_webgpu_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
++    auto * backend_ctx = (ggml_backend_webgpu_context *) backend->context;
++    webgpu_profile_operation_guard guard(backend_ctx->webgpu_ctx->operation_in_progress);
++    if (!guard.acquired) { return GGML_STATUS_FAILED; }
++    return ggml_backend_webgpu_graph_compute_impl(backend, cgraph, ggml_webgpu_encode);
+ }
+ 
+ struct ggml_backend_webgpu_event_context {
+@@ -5533,12 +5572,154 @@
+     return &device;
+ }
+ 
++struct webgpu_q8_diagnostic_binding {
++    wgpu::Buffer buffer;
++    uint64_t offset, size, payload_offset, payload_size;
++};
++
++static bool ggml_webgpu_q8_diagnostic_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                                              uint64_t bytes, uint64_t block_bytes,
++                                              webgpu_q8_diagnostic_binding & out) {
++    auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
++        !tensor->data || tensor->view_src || tensor->view_offs) { return false; }
++    auto * bc = (ggml_backend_webgpu_buffer_context *) buffer->context;
++    if (bc->global_ctx != ctx->global_ctx || !bc->buffer ||
++        (bc->buffer.GetUsage() & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) { return false; }
++    const uint64_t base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
++    const uint64_t data = reinterpret_cast<uintptr_t>(tensor->data);
++    if (data < base) { return false; }
++    const uint64_t offset = data - base;
++    const uint64_t alignment = ctx->global_ctx->capabilities.limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1)) || offset % (block_bytes == 34 ? 2 : 4)) { return false; }
++    uint64_t aligned = offset & ~(alignment - 1);
++    // The inherited quantized binding helper aligns a whole number of blocks.
++    // There are at most 17 residues for Q8_0 and a power-of-two alignment.
++    for (unsigned i = 0; (offset - aligned) % block_bytes; ++i) {
++        if (i >= 17 || aligned < alignment) { return false; }
++        aligned -= alignment;
++    }
++    const uint64_t size = (offset - aligned + bytes + 3) & ~uint64_t(3);
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (offset > buffer->size || bytes > buffer->size - offset ||
++        aligned > buffer->size || size > buffer->size - aligned ||
++        aligned > bc->buffer.GetSize() || size > bc->buffer.GetSize() - aligned ||
++        size > limits.maxStorageBufferBindingSize || size > UINT32_MAX - 4u) { return false; }
++    out = {bc->buffer, aligned, size, offset, bytes};
++    return true;
++}
++
++static bool ggml_webgpu_q8_diagnostic_shape(ggml_tensor * dst, uint64_t (&bytes)[3]) {
++    if (!dst || dst->op != GGML_OP_MUL_MAT || !dst->src[0] || !dst->src[1]) { return false; }
++    for (int i = 2; i < GGML_MAX_SRC; ++i) { if (dst->src[i]) { return false; } }
++    auto * a = dst->src[0]; auto * x = dst->src[1];
++    if (a->type != GGML_TYPE_Q8_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] < 32 || a->ne[0] > 16384 || a->ne[0] % 32 ||
++        a->ne[1] < 1 || a->ne[1] > 65536 || x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] ||
++        x->ne[1] != 1 || dst->ne[1] != 1) { return false; }
++    for (auto * t : {a, x, dst}) {
++        if (t->view_src || t->view_offs || t->ne[2] != 1 || t->ne[3] != 1) { return false; }
++    }
++    const uint64_t row = uint64_t(a->ne[0] / 32) * 34;
++    bytes[0] = row * uint64_t(a->ne[1]); bytes[1] = uint64_t(x->ne[0]) * 4; bytes[2] = uint64_t(dst->ne[0]) * 4;
++    if (bytes[0] > 64u * 1024u * 1024u) { return false; }
++    const ggml_tensor * tensors[3] = {a, x, dst};
++    for (unsigned i = 0; i < 3; ++i) {
++        const auto * t = tensors[i];
++        const uint64_t nb0 = i == 0 ? 34 : 4;
++        const uint64_t nb1 = i == 0 ? row : bytes[i];
++        if (t->nb[0] != nb0 || t->nb[1] != nb1 || t->nb[2] != bytes[i] || t->nb[3] != bytes[i]) { return false; }
++    }
++    return true;
++}
++
++static int32_t ggml_backend_webgpu_q8_diagnostic_v1(ggml_backend_t backend, ggml_tensor * dst,
++                  const ggml_webgpu_q8_diagnostic_request_v1 * request,
++                  ggml_webgpu_q8_diagnostic_report_v1 * report, uint32_t report_capacity) {
++    if (!report || report_capacity < sizeof(*report) || !request) { return GGML_WEBGPU_Q8_DIAGNOSTIC_BAD_REQUEST_V1; }
++    const auto req = *request; // Copy before pipeline creation or profile-map suspension.
++    ggml_webgpu_q8_diagnostic_report_v1 result{};
++    result.abi_version = 1; result.struct_size = sizeof(result); result.requested_variant = req.variant; result.phase = req.phase;
++    const auto finish = [&](int32_t status) { result.status = uint32_t(status); *report = result; return status; };
++    if (req.abi_version != 1 || req.struct_size != sizeof(req) || req.reserved || req.variant > 5 ||
++        (req.phase != 1 && req.phase != 2) || (req.phase == 1 && req.repetitions) ||
++        (req.phase == 2 && (!req.repetitions || req.repetitions > 128))) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_BAD_REQUEST_V1); }
++    if (!backend || backend->guid != ggml_backend_webgpu_guid() || !backend->context) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNAVAILABLE_V1); }
++    auto ctx = ((ggml_backend_webgpu_context *) backend->context)->webgpu_ctx;
++    webgpu_profile_operation_guard guard(ctx->operation_in_progress);
++    if (!guard.acquired) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_BUSY_V1); }
++    uint64_t bytes[3];
++    if (!ggml_webgpu_q8_diagnostic_shape(dst, bytes)) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
++    ggml_tensor * tensors[3] = {dst->src[0], dst->src[1], dst};
++    webgpu_q8_diagnostic_binding bindings[3];
++    for (unsigned i = 0; i < 3; ++i) {
++        if (!ggml_webgpu_q8_diagnostic_binding(ctx, tensors[i], bytes[i], i == 0 ? 34 : 4, bindings[i])) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
++    }
++    for (unsigned i = 0; i < 3; ++i) for (unsigned j = i + 1; j < 3; ++j) {
++        const auto & a = bindings[i]; const auto & b = bindings[j];
++        if (a.buffer.Get() == b.buffer.Get() &&
++            (!(a.payload_offset <= b.payload_offset ? a.payload_size <= b.payload_offset - a.payload_offset : b.payload_size <= a.payload_offset - b.payload_offset) ||
++             !(a.offset <= b.offset ? a.size <= b.offset - a.offset : b.size <= a.offset - b.offset))) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
++    }
++    const auto context = ggml_webgpu_mat_context(ctx, tensors[0], tensors[1], dst);
++    auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(context, false);
++    if (req.variant == 0 && key.use_mmvq) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
++    if (req.variant) {
++        key.use_mmvq = false;
++        key.workgroup_size = req.variant == 1 ? 256 : 128;
++        key.subgroup_size = req.variant >= 2 && req.variant <= 4 ? context.min_subgroup_size : 0;
++        key.q8_rows_per_tile = req.variant == 3 ? 1 : req.variant == 4 || req.variant == 5 ? 2 : 4;
++        if (req.variant >= 2 && req.variant <= 4 &&
++            (!context.supports_subgroups || key.subgroup_size != context.max_subgroup_size ||
++             key.subgroup_size < 4 || key.subgroup_size > 64 || (key.subgroup_size & (key.subgroup_size - 1)))) {
++            return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
++        }
++    }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint32_t outputs = key.subgroup_size ? key.q8_rows_per_tile * (key.workgroup_size / key.subgroup_size) : key.q8_rows_per_tile;
++    const uint32_t groups = (uint32_t(dst->ne[0]) + outputs - 1) / outputs;
++    if (!limits.maxComputeWorkgroupsPerDimension || uint64_t(groups) > uint64_t(limits.maxComputeWorkgroupsPerDimension) * limits.maxComputeWorkgroupsPerDimension ||
++        limits.maxComputeInvocationsPerWorkgroup < key.workgroup_size || limits.maxComputeWorkgroupSizeX < key.workgroup_size ||
++        (!key.subgroup_size && limits.maxComputeWorkgroupStorageSize < key.q8_rows_per_tile * key.workgroup_size * 4) ||
++        limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size || !ctx->global_ctx->device.HasFeature(wgpu::FeatureName::ShaderF16)) {
++        return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
++    }
++    result.actual_algorithm = key.subgroup_size ? 2 : 1;
++    result.workgroup_size = key.workgroup_size; result.logical_subgroup_size = key.subgroup_size;
++    result.real_min_subgroup_size = context.min_subgroup_size; result.real_max_subgroup_size = context.max_subgroup_size;
++    result.rows_per_tile = key.q8_rows_per_tile; result.outputs_per_workgroup = outputs;
++    result.cooperative_subgroup_reduction = !key.subgroup_size && key.subgroup_reduction;
++    compute_2d_workgroups(groups, limits.maxComputeWorkgroupsPerDimension, result.grid_x, result.grid_y); result.grid_z = 1;
++    result.codegen_revision = 1;
++    auto pipeline = req.phase == 1 ? std::optional<webgpu_pipeline>(ctx->shader_lib->prepare_q8_diagnostic_pipeline(context, key)) :
++                                     ctx->shader_lib->find_q8_diagnostic_pipeline(key);
++    if (!pipeline) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1); }
++    memcpy(result.shader_sha256, pipeline->diagnostic_sha256.data(), sizeof(result.shader_sha256));
++    if (req.phase == 1) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1); }
++    std::vector<ggml_tensor *> nodes(req.repetitions, dst);
++    ggml_cgraph graph{}; graph.n_nodes = int(nodes.size()); graph.nodes = nodes.data();
++    const auto status = ggml_backend_webgpu_graph_compute_impl(backend, &graph,
++        [&](webgpu_context & op_ctx, ggml_cgraph *, int, int & count) -> std::optional<webgpu_encoded_op> {
++            count = 1;
++            auto encoded = ggml_webgpu_mul_mat_impl<true>(op_ctx, tensors[0], tensors[1], dst, &*pipeline);
++            result.dispatches += encoded.num_kernels;
++            return encoded;
++        });
++    GGML_ASSERT(status == GGML_STATUS_SUCCESS);
++    return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1);
++}
++
+ static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
+     if (name && strcmp(name, GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1) == 0) {
+         // The typed assignment fixes the signature of this versioned contract.
+         ggml_backend_copy_host_input_snapshot_v1_t copy = ggml_backend_webgpu_copy_host_input_snapshot_v1;
+         return reinterpret_cast<void *>(copy);
++    }
++    if (name && strcmp(name, GGML_BACKEND_WEBGPU_Q8_DIAGNOSTIC_V1) == 0) {
++        ggml_backend_webgpu_q8_diagnostic_v1_t run = ggml_backend_webgpu_q8_diagnostic_v1;
++        return reinterpret_cast<void *>(run);
+     }
+     return nullptr;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -7,6 +7,9 @@
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
++#include "ggml-webgpu-q8-diagnostic-sha256.hpp"
++#include <array>
++#include <optional>
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+@@ -318,6 +321,7 @@
+     wgpu::ComputePipeline pipeline;
+     std::string           name;
+     std::shared_ptr<void> context = nullptr;
++    std::array<uint8_t, 32> diagnostic_sha256{};
+ };
+ 
+ struct ggml_webgpu_generic_shader_decisions {
+@@ -1188,11 +1192,14 @@
+     uint32_t  subgroup_size;
+     bool      use_mmvq;
+     bool      src_overlap;
++    uint32_t  q8_rows_per_tile = 4;
++    bool      subgroup_reduction = false;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+-               subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
++               subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap &&
++               q8_rows_per_tile == other.q8_rows_per_tile && subgroup_reduction == other.subgroup_reduction;
+     }
+ };
+ 
+@@ -1207,6 +1214,8 @@
+         ggml_webgpu_hash_combine(seed, key.subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.use_mmvq);
+         ggml_webgpu_hash_combine(seed, key.src_overlap);
++        ggml_webgpu_hash_combine(seed, key.q8_rows_per_tile);
++        ggml_webgpu_hash_combine(seed, key.subgroup_reduction);
+         return seed;
+     }
+ };
+@@ -2299,7 +2308,7 @@
+         return quantize_q8_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
++    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
+         ggml_webgpu_mul_mat_vec_pipeline_key key = {};
+         key.src0_type                            = context.src0->type;
+         key.src1_type                            = context.src1->type;
+@@ -2316,6 +2325,32 @@
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
+ 
++        key.subgroup_reduction = context.supports_subgroups;
++        return key;
++    }
++
++    std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key, webgpu_pipeline,
++                       ggml_webgpu_mul_mat_vec_pipeline_key_hash> q8_diagnostic_pipelines;
++
++    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
++        return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap));
++    }
++
++    webgpu_pipeline prepare_q8_diagnostic_pipeline(const ggml_webgpu_shader_lib_context & context,
++                                                   const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
++        auto pipeline = prepare_mul_mat_vec_pipeline(context, key);
++        q8_diagnostic_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
++    std::optional<webgpu_pipeline> find_q8_diagnostic_pipeline(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
++        const auto found = q8_diagnostic_pipelines.find(key);
++        if (found == q8_diagnostic_pipelines.end()) { return std::nullopt; }
++        return found->second;
++    }
++
++    webgpu_pipeline prepare_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context,
++                                                  const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
+         auto it = mul_mat_vec_pipelines.find(key);
+         if (it != mul_mat_vec_pipelines.end()) {
+             return it->second;
+@@ -2436,6 +2471,8 @@
+             outputs_per_wg = WEBGPU_MUL_MAT_VEC_LEGACY_Q_OUTPUTS_PER_WG;
+         }
+ 
++        if (key.src0_type == GGML_TYPE_Q8_0) { outputs_per_wg = key.q8_rows_per_tile; }
++
+         if (key.use_mmvq) {
+             defines.push_back("MMVQ");
+             defines.push_back("Q8_1_T");
+@@ -2456,12 +2493,13 @@
+             // describe all output rows covered by the actual workgroup.
+             outputs_per_wg *= wg_size / key.subgroup_size;
+         } else {
+-            defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+-            variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
++            defines.push_back(key.subgroup_reduction ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
++            variant += key.subgroup_reduction ? "_sg_reduce" : "_wg_reduce";
+             if (wg_size != WEBGPU_MUL_MAT_VEC_WG_SIZE) {
+                 variant += "_wg" + std::to_string(wg_size);
+             }
+         }
++        if (key.q8_rows_per_tile != 4) { variant += "_r" + std::to_string(key.q8_rows_per_tile); }
+         if (key.vectorized) {
+             variant += "_vectorized";
+         }
+@@ -2475,6 +2513,12 @@
+ 
+         webgpu_pipeline pipeline   = ggml_webgpu_create_pipeline(device, processed, variant);
+         pipeline.context           = decisions;
++        if (key.src0_type == GGML_TYPE_Q8_0) {
++            ggml_webgpu_q8_digest::sha256_ctx digest;
++            ggml_webgpu_q8_digest::sha256_init(digest);
++            ggml_webgpu_q8_digest::sha256_update(digest, processed.data(), processed.size());
++            ggml_webgpu_q8_digest::sha256_final(digest, pipeline.diagnostic_sha256.data());
++        }
+         mul_mat_vec_pipelines[key] = pipeline;
+         return mul_mat_vec_pipelines[key];
+     }

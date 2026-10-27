@@ -30,6 +30,7 @@ import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
+import prepare_webgpu_q8_diagnostic as q8_diagnostic
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -86,6 +87,7 @@ def collect(root: Path, manifest: dict) -> dict:
     enabled = []
     audio_enabled = []
     copy_enabled = []
+    diagnostic_enabled = []
     batch_enabled = []
     rows_enabled = []
     qsa_enabled = []
@@ -100,6 +102,14 @@ def collect(root: Path, manifest: dict) -> dict:
             if webgpu_enabled:
                 copy_enabled.append(profile + '/' + variant)
                 batch_enabled.append(profile + '/' + variant)
+            profiling_options = [option for option in provenance['cmakeCommand']
+                                 if option.startswith(('-DGGML_WEBGPU_GPU_PROFILE=', '-DGGML_WEBGPU_GPU_PROFILE:'))]
+            if profiling_options and profiling_options not in (['-DGGML_WEBGPU_GPU_PROFILE=ON'], ['-DGGML_WEBGPU_GPU_PROFILE=OFF']):
+                raise ValueError('Unknown GPU-profile activation in compiled provenance')
+            if profiling_options == ['-DGGML_WEBGPU_GPU_PROFILE=ON']:
+                if not webgpu_enabled:
+                    raise ValueError('Q8 diagnostics require WebGPU')
+                diagnostic_enabled.append(profile + '/' + variant)
             rows_options = [option for option in provenance['cmakeCommand']
                             if option.startswith('-DLCB_FILE_BACKED_PLE=') or option.startswith('-DLCB_FILE_BACKED_PLE:')]
             if rows_options not in (['-DLCB_FILE_BACKED_PLE=ON'], ['-DLCB_FILE_BACKED_PLE=OFF']):
@@ -238,9 +248,19 @@ def collect(root: Path, manifest: dict) -> dict:
             host_snapshot_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h']}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
+        diagnostic_files = {}
+        diagnostic_copies = {}
+        if diagnostic_enabled:
+            profiled = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu-profile',
+                                            patch_root=root / PATCH_DIRECTORY, gpu_profile=True).parent
+            diagnostic_files = {path.name: file_identity(path) for path in profiled.iterdir() if path.is_file()}
+            names = ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-q8-diagnostic.h',
+                     'ggml-webgpu-q8-diagnostic-sha256.hpp']
+            diagnostic_copies = {variant: {name: diagnostic_files[name] for name in names} for variant in diagnostic_enabled}
+
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
-    return {
+    report = {
         'upstreamRepository': 'ggml-org/llama.cpp',
         'baseCommit': upstream,
         'vendorCheckoutModified': False,
@@ -525,6 +545,22 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Fuse eligible contiguous F32 scale, SILU or sigmoid, and optional final scale operations into one dispatch, retaining guarded fallback and upstream graph semantics. No target-device speedup is claimed.',
         }, {
+            'id': 'webgpu-q8-kernel-diagnostic-v1',
+            'kind': 'profile-only-build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / q8_diagnostic.PATCH_NAME)},
+            'compiledCopies': (next(iter(diagnostic_copies.values())) if diagnostic_copies else None),
+            'compiledCopiesByProfileVariant': diagnostic_copies,
+            'reviewedInputs': q8_diagnostic.CONTRACT_INPUTS,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_q8_diagnostic.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'GGML_WEBGPU_GPU_PROFILE', 'enabledProfileVariants': sorted(diagnostic_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_q8_diagnostic.py', 'scripts/generate_webgpu_q8_diagnostic.py',
+                                 'bridge/webgpu-q8-diagnostic.h', 'bridge/webgpu-q8-diagnostic.cpp',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake', 'CMakeLists.txt']},
+            'behavior': 'Expose a typed optional Q8 kernel diagnostic only in the existing GPU-profile build. Reuse actual matvec factories, params/bindings/grid and graph submission. PREPARE caches actual processed-WGSL SHA-256; EXECUTE only looks up prepared keys. Normal source and base binding outputs remain unchanged. No target-device speedup is claimed.',
+        }, {
             'id': 'webgpu-ssm-conv-silu-fusion',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}',
@@ -645,7 +681,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',
@@ -655,6 +691,37 @@ def collect(root: Path, manifest: dict) -> dict:
             },
         },
     }
+
+    # Profile and normal TUs now differ. Never attribute the normal final bytes
+    # to a profile artifact, including earlier overlays that share the final TU.
+    def actual_copy(value):
+        if not isinstance(value, dict):
+            return value
+        result = {}
+        for name, child in value.items():
+            result[name] = actual_copy(child)
+            if name in diagnostic_files and isinstance(child, dict) and 'sha256' in child and 'bytes' in child:
+                result[name].update(diagnostic_files[name])
+        logical = value.get('logicalUpstreamPath')
+        if logical and Path(logical).name in diagnostic_files:
+            result.update(diagnostic_files[Path(logical).name])
+            if logical == webgpu_source.SOURCE_PATH and 'compileDefinitions' in result:
+                result['compileDefinitions'] = result['compileDefinitions'] + ['GGML_WEBGPU_GPU_PROFILE=1']
+        return result
+
+    for item in report['sourceOverlays']:
+        field = 'compiledCopies' if 'compiledCopies' in item else 'compiledCopy'
+        if field not in item:
+            continue
+        variants = item.get('compiledCopiesByProfileVariant')
+        if variants is None:
+            variants = {variant: item[field] for variant in item.get('application', {}).get('enabledProfileVariants', [])}
+        item['compiledCopiesByProfileVariant'] = {
+            variant: actual_copy(value) if variant in diagnostic_enabled else value for variant, value in variants.items()}
+        values = list(item['compiledCopiesByProfileVariant'].values())
+        if values:
+            item[field] = values[0] if all(value == values[0] for value in values) else None
+    return report
 
 
 def main():

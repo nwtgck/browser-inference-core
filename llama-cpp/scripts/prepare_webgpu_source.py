@@ -24,6 +24,7 @@ import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
+import prepare_webgpu_q8_diagnostic as q8_diagnostic
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -66,7 +67,7 @@ def patch_environment(work: Path) -> dict[str, str]:
     return env
 
 
-def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY) -> Path:
+def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY, gpu_profile: bool = False) -> Path:
     source, output = source.resolve(), output.resolve()
     if output == source or source in output.parents or output in source.parents:
         raise ValueError('WebGPU overlay must be outside the upstream source tree')
@@ -129,6 +130,11 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             raise ValueError('Unexpected chunked loader source identity')
         if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
             raise ValueError('Unexpected combined shader-library header identity')
+        if gpu_profile:
+            hc_headers.update(q8_diagnostic.prepare(work, source, patch_root, env))
+        else:
+            for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
+                (output / name).unlink(missing_ok=True)
         # Do not emit an embedded WGSL header here: the sibling shader library
         # must continue to use upstream's generated shaders. Narrow matrix-only
         # specializations use dedicated embedded headers, never shadowing it.
@@ -156,9 +162,10 @@ def main():
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--dawn-package', type=Path, required=True)
+    parser.add_argument('--gpu-profile', action='store_true')
     args = parser.parse_args()
     tensor_copy.verify_dawn(args.dawn_package)
-    prepare(args.source, args.output)
+    prepare(args.source, args.output, gpu_profile=args.gpu_profile)
 
 
 if __name__ == '__main__':

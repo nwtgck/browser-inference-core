@@ -6,9 +6,13 @@ if(NOT EMDAWNWEBGPU_DIR)
     message(FATAL_ERROR "WebGPU source requires the reviewed EMDAWNWEBGPU_DIR package")
 endif()
 set(LCB_SOURCE_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/webgpu-source-overlay")
+set(LCB_WEBGPU_PROFILE_PREPARE_ARGS)
+if(GGML_WEBGPU_GPU_PROFILE)
+    list(APPEND LCB_WEBGPU_PROFILE_PREPARE_ARGS --gpu-profile)
+endif()
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_source.py"
     --source "${LCB_LLAMA_SOURCE}" --output "${LCB_SOURCE_OVERLAY}"
-    --dawn-package "${EMDAWNWEBGPU_DIR}"
+    --dawn-package "${EMDAWNWEBGPU_DIR}" ${LCB_WEBGPU_PROFILE_PREPARE_ARGS}
     COMMAND_ERROR_IS_FATAL ANY)
 get_target_property(LCB_SOURCE_SOURCES ggml-webgpu SOURCES)
 set(LCB_SOURCE_MATCHES 0)
@@ -254,3 +258,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/quant_inner_loops.tmpl")
+
+# The diagnostic is a final profile-only stage. Normal overlay bytes stay unchanged.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_diagnostic.py"
+    "${LCB_SOURCE_ROOT}/bridge/webgpu-q8-diagnostic.h"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-opencl/cl-program-cache.cpp")

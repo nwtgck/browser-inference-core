@@ -28,13 +28,30 @@ class GpuProfileBuild(unittest.TestCase):
                 for flag in ('', '-DGGML_WEBGPU_GPU_PROFILE=1', '-DGGML_WEBGPU_GPU_PROFILE=0',
                              '-DGGML_WEBGPU_GPU_PROFILE', '-DGGML_WEBGPU_GPU_PROFILE_EXTRA=1'):
                     with self.subTest(enabled=enabled, flag=flag):
-                        database.write_text(json.dumps([{'file': '/build/ggml-webgpu.cpp',
-                                                         'command': 'em++ -c ggml-webgpu.cpp ' + flag}]))
+                        entries = [{'file': '/build/ggml-webgpu.cpp', 'command': 'em++ -c ggml-webgpu.cpp ' + flag}]
+                        if enabled:
+                            entries += [{'file': name, 'command': 'em++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c ' + name}
+                                        for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
+                        database.write_text(json.dumps(entries))
                         if flag == ('-DGGML_WEBGPU_GPU_PROFILE=1' if enabled else ''):
                             verify(database, webgpu=True, enabled=enabled)
                         else:
                             with self.assertRaisesRegex(ValueError, 'definition mismatch'):
                                 verify(database, webgpu=True, enabled=enabled)
+
+    def test_diagnostic_translation_units_are_profile_only_and_require_value_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / 'compile_commands.json'
+            backend = {'file': 'ggml-webgpu.cpp', 'arguments': ['em++', '-DGGML_WEBGPU_GPU_PROFILE=1']}
+            names = ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')
+            good = [{'file': name, 'arguments': ['em++', '-DLCB_WEBGPU_Q8_DIAGNOSTIC=1']} for name in names]
+            for bad in ([], good[:1], good + good, [dict(item, arguments=['em++', '-DLCB_WEBGPU_Q8_DIAGNOSTIC=0']) for item in good]):
+                database.write_text(json.dumps([backend, *bad]))
+                with self.assertRaisesRegex(ValueError, 'Q8 diagnostic'):
+                    verify(database, webgpu=True, enabled=True)
+            database.write_text(json.dumps([{'file': 'ggml-webgpu.cpp', 'arguments': ['em++']}, *good]))
+            with self.assertRaisesRegex(ValueError, 'Q8 diagnostic'):
+                verify(database, webgpu=True, enabled=False)
 
     def test_missing_and_duplicate_translation_units_fail(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -48,7 +65,7 @@ class GpuProfileBuild(unittest.TestCase):
             verify(database, webgpu=False, enabled=False)
             with self.assertRaisesRegex(ValueError, 'requires a WebGPU'):
                 verify(database, webgpu=False, enabled=True)
-            database.write_text(json.dumps([entry]))
+            database.write_text(json.dumps([entry, *[{'file': name, 'arguments': ['em++', '-DLCB_WEBGPU_Q8_DIAGNOSTIC=1']} for name in ('webgpu-q8-diagnostic.cpp','q8-diagnostic-metadata.cpp')]]))
             verify(database, webgpu=True, enabled=True)
 
 

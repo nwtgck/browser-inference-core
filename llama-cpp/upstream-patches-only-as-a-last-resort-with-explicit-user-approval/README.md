@@ -465,3 +465,13 @@ not establish target-device speed.
 - **Removal:** upstream provides equivalent inactive-group handling, or the owner
   withdraws it; remove the patch, preparation, dedicated embedding, build wiring,
   tests and provenance entry together.
+
+## Profile-only Q8 kernel diagnostic
+
+- **Patch:** `ggml-webgpu-q8-diagnostic.patch`.
+- **Approval and scope:** the owner's explicitly authorized kernel A/B diagnostic. Only `GGML_WEBGPU_GPU_PROFILE` builds add a versioned typed registry provider, fixed-width bridge, separate generated extension schema and explicit Q8 variants. AUTO preserves real production selection; forced variants never replace normal selection. No model data or host application policy is added.
+- **No-patch alternative:** compare separate immutable artifacts or defer the diagnostic; neither supplies explicit same-device/same-buffer selection in one runtime.
+- **Safety:** bounded contiguous, non-view Q8_0/F32/F32 single-vector tensors, checked physical/logical bindings and device/grid limits; reject unsupported requests before enqueue. PREPARE creates pipelines and records actual processed-WGSL SHA-256; EXECUTE only looks up prepared keys. Same-context operation guards span pipeline and profile-map suspension. Borrowed tensors are not retained; existing bind-group buffer references follow their generation cleanup contract. Hosts serialize all calls and destroy a poisoned runtime after unexpected rejection rather than freeing pending resources.
+- **Integration:** apply a final profile-only stage after the other overlays. Normal final source and common generated ABI remain byte-identical. Pin upstream factory/decoder/submit contracts, patch, stage outputs, bridge contract and the mechanically extracted upstream public-domain SHA-256 reference, including extraction boundaries. Separate extension records use generated native layout queries and a compiled schema fingerprint; absent exports remain optional for older artifacts.
+- **Validation and limits:** focused source-bound native tests cover the ABI, cache, shader identity, dispatch, lifetime and guarded fallback; these do not establish real-device speed or model quality. Only the existing profiler supplies GPU timestamps.
+- **Removal:** when upstream provides an equivalent optional diagnostic or the owner withdraws it, remove its profile stage, bridge, schema generator, build/provenance wiring and tests together.

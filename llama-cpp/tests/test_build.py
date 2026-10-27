@@ -79,6 +79,8 @@ class BuildProvenance(unittest.TestCase):
             if not building:
                 macro=' -DGGML_WEBGPU_GPU_PROFILE=1' if sys.argv[3]=='ON' else ''
                 commands=[{'file':'ggml-webgpu.cpp','command':'c++ -c ggml-webgpu.cpp'+macro}] if sys.argv[2]=='ON' else []
+                if macro:
+                    commands += [{'file':name,'command':'c++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c '+name} for name in ('webgpu-q8-diagnostic.cpp','q8-diagnostic-metadata.cpp')]
                 Path('compile_commands.json').write_text(json.dumps(commands))
                 mode=os.environ.get('LCB_TEST_MODE')
                 if mode=='modify':
