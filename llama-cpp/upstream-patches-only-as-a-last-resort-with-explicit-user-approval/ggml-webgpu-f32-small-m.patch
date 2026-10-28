@@ -1,0 +1,102 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1234,6 +1234,8 @@
+ };
+ 
+ struct ggml_webgpu_mul_mat_pipeline_key {
++    // 0: existing geometry, 1/4: F32 small-M register tiles.
++    uint32_t  small_m_tile;
+     ggml_type src0_type;
+     ggml_type src1_type;
+     int       vectorized;
+@@ -1242,13 +1244,15 @@
+ 
+     bool operator==(const ggml_webgpu_mul_mat_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+-               use_subgroup_matrix == other.use_subgroup_matrix && src_overlap == other.src_overlap;
++               use_subgroup_matrix == other.use_subgroup_matrix && src_overlap == other.src_overlap &&
++               small_m_tile == other.small_m_tile;
+     }
+ };
+ 
+ struct ggml_webgpu_mul_mat_pipeline_key_hash {
+     size_t operator()(const ggml_webgpu_mul_mat_pipeline_key & key) const {
+         size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, key.small_m_tile);
+         ggml_webgpu_hash_combine(seed, key.src0_type);
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+@@ -2503,12 +2507,23 @@
+                                       0;
+         key.use_subgroup_matrix = context.supports_subgroup_matrix;
+         key.src_overlap         = src_overlap;
++        // N<=4 retains the existing host matvec route. Reuse the pinned TK8
++        // accumulator; only remove the unused M extent of register tiles.
++        key.small_m_tile = !key.use_subgroup_matrix && !key.src_overlap &&
++                           key.src0_type == GGML_TYPE_F32 && key.src1_type == GGML_TYPE_F32 &&
++                           context.dst->type == GGML_TYPE_F32 && context.src0->ne[0] >= 128 &&
++                           context.dst->ne[0] >= 1 && context.dst->ne[0] <= 4 && context.dst->ne[1] >= 5 ?
++                               (context.dst->ne[0] == 1 ? 1u : 4u) : 0u;
+ 
+         auto it = mul_mat_fast_pipelines.find(key);
+         if (it != mul_mat_fast_pipelines.end()) {
+             return it->second;
+         }
+ 
++        const uint32_t tile_m = key.small_m_tile ? key.small_m_tile : WEBGPU_MUL_MAT_TILE_M;
++        const uint32_t tile_n = key.small_m_tile ? 1u : WEBGPU_MUL_MAT_TILE_N;
++        const uint32_t wg_m   = key.small_m_tile ? 1u : WEBGPU_MUL_MAT_WG_SIZE_M;
++        const uint32_t wg_n   = key.small_m_tile ? 32u : WEBGPU_MUL_MAT_WG_SIZE_N;
+         const char * shader_src = key.use_subgroup_matrix ? wgsl_mul_mat_subgroup_matrix : wgsl_mul_mat_reg_tile;
+         std::vector<std::string> defines;
+         std::string              variant = key.use_subgroup_matrix ? "mul_mat_subgroup_matrix" : "mul_mat_reg_tile";
+@@ -2607,8 +2622,8 @@
+         }
+ 
+         // Tiles
+-        defines.push_back("TILE_M=" + std::to_string(WEBGPU_MUL_MAT_TILE_M) + "u");
+-        defines.push_back("TILE_N=" + std::to_string(WEBGPU_MUL_MAT_TILE_N) + "u");
++        defines.push_back("TILE_M=" + std::to_string(tile_m) + "u");
++        defines.push_back("TILE_N=" + std::to_string(tile_n) + "u");
+ 
+         // Subgroup matrix specifics
+         if (key.use_subgroup_matrix) {
+@@ -2635,17 +2650,21 @@
+         }
+ 
+         if (!key.use_subgroup_matrix) {
+-            defines.push_back("WORKGROUP_SIZE_M=" + std::to_string(WEBGPU_MUL_MAT_WG_SIZE_M) + "u");
+-            defines.push_back("WORKGROUP_SIZE_N=" + std::to_string(WEBGPU_MUL_MAT_WG_SIZE_N) + "u");
++            defines.push_back("WORKGROUP_SIZE_M=" + std::to_string(wg_m) + "u");
++            defines.push_back("WORKGROUP_SIZE_N=" + std::to_string(wg_n) + "u");
+             defines.push_back("TILE_K=" + std::to_string(tile_k) + "u");
++        }
++
++        if (key.small_m_tile) {
++            variant += "_small_m" + std::to_string(key.small_m_tile);
+         }
+ 
+         auto processed = preprocessor.preprocess(shader_src, defines);
+ 
+         auto decisions                 = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();
+         decisions->tile_k              = tile_k;
+-        decisions->tile_m              = WEBGPU_MUL_MAT_TILE_M;
+-        decisions->tile_n              = WEBGPU_MUL_MAT_TILE_N;
++        decisions->tile_m              = tile_m;
++        decisions->tile_n              = tile_n;
+         decisions->use_subgroup_matrix = key.use_subgroup_matrix;
+         if (key.use_subgroup_matrix) {
+             decisions->subgroup_m        = WEBGPU_MUL_MAT_SUBGROUP_M;
+@@ -2654,9 +2673,9 @@
+             decisions->subgroup_matrix_n = WEBGPU_MUL_MAT_SUBGROUP_MATRIX_N;
+             decisions->wg_size           = context.max_subgroup_size;
+         } else {
+-            decisions->wg_size_m       = WEBGPU_MUL_MAT_WG_SIZE_M;
+-            decisions->wg_size_n       = WEBGPU_MUL_MAT_WG_SIZE_N;
+-            decisions->wg_size         = WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_WG_SIZE_N;
++            decisions->wg_size_m       = wg_m;
++            decisions->wg_size_n       = wg_n;
++            decisions->wg_size         = wg_m * wg_n;
+             decisions->mul_mat_wg_size = WEBGPU_MUL_MAT_WG_SIZE;
+         }
+ 

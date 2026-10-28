@@ -510,3 +510,13 @@ not establish target-device speed.
 - **Integration:** run a checked profile-only stage immediately before the optional Q8 diagnostic. Pin upstream contracts, input, patch and prefix output. Normal prepared source and the shared ABI/schema/shaders remain byte-identical.
 - **Validation and limits:** extracted actual graph/build/arena control tests retain the failing baseline at the query boundary, the repaired behavior, capacity and arena rejection, plus normal byte invariance. The Encode callback supplies source-derived multi-dispatch counts; this CPU model is not a GPU or full GGML graph/factory execution. Actual profile runtime validation remains a separate check.
 - **Removal condition:** remove the stage and its preparation/build/provenance/test wiring when upstream reserves queries for every accepted batch or supplies an equivalent safe collection boundary.
+
+
+## F32 small-M prefill register tiles
+
+- **Patch:** `ggml-webgpu-f32-small-m.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this agent-selected geometry specialization. Only F32/F32/F32 matrices with K>=128, M1..4 and N>=5, without subgroup matrices or source overlap, use narrower existing register tiles. Existing N<=4 matvec routing, other types and fallback geometries remain unchanged.
+- **Contract:** use the pinned upstream register-tile WGSL and TK8 accumulation unchanged. M1 uses tileM1; M2..4 use tileM4. Both use tileN1 and a 1x32 workgroup. Effective geometry is part of pipeline equality/hash before lookup, and profile names distinguish it. Parameter bytes, binding layout and dispatch grid remain unchanged.
+- **Integration:** a checked header-only stage follows host assembly and precedes optional profile stages. Normal/profile shader-library identities change; host source, shared bindings/schema and canonical WGSL inputs do not. No extra runtime profile or native API is added.
+- **Validation and limits:** source-bound admission/cache/factory/dispatch checks cover boundaries and guarded fallbacks. Private software-GPU geometry comparisons informed the scope; target-device/model speed and model quality are not established by those results. Revalidate arithmetic, layouts and performance before widening the scope.
+- **Removal:** remove this stage and its metadata/tests when upstream provides a suitable equivalent or the specialization is no longer useful. Re-review upstream factory, key, geometry decisions, reg-tile loads/accumulation and dispatch contracts on pin changes.
