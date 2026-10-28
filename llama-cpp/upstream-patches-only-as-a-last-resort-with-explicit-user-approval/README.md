@@ -9,12 +9,12 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`338fce6511c744893cc0d3d958b275f40552c7a4`. Re-evaluate compatibility at each pin
+`8642541b255bfb5dc39cd351a178be09013a55d6`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
-See [the current upstream review](../docs/llama-338fce-review.md) for reviewed
-contracts and validation boundaries. The [v0.7.0 review](../docs/llama-v0.7.0-review.md)
-records the preceding pin and remains historical context.
+See [the current upstream review](../docs/llama-v0.8.0-review.md) for reviewed
+contracts and validation boundaries. The [338fce review](../docs/llama-338fce-review.md)
+and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 
 ## Vision BF16 compatibility/performance
 

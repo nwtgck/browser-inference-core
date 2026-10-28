@@ -42,6 +42,18 @@ operations. `delete()` invokes upstream cleanup. Supply every bound argument;
 C++ default arguments do not become JavaScript defaults. Its model argument is a checked
 `bigint` pointer from the C API; string overrides are ordinary JS strings.
 
+At the v0.8.0 pin, `templates.get_caps()` returns an owned `common_json`,
+including boolean capabilities and the `reasoning_effort_levels` string array.
+Use `JSON.parse(caps.dump(-1))` to inspect it and then call `caps.delete()`.
+This replaces the upstream method's previous boolean-map return type.
+
+The generated `mtmd_get_video_config` binding uses caller-owned return storage:
+allocate it with `core.allocRecord('mtmd_video_config')`, pass that pointer as
+the first argument, inspect fields through the generated layout queries, and
+release it with `core.free(pointer)`. The new `no_soundtrack` field in
+`mtmd_helper_video_init_params` changes its size; never reuse an older artifact's
+hardcoded layout. These APIs do not enable subprocess video helpers in Wasm.
+
 Embind owns returned value objects and STL containers; call `delete()` on them.
 Class-valued properties and vector elements use standard copy behavior: modifying
 a retrieved copy does not update its parent until assigned back. String conversion

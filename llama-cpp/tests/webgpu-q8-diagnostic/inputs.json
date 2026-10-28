@@ -1,5 +1,5 @@
 {
-  "upstream_commit": "338fce6511c744893cc0d3d958b275f40552c7a4",
+  "upstream_commit": "8642541b255bfb5dc39cd351a178be09013a55d6",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
@@ -7,12 +7,12 @@
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
   "base_generated_normalized_sha256": {
-    "bindings.cpp": "8f0cd26d86a0d6efeb6318289e85db5a9035bbf32dc98713514ba7ca9f262664",
-    "schema.json": "661059abdad121f33dc31ce96897769a96ed5eca037b23d0ef3eba7158f486bd",
-    "schema.mjs": "cd1f5f064daddb1a42d4fdffa5586b6753a9d42a1664764c1fd7bc3e47c6642a",
-    "exports.json": "5724dbdb55e7e7eaa2886ac2673204889f61817683c8935f82f8e499f0bd5cc8",
-    "jspi-exports.json": "71aee5e763caf0ffa3c7fd08c49288bbdcd99a585720d1260f88caf06facb8b1",
-    "functions.d.ts": "8d1dff3729b9eb386598535c855095dc36edca581dc0135a8d174f3e74693e95"
+    "bindings.cpp": "789e2bb02773b05e58abf394370e4d24102d742f0d7f4eddb305ec2e18f280d6",
+    "schema.json": "90cb1a05ef1075bc750ce8571465998e4bdc326a8db68c728421ed3b562fd60b",
+    "schema.mjs": "7a5b2a49196170be4b4e673d4dd0991697200be0c44a397d63518acfc7cf98e7",
+    "exports.json": "013c6b8dfa1d373c64f80cf6ec17f0992be91d232f7aada67695ce120680331b",
+    "jspi-exports.json": "e7f5a4356afae8849e51206112407d25dfd566a76bcfcb1579b4f631690dafaf",
+    "functions.d.ts": "8fe2e32be9b810af688ff6fa8c98cc70f2f6c50b645175859c758153872fe73c"
   },
   "public_source_sha256": {
     "scripts/prepare_webgpu_q8_diagnostic.py": "d8e4a48752b1a28f158e8e23f80819c9b7506337073877bd00d388475b90d49d",

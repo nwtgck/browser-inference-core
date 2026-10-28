@@ -46,7 +46,9 @@ export async function checkChatSurface(native, template) {
     check(typeof asr.has_language === 'boolean' && typeof localizedAsr.has_language === 'boolean', 'ASR language metadata missing');
     check(templates.get_tts_prompt('hello', 'English', '') === '', 'An absent TTS template must stay empty');
     const caps = own(templates.get_caps());
-    check(Number(caps.size()) > 0, 'Missing template capabilities');
+    const capabilities = toJS(caps);
+    check(caps.is_object() && typeof capabilities.supports_tool_calls === 'boolean', 'Template capabilities must retain the upstream JSON object');
+    check(Array.isArray(capabilities.reasoning_effort_levels) && capabilities.reasoning_effort_levels.every(level => typeof level === 'string'), 'Reasoning effort levels missing');
     const tools = [{ type: 'function', function: {
       name: 'lookup', description: 'Find weather',
       parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
