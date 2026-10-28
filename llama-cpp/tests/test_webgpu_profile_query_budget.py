@@ -65,16 +65,16 @@ class ProfileQueryBudget(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='profile-query-budget-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(source.matmul_vec4_layout, 'prepare'):
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             cls.normal = source.prepare(cls.upstream, cls.directory / 'normal')
         # The predecessor remains pinned and is actually executed by the test;
         # do not mutate its query counter or replace its assertion.
         old_inputs = {**diagnostic.INPUTS, 'ggml-webgpu.cpp': budget.INPUT_SHA256}
         old_outputs = {**diagnostic.OUTPUTS, 'ggml-webgpu.cpp': BASELINE_PROFILE_SHA256}
-        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(budget, 'prepare'), patch.object(diagnostic, 'INPUTS', old_inputs), \
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(budget, 'prepare'), patch.object(diagnostic, 'INPUTS', old_inputs), \
                 patch.object(diagnostic, 'OUTPUTS', old_outputs):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline', gpu_profile=True)
-        with patch.object(source.matmul_vec4_layout, 'prepare'):
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True)
 
     def test_normal_is_exact_and_does_not_enter_the_profile_stage(self):
@@ -84,7 +84,7 @@ class ProfileQueryBudget(unittest.TestCase):
         self.assertIn(CAPACITY_ASSERT, self.profile.read_text())
         for name in ('ggml-webgpu-shader-lib.hpp', 'ggml-backend.cpp', 'llama-model-loader.cpp', 'llama-sampler.cpp'):
             self.assertEqual((self.profile.parent / name).read_bytes(), (self.baseline.parent / name).read_bytes())
-        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(budget, 'prepare', side_effect=AssertionError('profile stage entered normal preparation')):
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(budget, 'prepare', side_effect=AssertionError('profile stage entered normal preparation')):
             normal = source.prepare(self.upstream, self.directory / 'normal-again')
         before = {p.name: p.read_bytes() for p in self.normal.parent.iterdir() if p.is_file()}
         after = {p.name: p.read_bytes() for p in normal.parent.iterdir() if p.is_file()}

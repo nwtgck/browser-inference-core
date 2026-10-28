@@ -31,9 +31,10 @@ class MatmulVec4Layout(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.baseline, cls.final = {}, {}
         for profile in (False, True):
-            with patch.object(layout, 'prepare'):
+            with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(layout, 'prepare'):
                 cls.baseline[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
+            with patch.object(source.moe_tight_tile_bound, 'prepare'):
+                cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
 
     def test_only_caller_and_factory_change_and_inverse_restores_full_prefix(self):
         before = {name: copy.digest(self.upstream / name) for name in layout.CONTRACT_INPUTS}
@@ -44,7 +45,7 @@ class MatmulVec4Layout(unittest.TestCase):
             self.assertEqual(changed, set(layout.OUTPUTS[profile]))
             for name in changed:
                 self.assertEqual(copy.digest(old / name), layout.INPUTS[profile][name])
-                self.assertEqual(copy.digest(final / name), source.FINAL_OUTPUTS[profile][name])
+                self.assertEqual(copy.digest(final / name), layout.OUTPUTS[profile][name])
             with tempfile.TemporaryDirectory() as temporary:
                 work = Path(temporary)
                 (work / layout.BASE).mkdir(parents=True)

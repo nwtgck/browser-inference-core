@@ -34,7 +34,7 @@ class Iq3sSubgroup(unittest.TestCase):
 
     def stage(self, destination):
         base = destination / 'base'
-        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                 patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                 patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \

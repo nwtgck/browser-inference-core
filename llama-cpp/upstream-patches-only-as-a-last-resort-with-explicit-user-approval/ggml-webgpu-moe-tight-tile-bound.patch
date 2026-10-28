@@ -1,0 +1,12 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2032,7 +2032,8 @@
+     const uint32_t n_expert = (uint32_t) dst->src[0]->ne[2];
+     const uint32_t n_slots  = (uint32_t) (dst->ne[1] * dst->ne[2]);  // n_expert_used * n_tokens
+ 
+-    return CEIL_DIV(n_slots, WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N) + std::min(n_expert, n_slots);
++    const uint32_t max_active_experts = std::min(n_expert, n_slots);
++    return max_active_experts + (n_slots - max_active_experts) / (WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N);
+ }
+ 
+ // tile count followed by (expert, first slot, n slots) per tile

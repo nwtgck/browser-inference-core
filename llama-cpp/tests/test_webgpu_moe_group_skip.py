@@ -30,7 +30,7 @@ class MoeGroupSkip(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
-        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
+        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source.f32_small_m, 'prepare'), \
                 patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
@@ -143,7 +143,7 @@ class MoeGroupSkip(unittest.TestCase):
                 self.assertEqual(metadata['gatherParams'], [3, dst, 11, 4, 9, 6, m])
                 self.assertEqual(metadata['mainParams'], [a, x, dst, k, m, 11, 4, 9, 4,
                                                          stride_a, stride_x, m * stride_a + 4, 4 * stride_x + 4])
-                self.assertEqual(metadata['maxTiles'], 13)
+                self.assertEqual(metadata['maxTiles'], 11)
                 self.assertEqual(metadata['vectorized'], vec)
                 self.assertEqual(metadata['tileK'], 8 if kind == 0 else 32)
                 baseline = (shaders / (name + '-baseline.wgsl')).read_text()
