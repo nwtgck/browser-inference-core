@@ -69,6 +69,7 @@ class HostInputSnapshot(unittest.TestCase):
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
                     patch.object(source, 'OUTPUT_SHA256', snapshot.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.ssm_conv_silu.INPUTS['ggml-webgpu-shader-lib.hpp']):
                 baseline = self.prepare(root / 'base')
@@ -149,6 +150,7 @@ class HostInputSnapshot(unittest.TestCase):
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
                     patch.object(source, 'OUTPUT_SHA256', snapshot.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.ssm_conv_silu.INPUTS['ggml-webgpu-shader-lib.hpp']):
                 before = self.prepare(directory / 'before').read_text()

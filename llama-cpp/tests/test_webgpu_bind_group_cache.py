@@ -82,6 +82,7 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
                     patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.q4_short.OUTPUT_SHA256):
                 baseline = source.prepare(self.upstream, root / 'base')
@@ -167,7 +168,12 @@ class BindGroupCache(unittest.TestCase):
                 'ACTUAL_DISPATCH_DESC': 'webgpu_dispatch_desc',
             }
             for marker, name in functions.items():
-                code = code.replace('// @' + marker + '@', function(actual, name))
+                value = function(actual, name)
+                if marker == 'ACTUAL_BUILD_MULTI':
+                    value = (definition(actual, 'struct webgpu_dispatch_view {') +
+                             'template<class Dispatch>\n' + function(actual, 'ggml_backend_webgpu_build_impl') +
+                             value)
+                code = code.replace('// @' + marker + '@', value)
             for marker, name in structures.items():
                 code = code.replace('// @' + marker + '@', definition(actual, 'struct ' + name + ' {'))
             harness = root / 'bind-group-cache.cpp'

@@ -31,6 +31,7 @@ class MoeGroupSkip(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
         with patch.object(source.router_tail, 'prepare', return_value={}), \
+                patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source, 'OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             cls.group_stage = source.prepare(cls.upstream, cls.directory / 'group-stage').parent

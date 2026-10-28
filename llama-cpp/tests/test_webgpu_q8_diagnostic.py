@@ -126,7 +126,8 @@ class Q8Diagnostic(unittest.TestCase):
             'extern "C" __attribute__((weak)) const ggml_type_traits * ggml_get_type_traits(')
         code += '\n' + (HERE / 'provider-prefix.cpp').read_text()
         for marker in ('struct webgpu_encoded_op {', 'struct webgpu_dispatch_desc {',
-                       'struct ggml_webgpu_merged_binding_range {', 'struct webgpu_profile_operation_guard {'):
+                       'struct ggml_webgpu_merged_binding_range {', 'struct webgpu_profile_operation_guard {',
+                       'struct webgpu_dispatch_view {'):
             code += '\n' + function(backend, marker) + ';'
         code += '\n' + function(library, 'struct ggml_webgpu_mul_mat_shader_decisions {') + ';'
         for marker in ('static inline void compute_2d_workgroups(', 'static size_t ggml_webgpu_tensor_offset(',
@@ -142,9 +143,10 @@ class Q8Diagnostic(unittest.TestCase):
                        'static uint32_t ggml_webgpu_tensor_merged_element_offset(',
                        'static wgpu::BindGroupEntry ggml_webgpu_make_bind_group_entry(',
                        'static wgpu::BindGroupEntry ggml_webgpu_make_tensor_bind_group_entry(',
+                       'static webgpu_encoded_op ggml_backend_webgpu_build_impl(',
                        'static webgpu_encoded_op ggml_backend_webgpu_build_multi(',
                        'static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context('):
-            code += '\n' + function(backend, marker)
+            code += '\n' + ('template<class Dispatch>\n' if 'ggml_backend_webgpu_build_impl(' in marker else '') + function(backend, marker)
         code += '\nstatic void ggml_webgpu_quantize_q8_dispatch(webgpu_context &,ggml_tensor *,ggml_tensor *,ggml_tensor *,std::vector<webgpu_dispatch_desc> &){throw std::runtime_error("unexpected MMVQ");}'
         code += '\ntemplate<bool Diagnostic>\n' + function(backend, 'static webgpu_encoded_op ggml_webgpu_mul_mat_impl(')
         code += '\nstatic std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context & ctx,ggml_cgraph * g,int i,int & count){count=1;auto * d=g->nodes[i];return ggml_webgpu_mul_mat_impl<false>(ctx,d->src[0],d->src[1],d);}'

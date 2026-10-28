@@ -60,7 +60,7 @@ struct Global {
 static std::vector<std::vector<uint32_t>> actual_params;
 static std::vector<wgpu::BindGroupEntry> actual_bindings;
 struct Arena {
- wgpu::Buffer buffer{100};size_t slot_size=256,cursor=0;unsigned flushes=0,resets=0;
+ wgpu::Buffer buffer{100};size_t slot_size=256,cursor=0;uint32_t slot_count=74;unsigned flushes=0,resets=0;
  size_t alloc_slot(size_t n){if(n>128)throw std::runtime_error("param overflow");const auto at=cursor;cursor+=256;return at;}
  void stage(size_t,const void * p,size_t n){const auto * v=static_cast<const uint32_t *>(p);actual_params.emplace_back(v,v+n/4);}
  void flush(wgpu::Queue &){++flushes;}

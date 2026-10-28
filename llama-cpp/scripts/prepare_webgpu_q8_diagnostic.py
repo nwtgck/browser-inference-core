@@ -9,11 +9,11 @@ PATCH_NAME = 'ggml-webgpu-q8-diagnostic.patch'
 PATCH_SHA256 = 'a27bdcdbd74dd7c3b39b9bd94075adfda59e2803729dae9ee9d72383b4691ab7'
 BASE = Path('ggml/src/ggml-webgpu')
 INPUTS = {
-    'ggml-webgpu.cpp': '4b66eeacddb5927aaed6c67e351b190eb5de3662937a9e8fed8760fdd4a8a27d',
+    'ggml-webgpu.cpp': 'd5228a8a36613fa8ae7341bb96eee04f318aed5ccd73aa85e57164d118a70a2b',
     'ggml-webgpu-shader-lib.hpp': '4ca71dcd2df778ffbe3f1678c525e03a646f68fa8345d14168ac91c16a452656',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': 'c19bd1f96ae466a93560eee0121891d98f44ea4ee3cdf68010bfe5275d4c5650',
+    'ggml-webgpu.cpp': 'eb38bb6fba491b03ef3cfc685f05982ad580c4a587082c0f288b88efa1558aac',
     'ggml-webgpu-shader-lib.hpp': '7a0c78ef92adb745329777bc44d9e08d24ba68ff6ba4955047f8bb623628ce4b',
 }
 CONTRACT_INPUTS = {

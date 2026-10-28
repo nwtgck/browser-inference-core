@@ -1,0 +1,87 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -731,19 +731,34 @@
+ }
+ #endif
+ 
+-static webgpu_encoded_op ggml_backend_webgpu_build_multi(webgpu_context &                          ctx,
+-                                                         const std::vector<webgpu_dispatch_desc> & dispatches) {
++// These references are used only while build_impl stages parameters and encodes
++// commands synchronously. Neither the cache nor queued work retains the view.
++struct webgpu_dispatch_view {
++    const webgpu_pipeline & pipeline;
++    const std::vector<uint32_t> & params;
++    const std::vector<wgpu::BindGroupEntry> & bind_group_entries;
++    std::pair<uint32_t, uint32_t> workgroups;
++};
++template<class Dispatch>
++static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches, size_t dispatch_count) {
+     webgpu_encoded_op            result = {};
+     std::vector<wgpu::BindGroup> bind_groups;
+     std::vector<size_t>          param_offsets;
+-    result.num_kernels = dispatches.size();
+-
+-    for (size_t i = 0; i < dispatches.size(); i++) {
+-        const webgpu_dispatch_desc & dispatch     = dispatches[i];
++    result.num_kernels = dispatch_count;
++    // Invalid oversized batches still fail at the existing arena guard without
++    // reserving unbounded scratch storage first.
++    const size_t reserve_count = dispatch_count < ctx->param_arena.slot_count ? dispatch_count : ctx->param_arena.slot_count;
++    bind_groups.reserve(reserve_count);
++    param_offsets.reserve(reserve_count);
++
++    for (size_t i = 0; i < dispatch_count; i++) {
++        const auto & dispatch = dispatches[i];
+         const size_t                 param_size   = dispatch.params.size() * sizeof(uint32_t);
+         const size_t                 param_offset = ctx->param_arena.alloc_slot(param_size);
+ 
+-        std::vector<wgpu::BindGroupEntry> entries            = dispatch.bind_group_entries;
++        std::vector<wgpu::BindGroupEntry> entries;
++        entries.reserve(dispatch.bind_group_entries.size() + 1);
++        entries.insert(entries.end(), dispatch.bind_group_entries.begin(), dispatch.bind_group_entries.end());
+         uint32_t                          params_binding_num = entries.size();
+         entries.push_back(ggml_webgpu_make_bind_group_entry(params_binding_num, ctx->param_arena.buffer, param_offset,
+                                                             ctx->param_arena.slot_size));
+@@ -765,7 +780,7 @@
+     }
+ 
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+-    for (size_t i = 0; i < dispatches.size(); i++) {
++    for (size_t i = 0; i < dispatch_count; i++) {
+         GGML_ASSERT(ctx->profile_timestamp_query_count + 2 <= WEBGPU_MAX_PROFILE_QUERY_COUNT);
+         const uint32_t query_begin = ctx->profile_timestamp_query_count++;
+         const uint32_t query_end   = ctx->profile_timestamp_query_count++;
+@@ -786,7 +801,7 @@
+         result.pipeline_names.push_back(dispatches[i].pipeline.name);
+     }
+ #else
+-    for (size_t i = 0; i < dispatches.size(); i++) {
++    for (size_t i = 0; i < dispatch_count; i++) {
+         if (ctx->batch_compute_passes) {
+             ctx->active_compute_pass.SetPipeline(dispatches[i].pipeline.pipeline);
+             ctx->active_compute_pass.SetBindGroup(0, bind_groups[i]);
+@@ -805,16 +820,14 @@
+     return result;
+ }
+ 
+-static webgpu_encoded_op ggml_backend_webgpu_build(webgpu_context &                  ctx,
+-                                                   webgpu_pipeline &                 pipeline,
+-                                                   std::vector<uint32_t>             params,
+-                                                   std::vector<wgpu::BindGroupEntry> bind_group_entries,
+-                                                   uint32_t                          wg_x,
+-                                                   uint32_t                          wg_y = 1) {
+-    return ggml_backend_webgpu_build_multi(
+-        ctx, {
+-                 { pipeline, std::move(params), std::move(bind_group_entries), { wg_x, wg_y } },
+-    });
++static webgpu_encoded_op ggml_backend_webgpu_build_multi(webgpu_context & ctx, const std::vector<webgpu_dispatch_desc> & dispatches) {
++    return ggml_backend_webgpu_build_impl(ctx, dispatches.data(), dispatches.size());
++}
++static webgpu_encoded_op ggml_backend_webgpu_build(webgpu_context & ctx, webgpu_pipeline & pipeline,
++    const std::vector<uint32_t> & params, const std::vector<wgpu::BindGroupEntry> & entries,
++    uint32_t wg_x, uint32_t wg_y = 1) {
++    const webgpu_dispatch_view dispatch{pipeline, params, entries, {wg_x, wg_y}};
++    return ggml_backend_webgpu_build_impl(ctx, &dispatch, 1);
+ }
+ 
+ static void ggml_backend_webgpu_buffer_memset(webgpu_global_context & ctx,

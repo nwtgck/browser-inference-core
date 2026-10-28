@@ -30,7 +30,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-ordered-readback.patch',
-            'ggml-webgpu-bind-group-cache.patch',
+            'ggml-webgpu-bind-group-cache.patch', 'ggml-webgpu-host-encode-assembly.patch',
             'ggml-webgpu-scale-unary.patch', 'ggml-webgpu-q8-subgroup-matvec.patch',
             'ggml-webgpu-rms-scale.patch', 'ggml-webgpu-async-tensor-copy.patch',
             'ggml-webgpu-host-input-snapshot.patch',
