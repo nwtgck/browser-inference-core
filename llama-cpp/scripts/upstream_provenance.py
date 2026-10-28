@@ -31,6 +31,7 @@ import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
 import prepare_webgpu_matmul_vec4_layout as matmul_vec4_layout
 import prepare_webgpu_moe_tight_tile_bound as moe_tight_tile_bound
 import prepare_webgpu_iq3s_row_split as iq3s_row_split
+import prepare_webgpu_f32_matvec_epilogue as f32_matvec_epilogue
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
@@ -284,6 +285,12 @@ def collect(root: Path, manifest: dict) -> dict:
                        for variant in copy_enabled}
         tight_tile_copies = {variant: {'ggml-webgpu.cpp': hc_compiled['ggml-webgpu.cpp']}
                              for variant in copy_enabled}
+        epilogue_names = ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                          f32_matvec_epilogue.HELPER_NAME, f32_matvec_epilogue.HEADER_NAME]
+        epilogue_copies = {variant: {name: file_identity(prepared.parent / name) for name in epilogue_names}
+                           for variant in copy_enabled}
+        epilogue_copies.update({variant: {name: diagnostic_files[name] for name in epilogue_names}
+                               for variant in diagnostic_enabled})
 
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
@@ -651,6 +658,28 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Require actual binding-relative input offsets and active strides to align to floating-point vec4 loads; check matrix output offsets too. Otherwise use the existing scalar shader. Preserve aligned keys and WGSL, uniform/binding ABI, dispatch geometry, quantized paths and gather semantics. Historical prefix pins remain distinct from final compiled identities.',
         }, {
+            'id': 'webgpu-f32-matvec-epilogue',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}',
+                      **file_identity(root / PATCH_DIRECTORY / f32_matvec_epilogue.PATCHES[False][0])},
+            'profilePatch': {'path': f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}',
+                             **file_identity(root / PATCH_DIRECTORY / f32_matvec_epilogue.PATCHES[True][0])},
+            'compiledCopies': (next(iter(epilogue_copies.values())) if epilogue_copies else None),
+            'compiledCopiesByProfileVariant': epilogue_copies,
+            'reviewedInputs': f32_matvec_epilogue.CONTRACT_INPUTS,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in f32_matvec_epilogue.INPUTS.items()},
+            'finalOutputs': {('profile' if profile else 'normal'): values
+                             for profile, values in f32_matvec_epilogue.OUTPUTS.items()},
+            'embeddedHeaderSha256': f32_matvec_epilogue.HEADER_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_f32_matvec_epilogue.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_f32_matvec_epilogue.py', 'scripts/prepare_webgpu_scale_unary.py',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Fuse only guarded dense F32 four-row single-column matvec followed by scale, sigmoid and scale. Retain original accumulation, reduction and geometry, use a distinct default-none pipeline key, copy four coefficients into 80-byte parameters and reject all live input/output payload and aligned binding overlaps. Existing graph, callback and scale-unary fallbacks remain. No model or target-device speedup is claimed.',
+        }, {
             'id': 'webgpu-moe-tight-tile-bound',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}',
@@ -886,7 +915,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

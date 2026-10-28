@@ -1,4 +1,7 @@
 #include "ggml.h"
+#if __has_include("ggml-webgpu-f32-matvec-epilogue-shaders.hpp")
+#include "ggml-webgpu-f32-matvec-epilogue-shaders.hpp"
+#endif
 #include "ggml-wgsl-shaders.hpp"
 #include "pre_wgsl.hpp"
 #include <algorithm>

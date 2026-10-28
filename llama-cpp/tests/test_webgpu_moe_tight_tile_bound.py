@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_moe_tight_tile_bound as bound
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
 spec = importlib.util.spec_from_file_location('moe_bound_emitter', ROOT / 'tests/webgpu-moe-tight-tile-bound/emit_host.py')
@@ -23,7 +24,7 @@ spec.loader.exec_module(emitter)
 
 def prepare_prefix(*args, **kwargs):
     # This fixture isolates the historical host-bound stage.
-    with patch.object(source, 'replace_iq3s_row_split_embedding'):
+    with without_final_matvec_stages(source):
         return source.prepare(*args, **kwargs)
 
 
@@ -112,7 +113,9 @@ class MoeTightTileBound(unittest.TestCase):
         for name in bound.CONTRACT_INPUTS:
             self.assertIn('${LCB_LLAMA_SOURCE}/' + name, cmake)
         for profile in (False, True):
-            for name, expected in source.FINAL_OUTPUTS[profile].items():
+            # This fixture intentionally stops at tight-bound's historical output.
+            prefix = {**source.matmul_vec4_layout.OUTPUTS[profile], **bound.OUTPUTS[profile]}
+            for name, expected in prefix.items():
                 self.assertEqual(copy.digest(self.final[profile] / name), expected)
             hpp = (self.final[profile] / 'ggml-webgpu-shader-lib.hpp').read_text()
             self.assertIn('#define WEBGPU_MUL_MAT_TILE_N           4', hpp)

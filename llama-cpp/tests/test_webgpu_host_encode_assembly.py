@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'tests'))
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_host_encode_assembly as assembly
 import prepare_webgpu_tensor_copy as tensor_copy
 from test_webgpu_bind_group_cache import definition, function
@@ -73,10 +74,10 @@ class HostEncodeAssembly(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='host-encode-assembly-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(assembly, 'prepare'), patch.object(source, 'OUTPUT_SHA256', assembly.INPUT_SHA256):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(assembly, 'prepare'), patch.object(source, 'OUTPUT_SHA256', assembly.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').read_text()
         # Isolate the assembly prefix; the later layout stage is checked separately.
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             cls.normal = source.prepare(cls.upstream, cls.directory / 'normal')
             cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True)
 

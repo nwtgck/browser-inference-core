@@ -52,10 +52,11 @@ class Iq3sRowSplit(unittest.TestCase):
                     shutil.copyfile(work / rows.BASE / name, captured / rows.BASE / name)
                 shutil.copytree(work / 'iq3s-field-loads-source', captured / 'iq3s-field-loads-source')
                 shutil.copyfile(headers[rows.HEADER_NAME], captured / rows.HEADER_NAME)
-            with patch.object(source, 'replace_iq3s_row_split_embedding', side_effect=capture):
+            with patch.object(source.f32_matvec_epilogue, 'prepare', return_value={}), patch.object(source, 'replace_iq3s_row_split_embedding', side_effect=capture):
                 cls.before[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
             cls.stage_inputs[profile] = captured
-            cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
+            with patch.object(source.f32_matvec_epilogue, 'prepare', return_value={}):
+                cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
 
     def stage(self, directory, profile):
         shutil.copytree(self.stage_inputs[profile], directory)
@@ -74,7 +75,8 @@ class Iq3sRowSplit(unittest.TestCase):
             self.assertEqual(copy.digest(old / rows.HEADER_NAME), fields.HEADER_SHA256)
             self.assertEqual(copy.digest(new / rows.HEADER_NAME), rows.HEADER_SHA256)
             stamps = {p.name: p.stat().st_mtime_ns for p in new.iterdir()}
-            source.prepare(self.upstream, new, gpu_profile=profile)
+            with patch.object(source.f32_matvec_epilogue, 'prepare', return_value={}):
+                source.prepare(self.upstream, new, gpu_profile=profile)
             self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in new.iterdir()})
 
     def test_complete_inverse_preserves_other_types_main_and_float_body(self):

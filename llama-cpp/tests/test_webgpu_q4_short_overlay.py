@@ -28,7 +28,7 @@ def build_host(upstream, prepared, output):
     text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     original = explicit_layout_argument((upstream / q4.HEADER_PATH).read_text())
     here = ROOT / 'tests/webgpu-q4-short'
-    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
+    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-f32-matvec-epilogue.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';']
     for name in ('q8', 'expert', 'q4'):
@@ -54,6 +54,7 @@ def build_host(upstream, prepared, output):
         chunks += ['webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &, bool, bool) {throw std::runtime_error("unexpected matrix path");}', '};']
     cpp = (prepared / 'ggml-webgpu.cpp').read_text()
     chunks += [(here / 'dispatch-prefix.cpp').read_text(),
+               function(cpp, 'static inline uint32_t ggml_webgpu_u32_from_f32('),
                function(cpp, 'static inline void compute_2d_workgroups('),
                function(cpp, 'static bool ggml_webgpu_mul_mat_vec4_aligned('),
                function(cpp, 'static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec('),
@@ -68,7 +69,7 @@ def build_host(upstream, prepared, output):
     code.write_text('\n'.join(chunks))
     exe = output / 'host'
     subprocess.run(['g++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror',
-                    '-I' + str(upstream / 'ggml/include'), '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
+                    '-I' + str(upstream / 'ggml/include'), '-isystem', str(upstream / 'ggml/src'), '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
                     '-I' + str(prepared),
                     '-I' + str(output), str(code), '-o', str(exe)], check=True)
     return exe

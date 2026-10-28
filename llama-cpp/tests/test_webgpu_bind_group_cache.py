@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-bind-group-cache'
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_bind_group_cache as cache
 import prepare_webgpu_tensor_copy as tensor_copy
 
@@ -78,7 +79,7 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
-                    patch.object(source, 'replace_iq3s_field_embedding'), patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \

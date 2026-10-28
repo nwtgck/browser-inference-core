@@ -41,6 +41,7 @@ public:''']
         chunks += [hpp[hpp.index(first):hpp.index('    webgpu_pipeline get_unary_pipeline(', hpp.index(first))],
                    '};', (HERE / 'dispatch-prefix.cpp').read_text()]
         markers = [
+            'static inline uint32_t ggml_webgpu_u32_from_f32(',
             'static size_t ggml_webgpu_tensor_offset(', 'static wgpu::Buffer ggml_webgpu_tensor_buf(',
             'static size_t ggml_webgpu_tensor_align_offset(const ggml_tensor *',
             'static size_t ggml_webgpu_tensor_misalignment(const ggml_tensor *',

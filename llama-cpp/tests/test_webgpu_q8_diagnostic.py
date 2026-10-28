@@ -67,6 +67,8 @@ def factory_code(prepared, *, provider=False):
     prefix = prefix.replace('static unsigned created = 0;', 'static unsigned created = 0;\nstatic std::function<void()> prepare_hook;')
     prefix = prefix.replace('    return {++created, name, nullptr, code};', '    if(prepare_hook){auto hook=std::move(prepare_hook);prepare_hook={};hook();}\n    webgpu_pipeline result{++created,name,nullptr,code};result.pipeline=result.id;return result;')
     chunks = [prefix]
+    if provider:
+        chunks.append('#include "ggml-webgpu-f32-matvec-epilogue.hpp"')
     for marker in ('template <typename T> inline void ggml_webgpu_hash_combine(', 'struct ggml_webgpu_shader_lib_context {',
                    'inline uint32_t ggml_webgpu_q8_short_workgroup(', 'inline uint32_t ggml_webgpu_q4_short_workgroup(',
                    'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size(', 'inline bool ggml_webgpu_can_use_mmvq('):
@@ -132,7 +134,7 @@ class Q8Diagnostic(unittest.TestCase):
                        'struct webgpu_dispatch_view {'):
             code += '\n' + function(backend, marker) + ';'
         code += '\n' + function(library, 'struct ggml_webgpu_mul_mat_shader_decisions {') + ';'
-        for marker in ('static inline void compute_2d_workgroups(', 'static size_t ggml_webgpu_tensor_offset(',
+        for marker in ('static inline uint32_t ggml_webgpu_u32_from_f32(', 'static inline void compute_2d_workgroups(', 'static size_t ggml_webgpu_tensor_offset(',
                        'static wgpu::Buffer ggml_webgpu_tensor_buf(',
                        'static size_t ggml_webgpu_tensor_align_offset(const ggml_tensor *',
                        'static size_t ggml_webgpu_tensor_misalignment(const ggml_tensor *',

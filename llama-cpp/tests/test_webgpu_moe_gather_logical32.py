@@ -15,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts')]
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_moe_gather_logical32 as gather
 
 spec = importlib.util.spec_from_file_location('logical32_actual_factory', ROOT / 'tests/webgpu-moe-group-skip/emit_factory.py')
@@ -29,11 +30,11 @@ class MoeGatherLogical32(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='moe-gather-logical32-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(gather, 'prepare', return_value={}), patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', gather.INPUT_SHA256):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(gather, 'prepare', return_value={}), patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', gather.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').parent
         # This suite isolates the gather stage; the final layout stage has its
         # own full caller/factory tests, and does not change gather WGSL.
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
             cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
         cls.factories = {}
@@ -112,11 +113,11 @@ class MoeGatherLogical32(unittest.TestCase):
 
     def test_reprepare_repairs_embedding_without_unnecessary_rewrites(self):
         stamps = {p.name: p.stat().st_mtime_ns for p in self.normal.iterdir()}
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             source.prepare(self.upstream, self.normal)
         self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in self.normal.iterdir()})
         (self.normal / gather.HEADER_NAME).write_text('stale generated header')
-        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'):
             source.prepare(self.upstream, self.normal)
         self.assertEqual(source.tensor_copy.digest(self.normal / gather.HEADER_NAME), gather.HEADER_SHA256)
         for name, expected in gather.CONTRACT_INPUTS.items():

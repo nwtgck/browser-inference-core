@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_matmul_vec4_layout as layout
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
 spec = importlib.util.spec_from_file_location('matmul_vec4_emitter', ROOT / 'tests/webgpu-matmul-vec4/emit_host.py')
@@ -31,9 +32,9 @@ class MatmulVec4Layout(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.baseline, cls.final = {}, {}
         for profile in (False, True):
-            with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(layout, 'prepare'):
+            with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(layout, 'prepare'):
                 cls.baseline[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'):
+            with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'):
                 cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
 
     def test_only_caller_and_factory_change_and_inverse_restores_full_prefix(self):

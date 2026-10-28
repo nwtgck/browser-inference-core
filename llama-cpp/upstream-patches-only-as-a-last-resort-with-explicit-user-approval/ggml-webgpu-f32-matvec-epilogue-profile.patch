@@ -1,0 +1,528 @@
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp
+@@ -0,0 +1,55 @@
++#pragma once
++#include "ggml-webgpu-scale-unary.hpp"
++#include <cstdint>
++
++struct f32_matvec_epilogue_parameters {
++    float scale, bias, final_scale, final_bias;
++};
++
++struct f32_matvec_epilogue_plan {
++    ggml_tensor * matmul = nullptr;
++    ggml_tensor * weights = nullptr;
++    ggml_tensor * input = nullptr;
++    ggml_tensor * output = nullptr;
++    uint64_t weights_bytes = 0, input_bytes = 0, output_bytes = 0;
++    f32_matvec_epilogue_parameters parameters = {};
++};
++
++inline bool f32_matvec_epilogue_layout(const ggml_tensor * tensor, uint64_t & bytes) {
++    if (!tensor || tensor->type != GGML_TYPE_F32) { return false; }
++    bytes = 4;
++    for (int i = 0; i < GGML_MAX_DIMS; ++i) {
++        if (tensor->ne[i] <= 0 || uint64_t(tensor->ne[i]) > UINT32_MAX || tensor->nb[i] != bytes ||
++            bytes > uint64_t(UINT32_MAX) * 4 / uint64_t(tensor->ne[i])) { return false; }
++        bytes *= uint64_t(tensor->ne[i]);
++    }
++    return true;
++}
++
++inline bool plan_f32_matvec_epilogue(const ggml_cgraph * graph, int index, f32_matvec_epilogue_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 4) { return false; }
++    ggml_tensor * matmul = graph->nodes[index];
++    if (!matmul || matmul->op != GGML_OP_MUL_MAT || matmul->type != GGML_TYPE_F32) { return false; }
++    ggml_tensor * weights = matmul->src[0];
++    ggml_tensor * input = matmul->src[1];
++    if (!weights || !input || weights->type != GGML_TYPE_F32 || input->type != GGML_TYPE_F32 ||
++        weights->ne[0] < 1 || weights->ne[0] > 16384 || weights->ne[1] != 4 ||
++        input->ne[0] != weights->ne[0] || input->ne[1] != 1 || matmul->ne[0] != 4 || matmul->ne[1] != 1) { return false; }
++    for (int i = 2; i < GGML_MAX_DIMS; ++i) {
++        if (weights->ne[i] != 1 || input->ne[i] != 1 || matmul->ne[i] != 1) { return false; }
++    }
++    for (int i = 2; i < GGML_MAX_SRC; ++i) { if (matmul->src[i]) { return false; } }
++    uint64_t weights_bytes, input_bytes;
++    if (!scale_unary_dense(matmul) || !f32_matvec_epilogue_layout(weights, weights_bytes) ||
++        !f32_matvec_epilogue_layout(input, input_bytes)) { return false; }
++    const ggml_op ops[] = { GGML_OP_MUL_MAT, GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE };
++    scale_unary_plan post;
++    if (!ggml_can_fuse(graph, index, ops, 4) || !plan_scale_unary(graph, index + 1, 3, post) ||
++        post.source != matmul || ggml_get_unary_op(post.unary) != GGML_UNARY_OP_SIGMOID ||
++        !ggml_are_same_shape(matmul, post.output)) { return false; }
++    plan = { matmul, weights, input, post.output, weights_bytes, input_bytes, 16,
++             { ggml_get_op_params_f32(post.first_scale, 0), ggml_get_op_params_f32(post.first_scale, 1),
++               ggml_get_op_params_f32(post.final_scale, 0), ggml_get_op_params_f32(post.final_scale, 1) } };
++    return true;
++}
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -6,6 +6,7 @@
+ #include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
++#include "ggml-webgpu-f32-matvec-epilogue-shaders.hpp"
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
+ #include "ggml-webgpu-q8-diagnostic-sha256.hpp"
+ #include <array>
+@@ -87,6 +88,7 @@
+ }
+ 
+ struct ggml_webgpu_shader_lib_context {
++    enum class matvec_post_op : uint32_t { none = 0, scale_sigmoid_scale = 1 };
+     ggml_tensor * src0;
+     ggml_tensor * src1;
+     ggml_tensor * src2;
+@@ -113,6 +115,7 @@
+     uint32_t    max_subgroup_size        = 0;
+     bool        supports_dot_product     = false;
+     std::string vendor;
++    matvec_post_op matvec_epilogue = matvec_post_op::none;
+ };
+ 
+ // Keep the upstream Q8_0 arithmetic, output tiling and lane-to-block mapping.
+@@ -1186,6 +1189,7 @@
+ /** Matrix Multiplication **/
+ 
+ struct ggml_webgpu_mul_mat_vec_pipeline_key {
++    ggml_webgpu_shader_lib_context::matvec_post_op epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
+     ggml_type src0_type;
+     ggml_type src1_type;
+     int       vectorized;
+@@ -1198,7 +1202,7 @@
+     bool      subgroup_reduction = false;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
+-        return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
++        return epilogue == other.epilogue && src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap &&
+                q8_rows_per_tile == other.q8_rows_per_tile && subgroup_reduction == other.subgroup_reduction;
+@@ -1208,6 +1212,7 @@
+ struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
+     size_t operator()(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
+         size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, key.epilogue);
+         ggml_webgpu_hash_combine(seed, key.src0_type);
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+@@ -1228,6 +1233,22 @@
+     uint32_t vec_size;
+     bool     src_overlap = false;
+ };
++
++inline bool ggml_webgpu_matvec_post_supported(const ggml_webgpu_shader_lib_context & context,
++                                                ggml_webgpu_shader_lib_context::matvec_post_op kind,
++                                                bool src_overlap) {
++    using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
++    if (kind == post_op::none) { return true; }
++    if (kind != post_op::scale_sigmoid_scale || src_overlap || !context.src0 || !context.src1 || !context.dst ||
++        context.src0->type != GGML_TYPE_F32 || context.src1->type != GGML_TYPE_F32 || context.dst->type != GGML_TYPE_F32 ||
++        context.src0->ne[0] < 1 || context.src0->ne[0] > 16384 || context.src0->ne[1] != 4 ||
++        context.src1->ne[0] != context.src0->ne[0] || context.src1->ne[1] != 1 ||
++        context.dst->ne[0] != 4 || context.dst->ne[1] != 1 || context.max_wg_size < 256) { return false; }
++    for (int i = 2; i < GGML_MAX_DIMS; ++i) {
++        if (context.src0->ne[i] != 1 || context.src1->ne[i] != 1 || context.dst->ne[i] != 1) { return false; }
++    }
++    return true;
++}
+ 
+ struct ggml_webgpu_quantize_q8_pipeline_key {
+     ggml_type src0_type;
+@@ -2339,6 +2360,7 @@
+         key.use_mmvq =
+             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.supports_dot_product, context.vendor);
+         key.src_overlap = src_overlap;
++        key.epilogue = context.matvec_epilogue;
+         key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+@@ -2352,6 +2374,7 @@
+                        ggml_webgpu_mul_mat_vec_pipeline_key_hash> q8_diagnostic_pipelines;
+ 
+     webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
++        if (!ggml_webgpu_matvec_post_supported(context, context.matvec_epilogue, src_overlap)) { return {}; }
+         return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap, vec4_aligned));
+     }
+ 
+@@ -2370,6 +2393,11 @@
+ 
+     webgpu_pipeline prepare_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context,
+                                                   const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
++        if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
++        if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none &&
++            (key.src0_type != GGML_TYPE_F32 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
++             key.workgroup_size != 256 || key.subgroup_size != 0 || key.use_mmvq || key.src_overlap ||
++             key.vectorized < 0 || key.vectorized > 1 || (key.vectorized && context.src0->ne[0] % 4))) { return {}; }
+         auto it = mul_mat_vec_pipelines.find(key);
+         if (it != mul_mat_vec_pipelines.end()) {
+             return it->second;
+@@ -2377,7 +2405,8 @@
+ 
+         std::vector<std::string> defines;
+         std::string              variant    = "mul_mat_vec";
+-        const char *             shader_src = wgsl_mul_mat_vec;
++        const char *             shader_src = key.epilogue == ggml_webgpu_shader_lib_context::matvec_post_op::scale_sigmoid_scale ?
++                                                wgsl_mul_mat_vec_f32_epilogue : wgsl_mul_mat_vec;
+ 
+         // src0 type (matrix row)
+         switch (context.src0->type) {
+@@ -2524,6 +2553,7 @@
+         }
+         defines.push_back(std::string("NUM_COLS=") + std::to_string(key.num_cols));
+ 
++        if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none) { variant += "_scale_sigmoid_scale"; }
+         auto processed            = preprocessor.preprocess(shader_src, defines);
+         auto decisions            = std::make_shared<ggml_webgpu_mul_mat_vec_shader_decisions>();
+         decisions->wg_size        = wg_size;
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -7,6 +7,7 @@
+ #include "ggml-webgpu-hc.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
+ #include "ggml-webgpu-scale-unary.hpp"
++#include "ggml-webgpu-f32-matvec-epilogue.hpp"
+ #include "ggml-webgpu-rms-scale.hpp"
+ #include "ggml-webgpu-ssm-conv-silu.hpp"
+ #include "ggml-webgpu-q8-diagnostic.h"
+@@ -1842,7 +1843,11 @@
+                                              ggml_tensor *    src0,
+                                              ggml_tensor *    src1,
+                                              ggml_tensor *    dst,
+-                                             const webgpu_pipeline * explicit_pipeline = nullptr) {
++                                             const webgpu_pipeline * explicit_pipeline = nullptr,
++                                             ggml_webgpu_shader_lib_context::matvec_post_op post_op = ggml_webgpu_shader_lib_context::matvec_post_op::none,
++                                             const f32_matvec_epilogue_parameters * post_params = nullptr) {
++    const bool post = post_op != ggml_webgpu_shader_lib_context::matvec_post_op::none;
++    if (post && (post_op != ggml_webgpu_shader_lib_context::matvec_post_op::scale_sigmoid_scale || !post_params)) { return {}; }
+     // Determine if this is a mat-vec operation
+     bool use_mat_vec = (dst->ne[1] <= 4);
+ 
+@@ -1851,6 +1856,9 @@
+                                              ctx->global_ctx->vendor);
+ 
+     auto shader_lib_ctx = ggml_webgpu_mat_context(ctx, src0, src1, dst);
++    shader_lib_ctx.matvec_epilogue = post_op;
++
++    if (post && !ggml_webgpu_matvec_post_supported(shader_lib_ctx, post_op, false)) { return {}; }
+ 
+     // Get or create pipeline
+     webgpu_pipeline                   pipeline;
+@@ -1886,8 +1894,12 @@
+                                                              vec4_aligned && offset_dst % 4 == 0);
+     }
+ 
++    if (post && !pipeline.context) { return {}; }
++
+     // Build params
+-    std::vector<uint32_t> params = { offset_src0,
++    std::vector<uint32_t> params;
++    params.reserve(post ? 20 : 16);
++    params.insert(params.end(), { offset_src0,
+                                      offset_src1,
+                                      offset_dst,
+                                      (uint32_t) dst->ne[0],
+@@ -1902,7 +1914,13 @@
+                                      (uint32_t) src0->ne[2],
+                                      (uint32_t) src0->ne[3],
+                                      (uint32_t) (src1->ne[2] / src0->ne[2]),
+-                                     (uint32_t) (src1->ne[3] / src0->ne[3]) };
++                                     (uint32_t) (src1->ne[3] / src0->ne[3]) });
++    if (post) {
++        params.insert(params.end(), { ggml_webgpu_u32_from_f32(post_params->scale),
++                                      ggml_webgpu_u32_from_f32(post_params->bias),
++                                      ggml_webgpu_u32_from_f32(post_params->final_scale),
++                                      ggml_webgpu_u32_from_f32(post_params->final_bias) });
++    }
+ 
+     // Build bind group entries
+     std::vector<wgpu::BindGroupEntry> entries = {};
+@@ -1965,8 +1983,10 @@
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
+-                                             ggml_tensor * src0, ggml_tensor * src1, ggml_tensor * dst) {
+-    return ggml_webgpu_mul_mat_impl<false>(ctx, src0, src1, dst);
++                                             ggml_tensor * src0, ggml_tensor * src1, ggml_tensor * dst,
++                                             ggml_webgpu_shader_lib_context::matvec_post_op post_op = ggml_webgpu_shader_lib_context::matvec_post_op::none,
++                                             const f32_matvec_epilogue_parameters * post_params = nullptr) {
++    return ggml_webgpu_mul_mat_impl<false>(ctx, src0, src1, dst, nullptr, post_op, post_params);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
+@@ -3898,6 +3918,86 @@
+     return encoded;
+ }
+ 
++struct webgpu_f32_matvec_buffer_facts {
++    const wgpu::Buffer * buffer = nullptr;
++    uint64_t size = 0;
++    wgpu::BufferUsage usage = wgpu::BufferUsage::None;
++};
++
++struct webgpu_f32_matvec_binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0, size = 0, tensor_offset = 0, tensor_size = 0;
++};
++
++static bool ggml_webgpu_f32_matvec_binding(webgpu_context & ctx, const ggml_tensor * tensor, uint64_t bytes,
++                                           webgpu_f32_matvec_buffer_facts (&facts)[3], size_t & fact_count,
++                                           webgpu_f32_matvec_binding & binding) {
++    auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base || !tensor->data) { return false; }
++    auto * buffer_ctx = (ggml_backend_webgpu_buffer_context *) buffer->context;
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer) { return false; }
++    size_t fact_index = 0;
++    while (fact_index < fact_count && facts[fact_index].buffer->Get() != buffer_ctx->buffer.Get()) { ++fact_index; }
++    if (fact_index == fact_count) {
++        if (fact_count == 3) { return false; }
++        facts[fact_count++] = { &buffer_ctx->buffer, buffer_ctx->buffer.GetSize(), buffer_ctx->buffer.GetUsage() };
++    }
++    const auto & physical = facts[fact_index];
++    if ((physical.usage & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) { return false; }
++    const auto * root = tensor->view_src ? tensor->view_src : tensor;
++    if (root->view_src || root->view_offs || root->buffer != buffer || !root->data) { return false; }
++    const uint64_t base = reinterpret_cast<uintptr_t>(ggml_backend_webgpu_buffer_get_base(buffer));
++    const uint64_t root_data = reinterpret_cast<uintptr_t>(root->data);
++    if (root_data < base || tensor->view_offs > UINT64_MAX - root_data ||
++        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs) { return false; }
++    uint64_t root_bytes = bytes;
++    if ((root != tensor && !f32_matvec_epilogue_layout(root, root_bytes)) ||
++        tensor->view_offs > root_bytes || bytes > root_bytes - tensor->view_offs) { return false; }
++    const uint64_t alignment = ctx->global_ctx->capabilities.limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1))) { return false; }
++    const uint64_t offset = root_data - base + tensor->view_offs;
++    if (offset % 4 || offset > buffer->size || bytes > buffer->size - offset ||
++        offset > physical.size || bytes > physical.size - offset) { return false; }
++    const uint64_t aligned_offset = offset & ~(alignment - 1);
++    const uint64_t size = offset - aligned_offset + bytes;
++    if (!size || size > ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize || size / 4 > UINT32_MAX) { return false; }
++    binding = { buffer_ctx->buffer, aligned_offset, size, offset, bytes };
++    return true;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_f32_matvec_epilogue(webgpu_context & ctx,
++                                                                       ggml_cgraph * graph, int index,
++                                                                       int & num_encoded_ops) {
++    f32_matvec_epilogue_plan plan;
++    if (!plan_f32_matvec_epilogue(graph, index, plan)) { return std::nullopt; }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < 256 || limits.maxComputeWorkgroupSizeX < 256 ||
++        limits.maxComputeWorkgroupsPerDimension < 1 || limits.maxStorageBuffersPerShaderStage < 3 ||
++        limits.maxBindingsPerBindGroup < 4 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        ctx->param_arena.slot_size < 80 || ctx->param_arena.slot_size > limits.maxUniformBufferBindingSize ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) { return std::nullopt; }
++    webgpu_f32_matvec_buffer_facts facts[3];
++    size_t fact_count = 0;
++    webgpu_f32_matvec_binding bindings[3];
++    if (!ggml_webgpu_f32_matvec_binding(ctx, plan.weights, plan.weights_bytes, facts, fact_count, bindings[0]) ||
++        !ggml_webgpu_f32_matvec_binding(ctx, plan.input, plan.input_bytes, facts, fact_count, bindings[1]) ||
++        !ggml_webgpu_f32_matvec_binding(ctx, plan.output, plan.output_bytes, facts, fact_count, bindings[2])) { return std::nullopt; }
++    for (int a = 0; a < 3; ++a) {
++        for (int b = a + 1; b < 3; ++b) {
++            if (bindings[a].buffer.Get() == bindings[b].buffer.Get() &&
++                (!scale_unary_disjoint(bindings[a].tensor_offset, bindings[a].tensor_size, bindings[b].tensor_offset, bindings[b].tensor_size) ||
++                 !scale_unary_disjoint(bindings[a].offset, bindings[a].size, bindings[b].offset, bindings[b].size))) { return std::nullopt; }
++        }
++    }
++    // The logical matmul and the final output have identical shapes. The old
++    // matmul allocation is no longer used; live inputs still must be disjoint.
++    auto encoded = ggml_webgpu_mul_mat(ctx, plan.weights, plan.input, plan.output,
++        ggml_webgpu_shader_lib_context::matvec_post_op::scale_sigmoid_scale, &plan.parameters);
++    if (encoded.num_kernels != 1) { return std::nullopt; }
++    num_encoded_ops = 4;
++    return encoded;
++}
++
+ static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
+     if (!ggml_can_fuse(cgraph, node_idx, { GGML_OP_RMS_NORM, GGML_OP_MUL })) {
+         return false;
+@@ -4072,6 +4172,7 @@
+             if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
++            if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT_ID:
+             return ggml_webgpu_mul_mat_id(ctx, src0, src1, src2, node);
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_f32_epilogue.wgsl
+@@ -0,0 +1,177 @@
++#ifdef USE_SUBGROUP_REDUCTION
++enable subgroups;
++#endif
++enable f16;
++
++#ifdef MMVQ
++requires packed_4x8_integer_dot_product;
++#endif
++
++#ifdef SRC_OVERLAP
++#define SRC0 merged_src
++#define SRC1 merged_src
++#endif
++
++#define DECLARE_BYTE_LOADERS_SRC0
++#include "common_decls.tmpl"
++
++#ifdef MMVQ
++#include "mul_mat_vec_q_acc.tmpl"
++#else
++#include "mul_mat_vec_acc.tmpl"
++#endif
++
++struct MulMatParams {
++    offset_src0: u32,
++    offset_src1: u32,
++    offset_dst: u32,
++    m: u32,
++    n: u32,
++    k: u32,
++    stride_01: u32,
++    stride_11: u32,
++    stride_02: u32,
++    stride_12: u32,
++    stride_03: u32,
++    stride_13: u32,
++    bs02: u32,
++    bs03: u32,
++    broadcast2: u32,
++    broadcast3: u32,
++    scale: f32,
++    bias: f32,
++    final_scale: f32,
++    final_bias: f32
++};
++
++#if defined(MMVQ)
++@group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>;
++@group(0) @binding(1) var<storage, read_write> src1q: array<q8_1>;
++#define DST_BINDING 2
++#elif defined(SRC_OVERLAP)
++@group(0) @binding(0) var<storage, read_write> merged_src: array<SRC0_TYPE>;
++#define DST_BINDING 1
++#else
++@group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>;
++@group(0) @binding(1) var<storage, read_write> src1: array<SRC1_TYPE>;
++#define DST_BINDING 2
++#endif
++
++@group(0) @binding(DST_BINDING) var<storage, read_write> dst: array<f32>;
++// "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
++@group(0) @binding(DST_BINDING + 1) var<uniform> params: MulMatParams;
++
++// Flattened as [row][thread] to keep each row's reduction contiguous in memory.
++var<workgroup> partial_sums: array<f32, OUTPUTS_PER_WG * WG_SIZE>;
++
++fn partial_index(row: u32, thread: u32) -> u32 {
++    return row * WG_SIZE + thread;
++}
++
++@compute @workgroup_size(WG_SIZE)
++fn main(
++    @builtin(local_invocation_id) local_id: vec3<u32>,
++    @builtin(workgroup_id) wg_id: vec3<u32>,
++    @builtin(num_workgroups) num_wg: vec3<u32>
++#ifdef USE_SUBGROUP_REDUCTION
++  , @builtin(subgroup_id) subgroup_id: u32,
++    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32,
++    @builtin(num_subgroups) num_subgroups: u32,
++    @builtin(subgroup_size) subgroup_size: u32
++#endif
++) {
++    let thread_id = local_id.x;
++
++    let total_batches = params.bs02 * params.broadcast2 * params.bs03 * params.broadcast3;
++    let wg_linear = wg_id.y * num_wg.x + wg_id.x;
++    let output_groups = (params.m + OUTPUTS_PER_WG - 1u) / OUTPUTS_PER_WG;
++    let batch_idx = wg_linear / output_groups;
++    if (batch_idx >= total_batches) {
++        return;
++    }
++
++    let row_base = (wg_linear % output_groups) * OUTPUTS_PER_WG;
++
++    let dst2_stride = params.m * params.n;
++    let dst2_idx = batch_idx % (params.bs02 * params.broadcast2);
++    let dst3_stride = dst2_stride * params.bs02 * params.broadcast2;
++    let dst3_idx = batch_idx / (params.bs02 * params.broadcast2);
++    let src03_idx = dst3_idx / params.broadcast3;
++    let src13_idx = dst3_idx;
++    let src02_idx = dst2_idx / params.broadcast2;
++    let src12_idx = dst2_idx;
++
++    let src0_batch_offset = params.offset_src0 + src03_idx * params.stride_03 + src02_idx * params.stride_02;
++    let dst_idx_base = params.offset_dst + dst3_idx * dst3_stride + dst2_idx * dst2_stride + row_base;
++
++#ifdef MMVQ
++    let src1q_idx_base = (src13_idx * params.bs02 * params.broadcast2 + src12_idx) * params.n * (params.k / 32u);
++    let acc = accumulate_vec_q_dot(thread_id, row_base, src0_batch_offset, src1q_idx_base);
++#else
++    let src1_idx_base = params.offset_src1 + src13_idx * params.stride_13 + src12_idx * params.stride_12;
++    let acc = accumulate_vec_dot(thread_id, row_base, src0_batch_offset, src1_idx_base);
++#endif
++
++    for (var col = 0u;col < NUM_COLS;col += 1) {
++
++#ifdef USE_SUBGROUP_REDUCTION
++            for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                let subgroup_total = subgroupAdd(acc[col][row]);
++                if (subgroup_invocation_id == 0u) {
++                    partial_sums[partial_index(row, subgroup_id)] = subgroup_total;
++                }
++            }
++
++            workgroupBarrier();
++
++            for (var row = subgroup_id; (row < OUTPUTS_PER_WG) && (row_base + row < params.m); row += num_subgroups) {
++                let output_row = row_base + row;
++                var row_acc = 0.0f;
++                for (var k = subgroup_invocation_id; k < num_subgroups; k += subgroup_size) {
++                    row_acc += partial_sums[partial_index(row, k)];
++                }
++                let row_total = subgroupAdd(row_acc);
++                if (subgroup_invocation_id == 0) {
++                    let scaled = row_total * params.scale + params.bias;
++                    let activated = 1.0 / (1.0 + exp(-scaled));
++                    let result = activated * params.final_scale + params.final_bias;
++                    dst[dst_idx_base + col * params.m + row] = result;
++                }
++            }
++#endif
++
++#ifdef USE_WORKGROUP_REDUCTION
++            for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                partial_sums[partial_index(row, thread_id)] = acc[col][row];
++            }
++
++            workgroupBarrier();
++
++            var stride = WG_SIZE / 2u;
++
++            while (stride > 0) {
++                if (thread_id < stride) {
++                    for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++                        partial_sums[partial_index(row, thread_id)] += partial_sums[partial_index(row, thread_id + stride)];
++                    }
++                }
++
++                workgroupBarrier();
++                stride = stride / 2;
++            }
++
++            if (thread_id < OUTPUTS_PER_WG) {
++                let output_row = row_base + thread_id;
++                if (output_row < params.m) {
++                    let scaled = partial_sums[partial_index(thread_id, 0)] * params.scale + params.bias;
++                    let activated = 1.0 / (1.0 + exp(-scaled));
++                    let result = activated * params.final_scale + params.final_bias;
++                    dst[dst_idx_base + col * params.m + thread_id] = result;
++                }
++            }
++#endif
++
++    workgroupBarrier();
++
++    }
++}

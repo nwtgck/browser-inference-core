@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_iq3s_field_loads as fields
 import prepare_webgpu_iq3s_subgroup as original
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
 
@@ -104,9 +105,9 @@ class Iq3sFieldLoads(unittest.TestCase):
             root = Path(tmp)
             for profile in (False, True):
                 with self.subTest(profile=profile):
-                    with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(fields, 'prepare', side_effect=lambda work, source, patch_root, env, *, previous_header: previous_header):
+                    with without_final_matvec_stages(source), patch.object(fields, 'prepare', side_effect=lambda work, source, patch_root, env, *, previous_header: previous_header):
                         baseline = source.prepare(self.upstream, root / f'before-{profile}', gpu_profile=profile).parent
-                    with patch.object(source, 'replace_iq3s_row_split_embedding'):
+                    with without_final_matvec_stages(source):
                         candidate = source.prepare(self.upstream, root / f'after-{profile}', gpu_profile=profile).parent
                     old = {p.name: p.read_bytes() for p in baseline.iterdir() if p.is_file()}
                     new = {p.name: p.read_bytes() for p in candidate.iterdir() if p.is_file()}

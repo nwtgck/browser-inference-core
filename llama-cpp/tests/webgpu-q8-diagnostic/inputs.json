@@ -12,7 +12,8 @@
     "schema.mjs": "7a5b2a49196170be4b4e673d4dd0991697200be0c44a397d63518acfc7cf98e7",
     "exports.json": "013c6b8dfa1d373c64f80cf6ec17f0992be91d232f7aada67695ce120680331b",
     "jspi-exports.json": "e7f5a4356afae8849e51206112407d25dfd566a76bcfcb1579b4f631690dafaf",
-    "functions.d.ts": "8fe2e32be9b810af688ff6fa8c98cc70f2f6c50b645175859c758153872fe73c"
+    "functions.d.ts": "8fe2e32be9b810af688ff6fa8c98cc70f2f6c50b645175859c758153872fe73c",
+    "headers.c": "7fa31449cb6169b704e0187d6a98ca24d13d073715d7f66396570e42836a328c"
   },
   "public_source_sha256": {
     "scripts/prepare_webgpu_q8_diagnostic.py": "d8e4a48752b1a28f158e8e23f80819c9b7506337073877bd00d388475b90d49d",

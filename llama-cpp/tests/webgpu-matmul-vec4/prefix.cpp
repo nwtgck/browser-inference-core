@@ -1,4 +1,8 @@
 #include "ggml.h"
+#if __has_include("ggml-webgpu-f32-matvec-epilogue-shaders.hpp")
+#include "ggml-webgpu-f32-matvec-epilogue-shaders.hpp"
+#include "ggml-webgpu-f32-matvec-epilogue.hpp"
+#endif
 #include "pre_wgsl.hpp"
 #include "ggml-wgsl-shaders.hpp"
 #include "ggml-webgpu-q8-subgroup-shaders.hpp"
