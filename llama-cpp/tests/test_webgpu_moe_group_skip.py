@@ -33,6 +33,7 @@ class MoeGroupSkip(unittest.TestCase):
         with patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source.f32_small_m, 'prepare'), \
+                patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             cls.group_stage = source.prepare(cls.upstream, cls.directory / 'group-stage').parent
@@ -165,15 +166,17 @@ class MoeGroupSkip(unittest.TestCase):
         for case in cases:
             for name, expected in case['hashes'].items():
                 self.assertEqual(hashlib.sha256((work / 'fixtures' / case['name'] / (name + '.bin')).read_bytes()).hexdigest(), expected)
-            for name in ('gather', 'baseline', 'candidate'):
+            for name in ('gather', 'gather-baseline', 'baseline', 'candidate'):
                 self.assertEqual(hashlib.sha256((work / 'shaders' / (case['name'] + '-' + name + '.wgsl')).read_bytes()).hexdigest(), case['shaderHashes'][name])
+        for case in cases:
+            self.assertNotEqual(case['shaderHashes']['gather'], case['shaderHashes']['gather-baseline'])
         profiled = emit_factory.build(self.upstream, self.prepared, self.directory / 'profile-factory', profile=True)
         for case in cases:
             result = json.loads(subprocess.check_output([str(profiled), str(work / 'shaders'), case['name'] + '-profile', *map(str, case['args'])], text=True))
             self.assertEqual(result['mainParams'], case['mainParams'])
             self.assertEqual(result['gatherParams'], case['gatherParams'])
             self.assertEqual(result['grid'], case['grid'])
-            for name in ('gather', 'baseline', 'candidate'):
+            for name in ('gather', 'gather-baseline', 'baseline', 'candidate'):
                 self.assertEqual((work / 'shaders' / (case['name'] + '-profile-' + name + '.wgsl')).read_bytes(),
                                  (work / 'shaders' / (case['name'] + '-' + name + '.wgsl')).read_bytes())
         for case in [cases[0], next(c for c in cases if c['experts'] == 4)]:

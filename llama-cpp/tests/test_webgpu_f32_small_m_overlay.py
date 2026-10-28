@@ -29,19 +29,24 @@ class F32SmallMOverlay(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='f32-small-m-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(small, 'prepare'), patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', small.INPUT_SHA256):
+        with patch.object(small, 'prepare'), patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
+                patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', small.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').parent
+        with patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
+                patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', small.OUTPUT_SHA256):
+            cls.f32_stage = source.prepare(cls.upstream, cls.directory / 'f32-stage').parent
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
 
     def test_only_the_shared_library_changes_and_all_canonical_inputs_remain_exact(self):
         self.assertEqual(copy.digest(self.baseline / small.HEADER_NAME), small.INPUT_SHA256)
-        self.assertEqual(copy.digest(self.normal / small.HEADER_NAME), small.OUTPUT_SHA256)
+        self.assertEqual(copy.digest(self.f32_stage / small.HEADER_NAME), small.OUTPUT_SHA256)
+        self.assertEqual(copy.digest(self.normal / small.HEADER_NAME), source.SSM_HEADER_OUTPUT_SHA256)
         self.assertEqual(copy.digest(self.profile / small.HEADER_NAME), source.q8_diagnostic.OUTPUTS[small.HEADER_NAME])
-        self.assertEqual({p.name for p in self.baseline.iterdir()}, {p.name for p in self.normal.iterdir()})
+        self.assertEqual({p.name for p in self.baseline.iterdir()}, {p.name for p in self.f32_stage.iterdir()})
         for path in self.baseline.iterdir():
             if path.name != small.HEADER_NAME:
-                self.assertEqual(path.read_bytes(), (self.normal / path.name).read_bytes(), path.name)
+                self.assertEqual(path.read_bytes(), (self.f32_stage / path.name).read_bytes(), path.name)
         self.assertEqual(copy.digest(self.normal / 'ggml-webgpu.cpp'), 'd5228a8a36613fa8ae7341bb96eee04f318aed5ccd73aa85e57164d118a70a2b')
         self.assertEqual(copy.digest(self.profile / 'ggml-webgpu.cpp'), 'c604ef0c3a962bcca567c91a0911f77ae456aad3d8e7d939524a4b73764a98ec')
         for name, expected in small.CONTRACT_INPUTS.items():

@@ -55,6 +55,7 @@ class Q8SubgroupOverlay(unittest.TestCase):
                 patch.object(source.router_tail, 'prepare', return_value={}), \
                     patch.object(source.host_encode_assembly, 'prepare'), \
                     patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu.cpp']), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
                 source.prepare(self.upstream, root / 'base')

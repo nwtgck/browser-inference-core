@@ -1,4 +1,4 @@
-// Opt-in actual upstream gather and canonical/prepared matrix validation.
+// Opt-in actual prepared/canonical gather and matrix validation.
 import {readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {dirname, join, resolve} from 'node:path';
@@ -18,7 +18,7 @@ invariant(hash(manifestBytes)===source.fixtureManifestSha256,'Manifest hash mism
 const specs=JSON.parse(manifestBytes).filter(x=>(large||!x.large)&&x.name.includes(filter)).slice(Number(value('--skip',0)),Number(value('--skip',0))+limit);
 invariant(specs.length>0,'No fixtures selected');
 const names=['baseline','candidate'];
-const report={scope:'Actual upstream gather/factory/emitter; synthetic packed inputs; canonical/prepared byte validation; no model speed claim',status:'started',source,runnerSha256:hash(readFileSync(fileURLToPath(import.meta.url))),adapter:{},device:{},cases:[],benchmarks:[],errors:[]};
+const report={scope:'Actual prepared/canonical gather/factory/emitter; synthetic packed inputs; semantic and byte validation; no model speed claim',status:'started',source,runnerSha256:hash(readFileSync(fileURLToPath(import.meta.url))),adapter:{},device:{},cases:[],benchmarks:[],errors:[]};
 const owner=create(process.env.LCB_TEST_WEBGPU_BACKEND?['backend='+process.env.LCB_TEST_WEBGPU_BACKEND]:[]);globalThis[Symbol.for('ggml-moe-group-check.owner')]=owner;
 let device;const live=new Set(),queries=new Set();
 try{
@@ -86,21 +86,29 @@ try{
   const gparam=new Uint32Array(8);gparam.set(spec.gatherParams);const mparam=new Uint32Array(16);mparam.set(spec.mainParams);
   const wa=upload(data.weights,undefined,'weights'),xx=upload(data.input,undefined,'input'),ids=upload(data.ids,undefined,'ids'),pos=upload(iniPos,undefined,'slot-pos'),tiles=upload(iniTiles,undefined,'tiles'),gp=upload(gparam,GPUBufferUsage.UNIFORM,'gather-params'),mp=upload(mparam,GPUBufferUsage.UNIFORM,'main-params');
   const gatherOutput=upload(initial,undefined,'gather-output');
-  const gather=await pipeline(spec,'gather'),gg=group(gather,[ids,pos,tiles,gatherOutput,gp]);const lanes=[];
+  const gathers=[];for(const name of ['gather-baseline','gather']){const p=await pipeline(spec,name);gathers.push({name,p,g:group(p,[ids,pos,tiles,gatherOutput,gp])});}const lanes=[];
   for(const name of names){const p=await pipeline(spec,name),dst=upload(initial,undefined,'output-'+name);lanes.push({name,p,dst,g:group(p,[wa,xx,dst,pos,tiles,mp])});}
   const row={name:spec.name,type:spec.type,pattern:spec.pattern,k:spec.k,m:spec.m,experts:spec.experts,used:spec.used,tokens:spec.tokens,sharedInput:spec.sharedInput,mainParams:spec.mainParams,gatherParams:spec.gatherParams,grid:spec.grid,tileK:spec.tileK,vectorized:spec.vectorized,hashes:spec.hashes,rounds:[]};report.cases.push(row);let lastOutputHash,lastInputs;
   for(let round=0;round<2;round++){
-   const idsBytes=makeIds(spec,data.ids,round);device.queue.writeBuffer(ids,0,idsBytes);device.queue.writeBuffer(pos,0,iniPos);device.queue.writeBuffer(tiles,0,iniTiles);device.queue.writeBuffer(gatherOutput,0,initial);
-   device.queue.submit([encode(gather,gg,[1,1])]);let posBytes=await read(pos),tilesBytes=await read(tiles);
-   const gatheredOutput=await read(gatherOutput),gatheredWords=u32(gatheredOutput),liveIds=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4);
-   for(let i=0;i<gatheredWords.length;i++){const slot=Math.floor((i-p[9])/spec.m),inside=i>=p[9]&&i<p[9]+words;const skipped=inside&&liveIds[p[10]+Math.floor(slot/spec.used)*p[15]+slot%spec.used]===-1;invariant(gatheredWords[i]===(skipped?0:initial[i]),'Gather output initialization/guard mismatch');}
-   const occupancy=gatherCheck(spec,idsBytes,posBytes,tilesBytes,iniPos,iniTiles);
+   const idsBytes=makeIds(spec,data.ids,round);device.queue.writeBuffer(ids,0,idsBytes);
+   let posBytes,tilesBytes,gatheredOutput,occupancy,baselineGatherOutput;const gatherVariants=[];
+   for(const gather of gathers){
+    device.queue.writeBuffer(pos,0,iniPos);device.queue.writeBuffer(tiles,0,iniTiles);device.queue.writeBuffer(gatherOutput,0,initial);
+    device.queue.submit([encode(gather.p,gather.g,[1,1])]);posBytes=await read(pos);tilesBytes=await read(tiles);
+    gatheredOutput=await read(gatherOutput);const actual=u32(gatheredOutput),liveIds=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4);
+    for(let i=0;i<actual.length;i++){const slot=Math.floor((i-p[9])/spec.m),inside=i>=p[9]&&i<p[9]+words;const skipped=inside&&liveIds[p[10]+Math.floor(slot/spec.used)*p[15]+slot%spec.used]===-1;invariant(actual[i]===(skipped?0:initial[i]),'Gather output initialization/guard mismatch '+gather.name);}
+    occupancy=gatherCheck(spec,idsBytes,posBytes,tilesBytes,iniPos,iniTiles);
+    if(baselineGatherOutput)invariant(gatheredOutput.equals(baselineGatherOutput),'Prepared/canonical gather output byte mismatch');
+    else baselineGatherOutput=gatheredOutput;
+    gatherVariants.push({name:gather.name,shaderSha256:spec.shaderHashes[gather.name],outputSha256:hash(gatheredOutput),occupancy,status:'passed'});
+   }
+   const gatheredWords=u32(gatheredOutput);
    const zeroOverride=spec.zeroTilesOverride&&round===0;
    if(zeroOverride){device.queue.writeBuffer(tiles,0,new Uint32Array([0]));tilesBytes=await read(tiles);}
-   const rr={round,idsSha256:hash(idsBytes),gather:occupancy,zeroTilesOverride:zeroOverride,variants:[]};row.rounds.push(rr);let baseline,baselineCpu;
+   const rr={round,idsSha256:hash(idsBytes),gather:occupancy,gatherVariants,zeroTilesOverride:zeroOverride,variants:[]};row.rounds.push(rr);let baseline,baselineCpu;
    for(const lane of lanes){
     // Each matrix variant starts with the exact output state produced by the
-    // canonical gather, including its skipped-slot zero initialization.
+    // actual prepared gather, including its skipped-slot zero initialization.
     device.queue.writeBuffer(lane.dst,0,gatheredOutput);device.queue.submit([encode(lane.p,lane.g,spec.grid)]);const out=await read(lane.dst),actual=u32(out);
     let guardErrors=0,bitDifferences=0;
     for(let i=0;i<actual.length;i++){if(i<p[9]||i>=p[9]+words||zeroOverride)guardErrors+=Number(actual[i]!==gatheredWords[i]);if(baseline)bitDifferences+=Number(actual[i]!==baseline[i]);}

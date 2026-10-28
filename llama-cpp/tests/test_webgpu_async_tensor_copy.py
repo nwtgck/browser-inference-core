@@ -70,6 +70,7 @@ class AsyncTensorCopy(unittest.TestCase):
                 patch.object(source.router_tail, 'prepare', return_value={}), \
                     patch.object(source.host_encode_assembly, 'prepare'), \
                     patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', async_copy.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.rms_scale.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
                 baseline = source.prepare(self.upstream, root / 'base')

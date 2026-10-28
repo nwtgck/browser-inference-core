@@ -146,6 +146,7 @@ class ScaleUnary(unittest.TestCase):
                 patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source.f32_small_m, 'prepare'), \
+                patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', fusion.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             stage = source.prepare(self.upstream, Path(temporary)).parent

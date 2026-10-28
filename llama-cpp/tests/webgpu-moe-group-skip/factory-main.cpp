@@ -7,7 +7,31 @@ a.ne[0]=p[1];a.ne[1]=p[2];a.ne[2]=p[3];x.ne[0]=p[1];x.ne[1]=p[6];x.ne[2]=p[5];d.
 a.view_offs=p[7]*ggml_type_size(a.type);x.view_offs=p[8]*ggml_type_size(x.type);d.view_offs=p[9]*4;ids.view_offs=p[10]*4;
 a.nb[1]=p[11]*ggml_type_size(a.type);a.nb[2]=p[12]*ggml_type_size(a.type);x.nb[1]=p[13]*ggml_type_size(x.type);x.nb[2]=p[14]*ggml_type_size(x.type);ids.nb[1]=p[15]*4;
 ggml_webgpu_shader_lib_context c{};c.src0=&a;c.src1=&x;c.src2=&ids;c.dst=&d;c.max_wg_size=argc==21?std::stoul(argv[20]):256;
-Canonical gather_lib;auto gather=gather_lib.get_mul_mat_id_gather_pipeline(c);Candidate changed_gather_lib;auto same_gather=changed_gather_lib.get_mul_mat_id_gather_pipeline(c);auto gather_hit=changed_gather_lib.get_mul_mat_id_gather_pipeline(c);if(gather.code!=same_gather.code||gather.name!=same_gather.name||gather_hit.id!=same_gather.id)throw std::runtime_error("gather changed");std::ofstream(out+"/"+name+"-gather.wgsl")<<gather.code;
+Canonical gather_lib;auto gather=gather_lib.get_mul_mat_id_gather_pipeline(c);
+Candidate changed_gather_lib;auto same_gather=changed_gather_lib.get_mul_mat_id_gather_pipeline(c);
+auto gather_hit=changed_gather_lib.get_mul_mat_id_gather_pipeline(c);
+if(gather.name!=same_gather.name||gather_hit.id!=same_gather.id)throw std::runtime_error("gather cache/name changed");
+const auto expert_count=a.ne[2];a.ne[2]=expert_count==1?2:1;
+auto other_experts=changed_gather_lib.get_mul_mat_id_gather_pipeline(c);a.ne[2]=expert_count;
+if(other_experts.id==same_gather.id||changed_gather_lib.get_mul_mat_id_gather_pipeline(c).id!=same_gather.id)
+    throw std::runtime_error("gather expert key/return cache changed");
+const auto old_m=d.ne[0],old_used=d.ne[1],old_tokens=d.ne[2];
+d.ne[0]=old_m+1;d.ne[1]=old_used+1;d.ne[2]=old_tokens+1;
+if(changed_gather_lib.get_mul_mat_id_gather_pipeline(c).id!=same_gather.id)
+    throw std::runtime_error("gather shape polluted expert cache");
+d.ne[0]=old_m;d.ne[1]=old_used;d.ne[2]=old_tokens;
+#ifdef TEST_LOGICAL32_GATHER
+const auto old_zero=gather.code.find("    // the matmul writes only the rows that an expert owns");
+const auto new_zero=same_gather.code.find("    let zero_lanes = min(32u,");
+if(old_zero==std::string::npos||new_zero==std::string::npos||gather.code.substr(0,old_zero)!=same_gather.code.substr(0,new_zero)||gather.code==same_gather.code)
+    throw std::runtime_error("gather changed outside zeroing or candidate was not selected");
+#else
+if(gather.code!=same_gather.code)throw std::runtime_error("historical gather changed");
+#endif
+// The primary output is the actual prepared factory. Keep the canonical
+// baseline separately so a numerical runner cannot silently execute only it.
+std::ofstream(out+"/"+name+"-gather.wgsl")<<same_gather.code;
+std::ofstream(out+"/"+name+"-gather-baseline.wgsl")<<gather.code;
 Canonical canonical;Candidate candidate;
 auto plain=canonical.get_mul_mat_id_pipeline(c);auto changed=candidate.get_mul_mat_id_pipeline(c);
 auto plain_hit=canonical.get_mul_mat_id_pipeline(c);auto changed_hit=candidate.get_mul_mat_id_pipeline(c);

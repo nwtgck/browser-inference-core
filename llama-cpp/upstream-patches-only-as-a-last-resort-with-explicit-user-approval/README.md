@@ -520,3 +520,13 @@ not establish target-device speed.
 - **Integration:** a checked header-only stage follows host assembly and precedes optional profile stages. Normal/profile shader-library identities change; host source, shared bindings/schema and canonical WGSL inputs do not. No extra runtime profile or native API is added.
 - **Validation and limits:** source-bound admission/cache/factory/dispatch checks cover boundaries and guarded fallbacks. Private software-GPU geometry comparisons informed the scope; target-device/model speed and model quality are not established by those results. Revalidate arithmetic, layouts and performance before widening the scope.
 - **Removal:** remove this stage and its metadata/tests when upstream provides a suitable equivalent or the specialization is no longer useful. Re-review upstream factory, key, geometry decisions, reg-tile loads/accumulation and dispatch contracts on pin changes.
+
+
+## MoE gather logical lane groups
+
+- **Patch:** `ggml-webgpu-moe-gather-logical32.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this agent-selected specialization. Distribute only the existing skipped-slot zero loop among logical groups of at most 32 lanes; the grouping is independent of hardware subgroup features. Preserve expert counting, prefix/tile construction and slot-position atomics.
+- **Contract:** shared storage and its expert capacity, existing barriers/atomics, seven parameter words, five bindings, gather grid, cache key and factory label remain unchanged. Partial final groups skip only zeroing; supported input/index/binding contracts are not widened. Matrix and matvec arithmetic are unchanged.
+- **Integration:** a checked stage after F32 small-M embeds only the derived gather in a dedicated header and changes its factory source selection. Canonical upstream files and the existing matrix group-skip stage remain intact. Normal/profile library and gather identities are recorded separately from the base ABI/schema.
+- **Validation and limits:** source-bound stage, ownership, factory/cache and unchanged-dispatch checks cover skipped/live slots and workgroup boundaries. Private software-GPU checks informed the candidate; benefits are not universal, and target-device/model performance is not established.
+- **Removal:** remove the stage and its build/provenance plumbing when upstream supplies an equivalent or it ceases to be useful. Re-review gather ownership, metadata capacity, factory specialization and downstream dispatch ordering on upstream changes.

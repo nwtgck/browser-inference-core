@@ -79,7 +79,7 @@ def generate(upstream: Path, work: Path, factory: Path, *, large: bool=False) ->
      else:subprocess.run([str(LAB/'oracle'),str(kind),str(k),str(e*m),str(d/'packed.bin'),str(d/'dequantized.bin')],check=True)
      p=[kind,k,m,e,u,t,bn,offa,offx,offd,offids,s01,s02,s11,s12,sid]
      actual=json.loads(subprocess.check_output([str(factory),str(shaders),name,*map(str,p)],text=True))
-     row=dict(name=name,type=typ,pattern=pattern,k=k,m=m,experts=e,used=u,tokens=t,sharedInput=shared,zeroTilesOverride=pattern=='zero',args=p,**actual,hashes={key:sha(d/(key+'.bin')) for key in ['weights','input','ids','dequantized']},shaderHashes={v:sha(shaders/(name+'-'+v+'.wgsl')) for v in ['gather',*variants]},large=k>512 or (e==512 and t==128))
+     row=dict(name=name,type=typ,pattern=pattern,k=k,m=m,experts=e,used=u,tokens=t,sharedInput=shared,zeroTilesOverride=pattern=='zero',args=p,**actual,hashes={key:sha(d/(key+'.bin')) for key in ['weights','input','ids','dequantized']},shaderHashes={v:sha(shaders/(name+'-'+v+'.wgsl')) for v in ['gather','gather-baseline',*variants]},large=k>512 or (e==512 and t==128))
      manifest_rows.append(row)
     manifest=LAB/('manifest-large.json' if large else 'manifest.json')
     manifest.write_text(json.dumps(manifest_rows,indent=2)+'\n')

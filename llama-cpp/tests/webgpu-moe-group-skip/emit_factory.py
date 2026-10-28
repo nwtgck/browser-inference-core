@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts')]
 import prepare_webgpu_moe_group_skip as group
+import prepare_webgpu_moe_gather_logical32 as gather
 
 
 def function(text: str, marker: str) -> str:
@@ -31,7 +32,10 @@ def build(upstream: Path, prepared: Path, output: Path, *, profile: bool = False
     fields = [function(final, marker) + ';' for marker in
               ('struct ggml_webgpu_shader_lib_context {', 'struct ggml_webgpu_generic_shader_decisions {',
                'struct ggml_webgpu_mul_mat_shader_decisions {')]
-    chunks = [(HERE / 'factory-prefix.cpp').read_text(), constants,
+    prefix = (HERE / 'factory-prefix.cpp').read_text()
+    if (prepared / gather.HEADER_NAME).is_file():
+        prefix += '#include "' + gather.HEADER_NAME + '"\n#define TEST_LOGICAL32_GATHER\n'
+    chunks = [prefix, constants,
               function(final, 'template <typename T> inline void ggml_webgpu_hash_combine('), *fields, keys]
     for name, text in (('Canonical', original), ('Candidate', final)):
         chunks += [f'''class {name} {{ int device=0; pre_wgsl::Preprocessor preprocessor;
