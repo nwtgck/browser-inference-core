@@ -1,0 +1,72 @@
+--- a/mtmd.cpp
++++ b/mtmd.cpp
+@@ -1,6 +1,8 @@
+ #include "clip.h"
+ #include "clip-impl.h"
+ #include "mtmd.h"
++#include "mtmd-vision-bf16.h"
++#include "mtmd-vision-bf16-internal.h"
+ #include "mtmd-internal.h"
+ #include "mtmd-audio.h"
+ #include "mtmd-image.h"
+@@ -552,6 +554,7 @@
+ }
+ 
+ struct mtmd_context {
++    const mtmd_vision_bf16_storage vision_bf16_storage;
+     struct clip_ctx * ctx_v; // vision
+     struct clip_ctx * ctx_a; // audio
+     std::vector<float> out_embd; // image embedding vector
+@@ -606,7 +609,9 @@
+     mtmd_context(const char * mmproj_fname,
+                    const llama_model * text_model,
+                    const mtmd_context_params & ctx_params,
+-                   bool no_alloc = false) :
++                   bool no_alloc = false,
++                   mtmd_vision_bf16_storage storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
++        vision_bf16_storage(storage),
+         print_timings   (ctx_params.print_timings),
+         n_threads       (ctx_params.n_threads),
+         media_marker    (ctx_params.media_marker),
+@@ -656,7 +661,7 @@
+             /* progress_callback_user_data */ ctx_params.progress_callback_user_data,
+         };
+ 
+-        auto res = clip_init(mmproj_fname, ctx_clip_params);
++        auto res = lcb_clip_init_with_vision_bf16_storage(mmproj_fname, ctx_clip_params, storage);
+         ctx_v = res.ctx_v;
+         ctx_a = res.ctx_a;
+         ctx_gen_a = res.ctx_gen_a;
+@@ -1260,6 +1265,32 @@
+         LOG_ERR("%s: error: %s\n", __func__, e.what());
+         return nullptr;
+     }
++}
++
++uint32_t mtmd_vision_bf16_storage_version(void) {
++    return 1;
++}
++
++mtmd_context * mtmd_init_from_file_with_vision_bf16_storage(
++        const char * path, const llama_model * text_model,
++        const mtmd_context_params params, int32_t storage) {
++    // Validate the raw i32 before conversion to the bounded C enum or any I/O.
++    if (storage != MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND &&
++        storage != MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED) {
++        LOG_ERR("%s: unknown vision BF16 storage policy\n", __func__);
++        return nullptr;
++    }
++    try {
++        return new mtmd_context(path, text_model, params, false,
++                               static_cast<mtmd_vision_bf16_storage>(storage));
++    } catch (const std::exception & error) {
++        LOG_ERR("%s: error: %s\n", __func__, error.what());
++        return nullptr;
++    }
++}
++
++mtmd_vision_bf16_storage mtmd_context_vision_bf16_storage(const mtmd_context * context) {
++    return context ? context->vision_bf16_storage : MTMD_VISION_BF16_STORAGE_INVALID;
+ }
+ 
+ void mtmd_free(mtmd_context * ctx) {

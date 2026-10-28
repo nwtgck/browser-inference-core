@@ -7,13 +7,13 @@
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
   "base_generated_normalized_sha256": {
-    "bindings.cpp": "789e2bb02773b05e58abf394370e4d24102d742f0d7f4eddb305ec2e18f280d6",
-    "schema.json": "90cb1a05ef1075bc750ce8571465998e4bdc326a8db68c728421ed3b562fd60b",
-    "schema.mjs": "7a5b2a49196170be4b4e673d4dd0991697200be0c44a397d63518acfc7cf98e7",
-    "exports.json": "013c6b8dfa1d373c64f80cf6ec17f0992be91d232f7aada67695ce120680331b",
-    "jspi-exports.json": "e7f5a4356afae8849e51206112407d25dfd566a76bcfcb1579b4f631690dafaf",
-    "functions.d.ts": "8fe2e32be9b810af688ff6fa8c98cc70f2f6c50b645175859c758153872fe73c",
-    "headers.c": "7fa31449cb6169b704e0187d6a98ca24d13d073715d7f66396570e42836a328c"
+    "bindings.cpp": "1b5c8b636139eb732cb96100a5b87501d22aee8f7e2ac09270e65971ec9239f5",
+    "schema.json": "3d1efa32cc5107433f60ee5e9ed68f37f506b7d671e4bcb97c91e1e71887bd65",
+    "schema.mjs": "6aff8dcfee660eecb63118beaae4cb75802fc8d0734c938864cf0228c7f658ac",
+    "exports.json": "ea6d896364213a3123aba4368525f63d9a0aeb94ab014a4b06faa1182bda5db7",
+    "jspi-exports.json": "342df66fec34035cfb58ad3e7c3dddd97dfa6e6f2bccd5557c6e4c18e41a4c96",
+    "functions.d.ts": "247b6441527a95cd1850a0269b1a87e169fa5b0c98783ef53668ace9af924b15",
+    "headers.c": "1f8041a40a5aca44ca125782d4459d9a624bc0003b891b6aabf4536ec33070e0"
   },
   "public_source_sha256": {
     "scripts/prepare_webgpu_q8_diagnostic.py": "d8e4a48752b1a28f158e8e23f80819c9b7506337073877bd00d388475b90d49d",

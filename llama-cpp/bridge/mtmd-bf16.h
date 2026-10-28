@@ -21,8 +21,9 @@ inline bool lcb_mtmd_is_webgpu(ggml_backend_t backend) {
     return name && std::strcmp(name, "WebGPU") == 0;
 }
 
-// Brain Floating Point 16 (BF16) storage is not supported by the pinned WebGPU
-// matmul kernels. Expand only the vision loader's weights, not the model file.
+// Legacy expansion of Brain Floating Point 16 (BF16) vision weights. The current
+// upstream has BF16 kernels, but target-model speed/quality acceptance remains
+// separate from storage support. Expand weights only, not the model file.
 // This conversion preserves finite BF16 values; it does not change the existing
 // WebGPU kernels' intermediate precision. Resident converted weights double in
 // size; bounded scratch does not remove that cost. Keep scratch space bounded

@@ -27,7 +27,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
         self.assertIn('Removal condition', register)
         self.assertFalse((ROOT / 'patches').exists(), 'Do not leave a second generic patch directory')
         self.assertEqual({p.name for p in directory.glob('*.patch')}, {
-            'mtmd-webgpu-bf16.patch', 'mtmd-audio-single-thread.patch',
+            'mtmd-webgpu-bf16.patch', 'mtmd-vision-bf16-runtime.patch', 'mtmd-vision-bf16-clip-runtime.patch', 'mtmd-audio-single-thread.patch',
             'ggml-webgpu-same-device-tensor-copy.patch',
             'ggml-webgpu-ordered-readback.patch',
             'ggml-webgpu-bind-group-cache.patch', 'ggml-webgpu-host-encode-assembly.patch',
@@ -63,6 +63,8 @@ class UpstreamPatchPolicy(unittest.TestCase):
             for component, filename, patch in (
                 ('vision', 'clip.cpp', 'mtmd-webgpu-bf16.patch'),
                 ('audio', 'mtmd-audio.cpp', 'mtmd-audio-single-thread.patch'),
+                ('runtime', 'mtmd.cpp', 'mtmd-vision-bf16-runtime.patch'),
+                ('clip-runtime', 'clip.cpp', 'mtmd-vision-bf16-clip-runtime.patch'),
             ):
                 with self.subTest(component=component):
                     before = (source / 'tools/mtmd' / filename).read_bytes()
@@ -94,7 +96,23 @@ class UpstreamPatchPolicy(unittest.TestCase):
             self.assertEqual(json.loads((output / 'schema.json').read_text()), schema)
         self.assertEqual(header.read_bytes(), before)
 
-    def test_cmake_replaces_only_the_two_accepted_translation_units(self):
+    def test_cpu_runtime_replaces_only_mtmd_and_the_minimal_clip_plumbing(self):
+        source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
+        if not shutil.which('cmake') or not (source / 'CMakeLists.txt').is_file():
+            self.skipTest('CMake and an upstream checkout are required')
+        with tempfile.TemporaryDirectory() as temporary:
+            build = Path(temporary) / 'cpu-build'
+            subprocess.run(['cmake', '-S', str(ROOT / 'tests/mtmd-overlay'), '-B', str(build),
+                            '-DLCB_WEBGPU=OFF', '-DLCB_LLAMA_SOURCE=' + str(source)],
+                           check=True, capture_output=True, text=True)
+            sources = (build / 'mtmd-sources.txt').read_text().strip().split(';')
+            clip = build / 'mtmd-runtime-overlay/clip.cpp'
+            self.assertIn(str(clip), sources)
+            self.assertIn(str(build / 'mtmd-runtime-overlay/mtmd.cpp'), sources)
+            self.assertNotIn('mtmd-retained-graph.h', clip.read_text())
+            self.assertFalse((build / 'mtmd-overlay').exists())
+
+    def test_cmake_replaces_only_the_three_accepted_translation_units(self):
         source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         if not shutil.which('cmake') or not (source / 'CMakeLists.txt').is_file():
             self.skipTest('CMake and an upstream checkout are required')
@@ -105,7 +123,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             before = (build / 'upstream-mtmd-sources.txt').read_text().strip().split(';')
             after = (build / 'mtmd-sources.txt').read_text().strip().split(';')
             self.assertEqual(len(after), len(before))
-            replaced = {'clip.cpp', 'mtmd-audio.cpp'}
+            replaced = {'clip.cpp', 'mtmd-audio.cpp', 'mtmd.cpp'}
             self.assertEqual(set(before) - set(after), replaced)
             copies = set(after) - set(before)
             self.assertEqual({Path(p).name for p in copies}, replaced)

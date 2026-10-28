@@ -14,7 +14,7 @@ PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-app
 
 def prepare(source: Path, output: Path, patch: Path, *, capture_output: bool = False,
             filename: str = "clip.cpp") -> Path:
-    if filename not in ("clip.cpp", "mtmd-audio.cpp"):
+    if filename not in ("clip.cpp", "mtmd-audio.cpp", "mtmd.cpp"):
         raise ValueError("unsupported mtmd overlay translation unit")
     # Resolve symlinks before checking overlap so a build path cannot disguise
     # a write inside the pinned checkout (or replace one of its ancestors).
@@ -48,11 +48,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--component", choices=("vision", "audio"), default="vision")
+    parser.add_argument("--component", choices=("vision", "audio", "runtime", "clip-runtime"), default="vision")
     args = parser.parse_args()
     if args.component == "audio":
         prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-audio-single-thread.patch",
                 filename="mtmd-audio.cpp")
+    elif args.component == "clip-runtime":
+        prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-vision-bf16-clip-runtime.patch")
+    elif args.component == "runtime":
+        prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-vision-bf16-runtime.patch", filename="mtmd.cpp")
     else:
         prepare(args.source, args.output, ROOT / PATCH_DIRECTORY / "mtmd-webgpu-bf16.patch")
 

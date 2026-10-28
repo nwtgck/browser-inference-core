@@ -12,6 +12,7 @@ import tempfile
 
 from github_api import full_sha, git
 from prepare_mtmd import PATCH_DIRECTORY, prepare
+from verify_bf16_build import runtime_metadata, validate_metadata as validate_bf16_metadata
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
 import prepare_webgpu_hc as hc
@@ -91,6 +92,9 @@ def collect(root: Path, manifest: dict) -> dict:
         raise ValueError('Reporting submodule does not match the built upstream commit')
     patch_path = f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch'
     upstream_path = 'tools/mtmd/clip.cpp'
+    runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-runtime.patch'
+    runtime_source = 'tools/mtmd/mtmd.cpp'
+    cpu_runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-clip-runtime.patch'
     audio_patch = f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch'
     audio_source = 'tools/mtmd/mtmd-audio.cpp'
     patch_files = sorted(path.relative_to(root).as_posix() for path in (root / PATCH_DIRECTORY).rglob('*.patch'))
@@ -104,6 +108,7 @@ def collect(root: Path, manifest: dict) -> dict:
     toolchain = runtime_toolchain(root)
     for profile, info in manifest['profiles'].items():
         for variant, provenance in info['variants'].items():
+            validate_bf16_metadata(provenance)
             webgpu_options = [option for option in provenance['cmakeCommand']
                               if option.startswith('-DLCB_WEBGPU=') or option.startswith('-DLCB_WEBGPU:')]
             if webgpu_options not in (['-DLCB_WEBGPU=ON'], ['-DLCB_WEBGPU=OFF']):
@@ -198,6 +203,10 @@ def collect(root: Path, manifest: dict) -> dict:
             rows_tree = trees[0] if all(value == trees[0] for value in trees) else None
         patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
         patched_identity = file_identity(patched)
+        runtime_copy = prepare(vendor, Path(temporary) / 'runtime', root / runtime_patch, filename='mtmd.cpp')
+        runtime_identity = file_identity(runtime_copy)
+        cpu_runtime_copy = prepare(vendor, Path(temporary) / 'cpu-runtime', root / cpu_runtime_patch)
+        cpu_runtime_identity = file_identity(cpu_runtime_copy)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
         audio_identity = file_identity(audio)
         webgpu_compiled = None
@@ -293,7 +302,11 @@ def collect(root: Path, manifest: dict) -> dict:
                                for variant in diagnostic_enabled})
 
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
-                  'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
+                  'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
+                  'bridge/mtmd-retained-graph.h', 'bridge/mtmd-retained-roles.h',
+                  'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'scripts/verify_retained_bf16_source.py', 'config/retained-bf16-source.json',
+                  'docs/webgpu-bf16-projector.md']
     report = {
         'upstreamRepository': 'ggml-org/llama.cpp',
         'baseCommit': upstream,
@@ -316,11 +329,12 @@ def collect(root: Path, manifest: dict) -> dict:
                 'preparationScript': 'scripts/prepare_mtmd.py',
                 'cmakeHook': 'cmake/MtmdOverlay.cmake',
                 'option': 'LCB_WEBGPU_BF16_PROJECTOR',
+                'runtimeStorageSelection': runtime_metadata(),
                 'enabledProfileVariants': sorted(enabled),
             },
             'supportingFiles': {path: file_identity(root / path) for path in supporting},
             'searchHints': ['mtmd-webgpu-bf16', 'LCB_WEBGPU_BF16_PROJECTOR', 'lcb_clip', 'bf16-f32', 'cpu_bf16'],
-            'behavior': 'WebGPU vision BF16 weights become resident F32 weights (2x storage for converted weights); bounded upload, placement diagnostics and loader guards. Upstream graph-allocation failure handling is preserved. Model files remain unchanged.',
+            'behavior': 'Legacy callers expand WebGPU vision BF16 weights to resident F32. Explicit per-context retain-checked keeps original BF16 storage with bounded loading and role/graph/placement guards; unsupported cases fail without implicit expansion or CPU retry. Upstream graph-allocation failure handling and model files remain unchanged.',
         }, {
             'id': 'single-thread-wasm-audio-preprocessing',
             'kind': 'build-tree-source-overlay',
@@ -925,6 +939,39 @@ def collect(root: Path, manifest: dict) -> dict:
             },
         },
     }
+
+    report['sourceOverlays'].append({
+        'id': 'vision-bf16-runtime-selection',
+        'kind': 'build-tree-source-overlay',
+        'upstreamSource': {'path': runtime_source, **file_identity(vendor / runtime_source)},
+        'patch': {'path': runtime_patch, **file_identity(root / runtime_patch)},
+        'compiledCopy': {'logicalUpstreamPath': runtime_source, **runtime_identity},
+        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component runtime',
+                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
+                        'enabledProfileVariants': sorted(audio_enabled),
+                        'runtimeStorageSelection': runtime_metadata()},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                             'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
+                             'scripts/verify_bf16_build.py']},
+        'behavior': 'Add explicit load-time immutable storage selection without changing upstream parameter layouts. Old entry points use legacy defaults; requested mode is distinct from actual backend placement.',
+    })
+    report['sourceOverlays'].append({
+        'id': 'vision-bf16-cpu-loader-plumbing',
+        'kind': 'build-tree-source-overlay',
+        'upstreamSource': {'path': upstream_path, **file_identity(vendor / upstream_path)},
+        'patch': {'path': cpu_runtime_patch, **file_identity(root / cpu_runtime_patch)},
+        'compiledCopy': {'logicalUpstreamPath': upstream_path, **cpu_runtime_identity},
+        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component clip-runtime',
+                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
+                        'enabledProfileVariants': sorted(set(audio_enabled) - set(enabled))},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h',
+                             'bridge/mtmd-vision-bf16-policy.h', 'cmake/MtmdBf16Runtime.cmake']},
+        'behavior': 'Keep CPU/audio storage unchanged and pass immutable mode explicitly. Reject a GPU-requested retained vision load at existing modality classification before allocating weights; audio-only loads keep their original behavior.',
+    })
+    report['otherPatchFiles'].pop(runtime_patch, None)
+    report['otherPatchFiles'].pop(cpu_runtime_patch, None)
 
     # Profile and normal TUs now differ. Never attribute the normal final bytes
     # to a profile artifact, including earlier overlays that share the final TU.

@@ -69,10 +69,10 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     unit = output / 'headers.c'
     unit.write_text('#include "llama.h"\n#include "gguf.h"\n#include "ggml.h"\n'
                     '#include "ggml-alloc.h"\n#include "ggml-backend.h"\n'
-                    '#include "mtmd.h"\n#include "mtmd-helper.h"\n')
+                    '#include "mtmd.h"\n#include "mtmd-helper.h"\n#include "mtmd-vision-bf16.h"\n')
     command = [compiler, '-x', 'c', '-std=c11', '-fsyntax-only',
                '-I'+str(source/'include'), '-I'+str(source/'ggml/include'),
-               '-I'+str(source/'tools/mtmd'),
+               '-I'+str(source/'tools/mtmd'), '-I'+str(Path(__file__).resolve().parents[1]/'bridge'),
                '-Xclang', '-ast-dump=json', str(unit)]
     ast = json.loads(subprocess.check_output(command, text=True))
     nodes = list(walk(ast))
@@ -170,7 +170,7 @@ def generate(source: Path, output: Path, compiler: str) -> dict:
     constants = sorted(set(enum_names + EXTRA_CONSTANTS))
     cpp = ['// Generated; do not edit.', '#include "llama.h"', '#include "gguf.h"',
            '#include "ggml.h"', '#include "ggml-alloc.h"', '#include "ggml-backend.h"',
-           '#include "mtmd.h"', '#include "mtmd-helper.h"',
+           '#include "mtmd.h"', '#include "mtmd-helper.h"', '#include "mtmd-vision-bf16.h"',
            '#include <stdint.h>', '#include <stddef.h>',
            '#include <errno.h>', '#include <stdlib.h>', '#include <stdexcept>',
            '#ifdef LCB_FILE_BACKED_PLE',

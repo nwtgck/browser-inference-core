@@ -48,7 +48,7 @@ class BuildProvenance(unittest.TestCase):
         toolchain['emscriptenAsyncifyBigIntPatch']['patchedSha256']=hashlib.sha256(patched_runtime).hexdigest()
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root/'scripts').mkdir()
-        for name in ('build.py', 'prepare_browser_module.py', 'verify_gpu_profile_build.py'):
+        for name in ('build.py', 'prepare_browser_module.py', 'verify_gpu_profile_build.py', 'verify_bf16_build.py'):
             shutil.copy2(ROOT/'scripts'/name,self.root/'scripts'/name)
         (self.root/'README.md').write_text('original\n')
         # The real CMake process intentionally runs a probe without WORKING_DIRECTORY,
@@ -81,6 +81,11 @@ class BuildProvenance(unittest.TestCase):
                 commands=[{'file':'ggml-webgpu.cpp','command':'c++ -c ggml-webgpu.cpp'+macro}] if sys.argv[2]=='ON' else []
                 if macro:
                     commands += [{'file':name,'command':'c++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c '+name} for name in ('webgpu-q8-diagnostic.cpp','q8-diagnostic-metadata.cpp')]
+                runtime=' -DLCB_MTMD_WEBGPU_BF16_RUNTIME='+('1' if sys.argv[2]=='ON' else '0')
+                if os.environ.get('LCB_TEST_MODE')=='bf16-mismatch':
+                    runtime=' -DLCB_MTMD_WEBGPU_BF16_RUNTIME=0'
+                commands += [{'file':'clip.cpp','command':'c++ -c clip.cpp'+runtime},
+                             {'file':'mtmd.cpp','command':'c++ -c mtmd.cpp'+runtime}]
                 Path('compile_commands.json').write_text(json.dumps(commands))
                 mode=os.environ.get('LCB_TEST_MODE')
                 if mode=='modify':
@@ -204,6 +209,22 @@ class BuildProvenance(unittest.TestCase):
         self.assertIn(' M README.md',info['sourceStatusBeforeBuild'])
         self.assertEqual(info['sourceStatusAfterBuild'],[])
         self.assertTrue(info['sourceDirty'])
+
+    def test_shared_runtime_metadata_and_compiler_mismatch(self):
+        dawn=self.root.parent/'.tools/emdawnwebgpu_pkg'
+        dawn.mkdir(parents=True)
+        (dawn/'emdawnwebgpu.port.py').write_text('# local fixture\n')
+        profiles=json.loads((ROOT/'config/profiles.json').read_text())
+        gpu=next(name for name, info in profiles.items() if info['webgpu'] and not info.get('gpuProfile'))
+        for profile in ['cpu-wasm32', gpu]:
+            info=self.build(profile)
+            self.assertEqual(info['visionBf16Storage'], {'version':1, 'modes':['legacy-expand','retain-checked'], 'default':'legacy-expand'})
+            self.assertFalse(any('LCB_WEBGPU_BF16_STORAGE' in arg for arg in info['cmakeCommand']))
+            self.assertTrue((self.root/'build'/profile/'browser/runtime/core.mjs').is_file())
+            self.assertFalse((self.root/'build'/profile/'browser-bf16-retained').exists())
+        result=self.build(gpu, mode='bf16-mismatch', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('compile definition mismatch', result.stderr)
 
     def test_dirty_submodule_is_rejected_before_configuring(self):
         (self.upstream/'include/llama.h').write_text('modified upstream\n')

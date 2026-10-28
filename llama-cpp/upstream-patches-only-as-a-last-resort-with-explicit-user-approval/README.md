@@ -18,28 +18,36 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 
 ## Vision BF16 compatibility/performance
 
-- **Patch:** `mtmd-webgpu-bf16.patch`.
-- **Accepted purpose:** avoid the unusably slow vision-projector path identified
-  by the project owner as necessary to fix. This is not general permission to
-  optimize every model in downstream code.
-- **Scope:** vision BF16 (Brain Floating Point 16) weights in the selected WebGPU
-  build variants, controlled by `LCB_WEBGPU_BF16_PROJECTOR`. No audio-weight
-  expansion and no change to stored model files.
-- **Integration:** one `tools/mtmd/clip.cpp` build-tree copy, with the local
-  conversion helper in `bridge/mtmd-bf16.h`. Internal loader coupling remains a
-  maintenance cost even though the upstream checkout is unchanged.
-- **v0.5.0 maintenance:** upstream now owns the graph-allocation failure check.
-  Keep it as unchanged context and insert the existing placement diagnostics
-  after it, instead of backporting the same guard again. The conversion helper,
-  loader changes, profile scope, and independent audio patch are unchanged.
-- **No-patch alternatives:** compatible weight formats, the existing CPU path,
-  or waiting for suitable upstream support; these do not necessarily satisfy
-  the required multimodal performance.
-- **Validation and costs:** see [the existing design and tests](../docs/webgpu-bf16-projector.md),
-  including increased resident storage and the limits of synthetic checks.
-- **Removal condition:** upstream provides the required working, acceptably fast
-  path on the target profiles, or the owner drops the requirement. Verify it
-  with the affected models before retiring the workaround.
+- **Patches:** `mtmd-webgpu-bf16.patch`, `mtmd-vision-bf16-runtime.patch`,
+  and `mtmd-vision-bf16-clip-runtime.patch`.
+- **Accepted scope:** the owner's explicit BF16-memory request permits per-load
+  immutable storage selection in the same runtime. Existing entries remain
+  legacy-expand; explicit retain-checked uses original BF16 storage and rejects
+  unreviewed roles/graphs/placement instead of retrying in F32 or on CPU.
+- **Integration:** checked build-tree clip.cpp and mtmd.cpp copies, preserving
+  upstream parameter-record layouts. The thin mtmd API plumbing exists in every
+  profile; WebGPU loader handling remains under `LCB_WEBGPU_BF16_PROJECTOR`.
+  Other profiles use a minimal clip copy that rejects unsupported retained GPU
+  vision only at existing modality classification, before weight allocation;
+  audio-only loads keep their original behavior without a second metadata parse.
+  Explicit CPU loads retain upstream storage and are not WebGPU acceptance.
+- **Coupling:** retained upload/graph helpers use public ggml interfaces;
+  `mtmd-retained-roles.h` explicitly uses pinned private clip_model fields. The
+  source contract, compile-target check, generated ABI and provenance expose
+  this maintenance cost. Vendor, audio, model builders and shaders stay intact.
+- **Compatibility:** ordinary assets contain both modes without extra variants
+  or build directories. No global/TLS selector or post-load mutator is added.
+  Upstream owns the graph-allocation failure check; preserve it unchanged.
+- **No-patch alternatives:** keep established expansion, compatible weight
+  formats, the existing CPU path or defer retention. Disabling the whole overlay
+  also removes independent safety/diagnostics and can restore full-tensor scratch.
+- **Validation and limits:** [storage design](../docs/webgpu-bf16-projector.md).
+  CPU/synthetic/source-extracted tests do not establish actual browser/model
+  correctness, physical peak or equal speed. Defaults are not switched on that
+  evidence alone. New shaders and wider role acceptance are separate scope.
+- **Removal:** upstream supplies the required storage, safety and performance
+  contract, or the owner withdraws the requirement; retire API/plumbing/tests
+  coherently without changing immutable artifacts or unrelated overlays.
 
 ## Non-pthread Wasm audio preprocessing
 

@@ -1,138 +1,166 @@
-# WebGPU vision BF16 compatibility workaround
+# WebGPU vision BF16 storage
 
-The pinned WebGPU backend does not accept Brain Floating Point 16 (BF16) weights
-for matrix multiplication. A vision graph with those weights can silently assign
-its largest projections to the single-threaded CPU backend while other nodes use
-WebGPU. The profile name alone does not establish where a node is executed.
+The pinned llama.cpp revision `8642541b255bfb5dc39cd351a178be09013a55d6`
+has BF16-left/F32-right matrix multiplication and BF16 row lookup in WebGPU.
+Storage support alone does not establish complete-model compatibility or speed.
+BF16 means Brain Floating Point 16; F16/F32 mean 16/32-bit floating point.
 
-## Scope
+## Load-time selection in the same runtime
 
-WebGPU builds enable `LCB_WEBGPU_BF16_PROJECTOR`. The mtmd vision loader expands
-BF16 weights to 32-bit floating point (F32) when its selected backend is WebGPU.
-It does not rewrite the model file, change language-model weights, convert audio
-weights, change non-BF16 types, or affect CPU-only profiles. This is not a general
-WebGPU BF16 kernel implementation. The choice is limited to the pinned backend;
-review or remove it when upstream BF16 support changes.
+Every existing profile and variant exposes the same versioned storage API.
+There is no extra Wasm asset, profile, variant or build directory for retention.
+`LCB_WEBGPU_BF16_PROJECTOR` continues to control the reviewed WebGPU loader
+integration. Ordinary builds include both storage policies in that integration.
 
-The vendor submodule is never edited. `scripts/prepare_mtmd.py` copies `clip.cpp`
-into each build tree and applies `upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch` there. CMake
-replaces that one mtmd translation unit. The helper is `bridge/mtmd-bf16.h`.
-Configure fails if the patch or upstream target source layout does not match.
-At the v0.5.0 pin `7fe450e19305b828c199d602c23a8337aaa1f03b`, upstream already
-checks graph-allocation failure. That guard is now unchanged patch context, not
-a downstream backport. Placement diagnostics are inserted only after successful
-allocation. The loader conversion and its existing checks remain local.
+`mtmd_init_from_file` remains unchanged and selects `legacy-expand`. Its parameter
+record and `clip_context_params` keep their upstream layouts. New callers use the
+C declarations in `bridge/mtmd-vision-bf16.h`:
 
-## Why this lives in the loader
+```c
+uint32_t mtmd_vision_bf16_storage_version(void);
+struct mtmd_context * mtmd_init_from_file_with_vision_bf16_storage(
+    const char * path, const struct llama_model * text_model,
+    const struct mtmd_context_params params, int32_t storage);
+enum mtmd_vision_bf16_storage mtmd_context_vision_bf16_storage(
+    const struct mtmd_context * context);
+```
 
-Changing WebGPU's `supports_op()` alone would only claim BF16 kernel support
-that the pinned implementation does not provide. Expanding at load time lets
-the existing graph see F32 types, strides and sizes before allocation and
-scheduling, without a per-image conversion or a rewritten model file. Original
-GGUF tensor metadata is retained separately for file offsets and progress.
+Version 1 defines `MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND=0` and
+`MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED=1`. The init argument is a raw i32 so
+unknown values can be rejected before enum conversion, file I/O or allocation.
+The generated schema, types, normalized pointer ABI and JSPI exports include
+these functions and constants just like the other mtmd functions.
 
-The build-tree copy avoids changing the pinned vendor checkout or duplicating
-the whole mtmd target. A failed configure must stop the build rather than
-silently omit the workaround or reuse an older patched translation unit.
+The selected mode is fixed before loading and immutable for that context.
+Changing mode requires freeing and reloading the projector; include mode in any
+host context-reuse identity. Separate contexts can use different modes in the
+same module, including progress-callback reentry. No process-global or
+thread-local selector is used. The query returns the requested policy, not proof
+of actual backend placement; null returns `MTMD_VISION_BF16_STORAGE_INVALID=-1`.
 
-## Upstream update / removal criteria
+| Request | Behavior |
+| --- | --- |
+| Legacy / old init | Established WebGPU BF16-to-F32 expansion |
+| Retain with actual WebGPU | Original BF16 storage with role/graph/placement checks |
+| Retain requesting GPU vision without WebGPU | Explicit failure, without CPU retry |
+| Explicit CPU load | Original upstream storage/execution, not WebGPU acceptance |
+| Unknown storage value | Failure before file I/O |
 
-The v0.4.1-era patch also replaced an unchecked graph-allocation call with an
-error check. Reapplying that backport to v0.5.0 fails because its old input no
-longer exists. The v0.5.0 refresh removes only that redundant replacement and
-its obsolete comments, retaining the upstream check and the existing placement
-summary. It does not disable the BF16 workaround or broaden its scope. The
-preparer still rejects mismatches; it does not try the reverse patch, ignore
-failed hunks, or use a previously generated copy after a failure.
+Audio-only loads keep their original behavior in every profile. The existing
+loader modality classification rejects unsupported retained GPU vision before
+weight allocation, without reparsing the file. Audio policy and non-BF16 weight
+types remain unchanged. Model files are never
+rewritten. Retention is opt-in; this core does not change consumer defaults.
+New runtime capability metadata records both modes and the legacy default.
+Normal distribution accepts the shared runtime; obsolete build-time storage
+selection is rejected rather than published as a runtime-selected comparison.
 
-A patch that still applies is not proof that this workaround is still needed.
-When changing the pinned llama.cpp commit, check BF16 input acceptance and the
-corresponding kernel implementation for the vision graph's operations/shapes.
-Compare actual assignments, memory, speed and outputs with the workaround
-disabled before keeping its extra resident memory cost. Native BF16 support
-is a reason to review removal, not to keep converting unconditionally.
+## Checked retention contract
 
-When retiring it, remove the overlay hook, preparation script, embedded patch,
-conversion helper and profile flag together, and update their tests/docs.
-Coordinate changes to the `lcb_clip:` records with the host parser; no emitted
-conversion record does not mean a successful load with zero converted tensors.
+A WebGPU vision load first checks the actual weight roles against the pinned
+private `clip_model` fields. Reviewed projector enums are MLP/MLP-norm,
+Qwen2/2.5/3VL, Gemma 3, Gemma4V and LFM2/3VL. This is a conservative role
+allowlist, not a complete real-model compatibility list. If BF16 weights exist,
+unreviewed projectors, BF16 norms/patch kernels/interpolated position tables and
+Gemma 3's custom BF16 transposed projection are rejected. Standard F16 Gemma 3
+projection stays F16. A load without BF16 weights does not need that role gate.
 
-## Memory, precision and failure behavior
+Every reservation and encoding checks retained weights and their views:
 
-The destination allocation is F32, but file offsets, reads and loading progress
-use original tensor sizes. Converted weights occupy twice their BF16 storage
-size in resident weight buffers. Total application memory is not necessarily
-doubled. A reusable buffer pair consumes at most 1.5 MiB of conversion scratch
-space (0.5 MiB BF16 input and 1 MiB F32 output), excluding allocator overhead.
-There is no additional full-size F32 temporary tensor.
+- Accept only contiguous BF16-left/F32-input `MUL_MAT` and BF16 `GET_ROWS`.
+  Metadata-only views must retain original storage.
+- Reject weight-side CONT/CPY/DUP/casts, unsupported operands, shapes, strides,
+  byte spans, view bounds and dispatch envelopes before large graph allocation.
+  Row lookup is limited to 65,535 output rows, avoiding an unreviewed 2D path.
+- Require target backend support for the actual operation and weight buffer type.
+  Commit scheduler assignments only after the entire plan passes.
+- After reserve/allocation, require unchanged weight-input identities. After
+  allocation, also check actual backend assignment and reject a weight buffer
+  shared with input or output. The mixed BF16/F32 overlap path is not assumed safe.
 
-Finite BF16 values are exactly representable in F32. This is a storage expansion,
-not a claim of all-F32 inference: the existing WebGPU matmul kernels can still use
-F16 intermediate storage. Numerical results need not be bit-identical to CPU
-execution. Actual image recognition quality and speed require model/browser
-validation. Large weights may still exceed device buffer limits or cause memory
-pressure after expansion; F32 eligibility alone is not a GPU-placement guarantee.
+Failures stop load/encode; they do not silently retry in F32 or on CPU. Load
+returns null and encode returns false through the existing failure boundaries.
+With warmup disabled, graph rejection can first occur at encoding. Original
+upstream graph-allocation failure handling is preserved. These checks are not a
+generic malicious-GGUF validator or a complete detector of activation copies.
 
-Truncated input is rejected before uploading an incomplete chunk. Address-space
-overflow is rejected, upload failures propagate, and initial load cancellation
-is honored. A failed graph allocation returns failure instead of using an
-unallocated graph. This does not add cooperative cancellation inside native
-kernels or change the host's worker-termination strategy.
+## Storage, loading and lifetime
+
+For original BF16 payload B and other weight payload C, retention aims for C+B
+instead of C+2B resident tensor bytes. Alignment, graph buffers, driver staging,
+physical GPU memory and overlapping old/new contexts are separate quantities.
+There is no all-F32 arithmetic or universal bit-identity claim: existing upstream
+BF16 kernels and intermediate precision remain unchanged. Retention can be slower;
+matched model/device/variant/image measurements are needed before adoption.
+
+Retained WebGPU loads use a reusable 512 KiB raw reader for all loaded tensor
+types and a loader-local 32 MiB logical queued-byte budget, including bounded
+head/tail write overhead. Ordinary `ggml_backend_tensor_set` owns partial-word
+BF16 writes; there is no replacement WebGPU upload API. Checked source-byte totals
+and stream offsets differ from expanded destination sizes.
+
+The queue drains before exceeding its budget, at completion and on stack
+unwinding, before the owning weight buffer can be destroyed. Cancellation is
+checked initially, around chunks, after waits, after the last write and after
+final drain. Truncation and arithmetic overflow fail explicitly. The budget is
+not a physical-memory guarantee. Existing backend fatal validation/device-loss
+behavior is unchanged; no recoverable device-loss API is added.
+
+Legacy conversion keeps its bounded 1.5 MiB scratch (0.5 MiB BF16 input + 1 MiB
+F32 output) and twofold converted resident payload. Finite BF16 values are exactly
+representable in F32. Neither policy promises equal whole-model output/speed.
 
 ## Diagnostics
 
-Two fixed, metadata-only native records are emitted for WebGPU vision graphs:
+Legacy successful allocated loads keep their existing record:
 
 ```text
 lcb_clip: bf16-f32 tensors=<count> source_bytes=<original> destination_bytes=<expanded>
-lcb_clip: matmul placement cpu=<count> webgpu=<count> other=<count> cpu_bf16=<count>
 ```
 
-The first record is emitted after a successful weight load, including zero
-counts when no BF16 weights were present. It is not emitted on `no_alloc` or
-failed loads. The second reports actual scheduler assignments of `MUL_MAT`
-nodes after graph allocation, not estimated GPU eligibility or elapsed kernel
-time. Other operation kinds are not counted. It adds one metadata scan and one
-log record per image graph, with no GPU synchronization or tensor readback.
-Neither record contains model paths, tensor names, prompts or tensor values.
+Retained WebGPU loads use separate metadata records:
 
-For performance measurements, disable host per-node tracing. Asking for each
-node's completion forces extra synchronization, independent of these summaries.
-
-## Local checks
-
-```sh
-python3 -m unittest discover -s tests -p test_mtmd_allocation_guard.py -v
-python3 -m unittest discover -s tests -p test_mtmd_overlay.py -v
-cmake -S tests/mtmd-bf16 -B build/mtmd-bf16-tests -DLCB_LLAMA_SOURCE="$PWD/vendor/llama.cpp"
-cmake --build build/mtmd-bf16-tests --target mtmd-bf16-test --parallel 2
-build/mtmd-bf16-tests/mtmd-bf16-test
+```text
+lcb_clip: bf16-storage mode=retain-checked tensors=<BF16 count> source_bytes=<BF16 payload> resident_bytes=<BF16 payload> scratch_bytes=<raw reader capacity> queue_budget_bytes=<logical window>
+lcb_clip: retained graph consumers=<checked consumers> webgpu_compute_bytes=<scheduler buffers> cpu_compute_bytes=<scheduler buffers>
 ```
 
-The allocation-boundary regression uses a short, independently recorded v0.5.0
-source fragment with the production preparer and the real diagnostic hunk. It
-checks guard ownership/order, unchanged input, unrelated line movement, parallel
-profile/variant outputs, idempotence, and rejection of changed or already-patched
-input without publishing a replacement. It does not test the omitted loader
-hunks or replace the full-source checks.
+Both preserve `lcb_clip: matmul placement cpu=... webgpu=... other=... cpu_bf16=...`
+after allocation. These are metadata, not timings or physical-memory readings.
+Absence of a record is not zero or success; `no_alloc` emits no load success.
+Requested mode, actual backend and retained-weight count are distinct facts.
+New records omit model paths, tensor names and tensor values.
 
-`LCB_TEST_LLAMA_SOURCE` can point the overlay test at a separately checked-out
-copy of the pinned source. That test applies all hunks and checks that the
-upstream guard occurs once before placement diagnostics, that the input stays
-unchanged, and that repeated preparation preserves the output timestamp. It
-also checks C++ syntax when clang++ is installed. The native conversion test links the real
-GGML conversion routine and checks bit patterns, chunk boundaries, offsets,
-truncation, overflow and upload errors. It does not emulate GPU performance.
-`tests/mtmd-overlay/CMakeLists.txt` can additionally configure the real native
-mtmd target with the overlay; compiling its `clip.cpp` object checks the CMake
-source replacement without building a complete runtime.
+## Legacy execution cost
 
-Normal `scripts/build.py` explicitly enables this workaround for WebGPU and
-disables it for CPU profiles, recording the option in `cmakeCommand` provenance.
-For a manual comparison build, use a separate build directory and configure
-`-DLCB_WEBGPU_BF16_PROJECTOR=OFF`; invoking the normal build script again restores
-the profile default. Do not confuse a no-workaround build with the normal one.
+Storage selection is read at context initialization and graph boundaries, not
+inside every WebGPU operation. Legacy mode skips role inspection and returns
+from retained graph preparation before collecting weights or walking nodes.
+The retained reader allocates scratch only when used; the legacy queue is empty
+and submits no extra wait. Existing placement diagnostics remain unchanged in
+scope. Empty helper state and a few branches still have a cost; these source
+properties are not a measured guarantee of equal latency.
 
-Backend detection uses the `WebGPU` registry identity, not the display name,
-which includes an adapter suffix. Host tests exercise that distinction without
-initializing a graphics device.
+## Maintenance and validation
+
+The vendor checkout is unchanged. A shared build-tree mtmd.cpp copy adds the
+versioned entry and immutable policy; an independent clip.cpp copy contains the
+existing loader integration and both policies. Audio and WebGPU kernel overlays
+remain independent. Source hashes pin the reviewed upstream contracts, including
+private model roles, scheduler, allocator and BF16 shaders. CPU-only builds use
+a separate minimal clip plumbing copy; they do not compile the retained graph
+checks. Configuration fails
+on drift, and all contract files trigger ordinary CMake regeneration.
+
+Native CPU contract/numerical tests and synthetic upstream model-graph fixtures
+are distinct from actual model loading, WebGPU execution and image quality. The
+source-extracted entry fixture uses a no-I/O constructor double and does not
+certify loader execution. Generated API tests cover the new scalar signature and
+old layout. Actual runtime loading and browser/device measurements remain
+separate gates. Supplied host evidence reported a CPU function-type sanitizer
+issue in pristine upstream; do not hide an upstream issue by weakening guards.
+
+Retire legacy expansion only after matched target-model evidence supports the
+change. Remove independent loader safety/diagnostics only when upstream provides
+equivalent behavior. New shaders or widened model-role acceptance require their
+own semantic review and are not implied by this storage API.

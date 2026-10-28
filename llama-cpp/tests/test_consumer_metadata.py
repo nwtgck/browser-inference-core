@@ -229,6 +229,7 @@ class OverlayProvenance(unittest.TestCase):
         (self.vendor / 'tools/mtmd').mkdir(parents=True)
         (self.vendor / 'tools/mtmd/clip.cpp').write_text('before\noriginal\nafter\n')
         (self.vendor / 'tools/mtmd/mtmd-audio.cpp').write_text('before\noriginal\nafter\n')
+        (self.vendor / 'tools/mtmd/mtmd.cpp').write_text('before\noriginal\nafter\n')
         toolchain = {'llamaCommit': B, 'emscriptenRelease': A,
                      'emscriptenAsyncifyBigIntPatch': {'sourceSha256': '1' * 64, 'patchedSha256': '2' * 64}}
         for name in ['config', 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval', 'scripts', 'cmake', 'bridge', 'docs']:
@@ -236,6 +237,8 @@ class OverlayProvenance(unittest.TestCase):
         seed_toolchain(self.root, toolchain, scripts=True)
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').write_text('--- a/clip.cpp\n+++ b/clip.cpp\n@@ -1,3 +1,3 @@\n before\n-original\n+patched\n after\n')
         (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
+        (self.root / provenance.PATCH_DIRECTORY / 'mtmd-vision-bf16-runtime.patch').write_text((self.root / provenance.PATCH_DIRECTORY / 'mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd.cpp'))
+        (self.root / provenance.PATCH_DIRECTORY / 'mtmd-vision-bf16-clip-runtime.patch').write_text((self.root / provenance.PATCH_DIRECTORY / 'mtmd-webgpu-bf16.patch').read_text())
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).parent.mkdir(parents=True)
         (self.vendor / provenance.tensor_copy.SOURCE_PATH).write_text('Copy provenance fixture\n')
         (self.vendor / provenance.host_input_snapshot.BACKEND_SOURCE_PATH).write_text('Backend provenance fixture\n')
@@ -282,7 +285,10 @@ class OverlayProvenance(unittest.TestCase):
         for path in ['scripts/prepare_webgpu_f32_matvec_epilogue.py', 'scripts/prepare_webgpu_iq3s_row_split.py', 'scripts/prepare_webgpu_moe_tight_tile_bound.py', 'scripts/prepare_webgpu_matmul_vec4_layout.py', 'scripts/prepare_webgpu_iq3s_field_loads.py', 'scripts/prepare_webgpu_moe_gather_logical32.py', 'scripts/prepare_webgpu_f32_small_m.py', 'scripts/prepare_webgpu_profile_query_budget.py', 'scripts/prepare_webgpu_host_encode_assembly.py', 'CMakeLists.txt', 'scripts/prepare_webgpu_q8_diagnostic.py', 'scripts/generate_webgpu_q8_diagnostic.py', 'bridge/webgpu-q8-diagnostic.h', 'bridge/webgpu-q8-diagnostic.cpp', 'scripts/prepare_webgpu_router_tail.py', 'scripts/prepare_webgpu_moe_group_skip.py', 'scripts/prepare_webgpu_ssm_conv_silu.py', 'scripts/prepare_webgpu_host_input_snapshot.py', 'scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_rms_scale.py', 'scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_scale_unary.py', 'scripts/prepare_webgpu_q8_subgroup.py', 'scripts/prepare_sampler_single_sync.py', 'scripts/prepare_webgpu_bind_group_cache.py', 'scripts/prepare_webgpu_q4_short.py', 'scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_expert_short.py', 'docs/webgpu-expert-short-workgroup.md', 'scripts/prepare_webgpu_moe_sum.py', 'docs/webgpu-moe-expert-sum.md', 'scripts/prepare_webgpu_q8_short.py', 'docs/webgpu-q8-short-workgroup.md',
                      'scripts/prepare_webgpu_hc.py', 'docs/webgpu-hc-pre-post.md', 'scripts/prepare_webgpu_tensor_copy.py', 'cmake/WebgpuSourceOverlay.cmake', 'scripts/prepare_webgpu_source.py', 'docs/webgpu-param-upload-batching.md',
                      'docs/webgpu-tensor-copy.md', 'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
-                     'docs/webgpu-bf16-projector.md',
+                     'docs/webgpu-bf16-projector.md', 'bridge/mtmd-retained-upload.h', 'bridge/mtmd-retained-graph.h',
+                     'bridge/mtmd-retained-roles.h', 'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                     'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
+                     'scripts/verify_retained_bf16_source.py', 'scripts/verify_bf16_build.py', 'config/retained-bf16-source.json',
                      'cmake/MtmdAudioOverlay.cmake', 'docs/audio-single-thread.md']:
             (self.root / path).write_text('Provenance fixture: ' + path + '\n')
         (self.vendor / 'src/models').mkdir(parents=True)
@@ -345,6 +351,19 @@ class OverlayProvenance(unittest.TestCase):
         self.mock_git.start()
         self.addCleanup(self.mock_git.stop)
 
+    def test_runtime_selection_provenance_keeps_both_modes_and_legacy_default(self):
+        result = provenance.collect(self.root, self.manifest)
+        overlay = next(item for item in result['sourceOverlays'] if item['id']=='vision-bf16-runtime-selection')
+        self.assertEqual(overlay['application']['runtimeStorageSelection'],
+                         {'version':1,'modes':['legacy-expand','retain-checked'],'default':'legacy-expand'})
+        self.assertEqual(len(overlay['application']['enabledProfileVariants']),4)
+        self.assertEqual(overlay['compiledCopy']['sha256'],hashlib.sha256(b'before\npatched\nafter\n').hexdigest())
+        self.assertNotIn(provenance.PATCH_DIRECTORY+'/mtmd-vision-bf16-runtime.patch',result['otherPatchFiles'])
+        info = self.manifest['profiles']['webgpu-wasm64-jspi']['variants']['test']
+        info['visionBf16Storage']='retain-checked'
+        with self.assertRaisesRegex(ValueError,'BF16 runtime capability'):
+            provenance.collect(self.root,self.manifest)
+
     def test_overlay_hashes_describe_pristine_and_actual_patched_copy(self):
         result = provenance.collect(self.root, self.manifest)
         overlay = result['sourceOverlays'][0]
@@ -401,7 +420,7 @@ class OverlayProvenance(unittest.TestCase):
             'webgpu-f32-matvec-epilogue', 'webgpu-moe-tight-tile-bound', 'webgpu-matmul-vec4-layout', 'webgpu-q8-kernel-diagnostic-v1', 'webgpu-profile-query-budget', 'webgpu-host-input-snapshot', 'webgpu-iq3s-indexed-subgroup-matvec', 'webgpu-iq3s-indexed-field-loads', 'webgpu-iq3s-indexed-row-split', 'webgpu-rms-scale-fusion', 'webgpu-ssm-conv-silu-fusion', 'webgpu-async-tensor-copy', 'webgpu-scale-unary-fusion', 'webgpu-q8-fixed-subgroup-matvec', 'webgpu-q4-short-workgroup', 'webgpu-expert-short-workgroup', 'webgpu-moe-expert-sum', 'webgpu-q8-short-workgroup', 'webgpu-hc-pre-post', 'webgpu-vision-bf16-projector', 'single-thread-wasm-audio-preprocessing',
             'webgpu-same-device-tensor-copy', 'webgpu-moe-matrix-group-skip', 'webgpu-router-tail-fusion', 'webgpu-f32-small-m-prefill', 'webgpu-moe-gather-logical32',
             'webgpu-parameter-upload-batching', 'webgpu-ordered-readback', 'webgpu-bind-group-cache', 'webgpu-host-encode-assembly', 'webgpu-sampler-single-sync', 'webgpu-chunked-model-upload', 'webgpu-ssm-conv-single-token',
-            'qwen4exp-file-backed-rows', 'qsa-all-pools-selection'})
+            'qwen4exp-file-backed-rows', 'qsa-all-pools-selection', 'vision-bf16-runtime-selection', 'vision-bf16-cpu-loader-plumbing'})
         self.assertIn(provenance.PATCH_DIRECTORY, report['inventoryScope'])
         for item in report['sourceOverlays']:
             self.assertTrue(item['patch']['path'].startswith(provenance.PATCH_DIRECTORY + '/'))
