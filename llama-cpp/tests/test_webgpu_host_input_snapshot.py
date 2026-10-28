@@ -65,7 +65,7 @@ class HostInputSnapshot(unittest.TestCase):
     def test_module_guards_reject_contract_patch_input_output_and_existing_source_drift(self):
         with tempfile.TemporaryDirectory(prefix='host-snapshot-drift-') as temporary:
             root = Path(temporary)
-            with patch.object(snapshot, 'prepare', return_value={}), \
+            with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
@@ -148,7 +148,7 @@ class HostInputSnapshot(unittest.TestCase):
                     self.assertEqual(harness.function(actual, name), harness.function(upstream, name))
             # Compare the previous composed provider, not pristine upstream: this
             # stage must retain checked async-copy and ordered-readback behavior.
-            with patch.object(snapshot, 'prepare', return_value={}), \
+            with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
