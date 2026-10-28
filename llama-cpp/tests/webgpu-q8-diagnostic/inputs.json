@@ -15,7 +15,7 @@
     "functions.d.ts": "8d1dff3729b9eb386598535c855095dc36edca581dc0135a8d174f3e74693e95"
   },
   "public_source_sha256": {
-    "scripts/prepare_webgpu_q8_diagnostic.py": "b6d0e9bf481886c550b4dea5968432066a9cdd89544b8c61e24bb6d3ef69d3e4",
+    "scripts/prepare_webgpu_q8_diagnostic.py": "bcb79c73c9f94677315457721151f5453280d96c84cec2b75a3d52ef6d689cae",
     "scripts/generate_webgpu_q8_diagnostic.py": "9f6a5e6a15f5edf4666f1ae6470653834c52b981dd94920987168b6211129e57",
     "bridge/webgpu-q8-diagnostic.h": "55923a7e5e1f5b96abbe8185e1499280d9a99c36c5c45887d42e54005d9c0bbc",
     "bridge/webgpu-q8-diagnostic.cpp": "5b71bea4b263c2a03c0127d57a59f3fbcffb9941e24f2e7b4661728b5760ec0d",

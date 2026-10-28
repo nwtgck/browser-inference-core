@@ -500,3 +500,13 @@ not establish target-device speed.
 - **Integration:** append a checked source stage after router-tail and before the optional profile diagnostic. Pin upstream contracts, composed input, patch and output. No shader/header or common ABI changes.
 - **Validation and limits:** source-extracted allocation tests use relative baseline comparisons, and the existing cache/queue/free/failure scenarios and complete normal/profile source checks remain required. Native mock allocations are not browser/GPU timings and do not establish model throughput or target-device improvement.
 - **Removal condition:** remove the stage, provenance/build wiring and tests when upstream provides equivalent synchronous assembly without the copies, or the owner drops the optimization.
+
+## Profile query capacity with multi-dispatch operations
+
+- **Patch:** `ggml-webgpu-profile-query-budget.patch`.
+- **Approval and scope:** the owner's session-wide authorization permits agent-decided upstream patches. This profile-only correctness repair follows a source-bound counterexample showing that a valid multi-dispatch operation could exceed the existing profile QuerySet before the next collection. It is separate from normal submission tuning.
+- **No-patch alternative:** leave profiling disabled or restrict profiled graphs to avoid the problematic boundary. Neither makes arbitrary accepted profiled batches safe.
+- **Contract:** every timestamped dispatch consumes one arena slot. Reserve queries using that actual slot capacity, including nominal-batch overshoot, and assert during profile initialization that the capacity is at most half the query limit. Keep collection after complete graph batches; do not flush inside the builder or introduce new encoder/name ownership.
+- **Integration:** run a checked profile-only stage immediately before the optional Q8 diagnostic. Pin upstream contracts, input, patch and prefix output. Normal prepared source and the shared ABI/schema/shaders remain byte-identical.
+- **Validation and limits:** extracted actual graph/build/arena control tests retain the failing baseline at the query boundary, the repaired behavior, capacity and arena rejection, plus normal byte invariance. The Encode callback supplies source-derived multi-dispatch counts; this CPU model is not a GPU or full GGML graph/factory execution. Actual profile runtime validation remains a separate check.
+- **Removal condition:** remove the stage and its preparation/build/provenance/test wiring when upstream reserves queries for every accepted batch or supplies an equivalent safe collection boundary.

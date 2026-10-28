@@ -27,6 +27,7 @@ import prepare_webgpu_moe_group_skip as moe_group_skip
 import prepare_webgpu_router_tail as router_tail
 import prepare_webgpu_q8_diagnostic as q8_diagnostic
 import prepare_webgpu_host_encode_assembly as host_encode_assembly
+import prepare_webgpu_profile_query_budget as profile_query_budget
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -135,6 +136,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
             raise ValueError('Unexpected combined shader-library header identity')
         if gpu_profile:
+            profile_query_budget.prepare(work, source, patch_root, env)
             hc_headers.update(q8_diagnostic.prepare(work, source, patch_root, env))
         else:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):

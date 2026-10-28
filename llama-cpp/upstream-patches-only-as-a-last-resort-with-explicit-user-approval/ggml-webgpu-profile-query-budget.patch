@@ -1,0 +1,23 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4232,8 +4232,8 @@
+             ctx->param_arena.reset();
+             commands.clear();
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+-            // flush before the next batch can overflow the QuerySet
+-            if (ctx->profile_timestamp_query_count + 2 * ctx->global_ctx->command_submit_batch_size >=
++            // Include multi-dispatch overshoot: every accepted batch fits in the arena.
++            if (ctx->profile_timestamp_query_count + 2 * ctx->param_arena.slot_count >=
+                 WEBGPU_MAX_PROFILE_QUERY_COUNT) {
+                 ggml_backend_webgpu_collect_profile_results(ctx, profile_pipeline_names, num_inflight_batches);
+                 // reset profile timestamp state
+@@ -5087,6 +5087,9 @@
+                               wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead, "set_rows_host_error_buf");
+ 
+ #ifdef GGML_WEBGPU_GPU_PROFILE
++    // A fresh query set must fit every arena slot, including batch overshoot.
++    // This bound also keeps the query lookahead arithmetic within uint32_t.
++    GGML_ASSERT(webgpu_ctx->param_arena.slot_count <= WEBGPU_MAX_PROFILE_QUERY_COUNT / 2);
+     webgpu_ctx->batch_compute_passes = false;
+     ggml_webgpu_create_buffer(
+         webgpu_ctx->global_ctx->device, webgpu_ctx->profile_timestamp_dev_buf, WEBGPU_TIMESTAMP_QUERY_BUF_SIZE_BYTES,

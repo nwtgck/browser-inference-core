@@ -228,7 +228,9 @@ class Q8Diagnostic(unittest.TestCase):
         identity = json.loads((HERE / 'inputs.json').read_text())
         for name, expected in identity['public_source_sha256'].items():
             self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), expected)
-        for name, expected in diagnostic.INPUTS.items():
+        self.assertEqual(source.profile_query_budget.INPUT_SHA256, source.OUTPUT_SHA256)
+        self.assertEqual(diagnostic.INPUTS['ggml-webgpu.cpp'], source.profile_query_budget.OUTPUT_SHA256)
+        for name, expected in {**diagnostic.INPUTS, 'ggml-webgpu.cpp': source.OUTPUT_SHA256}.items():
             self.assertEqual(hashlib.sha256((self.normal / name).read_bytes()).hexdigest(), expected)
         self.assertFalse((self.normal / 'ggml-webgpu-q8-diagnostic.h').exists())
         for name, expected in diagnostic.OUTPUTS.items():

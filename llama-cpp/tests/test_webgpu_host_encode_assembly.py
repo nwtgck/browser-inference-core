@@ -88,7 +88,8 @@ class HostEncodeAssembly(unittest.TestCase):
         self.assertEqual(actual[new_end:], self.baseline[base_end:])
         self.assertEqual(tensor_copy.digest(self.normal), assembly.OUTPUT_SHA256)
         self.assertEqual(source.OUTPUT_SHA256, assembly.OUTPUT_SHA256)
-        self.assertEqual(source.q8_diagnostic.INPUTS['ggml-webgpu.cpp'], assembly.OUTPUT_SHA256)
+        self.assertEqual(source.profile_query_budget.INPUT_SHA256, assembly.OUTPUT_SHA256)
+        self.assertEqual(source.q8_diagnostic.INPUTS['ggml-webgpu.cpp'], source.profile_query_budget.OUTPUT_SHA256)
         for filename in ('ggml-webgpu-shader-lib.hpp', 'ggml-backend.cpp', 'llama-model-loader.cpp', 'llama-sampler.cpp'):
             self.assertEqual((self.normal.parent / filename).read_bytes(), (self.directory / 'baseline' / filename).read_bytes())
         profile = self.profile.read_text()
