@@ -78,6 +78,7 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \

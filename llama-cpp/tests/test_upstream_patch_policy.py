@@ -38,6 +38,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'ggml-webgpu-q8-diagnostic.patch', 'ggml-webgpu-profile-query-budget.patch', 'ggml-webgpu-f32-small-m.patch', 'ggml-webgpu-moe-gather-logical32.patch',
             'ggml-webgpu-router-tail.patch',
             'ggml-webgpu-iq3s-id-subgroup.patch',
+            'ggml-webgpu-iq3s-field-loads.patch',
             'ggml-webgpu-batch-param-uploads.patch', 'ggml-webgpu-moe-expert-sum.patch', 'ggml-webgpu-hc-pre-post.patch',
             'ggml-webgpu-q8-short-workgroup.patch', 'ggml-webgpu-expert-short-workgroup.patch', 'ggml-webgpu-q4-short-workgroup.patch',
             'llama-model-loader-webgpu-chunked-upload.patch',

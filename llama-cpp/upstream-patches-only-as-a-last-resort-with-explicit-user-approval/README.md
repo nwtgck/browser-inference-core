@@ -411,6 +411,15 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing indexed matvec path or wait for upstream support.
 - **Removal:** equivalent upstream support or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Lane-selected fields in indexed IQ3_S matvec
+
+- **Patch:** `ggml-webgpu-iq3s-field-loads.patch`.
+- **Scope:** replace only the existing independent indexed IQ3_S embedded shader. Each half-lane reads its selected qs word, and qh/sign/scale fields use their containing aligned word. Keep the 110-byte block representation, decoder arithmetic and addition order, partial-subgroup main, IDs, bindings, selector, cache key and fallback paths unchanged. Canonical templates and other quantization/ordinary/cooperative shaders are unchanged.
+- **Integration:** append a source-bound stage after the original IQ3 stage. Patch only a private accumulator copy and regenerate the dedicated header with the pinned upstream emitter. Preserve the original stage output hash as an intermediate contract; provenance records the actual final compiled header separately. No additional runtime buffers, probes or synchronization are introduced.
+- **Validation and limits:** actual factory output for logical widths 16/32/64 is source-bound. Synthetic numerical comparisons covered width16 full and reported-width32 partial execution, input updates, skipped IDs, binding ends and guards. Target-device performance, full hardware width32/64, Mac/Metal and complete-model quality/performance are not established. Source read-expression counts are not physical bandwidth measurements.
+- **No-patch alternative:** retain the existing independent indexed matvec or wait for upstream equivalent field loads.
+- **Removal:** upstream equivalent support, withdrawal of this optimization, or removal of its parent indexed IQ3 implementation; remove this stage, patch, build dependencies, tests and provenance together.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.

@@ -1,0 +1,40 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -1368,13 +1368,14 @@
+             if (output_row < params.m) {
+                 let block_byte_base = (src0_batch_offset + output_row * params.stride_01 + block) * BLOCK_SIZE_BYTES;
+                 let d = f32(load_f16_at_src0(block_byte_base));
+-                let qs_lo = load_u32_at_src0(block_byte_base + 2u + sub_blk * 8u);
+-                let qs_hi = load_u32_at_src0(block_byte_base + 2u + sub_blk * 8u + 4u);
+-                let qh_word = load_u32_at_src0(block_byte_base + 66u + (sub_blk / 4u) * 4u);
+-                let qh_byte = get_byte(qh_word, sub_blk % 4u);
+-                let sg_w = load_u32_at_src0(block_byte_base + 74u + sub_blk * 4u);
+-                let sc_word = load_u32_at_src0(block_byte_base + 106u);
+-                let scales_byte = get_byte(sc_word, sub_blk / 2u);
++                let selected_qs = load_u32_at_src0(block_byte_base + 2u + sub_blk * 8u + half * 4u);
++                let qh_byte_offset = block_byte_base + 66u + sub_blk;
++                let qh_word = load_u32_at_src0_aligned(qh_byte_offset);
++                let qh_byte = get_byte(qh_word, qh_byte_offset & 3u);
++                let sign_pair = load_u16_at_src0(block_byte_base + 74u + sub_blk * 4u + half * 2u);
++                let scale_byte_offset = block_byte_base + 106u + sub_blk / 2u;
++                let sc_word = load_u32_at_src0_aligned(scale_byte_offset);
++                let scales_byte = get_byte(sc_word, scale_byte_offset & 3u);
+                 let sub_scale = (scales_byte >> (4u * (sub_blk % 2u))) & 0xFu;
+                 let db = d * (1.0 + 2.0 * f32(sub_scale));
+ 
+@@ -1382,13 +1383,13 @@
+                     var row_sum = 0.0;
+                     for (var ll = 0u; ll < 2u; ll++) {
+                         let l = slot0 + ll;
+-                        let qs_word = select(qs_hi, qs_lo, l < 2u);
++                        let qs_word = selected_qs;
+                         let byte_pos = (l % 2u) * 2u;
+                         let qs0 = (qs_word >> (byte_pos * 8u)) & 0xFFu;
+                         let qs1 = (qs_word >> ((byte_pos + 1u) * 8u)) & 0xFFu;
+                         let grid_idx_1 = qs0 | (((qh_byte >> (2u * l)) & 1u) << 8u);
+                         let grid_idx_2 = qs1 | (((qh_byte >> (2u * l + 1u)) & 1u) << 8u);
+-                        let sign_byte = get_byte(sg_w, l);
++                        let sign_byte = get_byte(sign_pair, ll);
+                         let grid1 = iq3s_grid[grid_idx_1];
+                         let grid2 = iq3s_grid[grid_idx_2];
+                         for (var j = 0u; j < 4u; j++) {

@@ -99,6 +99,18 @@ class Iq3sSubgroup(unittest.TestCase):
                     with patch.object(iq3, field, '0' * 64), self.assertRaises(ValueError):
                         iq3.prepare(work, self.upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work))
 
+    def test_optional_historical_prefix_still_uses_final_field_embedding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prefix = self.stage(root / 'prefix') / iq3.BASE
+            before = {name: copy.digest(prefix / name) for name in iq3.INPUTS}
+            with patch.dict(os.environ, {'LCB_TEST_IQ3S_BASE': str(prefix)}):
+                factory.prepare(self.upstream, root / 'prepared')
+            self.assertEqual(copy.digest(root / 'prepared' / iq3.HEADER_NAME), factory.fields.HEADER_SHA256)
+            for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp'):
+                self.assertEqual(copy.digest(root / 'prepared' / name), iq3.OUTPUTS[name])
+            self.assertEqual({name: copy.digest(prefix / name) for name in before}, before)
+
     def test_partial_subgroups_cover_every_logical_lane_and_only_owned_rows(self):
         for width in (16, 32, 64):
             layouts = [[width] * (128 // width)]
@@ -218,6 +230,14 @@ class Iq3sSubgroup(unittest.TestCase):
                 self.assertLess(text.index('return;'), text.index('subgroupAdd(1u)'))
                 self.assertNotIn('#include', text)
                 self.assertNotIn('var<workgroup>', text)
+                expected = {
+                    16: 'e99a1bb6f53b101fadb7de013175ed13663441ace94e0da706645ddbc85738ff',
+                    32: 'ad036f1feccf670be885cec225e3f8061a52d2066d43762e1712dac8da5a45e5',
+                    64: '54aa543f8e1a64215d9affe7969196beeb56d9cbf73acaaa315a86ce01da0278',
+                }
+                self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), expected[sg])
+                self.assertIn('let selected_qs = load_u32_at_src0(', text)
+                self.assertIn('let sign_pair = load_u16_at_src0(', text)
             print(result.stdout.strip())
 
     @unittest.skipUnless(shutil.which('c++'), 'C++ compiler needed')

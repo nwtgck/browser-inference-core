@@ -30,6 +30,7 @@ import prepare_webgpu_host_encode_assembly as host_encode_assembly
 import prepare_webgpu_profile_query_budget as profile_query_budget
 import prepare_webgpu_f32_small_m as f32_small_m
 import prepare_webgpu_moe_gather_logical32 as moe_gather_logical32
+import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -70,6 +71,13 @@ def patch_environment(work: Path) -> dict[str, str]:
         env.pop(key, None)
     env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
     return env
+
+
+def replace_iq3s_field_embedding(work: Path, source: Path, patch_root: Path, env: dict[str, str], headers: dict[str, Path]) -> None:
+    # This is mandatory in production; prefix-only tests exclude the whole stage.
+    # Missing original-stage output must fail closed rather than skip replacement.
+    headers[iq3s_field_loads.HEADER_NAME] = iq3s_field_loads.prepare(
+        work, source, patch_root, env, previous_header=headers[iq3s_field_loads.HEADER_NAME])
 
 
 def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY, gpu_profile: bool = False) -> Path:
@@ -132,6 +140,9 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         host_encode_assembly.prepare(work, source, patch_root, env)
         f32_small_m.prepare(work, source, patch_root, env)
         hc_headers.update(moe_gather_logical32.prepare(work, source, patch_root, env))
+        # Preserve the original IQ3 stage contract, then replace only its final
+        # dedicated embedding. Every selector, cache key and host source stays.
+        replace_iq3s_field_embedding(work, source, patch_root, env, hc_headers)
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')

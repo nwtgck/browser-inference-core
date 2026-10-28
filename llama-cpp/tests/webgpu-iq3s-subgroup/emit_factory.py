@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
 import prepare_webgpu_iq3s_subgroup as iq3
+import prepare_webgpu_iq3s_field_loads as fields
 import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
@@ -29,8 +30,9 @@ def prepare_base(upstream: Path, output: Path) -> None:
 def prepare(upstream: Path, output: Path) -> None:
     prepare_base(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) in (iq3.OUTPUTS[header.name], source.SSM_HEADER_OUTPUT_SHA256):
-        if copy.digest(output / iq3.HEADER_NAME) != iq3.HEADER_SHA256:
+    header_hash = copy.digest(header)
+    if header_hash == source.SSM_HEADER_OUTPUT_SHA256:
+        if copy.digest(output / iq3.HEADER_NAME) != fields.HEADER_SHA256:
             raise ValueError('Unexpected integrated IQ3_S embedding')
         return
     with tempfile.TemporaryDirectory(prefix='iq3s-stage-') as tmp:
@@ -39,6 +41,9 @@ def prepare(upstream: Path, output: Path) -> None:
         for name in iq3.INPUTS:
             shutil.copyfile(output / name, work / iq3.BASE / name)
         extra = iq3.prepare(work, upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work))
+        extra[iq3.HEADER_NAME] = fields.prepare(
+            work, upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work),
+            previous_header=extra[iq3.HEADER_NAME])
         for name in ('ggml-webgpu.cpp', header.name):
             shutil.copyfile(work / iq3.BASE / name, output / name)
         for name, path in extra.items():
