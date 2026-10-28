@@ -18492,6 +18492,24 @@
       ]
     },
     {
+      "name": "mtmd_bitmap_set_is_video",
+      "export": "_lcb_mtmd_bitmap_set_is_video",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "bitmap",
+          "cType": "mtmd_bitmap *",
+          "kind": "pointer"
+        },
+        {
+          "name": "is_video",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
       "name": "mtmd_bitmap_set_mergeable",
       "export": "_lcb_mtmd_bitmap_set_mergeable",
       "returnType": "void",
@@ -18739,6 +18757,39 @@
           "name": "ctx",
           "cType": "mtmd_context *",
           "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_get_video_config",
+      "export": "_lcb_mtmd_get_video_config",
+      "returnType": "struct mtmd_video_config",
+      "returnKind": "record",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "src_width",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "src_height",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "src_n_frames",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "src_fps",
+          "cType": "float",
+          "kind": "float"
         }
       ]
     },
@@ -21968,6 +22019,12 @@
           "cType": "int64_t",
           "kind": "i64",
           "id": 2
+        },
+        {
+          "name": "no_soundtrack",
+          "cType": "_Bool",
+          "kind": "boolean",
+          "id": 3
         }
       ],
       "id": 51
@@ -22021,6 +22078,43 @@
         }
       ],
       "id": 53
+    },
+    {
+      "name": "mtmd_video_config",
+      "cType": "struct mtmd_video_config",
+      "fields": [
+        {
+          "name": "tmpl",
+          "cType": "enum mtmd_video_template",
+          "kind": "signed",
+          "id": 0
+        },
+        {
+          "name": "fps",
+          "cType": "float",
+          "kind": "float",
+          "id": 1
+        },
+        {
+          "name": "n_frames",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 2
+        },
+        {
+          "name": "frame_width",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 3
+        },
+        {
+          "name": "frame_height",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 4
+        }
+      ],
+      "id": 54
     }
   ],
   "constants": [
@@ -22498,6 +22592,9 @@
     "MTMD_INPUT_CHUNK_TYPE_COUNT",
     "MTMD_INPUT_CHUNK_TYPE_IMAGE",
     "MTMD_INPUT_CHUNK_TYPE_TEXT",
+    "MTMD_VIDEO_TEMPLATE_DEFAULT",
+    "MTMD_VIDEO_TEMPLATE_LFM3",
+    "MTMD_VIDEO_TEMPLATE_LFM3_OMNI",
     "SEEK_CUR",
     "SEEK_END",
     "SEEK_SET"

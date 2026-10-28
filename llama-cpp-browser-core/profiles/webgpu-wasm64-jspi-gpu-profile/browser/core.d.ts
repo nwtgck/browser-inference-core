@@ -2107,6 +2107,8 @@ interface WasmModule {
   _mtmd_bitmap_is_audio(_0: BigInt): Promise<number>;
   _lcb_mtmd_bitmap_set_id(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_bitmap_set_id(_0: BigInt, _1: BigInt): Promise<void>;
+  _lcb_mtmd_bitmap_set_is_video(_0: BigInt, _1: number): Promise<void>;
+  _mtmd_bitmap_set_is_video(_0: BigInt, _1: number): Promise<void>;
   _lcb_mtmd_bitmap_set_mergeable(_0: BigInt, _1: number): Promise<void>;
   _mtmd_bitmap_set_mergeable(_0: BigInt, _1: number): Promise<void>;
   _lcb_mtmd_context_params_default(_0: BigInt): Promise<void>;
@@ -2143,6 +2145,8 @@ interface WasmModule {
   _mtmd_get_marker(_0: BigInt): Promise<BigInt>;
   _lcb_mtmd_get_output_embd(_0: BigInt): Promise<BigInt>;
   _mtmd_get_output_embd(_0: BigInt): Promise<BigInt>;
+  _lcb_mtmd_get_video_config(_0: BigInt, _1: BigInt, _2: number, _3: number, _4: number, _5: number): Promise<void>;
+  _mtmd_get_video_config(_0: BigInt, _1: BigInt, _2: number, _3: number, _4: number, _5: number): Promise<void>;
   _lcb_mtmd_helper_audio_stream_get_logit_bias(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): Promise<number>;
   _mtmd_helper_audio_stream_get_logit_bias(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): Promise<number>;
   _lcb_mtmd_helper_bitmap_init_from_buf(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: number, _5: BigInt): Promise<void>;
@@ -2657,7 +2661,7 @@ export interface common_chat_templates extends ClassHandle {
   apply(_0: common_chat_templates_inputs): common_chat_params;
   source(_0: EmbindString): string;
   was_explicit(): boolean;
-  get_caps(): bool_map;
+  get_caps(): common_json;
   support_enable_thinking(): boolean;
   format_single(_0: common_chat_messages, _1: common_chat_msg, _2: boolean, _3: boolean): string;
   format_example(_0: boolean, _1: string_map): string;

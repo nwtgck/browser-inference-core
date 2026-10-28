@@ -907,6 +907,7 @@ export interface LowLevelFunctions {
   mtmd_bitmap_init_lazy(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<bigint>;
   mtmd_bitmap_is_audio(arg0: bigint): Promise<number>;
   mtmd_bitmap_set_id(arg0: bigint, arg1: bigint): Promise<void>;
+  mtmd_bitmap_set_is_video(arg0: bigint, arg1: number): Promise<void>;
   mtmd_bitmap_set_mergeable(arg0: bigint, arg1: number): Promise<void>;
   mtmd_context_params_default(out: bigint): Promise<void>;
   mtmd_decode_use_mrope(arg0: bigint): Promise<number>;
@@ -925,6 +926,7 @@ export interface LowLevelFunctions {
   mtmd_get_cap_from_file(out: bigint, arg0: bigint): Promise<void>;
   mtmd_get_marker(arg0: bigint): Promise<bigint>;
   mtmd_get_output_embd(arg0: bigint): Promise<bigint>;
+  mtmd_get_video_config(out: bigint, arg0: bigint, arg1: number, arg2: number, arg3: number, arg4: number): Promise<void>;
   mtmd_helper_audio_stream_get_logit_bias(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number): Promise<number>;
   mtmd_helper_bitmap_init_from_buf(out: bigint, arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: bigint): Promise<void>;
   mtmd_helper_bitmap_init_from_file(out: bigint, arg0: bigint, arg1: bigint, arg2: number, arg3: bigint): Promise<void>;
