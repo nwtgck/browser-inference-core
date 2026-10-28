@@ -51,7 +51,7 @@ class HostInputSnapshot(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='host-snapshot-identity-') as temporary:
             directory = Path(temporary)
             target = self.prepare(directory)
-            self.assertEqual(tensor_copy.digest(target), source.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(target), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
             self.assertEqual(tensor_copy.digest(directory / 'ggml-backend.cpp'), snapshot.BACKEND_OUTPUT_SHA256)
             self.assertEqual(tensor_copy.digest(directory / 'ggml-backend-host-snapshot.h'), snapshot.HEADER_OUTPUT_SHA256)
             self.assertEqual(tensor_copy.digest(ROOT / source.PATCH_DIRECTORY / snapshot.PATCH_NAME), snapshot.PATCH_SHA256)

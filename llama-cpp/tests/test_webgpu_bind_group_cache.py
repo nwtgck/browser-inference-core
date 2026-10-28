@@ -56,7 +56,7 @@ class BindGroupCache(unittest.TestCase):
         before = (self.upstream / source.SOURCE_PATH).read_bytes()
         with tempfile.TemporaryDirectory(prefix='bind-group-cache-') as temporary:
             result = self.prepare(Path(temporary))
-            self.assertEqual(tensor_copy.digest(result), source.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(result), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
             self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu.cpp'], cache.OUTPUT_SHA256)
             actual = result.read_text()
             graph = function(actual, 'ggml_backend_webgpu_graph_compute')
@@ -78,7 +78,7 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
-                    patch.object(source, 'replace_iq3s_field_embedding'), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \

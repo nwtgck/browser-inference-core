@@ -30,8 +30,8 @@ class MoeSumOverlay(unittest.TestCase):
             stamps = {name: (out / name).stat().st_mtime_ns for name in names}
             # Later overlays also change the shared translation unit/header.
             # The MoE-only header and intermediate stage remain independently pinned.
-            expected = {**moe.OUTPUTS, 'ggml-webgpu.cpp': source.OUTPUT_SHA256,
-                        'ggml-webgpu-shader-lib.hpp': source.SSM_HEADER_OUTPUT_SHA256}
+            expected = {**moe.OUTPUTS, 'ggml-webgpu.cpp': source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'],
+                        'ggml-webgpu-shader-lib.hpp': source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp']}
             for name in names[:-1]:
                 self.assertEqual(copy.digest(out / name), expected[name])
             self.assertEqual(copy.digest(out / moe.HEADER_NAME), moe.HEADER_SHA256)

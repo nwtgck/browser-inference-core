@@ -30,7 +30,7 @@ class MoeGroupSkip(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
-        with patch.object(source.router_tail, 'prepare', return_value={}), \
+        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source.f32_small_m, 'prepare'), \
                 patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
@@ -150,6 +150,18 @@ class MoeGroupSkip(unittest.TestCase):
                 candidate = (shaders / (name + '-candidate.wgsl')).read_text()
                 self.assertEqual(candidate, baseline.replace('        if (is_valid) {\n            let k_end',
                     '        if (is_valid && output_col_base < rest_token_n) {\n            let k_end'))
+        # Shape permits VEC, but actual offsets/strides do not. The helper must
+        # use the production predicate for both main shaders, rather than force
+        # the former shape-only selector and silently reproduce its bad loads.
+        fields = [0, 32, 4, 11, 4, 2, 4, 1, 3, 7, 3, 33, 136, 37, 152, 6]
+        metadata = json.loads(subprocess.check_output(
+            [str(executable), str(shaders), 'unaligned', *map(str, fields)], text=True))
+        self.assertFalse(metadata['vectorized'])
+        baseline = (shaders / 'unaligned-baseline.wgsl').read_text()
+        candidate = (shaders / 'unaligned-candidate.wgsl').read_text()
+        self.assertIn('src0: array<f32>', candidate)
+        self.assertEqual(candidate, baseline.replace('        if (is_valid) {\n            let k_end',
+            '        if (is_valid && output_col_base < rest_token_n) {\n            let k_end'))
 
     @unittest.skipUnless(shutil.which('c++') and shutil.which('cc'), 'C/C++ compilers required')
     def test_self_authored_fixture_oracle_and_factory_generation(self):

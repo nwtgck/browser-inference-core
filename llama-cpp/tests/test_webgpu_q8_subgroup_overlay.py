@@ -33,7 +33,7 @@ class Q8SubgroupOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             factory.prepare(self.upstream, out)
-            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
+            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
             self.assertEqual(copy.digest(out / q8.HEADER_NAME), q8.HEADER_SHA256)
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             embedded = (out / q8.HEADER_NAME).read_text()
@@ -49,7 +49,7 @@ class Q8SubgroupOverlay(unittest.TestCase):
             with patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
-                    patch.object(source, 'replace_iq3s_field_embedding'), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \

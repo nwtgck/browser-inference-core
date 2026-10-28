@@ -29,10 +29,13 @@ class MoeGatherLogical32(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='moe-gather-logical32-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(gather, 'prepare', return_value={}), patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', gather.INPUT_SHA256):
+        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(gather, 'prepare', return_value={}), patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', gather.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').parent
-        cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
-        cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
+        # This suite isolates the gather stage; the final layout stage has its
+        # own full caller/factory tests, and does not change gather WGSL.
+        with patch.object(source.matmul_vec4_layout, 'prepare'):
+            cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
+            cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
         cls.factories = {}
 
     def actual_factory(self, mode):
@@ -63,8 +66,8 @@ class MoeGatherLogical32(unittest.TestCase):
         for path in self.baseline.iterdir():
             if path.name != 'ggml-webgpu-shader-lib.hpp':
                 self.assertEqual(path.read_bytes(), (self.normal / path.name).read_bytes(), path.name)
-        self.assertEqual(source.tensor_copy.digest(self.normal / 'ggml-webgpu.cpp'), source.OUTPUT_SHA256)
-        self.assertEqual(source.tensor_copy.digest(self.profile / 'ggml-webgpu.cpp'), source.q8_diagnostic.OUTPUTS['ggml-webgpu.cpp'])
+        self.assertEqual(source.tensor_copy.digest(self.normal / 'ggml-webgpu.cpp'), source.matmul_vec4_layout.INPUTS[False]['ggml-webgpu.cpp'])
+        self.assertEqual(source.tensor_copy.digest(self.profile / 'ggml-webgpu.cpp'), source.matmul_vec4_layout.INPUTS[True]['ggml-webgpu.cpp'])
         self.assertFalse((self.normal / 'ggml-wgsl-shaders.hpp').exists())
 
     def test_pins_and_existing_outputs_fail_closed(self):
@@ -109,10 +112,12 @@ class MoeGatherLogical32(unittest.TestCase):
 
     def test_reprepare_repairs_embedding_without_unnecessary_rewrites(self):
         stamps = {p.name: p.stat().st_mtime_ns for p in self.normal.iterdir()}
-        source.prepare(self.upstream, self.normal)
+        with patch.object(source.matmul_vec4_layout, 'prepare'):
+            source.prepare(self.upstream, self.normal)
         self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in self.normal.iterdir()})
         (self.normal / gather.HEADER_NAME).write_text('stale generated header')
-        source.prepare(self.upstream, self.normal)
+        with patch.object(source.matmul_vec4_layout, 'prepare'):
+            source.prepare(self.upstream, self.normal)
         self.assertEqual(source.tensor_copy.digest(self.normal / gather.HEADER_NAME), gather.HEADER_SHA256)
         for name, expected in gather.CONTRACT_INPUTS.items():
             self.assertEqual(source.tensor_copy.digest(self.upstream / name), expected)

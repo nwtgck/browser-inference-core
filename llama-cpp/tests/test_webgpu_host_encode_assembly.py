@@ -73,10 +73,12 @@ class HostEncodeAssembly(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='host-encode-assembly-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(assembly, 'prepare'), patch.object(source, 'OUTPUT_SHA256', assembly.INPUT_SHA256):
+        with patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(assembly, 'prepare'), patch.object(source, 'OUTPUT_SHA256', assembly.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').read_text()
-        cls.normal = source.prepare(cls.upstream, cls.directory / 'normal')
-        cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True)
+        # Isolate the assembly prefix; the later layout stage is checked separately.
+        with patch.object(source.matmul_vec4_layout, 'prepare'):
+            cls.normal = source.prepare(cls.upstream, cls.directory / 'normal')
+            cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True)
 
     def test_real_composition_preserves_all_other_bytes_and_profile_fields(self):
         actual = self.normal.read_text()

@@ -42,9 +42,9 @@ static void exercise(const std::vector<Case> & cases, const std::filesystem::pat
     for (const auto & c: cases) {
         ggml_tensor a{}, b{}, dst{};
         const auto context=context_for(c,a,b,dst);
-        const auto before=old.get_mul_mat_fast_pipeline(context,c.overlap);
-        const auto after=actual.get_mul_mat_fast_pipeline(context,c.overlap);
-        const auto repeated=actual.get_mul_mat_fast_pipeline(context,c.overlap);
+        const auto before=old.get_mul_mat_fast_pipeline(context,c.overlap,true);
+        const auto after=actual.get_mul_mat_fast_pipeline(context,c.overlap,true);
+        const auto repeated=actual.get_mul_mat_fast_pipeline(context,c.overlap,true);
         require(repeated.id==after.id && repeated.wgsl==after.wgsl, "Repeated key missed actual cache");
         const auto key=expected_key(c);
         const auto inserted=cached.emplace(key,after.id);

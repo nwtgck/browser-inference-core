@@ -15,10 +15,12 @@ import prepare_webgpu_tensor_copy as copy
 import prepare_webgpu_expert_short as expert
 from test_webgpu_q8_short_overlay import function
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def build_host(upstream, prepared, output):
-    text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
-    original = (upstream / source.SSM_HEADER_PATH).read_text()
+    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
+    original = explicit_layout_argument((upstream / source.SSM_HEADER_PATH).read_text())
     here = ROOT / 'tests/webgpu-expert-short'
     factory_start = '    webgpu_pipeline get_mul_mat_id_vec_pipeline('
     factory_end = '    webgpu_pipeline get_unary_pipeline('
@@ -41,6 +43,7 @@ def build_host(upstream, prepared, output):
     cpp = (prepared / 'ggml-webgpu.cpp').read_text()
     chunks += [(here / 'dispatch-prefix.cpp').read_text(),
                function(cpp, 'static inline void compute_2d_workgroups('),
+               function(cpp, 'static bool ggml_webgpu_mul_mat_vec4_aligned('),
                function(cpp, 'static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec('),
                (here / 'dispatch-cases.cpp').read_text()]
     chunks.append((here / 'host-cases.cpp').read_text())
@@ -70,8 +73,8 @@ class ExpertShortOverlay(unittest.TestCase):
             out = Path(tmp)
             source.prepare(self.upstream, out)
             for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp'):
-                expected = (source.OUTPUT_SHA256 if name == 'ggml-webgpu.cpp'
-                            else source.SSM_HEADER_OUTPUT_SHA256)
+                expected = (source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'] if name == 'ggml-webgpu.cpp'
+                            else source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
                 self.assertEqual(copy.digest(out / name), expected)
             stamp = (out / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             source.prepare(self.upstream, out)

@@ -12,10 +12,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition as function
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path) -> Path:
-    old = (baseline / 'ggml-webgpu-shader-lib.hpp').read_text()
-    new = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    old = explicit_layout_argument((baseline / 'ggml-webgpu-shader-lib.hpp').read_text())
+    new = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     backend = (prepared / 'ggml-webgpu.cpp').read_text()
     prefix = (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text()
     prefix = prefix[:prefix.index('extern "C" const ggml_type_traits * ggml_get_type_traits(')]

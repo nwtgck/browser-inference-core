@@ -305,9 +305,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_iq3s_field_loads.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-iq3s-field-loads.patch")
 
-# The diagnostic is a final profile-only stage. Normal overlay bytes stay unchanged.
+# The diagnostic is profile-only; its historical prefix contract stays independent.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q8_diagnostic.py"
     "${LCB_SOURCE_ROOT}/bridge/webgpu-q8-diagnostic.h"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-opencl/cl-program-cache.cpp")
+
+# Check actual binding-relative vec4 offsets/strides after both normal/profile prefixes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_matmul_vec4_layout.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-matmul-vec4-layout.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-matmul-vec4-layout-profile.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_subgroup_matrix.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl")

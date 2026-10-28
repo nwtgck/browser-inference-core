@@ -14,6 +14,8 @@ import prepare_webgpu_source as source
 import prepare_webgpu_tensor_copy as copy
 import prepare_webgpu_q8_short as q8
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def function(text, marker):
     start = text.index(marker)
@@ -21,7 +23,7 @@ def function(text, marker):
 
 
 def build_host(upstream, prepared, output):
-    text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     here = ROOT / 'tests/webgpu-q8-short'
     chunks = [
         (here / 'host-prefix.cpp').read_text(),
@@ -75,7 +77,7 @@ class Q8ShortOverlay(unittest.TestCase):
             source.prepare(self.upstream, out)
             header = out / 'ggml-webgpu-shader-lib.hpp'
             stamp = header.stat().st_mtime_ns
-            self.assertEqual(copy.digest(header), source.SSM_HEADER_OUTPUT_SHA256)
+            self.assertEqual(copy.digest(header), source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             source.prepare(self.upstream, out)
             self.assertEqual(header.stat().st_mtime_ns, stamp)

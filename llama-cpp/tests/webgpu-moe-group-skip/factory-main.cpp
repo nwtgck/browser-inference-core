@@ -33,8 +33,10 @@ if(gather.code!=same_gather.code)throw std::runtime_error("historical gather cha
 std::ofstream(out+"/"+name+"-gather.wgsl")<<same_gather.code;
 std::ofstream(out+"/"+name+"-gather-baseline.wgsl")<<gather.code;
 Canonical canonical;Candidate candidate;
-auto plain=canonical.get_mul_mat_id_pipeline(c);auto changed=candidate.get_mul_mat_id_pipeline(c);
-auto plain_hit=canonical.get_mul_mat_id_pipeline(c);auto changed_hit=candidate.get_mul_mat_id_pipeline(c);
+auto *src0=&a,*src1=&x,*src2=&ids,*dst=&d;int ctx=0;
+// @ACTUAL_LAYOUT@
+auto plain=canonical.get_mul_mat_id_pipeline(c,vec4_aligned);auto changed=candidate.get_mul_mat_id_pipeline(c,vec4_aligned);
+auto plain_hit=canonical.get_mul_mat_id_pipeline(c,vec4_aligned);auto changed_hit=candidate.get_mul_mat_id_pipeline(c,vec4_aligned);
 if(plain.id!=plain_hit.id||changed.id!=changed_hit.id||plain.name!=changed.name)throw std::runtime_error("factory/cache mismatch");
 std::string expected=plain.code;const std::string anchor="        if (is_valid) {\n            let k_end";
 auto at=expected.find(anchor);if(at==std::string::npos||expected.find(anchor,at+1)!=std::string::npos)throw std::runtime_error("canonical anchor drift");
@@ -45,12 +47,11 @@ auto b_decisions=static_cast<ggml_webgpu_mul_mat_shader_decisions*>(changed.cont
 if(a_decisions->tile_k!=b_decisions->tile_k||a_decisions->tile_m!=b_decisions->tile_m||a_decisions->tile_n!=b_decisions->tile_n||a_decisions->wg_size!=b_decisions->wg_size)throw std::runtime_error("tiling changed");
 std::ofstream(out+"/"+name+"-baseline.wgsl")<<plain.code;std::ofstream(out+"/"+name+"-candidate.wgsl")<<changed.code;
 std::shared_ptr<void> main_context=changed.context;
-auto *src0=&a,*src1=&x,*src2=&ids,*dst=&d;int ctx=0;
 uint32_t param_n_expert=src0->ne[2],param_n_expert_used=dst->ne[1],param_n_tokens=dst->ne[2];
 // @ACTUAL_PARAMETER_VECTORS@
 struct Caps {struct Limits {uint32_t maxComputeWorkgroupsPerDimension=17;}limits;};struct Global {Caps capabilities;};struct Context{Global*global_ctx;};Global global;Context context{&global};auto* context_ptr=&context;
 auto*main_decisions=static_cast<ggml_webgpu_mul_mat_shader_decisions*>(main_context.get());uint32_t wg_x=1,wg_y=1;
 // @ACTUAL_GRID@
 
-std::cout<<"{\"gatherWorkgroupSize\":"<<c.max_wg_size<<",\"gatherParams\":";numbers(gather_params);std::cout<<",\"mainParams\":";numbers(main_params);std::cout<<",\"grid\":["<<wg_x<<','<<wg_y<<"],\"maxTiles\":"<<ggml_webgpu_mul_mat_id_max_tiles(dst)<<",\"tileK\":"<<main_decisions->tile_k<<",\"vectorized\":"<<(a.type==GGML_TYPE_F32&&p[1]%4==0&&p[2]%4==0?"true":"false")<<"}\n";
+std::cout<<"{\"gatherWorkgroupSize\":"<<c.max_wg_size<<",\"gatherParams\":";numbers(gather_params);std::cout<<",\"mainParams\":";numbers(main_params);std::cout<<",\"grid\":["<<wg_x<<','<<wg_y<<"],\"maxTiles\":"<<ggml_webgpu_mul_mat_id_max_tiles(dst)<<",\"tileK\":"<<main_decisions->tile_k<<",\"vectorized\":"<<(changed.name.find("_vectorized")!=std::string::npos?"true":"false")<<"}\n";
 }

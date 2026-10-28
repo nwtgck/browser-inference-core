@@ -13,7 +13,7 @@ struct Fixture {
         context.min_subgroup_size=context.max_subgroup_size=32;context.supports_subgroups=true;context.max_wg_size=256;
     }
     uint32_t select(bool mmvq=false,bool overlap=false){return ggml_webgpu_q4_short_workgroup(context,indexed,mmvq,overlap);}
-    template<typename Library> webgpu_pipeline pipeline(Library & lib){return indexed?lib.get_mul_mat_id_vec_pipeline(context):lib.get_mul_mat_vec_pipeline(context,false);}
+    template<typename Library> webgpu_pipeline pipeline(Library & lib){return indexed?lib.get_mul_mat_id_vec_pipeline(context,true):lib.get_mul_mat_vec_pipeline(context,false,true);}
 };
 static uint32_t size(const webgpu_pipeline & p){return static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(p.context.get())->wg_size;}
 int main(int argc,char ** argv){
@@ -60,7 +60,7 @@ int main(int argc,char ** argv){
                     f.context.supports_dot_product=true;f.context.vendor="intel";
                     const auto mmvq=f.pipeline(lib),mmvqbase=f.pipeline(ref);require(size(mmvq)==256 && mmvq.wgsl==mmvqbase.wgsl,"MMVQ factory unchanged");
                     f.context.supports_dot_product=false;f.context.vendor="";
-                    const auto overlap=lib.get_mul_mat_vec_pipeline(f.context,true),overlapbase=ref.get_mul_mat_vec_pipeline(f.context,true);
+                    const auto overlap=lib.get_mul_mat_vec_pipeline(f.context,true,true),overlapbase=ref.get_mul_mat_vec_pipeline(f.context,true,true);
                     require(size(overlap)==256 && overlap.wgsl==overlapbase.wgsl,"overlap factory unchanged");
                 }
                 f.x.type=GGML_TYPE_F16;const auto half=f.pipeline(lib),halfbase=f.pipeline(ref);require(size(half)==256 && half.wgsl==halfbase.wgsl,"F16 vector factory unchanged");f.x.type=GGML_TYPE_F32;

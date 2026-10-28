@@ -17,14 +17,16 @@ import prepare_webgpu_tensor_copy as copy
 import prepare_webgpu_q4_short as q4
 from test_webgpu_q8_short_overlay import function
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def prepare(upstream, output):
     source.prepare(upstream, output)
 
 
 def build_host(upstream, prepared, output):
-    text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
-    original = (upstream / q4.HEADER_PATH).read_text()
+    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
+    original = explicit_layout_argument((upstream / q4.HEADER_PATH).read_text())
     here = ROOT / 'tests/webgpu-q4-short'
     chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
@@ -49,10 +51,11 @@ def build_host(upstream, prepared, output):
         for start, end in [('    webgpu_pipeline get_mul_mat_vec_pipeline(', '    webgpu_pipeline get_mul_mat_fast_pipeline('),
                            ('    webgpu_pipeline get_mul_mat_id_vec_pipeline(', '    webgpu_pipeline get_unary_pipeline(')]:
             chunks.append(body[body.index(start):body.index(end)])
-        chunks += ['webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &, bool) {throw std::runtime_error("unexpected matrix path");}', '};']
+        chunks += ['webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &, bool, bool) {throw std::runtime_error("unexpected matrix path");}', '};']
     cpp = (prepared / 'ggml-webgpu.cpp').read_text()
     chunks += [(here / 'dispatch-prefix.cpp').read_text(),
                function(cpp, 'static inline void compute_2d_workgroups('),
+               function(cpp, 'static bool ggml_webgpu_mul_mat_vec4_aligned('),
                function(cpp, 'static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec('),
                function(cpp, 'static webgpu_encoded_op ggml_webgpu_mul_mat('),
                (here / 'dispatch-cases.cpp').read_text(),
@@ -83,7 +86,7 @@ class Q4ShortOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             prepare(self.upstream, out)
-            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
+            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             stamp = (out / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             prepare(self.upstream, out)
@@ -109,12 +112,15 @@ class Q4ShortOverlay(unittest.TestCase):
         self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu-shader-lib.hpp'], q4.OUTPUT_SHA256)
         with tempfile.TemporaryDirectory() as tmp:
             prepare(self.upstream, Path(tmp))
-            prepared = (Path(tmp) / 'ggml-webgpu-shader-lib.hpp').read_text()
+            prepared = explicit_layout_argument((Path(tmp) / 'ggml-webgpu-shader-lib.hpp').read_text())
         original = (self.upstream / q4.HEADER_PATH).read_text()
         def matrix_factory(body):
             start = body.index('    webgpu_pipeline get_mul_mat_id_pipeline(')
             return body[start:body.index('    webgpu_pipeline get_mul_mat_id_vec_pipeline(', start)]
-        # The later matrix-only group overlay changes this shader selection.
+        # Later stages select the group shader and guard actual vec4 layouts.
+        # Reverse only those explicit changes; all other factory bytes remain.
+        prepared = prepared.replace(', bool vec4_aligned)', ')').replace(
+            '(vec4_aligned && context.src0->ne[0] % 4', '(context.src0->ne[0] % 4')
         self.assertEqual(matrix_factory(prepared), matrix_factory(original).replace(
             'preprocessor.preprocess(wgsl_mul_mat_id, defines)',
             'preprocessor.preprocess(wgsl_mul_mat_id_group, defines)'))

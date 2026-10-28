@@ -64,7 +64,7 @@ int main(int argc, char ** argv) {
         RecordingLibrary lib;
         auto get = [&](int64_t k, int64_t m=10240, int64_t n=1, bool overlap=false) {
             a.ne[0]=b.ne[0]=k; a.ne[1]=dst.ne[0]=m; b.ne[1]=dst.ne[1]=n;
-            return lib.get_mul_mat_vec_pipeline(c,overlap);
+            return lib.get_mul_mat_vec_pipeline(c,overlap,true);
         };
         // K=1056 stays on the generic WG256 path after the separate long-K
         // fixed-subgroup specialization is enabled.
