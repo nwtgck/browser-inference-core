@@ -238,6 +238,8 @@ class Q8Diagnostic(unittest.TestCase):
         self.assertFalse((self.normal / 'ggml-webgpu-q8-diagnostic.h').exists())
         for name, expected in source.FINAL_OUTPUTS[True].items():
             self.assertEqual(hashlib.sha256((self.profile / name).read_bytes()).hexdigest(), expected)
+        for prepared in (self.normal, self.profile):
+            self.assertEqual(hashlib.sha256((prepared / source.iq3s_row_split.HEADER_NAME).read_bytes()).hexdigest(), source.iq3s_row_split.HEADER_SHA256)
         original = (self.upstream / diagnostic.SHA_SOURCE).read_text()
         fragment = original[original.index(diagnostic.SHA_BEGIN):original.index(diagnostic.SHA_END)]
         self.assertIn(fragment, (self.profile / 'ggml-webgpu-q8-diagnostic-sha256.hpp').read_text())

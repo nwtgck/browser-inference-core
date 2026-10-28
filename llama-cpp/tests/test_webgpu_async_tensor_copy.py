@@ -64,7 +64,7 @@ class AsyncTensorCopy(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='async-copy-guards-') as temporary:
             root = Path(temporary)
             with patch.object(async_copy, 'prepare'), patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
-            patch.object(source, 'replace_iq3s_field_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
+            patch.object(source, 'replace_iq3s_field_embedding'), patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \

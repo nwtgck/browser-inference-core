@@ -21,6 +21,12 @@ emitter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(emitter)
 
 
+def prepare_prefix(*args, **kwargs):
+    # This fixture isolates the historical host-bound stage.
+    with patch.object(source, 'replace_iq3s_row_split_embedding'):
+        return source.prepare(*args, **kwargs)
+
+
 class MoeTightTileBound(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -31,8 +37,8 @@ class MoeTightTileBound(unittest.TestCase):
         cls.before, cls.final = {}, {}
         for profile in (False, True):
             with patch.object(bound, 'prepare'):
-                cls.before[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
+                cls.before[profile] = prepare_prefix(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
+            cls.final[profile] = prepare_prefix(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
         cls.library = None
 
     def test_only_capacity_helper_changes_and_inverse_restores_complete_sources(self):
@@ -92,9 +98,9 @@ class MoeTightTileBound(unittest.TestCase):
             saved = {p.name: p.read_bytes() for p in output.iterdir()}
             stamps = {p.name: p.stat().st_mtime_ns for p in output.iterdir()}
             with patch.object(bound, 'PATCH_SHA256', '0' * 64), self.assertRaisesRegex(ValueError, 'patch identity'):
-                source.prepare(self.upstream, output, gpu_profile=profile)
+                prepare_prefix(self.upstream, output, gpu_profile=profile)
             self.assertEqual(saved, {p.name: p.read_bytes() for p in output.iterdir()})
-            source.prepare(self.upstream, output, gpu_profile=profile)
+            prepare_prefix(self.upstream, output, gpu_profile=profile)
             self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in output.iterdir()})
 
     def test_final_and_historical_prefix_contracts_and_build_inputs_are_distinct(self):

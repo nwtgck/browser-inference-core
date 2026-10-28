@@ -34,7 +34,7 @@ class Iq3sSubgroup(unittest.TestCase):
 
     def stage(self, destination):
         base = destination / 'base'
-        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
+        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                 patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                 patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
@@ -99,13 +99,16 @@ class Iq3sSubgroup(unittest.TestCase):
                     with patch.object(iq3, field, '0' * 64), self.assertRaises(ValueError):
                         iq3.prepare(work, self.upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work))
 
-    def test_optional_historical_prefix_still_uses_final_field_embedding(self):
+    def test_historical_prefix_is_explicit_and_rejected_by_current_numerical_helper(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             prefix = self.stage(root / 'prefix') / iq3.BASE
             before = {name: copy.digest(prefix / name) for name in iq3.INPUTS}
             with patch.dict(os.environ, {'LCB_TEST_IQ3S_BASE': str(prefix)}):
-                factory.prepare(self.upstream, root / 'prepared')
+                with self.assertRaisesRegex(ValueError, 'historical prefixes'):
+                    factory.prepare(self.upstream, root / 'rejected')
+                self.assertFalse((root / 'rejected').exists())
+                factory.prepare_historical_prefix(self.upstream, root / 'prepared')
             self.assertEqual(copy.digest(root / 'prepared' / iq3.HEADER_NAME), factory.fields.HEADER_SHA256)
             for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp'):
                 self.assertEqual(copy.digest(root / 'prepared' / name), iq3.OUTPUTS[name])
@@ -231,9 +234,9 @@ class Iq3sSubgroup(unittest.TestCase):
                 self.assertNotIn('#include', text)
                 self.assertNotIn('var<workgroup>', text)
                 expected = {
-                    16: 'e99a1bb6f53b101fadb7de013175ed13663441ace94e0da706645ddbc85738ff',
-                    32: 'ad036f1feccf670be885cec225e3f8061a52d2066d43762e1712dac8da5a45e5',
-                    64: '54aa543f8e1a64215d9affe7969196beeb56d9cbf73acaaa315a86ce01da0278',
+                    16: '75b1ae4c3f115d68aed07b3a6d01688114085a81fec7b0052f581691cdf8658c',
+                    32: 'c1a1caffce956490fd1294ba301fcf190a76a26bcb5d3cbe87718aa9000b328b',
+                    64: '8a088145ac612cb6ab0cf24ec29cde878453d8943a1deb1706a3daa3bad54c9e',
                 }
                 self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), expected[sg])
                 self.assertIn('let selected_qs = load_u32_at_src0(', text)

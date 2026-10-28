@@ -31,9 +31,9 @@ class MatmulVec4Layout(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.baseline, cls.final = {}, {}
         for profile in (False, True):
-            with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(layout, 'prepare'):
+            with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(layout, 'prepare'):
                 cls.baseline[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            with patch.object(source.moe_tight_tile_bound, 'prepare'):
+            with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'):
                 cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'after-{profile}', gpu_profile=profile).parent
 
     def test_only_caller_and_factory_change_and_inverse_restores_full_prefix(self):

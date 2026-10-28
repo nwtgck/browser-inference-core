@@ -34,7 +34,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
             self.assertEqual(copy.digest(result.parent / 'llama-sampler.cpp'), source.sampler_single_sync.OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'ggml-backend.cpp'), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'ggml-backend-host-snapshot.h'), source.host_input_snapshot.HEADER_OUTPUT_SHA256)
-            for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_field_loads, source.ssm_conv_silu, source.moe_group_skip):
+            for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_row_split, source.ssm_conv_silu, source.moe_group_skip):
                 self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), module.HEADER_SHA256)
             header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
@@ -43,7 +43,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
             backend_stamp = (result.parent / 'ggml-backend.cpp').stat().st_mtime_ns
             snapshot_header_stamp = (result.parent / 'ggml-backend-host-snapshot.h').stat().st_mtime_ns
             generated_stamps = {module.HEADER_NAME: (result.parent / module.HEADER_NAME).stat().st_mtime_ns
-                                for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_field_loads, source.ssm_conv_silu, source.moe_group_skip)}
+                                for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_row_split, source.ssm_conv_silu, source.moe_group_skip)}
             self.assertEqual(source.prepare(self.upstream, Path(tmp)).stat().st_mtime_ns, stamp)
             self.assertEqual((result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns, header_stamp)
             self.assertEqual((result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns, loader_stamp)

@@ -327,3 +327,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_moe_tight_tile_bound.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-moe-tight-tile-bound.patch"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c")
+
+# Split only the dedicated four-row indexed IQ3 accumulator after final prefixes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_iq3s_row_split.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-iq3s-row-split.patch")

@@ -30,7 +30,7 @@ class MoeGroupSkip(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
-        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
+        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
                 patch.object(source.host_encode_assembly, 'prepare'), \
                 patch.object(source.f32_small_m, 'prepare'), \
                 patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \

@@ -30,6 +30,7 @@ import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
 import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
 import prepare_webgpu_matmul_vec4_layout as matmul_vec4_layout
 import prepare_webgpu_moe_tight_tile_bound as moe_tight_tile_bound
+import prepare_webgpu_iq3s_row_split as iq3s_row_split
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
@@ -792,6 +793,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'compiledCopies': iq3s_field_loads_compiled,
             'compiledCopiesByProfileVariant': {variant: iq3s_field_loads_compiled for variant in copy_enabled},
             'reviewedInputs': iq3s_field_loads.CONTRACT_INPUTS,
+            'intermediateEmbeddedHeaderSha256': iq3s_field_loads.HEADER_SHA256,
             'upstreamSource': {'path': iq3s_field_loads.ACCUMULATOR_PATH,
                                **file_identity(vendor / iq3s_field_loads.ACCUMULATOR_PATH)},
             'priorStage': {'id': 'webgpu-iq3s-indexed-subgroup-matvec',
@@ -803,6 +805,29 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_iq3s_field_loads.py', 'scripts/prepare_webgpu_iq3s_subgroup.py',
                                  'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Replace only the existing independent indexed IQ3_S embedding with lane-selected qs and aligned-containing-word metadata loads. Preserve the decoder arithmetic, main/reduction, selector, cache key, parameter/binding layout and all fallback paths. The original embedding hash is an intermediate stage contract; compiled copies describe the final header. No model or target-device speedup is established.',
+        }, {
+            'id': 'webgpu-iq3s-indexed-row-split',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / iq3s_row_split.PATCH_NAME)},
+            'compiledCopies': iq3s_field_loads_compiled,
+            'compiledCopiesByProfileVariant': {variant: iq3s_field_loads_compiled for variant in copy_enabled},
+            'reviewedInputs': iq3s_row_split.CONTRACT_INPUTS,
+            'priorStage': {'id': 'webgpu-iq3s-indexed-field-loads',
+                           'intermediateEmbeddedHeaderSha256': iq3s_row_split.PRIOR_HEADER_SHA256,
+                           'accumulatorSha256': iq3s_row_split.ACCUMULATOR_INPUT_SHA256},
+            'accumulatorOutputSha256': iq3s_row_split.ACCUMULATOR_OUTPUT_SHA256,
+            'rowsPerSubgroup': iq3s_row_split.ROWS_PER_SUBGROUP,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in iq3s_row_split.INPUTS.items()},
+            'finalEmbeddedHeaderSha256': iq3s_row_split.HEADER_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_iq3s_row_split.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_iq3s_row_split.py', 'scripts/prepare_webgpu_iq3s_field_loads.py',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Split the dedicated four-row independent IQ3_S accumulator loop into rows 0..1 and 2..3, retaining the four accumulators, per-row arithmetic and K order, main, partial-subgroup completion, reduction, selection and dispatch contracts. Canonical accumulators and fallback shaders remain upstream. Private software hot-only measurements are not model, streaming or target-device performance evidence.',
         }, {
             'id': 'webgpu-q8-fixed-subgroup-matvec',
             'kind': 'build-tree-source-overlay',
@@ -861,7 +886,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

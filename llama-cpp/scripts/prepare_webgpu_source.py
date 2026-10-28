@@ -33,6 +33,7 @@ import prepare_webgpu_moe_gather_logical32 as moe_gather_logical32
 import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
 import prepare_webgpu_matmul_vec4_layout as matmul_vec4_layout
 import prepare_webgpu_moe_tight_tile_bound as moe_tight_tile_bound
+import prepare_webgpu_iq3s_row_split as iq3s_row_split
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -84,6 +85,11 @@ def replace_iq3s_field_embedding(work: Path, source: Path, patch_root: Path, env
     # Missing original-stage output must fail closed rather than skip replacement.
     headers[iq3s_field_loads.HEADER_NAME] = iq3s_field_loads.prepare(
         work, source, patch_root, env, previous_header=headers[iq3s_field_loads.HEADER_NAME])
+
+
+def replace_iq3s_row_split_embedding(work: Path, source: Path, patch_root: Path, env: dict[str, str], headers: dict[str, Path], *, gpu_profile: bool) -> None:
+    headers[iq3s_row_split.HEADER_NAME] = iq3s_row_split.prepare(
+        work, source, patch_root, env, previous_header=headers[iq3s_row_split.HEADER_NAME], gpu_profile=gpu_profile)
 
 
 def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY, gpu_profile: bool = False) -> Path:
@@ -161,6 +167,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
             hc_headers.update(q8_diagnostic.prepare(work, source, patch_root, env))
         matmul_vec4_layout.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         moe_tight_tile_bound.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        replace_iq3s_row_split_embedding(work, source, patch_root, env, hc_headers, gpu_profile=gpu_profile)
         if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)

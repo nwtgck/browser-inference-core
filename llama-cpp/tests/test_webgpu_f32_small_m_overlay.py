@@ -29,10 +29,10 @@ class F32SmallMOverlay(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='f32-small-m-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(small, 'prepare'), patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
+        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(small, 'prepare'), patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', small.INPUT_SHA256):
             cls.baseline = source.prepare(cls.upstream, cls.directory / 'baseline').parent
-        with patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
+        with patch.object(source, 'replace_iq3s_row_split_embedding'), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', small.OUTPUT_SHA256):
             cls.f32_stage = source.prepare(cls.upstream, cls.directory / 'f32-stage').parent
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent

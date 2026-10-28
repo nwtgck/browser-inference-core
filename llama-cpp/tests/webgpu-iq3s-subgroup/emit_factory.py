@@ -11,6 +11,7 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
 import prepare_webgpu_iq3s_subgroup as iq3
 import prepare_webgpu_iq3s_field_loads as fields
+import prepare_webgpu_iq3s_row_split as rows
 import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
@@ -30,13 +31,20 @@ def prepare_base(upstream: Path, output: Path) -> None:
 
 
 def prepare(upstream: Path, output: Path) -> None:
+    if os.environ.get('LCB_TEST_IQ3S_BASE'):
+        raise ValueError('Current IQ3_S numerical checks require the final embedding; historical prefixes are native-test-only')
     prepare_base(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    header_hash = copy.digest(header)
-    if header_hash == source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp']:
-        if copy.digest(output / iq3.HEADER_NAME) != fields.HEADER_SHA256:
-            raise ValueError('Unexpected integrated IQ3_S embedding')
-        return
+    if copy.digest(header) != source.FINAL_OUTPUTS[False][header.name] or copy.digest(output / iq3.HEADER_NAME) != rows.HEADER_SHA256:
+        raise ValueError('Unexpected final IQ3_S embedding')
+
+
+def prepare_historical_prefix(upstream: Path, output: Path) -> None:
+    """Native prefix fixtures only; never the current numerical-checker path."""
+    if not os.environ.get('LCB_TEST_IQ3S_BASE'):
+        raise ValueError('Historical IQ3_S preparation requires an explicit prefix')
+    prepare_base(upstream, output)
+    header = output / 'ggml-webgpu-shader-lib.hpp'
     with tempfile.TemporaryDirectory(prefix='iq3s-stage-') as tmp:
         work = Path(tmp)
         (work / iq3.BASE).mkdir(parents=True)
