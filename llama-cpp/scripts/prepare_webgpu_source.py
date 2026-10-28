@@ -60,8 +60,8 @@ FINAL_OUTPUTS = {profile: {name: f32_matvec_epilogue.OUTPUTS[profile][name]
 # browser transport thresholds are version-specific, not this loader's contract.
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
-LOADER_PATCH_SHA256 = 'ddb01246fb2a7901359c0bc576023ce0a0f2c5898ee46623f71c86c9eb6f7f3f'
-LOADER_OUTPUT_SHA256 = '96aefafbf214482f3116af5ee4de0c8a4e53d6da999077cf8492526f0c52837e'
+LOADER_PATCH_SHA256 = 'e83cc330b66ad4683799b4e9a52ed2bc862195cf0a025729a80cc20452b3561a'
+LOADER_OUTPUT_SHA256 = '121845c207be9a409ea6a3d39692603d91576911feb7b30fe1be00f64b946617'
 LOADER_INPUTS = {
     "src/llama-model-loader.cpp": "fc7ab08ffda8f94ff2a1ae6ddff034b9a90d2eb1d532309bd14a388e1bfa83e3",
     "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",

@@ -1,7 +1,7 @@
 diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 --- a/src/llama-model-loader.cpp
 +++ b/src/llama-model-loader.cpp
-@@ -1550,6 +1550,59 @@ const void * llama_model_loader::load_data_range(const llama_tensor_weight & w,
+@@ -1559,6 +1559,120 @@
      return data;
  }
  
@@ -17,6 +17,67 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 +    llama_webgpu_load_uploads() = default;
 +    llama_webgpu_load_uploads(const llama_webgpu_load_uploads &) = delete;
 +    llama_webgpu_load_uploads & operator=(const llama_webgpu_load_uploads &) = delete;
++
++    struct projection {
++        size_t waits;
++        size_t pending;
++    };
++
++    // Replay repeated full chunks and one tail without allocating or touching a
++    // backend. Products are limited by the charged budget, not the tensor size.
++    static projection project(size_t size, size_t chunk, size_t initial_pending) {
++        const size_t charge = chunk + overhead;
++        size_t full = size / chunk;
++        const size_t tail = size % chunk;
++        const size_t first = std::min(full, (budget - initial_pending) / charge);
++        size_t projected_pending = initial_pending + first * charge;
++        full -= first;
++        size_t waits = 0;
++        if (full != 0) {
++            const size_t per_batch = budget / charge;
++            waits = 1 + (full - 1) / per_batch;
++            projected_pending = (1 + (full - 1) % per_batch) * charge;
++        }
++        if (tail != 0) {
++            const size_t tail_charge = tail + overhead;
++            if (tail_charge > budget - projected_pending) {
++                ++waits;
++                projected_pending = 0;
++            }
++            projected_pending += tail_charge;
++        }
++        return { waits, projected_pending };
++    }
++
++    size_t chunk_size_for(ggml_backend_dev_t destination, size_t size, size_t alignment) const {
++        static constexpr size_t maximum = 8 * MiB;
++        static_assert(budget / 4 > overhead, "model upload budget must allow four charged chunks");
++        if (size == 0) {
++            return 0;
++        }
++        if (alignment == 0 || alignment > maximum) {
++            throw std::runtime_error("invalid WebGPU model upload chunk alignment");
++        }
++        const size_t original = std::min(size, (maximum / alignment) * alignment);
++        const size_t candidate = std::min(size, ((budget / 4 - overhead) / alignment) * alignment);
++        if (candidate == 0 || candidate >= original ||
++            (size - 1) / candidate != (size - 1) / original) {
++            return original;
++        }
++        // A device switch drains the old queue in reserve(), after the file read.
++        // Choosing a chunk must not initialize a backend or advance that wait.
++        const size_t initial = device == destination ? pending : 0;
++        const projection before = project(size, original, initial);
++        const projection after = project(size, candidate, initial);
++        // Equal read counts alone can increase waits when the larger final tail
++        // meets an earlier tensor's pending uploads. This ordering is preserved
++        // by every subsequent charged upload, including the final drain.
++        if (after.waits < before.waits ||
++            (after.waits == before.waits && after.pending <= before.pending)) {
++            return candidate;
++        }
++        return original;
++    }
 +
 +    void drain() {
 +        if (pending != 0) {
@@ -61,16 +122,16 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
  bool llama_model_loader::load_all_data(
          struct ggml_context * ctx,
          std::vector<ggml_backend_buffer_t> & bufs,
-@@ -1681,6 +1734,8 @@ bool llama_model_loader::load_all_data(
+@@ -1689,6 +1803,8 @@
+             return staged_a && ggml_nbytes(a) > ggml_nbytes(b);
          });
      }
- 
-+    llama_webgpu_load_uploads webgpu_uploads;
 +
++    llama_webgpu_load_uploads webgpu_uploads;
+ 
      for (struct ggml_tensor * cur : tensors) {
          const auto * weight = get_weight(ggml_get_name(cur));
-         if (weight == nullptr) {
-@@ -1800,13 +1855,35 @@ bool llama_model_loader::load_all_data(
+@@ -1809,13 +1925,35 @@
                          buffer_idx %= n_buffers;
                      }
                  } else {
@@ -90,7 +151,7 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 +                    if (chunked) {
 +                        // Keep complete quantization blocks and four-byte upload boundaries.
 +                        const size_t chunk_alignment = 4 * ggml_type_size(cur->type);
-+                        chunk_size = std::min(n_size, (8 * MiB / chunk_alignment) * chunk_alignment);
++                        chunk_size = webgpu_uploads.chunk_size_for(dev, n_size, chunk_alignment);
 +                        if (weight->offs > file->size() || n_size > file->size() - weight->offs) {
 +                            throw std::runtime_error(format("tensor '%s' extends beyond the file", ggml_get_name(cur)));
 +                        }
@@ -113,12 +174,12 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
                      }
                  }
              }
-@@ -1815,6 +1892,8 @@ bool llama_model_loader::load_all_data(
+@@ -1823,6 +1961,8 @@
+ 
          size_done += n_size;
      }
- 
-+    webgpu_uploads.drain();
 +
++    webgpu_uploads.drain();
+ 
      // free temporary resources used for async uploads
      for (auto * event : events) {
-         ggml_backend_event_synchronize(event);

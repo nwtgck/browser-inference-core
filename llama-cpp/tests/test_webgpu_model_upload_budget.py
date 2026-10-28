@@ -1,4 +1,5 @@
 """Exercise the actual loader-overlay helper with CPU queues, never a GPU claim."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -37,7 +38,10 @@ class WebgpuModelUploadBudget(unittest.TestCase):
         self.assertIn('auto * dev = ggml_backend_buft_get_device(buft);', function)
         self.assertIn('buft == ggml_backend_dev_buffer_type(dev)', function)
         self.assertIn('strcmp(ggml_backend_reg_name(reg), "WebGPU") == 0', function)
-        self.assertIn('(8 * MiB / chunk_alignment) * chunk_alignment', function)
+        self.assertIn('const size_t chunk_alignment = 4 * ggml_type_size(cur->type);', function)
+        self.assertIn('chunk_size = webgpu_uploads.chunk_size_for(dev, n_size, chunk_alignment);', function)
+        self.assertLess(function.index('webgpu_uploads.chunk_size_for('),
+                        function.index('file->read_raw(read_buf.data(), read_size);'))
         self.assertIn('webgpu_uploads.drain();\n\n    // free temporary resources', function)
         self.assertEqual(function.count('webgpu_uploads.reserve('), 1)
         self.assertEqual(text.count('ggml_backend_synchronize(backend);'), 1)
@@ -51,6 +55,7 @@ class WebgpuModelUploadBudget(unittest.TestCase):
             end = text.index('\n};', start) + 3
             helper = text[start:end]
             harness = r'''
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <limits>
@@ -145,6 +150,25 @@ int main() {
             cpp = root / 'budget.cpp'; cpp.write_text(harness)
             subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(root / 'budget')], check=True)
             subprocess.run([str(root / 'budget')], check=True)
+
+    @unittest.skipUnless(shutil.which('c++'), 'C++ compiler required')
+    def test_actual_chunk_policy_with_32_and_64_bit_integer_arithmetic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = self.prepared(root / 'overlay')
+            start = text.index('struct llama_webgpu_load_uploads {')
+            end = text.index('\n};', start) + 3
+            (root / 'model-upload-helper.inc').write_text(text[start:end])
+            harness = ROOT / 'tests/webgpu-model-upload-budget/chunk-policy.cpp'
+            executable = root / 'chunk-policy'
+            subprocess.run(['c++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-UNDEBUG',
+                            '-I' + str(root), str(harness), '-o', str(executable)], check=True)
+            result = subprocess.run([str(executable)], check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(result.stdout), {
+                'passed': True, 'widths': [32, 64], 'projectionCases': 7830,
+                'policyCases': 3060, 'regressionSequences': 2, 'positiveAdoptions': 2,
+                'liveBackends': 0, 'gpu': False,
+            })
 
     @unittest.skipUnless(shutil.which('c++'), 'C++ compiler required')
     def test_complete_loader_native_syntax_with_pinned_headers(self):

@@ -233,7 +233,7 @@ commit with different bytes or invent a future artifact identity.
 - **Integration:** reuse ordinary WebGPU source preparation and its CMake hook to
   replace only `src/llama-model-loader.cpp` on `llama`. No additional options,
   variants, workflow inputs or publication gates. CPU builds stay upstream.
-- **Reviewed inputs:** 620d2225cc436ab0b001e3200e590e3b286ef9ab; exact loader,
+- **Reviewed inputs:** 8642541b255bfb5dc39cd351a178be09013a55d6; exact loader,
   file-reader and target-layout identities augment existing backend/API guards.
   Copies are isolated; upstream sources are never rewritten. Updater preflight
   and provenance use the same preparation. Input drift requires semantic review.
@@ -246,15 +246,24 @@ commit with different bytes or invent a future artifact identity.
   final partial batches, callback cancellation and ordinary C++ exceptions drain
   pending work, and the helper releases its backend through RAII. No global
   tensor-set, inference or WEIGHTS-buffer waits are added. Other buffer types and
-  backends retain their existing upload behavior and optional validation.
+  backends retain their existing upload behavior and optional validation. A
+  smaller aligned chunk can admit four charged uploads per batch, but is selected
+  only when it preserves read/upload counts and does not increase the projected
+  `(wait count, pending charge)` state. Pure constant-time selection accounts for
+  the current queue or a device handoff; it does not acquire or wait for a backend.
 - **Validation/limits:** focused deterministic CPU queue tests extract the actual
   generated helper, checking pre-write waits, cross-tensor/device accounting,
-  auxiliary charges, overflow, cleanup and initialization failure. The complete
-  generated loader passes native syntax checking against pinned upstream headers;
+  auxiliary charges, overflow, cleanup and initialization failure. Independent
+  32-bit and 64-bit integer references cover chunk selection, exact-multiple
+  fallback, cross-tensor regressions and positive adoption; these are not Wasm
+  ABI executions. The complete generated loader passes native syntax checking
+  against pinned upstream headers;
   actual overlay/target/provenance contracts remain tested. These are not full
   Wasm builds or browser/GPU tests. The 32 MiB bound covers charged loader uploads,
-  not total Wasm, process, driver or GPU memory. Existing completion/device-loss
-  behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
+  not total Wasm, process, driver or GPU memory. Actual pending peaks can rise
+  from three to four chunks within that unchanged cap; lower read-vector maxima
+  do not establish unchanged physical or Wasm high-water memory. Existing
+  completion/device-loss behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
   OOM/device-loss recovery is not claimed. See
   [bounded WebGPU model uploads](../docs/webgpu-model-upload-budget.md).
 - **Removal:** equivalent upstream support, withdrawal of the requirement, or costs

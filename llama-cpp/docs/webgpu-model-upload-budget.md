@@ -30,6 +30,22 @@ reservations are rejected before addition, preventing size_t overflow. Rounding
 full chunks down for Q4_K or Q8_0 alignment leaves enough room for four such
 chunks plus their charges; smaller tails likewise change the number that fits.
 
+The loader also considers a smaller aligned maximum of `32 MiB / 4 - 24` so
+four charged full chunks fit in a batch. It uses that candidate only when the
+tensor needs the same number of reads and uploads, and the projected final
+`(wait count, pending charge)` is lexicographically no greater than with the
+original maximum. The projection starts with the current pending charge for
+the same device, or zero for a device switch. It is a constant-time integer
+calculation that does not allocate, initialize a backend, read a file, or wait.
+Exact multiples of the original maximum keep that maximum if reducing it would
+add another read. Equal read counts alone are insufficient: a larger final tail
+can otherwise increase waits when it meets earlier tensors' pending uploads.
+
+This ordering is preserved by subsequent charged uploads and the final drain,
+so choosing the candidate does not increase charged wait counts across tensors.
+It does not guarantee lower wall time. Selection leaves the read, reservation,
+and upload order unchanged, and each read vector is no larger than before.
+
 Accounting spans tensor boundaries. A device change drains and releases the old
 backend before acquiring the new one, so multiple queues do not each claim the
 full budget. Normal completion drains the partial batch before final completion
@@ -41,6 +57,10 @@ submission followed by an ordinary exception is included in cleanup.
 
 The budget is charged bytes for this loader path, not a hard memory bound for the
 browser process, Wasm heap, GPU allocations, driver staging or other queue users.
+Filling four chunks instead of three can increase the actual pending peak from
+about 24 MiB to nearly 32 MiB while remaining within the same budget. An unchanged
+cap does not imply unchanged peak memory: Wasm capacity, driver staging and
+retained pools must be measured separately, including after model release.
 It does not cap retained browser transport pools: alignment, fragmentation and
 allocation history can affect retained capacity even after queue completion.
 The backend synchronization uses the existing Wasm yield mechanism (JSPI or Asyncify,
@@ -52,7 +72,7 @@ not covered by ordinary C++ RAII. No generic setter or inference path is changed
 
 ## Source and validation
 
-Reviewed upstream is d81235049384534c167caea52b85a694f6103d14 (b11429).
+Reviewed upstream is 8642541b255bfb5dc39cd351a178be09013a55d6 (v0.8.0).
 Exact source, API, file-reader, patch and generated-output identities are checked
 by the existing preparation/provenance flow; input drift fails closed. The
 backend overlay and normal build/publication route remain unchanged.
@@ -65,7 +85,12 @@ checkout, and optionally `LCB_TEST_DAWN_PACKAGE` at the pinned Dawn package:
 
 The budget suite compiles the actual generated helper against deterministic CPU
 queue stubs, asserts actual loader wiring, and syntax-checks the complete loader
-against upstream headers. Overlay tests configure real CMake targets. These
+against upstream headers. Integer-width fixtures exercise the same prepared
+helper with 32-bit and 64-bit arithmetic, including independent sequential and
+cycle-skipping reference states, size limits, pure device-switch selection,
+exact-multiple fallback, cross-tensor counterexamples, and a positive adoption
+case that prevents an always-original policy from passing. These integer-width
+fixtures do not execute Wasm ABIs. Overlay tests configure real CMake targets. These
 focused checks establish source/native contracts only. Browser model-load tests
 are required to establish runtime behavior, peak memory, throughput, cancellation
 and failure behavior; compilation alone does not establish those properties.
