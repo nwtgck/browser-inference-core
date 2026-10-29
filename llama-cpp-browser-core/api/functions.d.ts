@@ -910,6 +910,7 @@ export interface LowLevelFunctions {
   mtmd_bitmap_set_is_video(arg0: bigint, arg1: number): Promise<void>;
   mtmd_bitmap_set_mergeable(arg0: bigint, arg1: number): Promise<void>;
   mtmd_context_params_default(out: bigint): Promise<void>;
+  mtmd_context_vision_bf16_storage(arg0: bigint): Promise<number>;
   mtmd_decode_use_mrope(arg0: bigint): Promise<number>;
   mtmd_decode_use_non_causal(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_default_marker(): Promise<bigint>;
@@ -958,6 +959,7 @@ export interface LowLevelFunctions {
   mtmd_image_tokens_get_n_pos(arg0: bigint): Promise<number>;
   mtmd_image_tokens_get_n_tokens(arg0: bigint): Promise<bigint>;
   mtmd_init_from_file(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
+  mtmd_init_from_file_with_vision_bf16_storage(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number): Promise<bigint>;
   mtmd_input_chunk_copy(arg0: bigint): Promise<bigint>;
   mtmd_input_chunk_free(arg0: bigint): Promise<void>;
   mtmd_input_chunk_get_id(arg0: bigint): Promise<bigint>;
@@ -980,4 +982,5 @@ export interface LowLevelFunctions {
   mtmd_test_create_input_chunks(): Promise<bigint>;
   mtmd_tokenize(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
   mtmd_tokenize_from_parts(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: number): Promise<number>;
+  mtmd_vision_bf16_storage_version(): Promise<number>;
 }

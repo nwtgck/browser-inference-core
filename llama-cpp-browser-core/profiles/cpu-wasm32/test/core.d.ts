@@ -2117,6 +2117,8 @@ interface WasmModule {
   _mtmd_bitmap_set_mergeable(_0: number, _1: number): void;
   _lcb_mtmd_context_params_default(_0: BigInt): void;
   _mtmd_context_params_default(_0: number): void;
+  _lcb_mtmd_context_vision_bf16_storage(_0: BigInt): number;
+  _mtmd_context_vision_bf16_storage(_0: number): number;
   _lcb_mtmd_decode_use_mrope(_0: BigInt): number;
   _mtmd_decode_use_mrope(_0: number): number;
   _lcb_mtmd_decode_use_non_causal(_0: BigInt, _1: BigInt): number;
@@ -2213,6 +2215,8 @@ interface WasmModule {
   _mtmd_image_tokens_get_n_tokens(_0: number): number;
   _lcb_mtmd_init_from_file(_0: BigInt, _1: BigInt, _2: BigInt): BigInt;
   _mtmd_init_from_file(_0: number, _1: number, _2: number): number;
+  _lcb_mtmd_init_from_file_with_vision_bf16_storage(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): BigInt;
+  _mtmd_init_from_file_with_vision_bf16_storage(_0: number, _1: number, _2: number, _3: number): number;
   _lcb_mtmd_input_chunk_copy(_0: BigInt): BigInt;
   _mtmd_input_chunk_copy(_0: number): number;
   _lcb_mtmd_input_chunk_free(_0: BigInt): void;
@@ -2257,6 +2261,8 @@ interface WasmModule {
   _mtmd_tokenize(_0: number, _1: number, _2: number, _3: number, _4: number): number;
   _lcb_mtmd_tokenize_from_parts(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: number): number;
   _mtmd_tokenize_from_parts(_0: number, _1: number, _2: number, _3: number, _4: number): number;
+  _lcb_mtmd_vision_bf16_storage_version(): number;
+  _mtmd_vision_bf16_storage_version(): number;
   _lcb_sizeof_record(_0: number): BigInt;
   _lcb_alignof_record(_0: number): BigInt;
   _lcb_offsetof_field(_0: number, _1: number): BigInt;
