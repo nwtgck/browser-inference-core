@@ -15,6 +15,7 @@ from browser_toolchain import runtime_toolchain
 from patch_emscripten import verify_asyncify_bigint_patch
 from prepare_browser_module import prepare as prepare_browser_module
 from verify_gpu_profile_build import verify as verify_gpu_profile_build
+from verify_bf16_build import verify as verify_bf16_build, runtime_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,6 +84,7 @@ def main():
     build.mkdir(parents=True,exist_ok=True)
     subprocess.run(command,cwd=build,check=True)
     verify_gpu_profile_build(build/'compile_commands.json', webgpu=cfg['webgpu'], enabled=cfg.get('gpuProfile', False))
+    verify_bf16_build(build/'compile_commands.json', webgpu=cfg['webgpu'])
     subprocess.run(['cmake','--build',str(build),'--target','core','-j',str(a.jobs)],cwd=build,check=True)
     browser_module = prepare_browser_module(build/'runtime/core.mjs') if a.variant == 'browser' else None
     status_after=source_status(ROOT)
@@ -92,6 +94,7 @@ def main():
         },indent=2),file=sys.stderr)
     provenance={'profile':a.profile,'variant':a.variant,'configuration':cfg,
                 'variantConfiguration':variants[a.variant],'sourceCommit':source_commit,
+                'visionBf16Storage':runtime_metadata(),
                 'sourceDirty': bool(status_before or status_after),
                 'sourceStatusBeforeBuild':status_before,'sourceStatusAfterBuild':status_after,
                 'llamaCommit':sha,'toolchain':toolchain,'emccVersion':version,

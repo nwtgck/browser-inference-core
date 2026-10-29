@@ -237,7 +237,9 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
             return common_chat_templates_source(self.value.get(), variant);
         })
         .function("was_explicit", +[](const templates_owner & self) { return common_chat_templates_was_explicit(self.value.get()); })
-        .function("get_caps", +[](const templates_owner & self) { return common_chat_templates_get_caps(self.value.get()); })
+        .function("get_caps", +[](const templates_owner & self) -> common_json {
+            return select_overload<common_json(const common_chat_templates *)>(&common_chat_templates_get_caps)(self.value.get());
+        })
         .function("support_enable_thinking", +[](const templates_owner & self) { return common_chat_templates_support_enable_thinking(self.value.get()); })
         .function("format_single", +[](const templates_owner & self, const std::vector<common_chat_msg> & past,
             const common_chat_msg & message, bool add_assistant, bool use_jinja) {

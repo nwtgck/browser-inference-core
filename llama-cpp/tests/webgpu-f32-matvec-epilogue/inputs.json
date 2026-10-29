@@ -1,0 +1,13 @@
+{
+  "module_sha256": "b4945b5f0675f7f5f04e534fb8dd3e48394e92894c8c86852bcddb54978b07ac",
+  "processed_sha256": {
+    "sg-scalar-none.wgsl": "9368ae45e8cccba08d94614688652b6e3e970397e0bf625f9ba85d522d9ca868",
+    "sg-scalar-post.wgsl": "c7ee4bd1b841259e374a70b5daa0cc748a03dd8b65f11389a721cec1308ae17e",
+    "sg-vec4-none.wgsl": "9fab4c605ba7cf35ee0e35fadcaabcd2caccf04d702a363ffbab4114b1a57bb1",
+    "sg-vec4-post.wgsl": "683ee4398768408a68b132ff120569913f74d58d20a1ee0d9e36418ad85bb6ae",
+    "wg-scalar-none.wgsl": "09effd43f8996ab13a37b0951156d18883e61cd7fd94e6a8a3e81e82de978edc",
+    "wg-scalar-post.wgsl": "b68daf6b640970e0784280038e632648576cfbd67075c73908d192ff35a5d9f1",
+    "wg-vec4-none.wgsl": "1eb119de47db60a9544a21da9007a46ee43ec0a4d9eb1f964e556f61afcd4ae5",
+    "wg-vec4-post.wgsl": "eab1b1cc71bac32dac945c192f249bef3f726ed51bd1b83eb694d2bb12519453"
+  }
+}

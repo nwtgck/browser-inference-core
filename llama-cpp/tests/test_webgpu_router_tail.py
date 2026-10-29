@@ -28,9 +28,11 @@ class RouterTail(unittest.TestCase):
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
 
     def test_checked_stage_before_profile_and_exact_shader_headers(self):
-        for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-router-tail.hpp'):
-            self.assertEqual(source.tensor_copy.digest(self.normal / name), router.OUTPUTS[name])
-        for name, expected in source.q8_diagnostic.OUTPUTS.items():
+        self.assertEqual(source.host_encode_assembly.INPUT_SHA256, router.OUTPUTS['ggml-webgpu.cpp'])
+        self.assertEqual(source.tensor_copy.digest(self.normal / 'ggml-webgpu.cpp'), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
+        for name in ('ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-router-tail.hpp'):
+            self.assertEqual(source.tensor_copy.digest(self.normal / name), (source.FINAL_OUTPUTS[False][name] if name == 'ggml-webgpu-shader-lib.hpp' else router.OUTPUTS[name]))
+        for name, expected in source.FINAL_OUTPUTS[True].items():
             self.assertEqual(source.tensor_copy.digest(self.profile / name), expected)
         for prepared in (self.normal, self.profile):
             self.assertEqual(source.tensor_copy.digest(prepared / router.HEADER_NAME), router.HEADER_SHA256)

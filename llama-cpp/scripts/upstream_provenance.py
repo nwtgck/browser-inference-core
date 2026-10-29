@@ -12,6 +12,7 @@ import tempfile
 
 from github_api import full_sha, git
 from prepare_mtmd import PATCH_DIRECTORY, prepare
+from verify_bf16_build import runtime_metadata, validate_metadata as validate_bf16_metadata
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
 import prepare_webgpu_hc as hc
@@ -27,11 +28,20 @@ import prepare_webgpu_q8_subgroup as q8_subgroup
 import prepare_webgpu_rms_scale as rms_scale
 import prepare_webgpu_async_tensor_copy as async_tensor_copy
 import prepare_webgpu_iq3s_subgroup as iq3s_subgroup
+import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
+import prepare_webgpu_matmul_vec4_layout as matmul_vec4_layout
+import prepare_webgpu_moe_tight_tile_bound as moe_tight_tile_bound
+import prepare_webgpu_iq3s_row_split as iq3s_row_split
+import prepare_webgpu_f32_matvec_epilogue as f32_matvec_epilogue
 import prepare_webgpu_host_input_snapshot as host_input_snapshot
 import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
 import prepare_webgpu_router_tail as router_tail
 import prepare_webgpu_q8_diagnostic as q8_diagnostic
+import prepare_webgpu_host_encode_assembly as host_encode_assembly
+import prepare_webgpu_f32_small_m as f32_small_m
+import prepare_webgpu_moe_gather_logical32 as moe_gather_logical32
+import prepare_webgpu_profile_query_budget as profile_query_budget
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
 
@@ -82,6 +92,9 @@ def collect(root: Path, manifest: dict) -> dict:
         raise ValueError('Reporting submodule does not match the built upstream commit')
     patch_path = f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch'
     upstream_path = 'tools/mtmd/clip.cpp'
+    runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-runtime.patch'
+    runtime_source = 'tools/mtmd/mtmd.cpp'
+    cpu_runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-clip-runtime.patch'
     audio_patch = f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch'
     audio_source = 'tools/mtmd/mtmd-audio.cpp'
     patch_files = sorted(path.relative_to(root).as_posix() for path in (root / PATCH_DIRECTORY).rglob('*.patch'))
@@ -95,6 +108,7 @@ def collect(root: Path, manifest: dict) -> dict:
     toolchain = runtime_toolchain(root)
     for profile, info in manifest['profiles'].items():
         for variant, provenance in info['variants'].items():
+            validate_bf16_metadata(provenance)
             webgpu_options = [option for option in provenance['cmakeCommand']
                               if option.startswith('-DLCB_WEBGPU=') or option.startswith('-DLCB_WEBGPU:')]
             if webgpu_options not in (['-DLCB_WEBGPU=ON'], ['-DLCB_WEBGPU=OFF']):
@@ -189,6 +203,10 @@ def collect(root: Path, manifest: dict) -> dict:
             rows_tree = trees[0] if all(value == trees[0] for value in trees) else None
         patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
         patched_identity = file_identity(patched)
+        runtime_copy = prepare(vendor, Path(temporary) / 'runtime', root / runtime_patch, filename='mtmd.cpp')
+        runtime_identity = file_identity(runtime_copy)
+        cpu_runtime_copy = prepare(vendor, Path(temporary) / 'cpu-runtime', root / cpu_runtime_patch)
+        cpu_runtime_identity = file_identity(cpu_runtime_copy)
         audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
         audio_identity = file_identity(audio)
         webgpu_compiled = None
@@ -201,9 +219,12 @@ def collect(root: Path, manifest: dict) -> dict:
         q8_subgroup_compiled = None
         rms_scale_compiled = None
         iq3s_subgroup_compiled = None
+        iq3s_field_loads_compiled = None
         ssm_conv_silu_compiled = None
         moe_group_skip_compiled = None
         router_tail_compiled = None
+        f32_small_m_compiled = None
+        moe_gather_logical32_compiled = None
         host_snapshot_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
@@ -242,6 +263,8 @@ def collect(root: Path, manifest: dict) -> dict:
                                    'ggml-webgpu-rms-scale.hpp', rms_scale.HEADER_NAME]}
             iq3s_subgroup_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', iq3s_subgroup.HEADER_NAME]}
+            iq3s_field_loads_compiled = {iq3s_field_loads.HEADER_NAME:
+                                        file_identity(prepared.parent / iq3s_field_loads.HEADER_NAME)}
             ssm_conv_silu_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
                                        'ggml-webgpu-ssm-conv-silu.hpp', ssm_conv_silu.HEADER_NAME]}
@@ -250,6 +273,9 @@ def collect(root: Path, manifest: dict) -> dict:
             router_tail_compiled = {name: file_identity(prepared.parent / name) for name in
                                      ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
                                       'ggml-webgpu-router-tail.hpp', router_tail.HEADER_NAME]}
+            f32_small_m_compiled = {'ggml-webgpu-shader-lib.hpp': file_identity(prepared.parent / 'ggml-webgpu-shader-lib.hpp')}
+            moe_gather_logical32_compiled = {name: file_identity(prepared.parent / name) for name in
+                                            ['ggml-webgpu-shader-lib.hpp', moe_gather_logical32.HEADER_NAME]}
             host_snapshot_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h']}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
@@ -262,9 +288,25 @@ def collect(root: Path, manifest: dict) -> dict:
             names = ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp', 'ggml-webgpu-q8-diagnostic.h',
                      'ggml-webgpu-q8-diagnostic-sha256.hpp']
             diagnostic_copies = {variant: {name: diagnostic_files[name] for name in names} for variant in diagnostic_enabled}
+        query_budget_copies = {variant: {'ggml-webgpu.cpp': diagnostic_files['ggml-webgpu.cpp']}
+                               for variant in diagnostic_enabled}
+        vec4_copies = {variant: {name: hc_compiled[name] for name in matmul_vec4_layout.OUTPUTS[False]}
+                       for variant in copy_enabled}
+        tight_tile_copies = {variant: {'ggml-webgpu.cpp': hc_compiled['ggml-webgpu.cpp']}
+                             for variant in copy_enabled}
+        epilogue_names = ['ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp',
+                          f32_matvec_epilogue.HELPER_NAME, f32_matvec_epilogue.HEADER_NAME]
+        epilogue_copies = {variant: {name: file_identity(prepared.parent / name) for name in epilogue_names}
+                           for variant in copy_enabled}
+        epilogue_copies.update({variant: {name: diagnostic_files[name] for name in epilogue_names}
+                               for variant in diagnostic_enabled})
 
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
-                  'bridge/mtmd-bf16.h', 'docs/webgpu-bf16-projector.md']
+                  'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
+                  'bridge/mtmd-retained-graph.h', 'bridge/mtmd-retained-roles.h',
+                  'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'scripts/verify_retained_bf16_source.py', 'config/retained-bf16-source.json',
+                  'docs/webgpu-bf16-projector.md']
     report = {
         'upstreamRepository': 'ggml-org/llama.cpp',
         'baseCommit': upstream,
@@ -287,11 +329,12 @@ def collect(root: Path, manifest: dict) -> dict:
                 'preparationScript': 'scripts/prepare_mtmd.py',
                 'cmakeHook': 'cmake/MtmdOverlay.cmake',
                 'option': 'LCB_WEBGPU_BF16_PROJECTOR',
+                'runtimeStorageSelection': runtime_metadata(),
                 'enabledProfileVariants': sorted(enabled),
             },
             'supportingFiles': {path: file_identity(root / path) for path in supporting},
             'searchHints': ['mtmd-webgpu-bf16', 'LCB_WEBGPU_BF16_PROJECTOR', 'lcb_clip', 'bf16-f32', 'cpu_bf16'],
-            'behavior': 'WebGPU vision BF16 weights become resident F32 weights (2x storage for converted weights); bounded upload, placement diagnostics and loader guards. Upstream graph-allocation failure handling is preserved. Model files remain unchanged.',
+            'behavior': 'Legacy callers expand WebGPU vision BF16 weights to resident F32. Explicit per-context retain-checked keeps original BF16 storage with bounded loading and role/graph/placement guards; unsupported cases fail without implicit expansion or CPU retry. Upstream graph-allocation failure handling and model files remain unchanged.',
         }, {
             'id': 'single-thread-wasm-audio-preprocessing',
             'kind': 'build-tree-source-overlay',
@@ -367,6 +410,23 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_ordered_readback.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'For nonempty reads from the same WebGPU queue, skip the redundant preliminary queue wait and use the existing blocking copy and map; foreign and zero-byte reads retain the generic synchronization behavior. No measured speedup is claimed.',
+        }, {
+            'id': 'webgpu-host-encode-assembly',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': webgpu_source.SOURCE_PATH, **file_identity(vendor / webgpu_source.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / host_encode_assembly.PATCH_NAME)},
+            'compiledCopy': webgpu_compiled,
+            'compiledCopiesByProfileVariant': webgpu_copies,
+            'reviewedInputs': host_encode_assembly.CONTRACT_INPUTS,
+            'composedInputSha256': host_encode_assembly.INPUT_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_host_encode_assembly.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_host_encode_assembly.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Borrow single-dispatch inputs only during synchronous encoding and reserve bounded temporary vectors. Preserve parameter staging, exact binding identity, profile-owned names, API order, queue ownership and batching. No GPU or target-device speedup is claimed.',
         }, {
             'id': 'webgpu-bind-group-cache',
             'kind': 'build-tree-source-overlay',
@@ -550,6 +610,126 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Fuse eligible contiguous F32 scale, SILU or sigmoid, and optional final scale operations into one dispatch, retaining guarded fallback and upstream graph semantics. No target-device speedup is claimed.',
         }, {
+            'id': 'webgpu-f32-small-m-prefill',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': str(f32_small_m.HEADER_PATH),
+                               **file_identity(vendor / f32_small_m.HEADER_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / f32_small_m.PATCH_NAME)},
+            'compiledCopies': f32_small_m_compiled,
+            'compiledCopiesByProfileVariant': {variant: f32_small_m_compiled for variant in copy_enabled},
+            'reviewedInputs': f32_small_m.CONTRACT_INPUTS,
+            'composedInputSha256': f32_small_m.INPUT_SHA256,
+            'normalOutputSha256': f32_small_m.OUTPUT_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_f32_small_m.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_f32_small_m.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Use narrower register tiles for F32/F32 small-M matrices with K>=128 and N>=5, excluding subgroup matrices and source overlap. Preserve canonical TK8 arithmetic, parameter bytes, binding layout and dispatch grid; cache keys and profile labels distinguish effective geometries. No target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-moe-gather-logical32',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSource': {'path': str(moe_gather_logical32.BASE / 'wgsl-shaders/mul_mat_id_gather.wgsl'),
+                               **file_identity(vendor / moe_gather_logical32.BASE / 'wgsl-shaders/mul_mat_id_gather.wgsl')},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / moe_gather_logical32.PATCH_NAME)},
+            'compiledCopies': moe_gather_logical32_compiled,
+            'compiledCopiesByProfileVariant': {variant: moe_gather_logical32_compiled for variant in copy_enabled},
+            'reviewedInputs': moe_gather_logical32.CONTRACT_INPUTS,
+            'composedInputSha256': moe_gather_logical32.INPUT_SHA256,
+            'normalOutputSha256': moe_gather_logical32.OUTPUT_SHA256,
+            'specializedShaderSha256': moe_gather_logical32.SHADER_SHA256,
+            'embeddedHeaderSha256': moe_gather_logical32.HEADER_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_moe_gather_logical32.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_moe_gather_logical32.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Distribute only skipped-slot zeroing across logical groups of at most 32 lanes in the existing MoE gather. Preserve shared-memory capacity, atomics, barriers, keys, parameters, bindings, grid and matrix arithmetic. No hardware subgroup feature or target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-matmul-vec4-layout',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}',
+                      **file_identity(root / PATCH_DIRECTORY / matmul_vec4_layout.PATCHES[False][0])},
+            'profilePatch': {'path': f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}',
+                             **file_identity(root / PATCH_DIRECTORY / matmul_vec4_layout.PATCHES[True][0])},
+            'compiledCopies': (next(iter(vec4_copies.values())) if vec4_copies else None),
+            'compiledCopiesByProfileVariant': vec4_copies,
+            'reviewedInputs': matmul_vec4_layout.CONTRACT_INPUTS,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in matmul_vec4_layout.INPUTS.items()},
+            'finalOutputs': {('profile' if profile else 'normal'): values
+                             for profile, values in matmul_vec4_layout.OUTPUTS.items()},
+            'finalOutputsScope': 'Outputs of this intermediate stage; compiledCopies identify the final composition.',
+            'application': {'preparationScript': 'scripts/prepare_webgpu_matmul_vec4_layout.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_matmul_vec4_layout.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Require actual binding-relative input offsets and active strides to align to floating-point vec4 loads; check matrix output offsets too. Otherwise use the existing scalar shader. Preserve aligned keys and WGSL, uniform/binding ABI, dispatch geometry, quantized paths and gather semantics. Historical prefix pins remain distinct from final compiled identities.',
+        }, {
+            'id': 'webgpu-f32-matvec-epilogue',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}',
+                      **file_identity(root / PATCH_DIRECTORY / f32_matvec_epilogue.PATCHES[False][0])},
+            'profilePatch': {'path': f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}',
+                             **file_identity(root / PATCH_DIRECTORY / f32_matvec_epilogue.PATCHES[True][0])},
+            'compiledCopies': (next(iter(epilogue_copies.values())) if epilogue_copies else None),
+            'compiledCopiesByProfileVariant': epilogue_copies,
+            'reviewedInputs': f32_matvec_epilogue.CONTRACT_INPUTS,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in f32_matvec_epilogue.INPUTS.items()},
+            'finalOutputs': {('profile' if profile else 'normal'): values
+                             for profile, values in f32_matvec_epilogue.OUTPUTS.items()},
+            'embeddedHeaderSha256': f32_matvec_epilogue.HEADER_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_f32_matvec_epilogue.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_f32_matvec_epilogue.py', 'scripts/prepare_webgpu_scale_unary.py',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Fuse only guarded dense F32 four-row single-column matvec followed by scale, sigmoid and scale. Retain original accumulation, reduction and geometry, use a distinct default-none pipeline key, copy four coefficients into 80-byte parameters and reject all live input/output payload and aligned binding overlaps. Existing graph, callback and scale-unary fallbacks remain. No model or target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-moe-tight-tile-bound',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / moe_tight_tile_bound.PATCH_NAME)},
+            'compiledCopies': (next(iter(tight_tile_copies.values())) if tight_tile_copies else None),
+            'compiledCopiesByProfileVariant': tight_tile_copies,
+            'reviewedInputs': moe_tight_tile_bound.CONTRACT_INPUTS,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in moe_tight_tile_bound.INPUTS.items()},
+            'finalOutputs': {('profile' if profile else 'normal'): values
+                             for profile, values in moe_tight_tile_bound.OUTPUTS.items()},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_moe_tight_tile_bound.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_moe_tight_tile_bound.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Tighten only the shared host tile-count upper bound to A+floor((S-A)/L), A=min(E,S), with the existing L=32. Allocation, descriptor binding and direct dispatch use the same helper. Preserve all shaders, parameters, cache keys and mathematical outputs. No indirect work or runtime probe is added. Savings count provably empty workgroups and descriptor capacity; target-device speed is not established.',
+        }, {
+            'id': 'webgpu-profile-query-budget',
+            'kind': 'profile-only-build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / profile_query_budget.PATCH_NAME)},
+            'compiledCopies': (next(iter(query_budget_copies.values())) if query_budget_copies else None),
+            'compiledCopiesByProfileVariant': query_budget_copies,
+            'reviewedInputs': profile_query_budget.CONTRACT_INPUTS,
+            'composedInputSha256': profile_query_budget.INPUT_SHA256,
+            'profilePrefixSha256': profile_query_budget.OUTPUT_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_profile_query_budget.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'GGML_WEBGPU_GPU_PROFILE', 'enabledProfileVariants': sorted(diagnostic_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_profile_query_budget.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Reserve timestamp queries for the actual arena slot capacity, including multi-dispatch overshoot. Check that a fresh query set can hold that capacity. Preserve normal source, shaders, ABI, graph submission and parameter staging; only profile collection boundaries may move.',
+        }, {
             'id': 'webgpu-q8-kernel-diagnostic-v1',
             'kind': 'profile-only-build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}',
@@ -640,6 +820,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'compiledCopies': iq3s_subgroup_compiled,
             'compiledCopiesByProfileVariant': {variant: iq3s_subgroup_compiled for variant in copy_enabled},
             'reviewedInputs': iq3s_subgroup.CONTRACT_INPUTS,
+            'intermediateEmbeddedHeaderSha256': iq3s_subgroup.HEADER_SHA256,
             'application': {'preparationScript': 'scripts/prepare_webgpu_iq3s_subgroup.py',
                             'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
                             'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
@@ -647,6 +828,49 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_iq3s_subgroup.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Use independent fixed-width subgroups for guarded single-token IQ3_S indexed matvecs, preserving the upstream decoder and accumulator; cover missing logical lanes when subgroups are partial and fall back for unsupported shapes, device limits or ranges. Geometry probes are test-only and add no production CPU readback. Reduction order differs; target model quality and performance are not established.',
+        }, {
+            'id': 'webgpu-iq3s-indexed-field-loads',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / iq3s_field_loads.PATCH_NAME)},
+            'compiledCopies': iq3s_field_loads_compiled,
+            'compiledCopiesByProfileVariant': {variant: iq3s_field_loads_compiled for variant in copy_enabled},
+            'reviewedInputs': iq3s_field_loads.CONTRACT_INPUTS,
+            'intermediateEmbeddedHeaderSha256': iq3s_field_loads.HEADER_SHA256,
+            'upstreamSource': {'path': iq3s_field_loads.ACCUMULATOR_PATH,
+                               **file_identity(vendor / iq3s_field_loads.ACCUMULATOR_PATH)},
+            'priorStage': {'id': 'webgpu-iq3s-indexed-subgroup-matvec',
+                           'intermediateEmbeddedHeaderSha256': iq3s_field_loads.PRIOR_HEADER_SHA256},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_iq3s_field_loads.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_iq3s_field_loads.py', 'scripts/prepare_webgpu_iq3s_subgroup.py',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Replace only the existing independent indexed IQ3_S embedding with lane-selected qs and aligned-containing-word metadata loads. Preserve the decoder arithmetic, main/reduction, selector, cache key, parameter/binding layout and all fallback paths. The original embedding hash is an intermediate stage contract; compiled copies describe the final header. No model or target-device speedup is established.',
+        }, {
+            'id': 'webgpu-iq3s-indexed-row-split',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / iq3s_row_split.PATCH_NAME)},
+            'compiledCopies': iq3s_field_loads_compiled,
+            'compiledCopiesByProfileVariant': {variant: iq3s_field_loads_compiled for variant in copy_enabled},
+            'reviewedInputs': iq3s_row_split.CONTRACT_INPUTS,
+            'priorStage': {'id': 'webgpu-iq3s-indexed-field-loads',
+                           'intermediateEmbeddedHeaderSha256': iq3s_row_split.PRIOR_HEADER_SHA256,
+                           'accumulatorSha256': iq3s_row_split.ACCUMULATOR_INPUT_SHA256},
+            'accumulatorOutputSha256': iq3s_row_split.ACCUMULATOR_OUTPUT_SHA256,
+            'rowsPerSubgroup': iq3s_row_split.ROWS_PER_SUBGROUP,
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in iq3s_row_split.INPUTS.items()},
+            'finalEmbeddedHeaderSha256': iq3s_row_split.HEADER_SHA256,
+            'application': {'preparationScript': 'scripts/prepare_webgpu_iq3s_row_split.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_iq3s_row_split.py', 'scripts/prepare_webgpu_iq3s_field_loads.py',
+                                 'scripts/prepare_webgpu_source.py', 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Split the dedicated four-row independent IQ3_S accumulator loop into rows 0..1 and 2..3, retaining the four accumulators, per-row arithmetic and K order, main, partial-subgroup completion, reduction, selection and dispatch contracts. Canonical accumulators and fallback shaders remain upstream. Private software hot-only measurements are not model, streaming or target-device performance evidence.',
         }, {
             'id': 'webgpu-q8-fixed-subgroup-matvec',
             'kind': 'build-tree-source-overlay',
@@ -705,7 +929,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',
@@ -715,6 +939,39 @@ def collect(root: Path, manifest: dict) -> dict:
             },
         },
     }
+
+    report['sourceOverlays'].append({
+        'id': 'vision-bf16-runtime-selection',
+        'kind': 'build-tree-source-overlay',
+        'upstreamSource': {'path': runtime_source, **file_identity(vendor / runtime_source)},
+        'patch': {'path': runtime_patch, **file_identity(root / runtime_patch)},
+        'compiledCopy': {'logicalUpstreamPath': runtime_source, **runtime_identity},
+        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component runtime',
+                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
+                        'enabledProfileVariants': sorted(audio_enabled),
+                        'runtimeStorageSelection': runtime_metadata()},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                             'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
+                             'scripts/verify_bf16_build.py']},
+        'behavior': 'Add explicit load-time immutable storage selection without changing upstream parameter layouts. Old entry points use legacy defaults; requested mode is distinct from actual backend placement.',
+    })
+    report['sourceOverlays'].append({
+        'id': 'vision-bf16-cpu-loader-plumbing',
+        'kind': 'build-tree-source-overlay',
+        'upstreamSource': {'path': upstream_path, **file_identity(vendor / upstream_path)},
+        'patch': {'path': cpu_runtime_patch, **file_identity(root / cpu_runtime_patch)},
+        'compiledCopy': {'logicalUpstreamPath': upstream_path, **cpu_runtime_identity},
+        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component clip-runtime',
+                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
+                        'enabledProfileVariants': sorted(set(audio_enabled) - set(enabled))},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h',
+                             'bridge/mtmd-vision-bf16-policy.h', 'cmake/MtmdBf16Runtime.cmake']},
+        'behavior': 'Keep CPU/audio storage unchanged and pass immutable mode explicitly. Reject a GPU-requested retained vision load at existing modality classification before allocating weights; audio-only loads keep their original behavior.',
+    })
+    report['otherPatchFiles'].pop(runtime_patch, None)
+    report['otherPatchFiles'].pop(cpu_runtime_patch, None)
 
     # Profile and normal TUs now differ. Never attribute the normal final bytes
     # to a profile artifact, including earlier overlays that share the final TU.

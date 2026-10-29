@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-bind-group-cache'
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_bind_group_cache as cache
 import prepare_webgpu_tensor_copy as tensor_copy
 
@@ -56,7 +57,7 @@ class BindGroupCache(unittest.TestCase):
         before = (self.upstream / source.SOURCE_PATH).read_bytes()
         with tempfile.TemporaryDirectory(prefix='bind-group-cache-') as temporary:
             result = self.prepare(Path(temporary))
-            self.assertEqual(tensor_copy.digest(result), source.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(result), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
             self.assertEqual(source.scale_unary.INPUTS['ggml-webgpu.cpp'], cache.OUTPUT_SHA256)
             actual = result.read_text()
             graph = function(actual, 'ggml_backend_webgpu_graph_compute')
@@ -78,10 +79,14 @@ class BindGroupCache(unittest.TestCase):
                     patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
+                    patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', cache.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.q4_short.OUTPUT_SHA256):
                 baseline = source.prepare(self.upstream, root / 'base')
@@ -167,7 +172,12 @@ class BindGroupCache(unittest.TestCase):
                 'ACTUAL_DISPATCH_DESC': 'webgpu_dispatch_desc',
             }
             for marker, name in functions.items():
-                code = code.replace('// @' + marker + '@', function(actual, name))
+                value = function(actual, name)
+                if marker == 'ACTUAL_BUILD_MULTI':
+                    value = (definition(actual, 'struct webgpu_dispatch_view {') +
+                             'template<class Dispatch>\n' + function(actual, 'ggml_backend_webgpu_build_impl') +
+                             value)
+                code = code.replace('// @' + marker + '@', value)
             for marker, name in structures.items():
                 code = code.replace('// @' + marker + '@', definition(actual, 'struct ' + name + ' {'))
             harness = root / 'bind-group-cache.cpp'

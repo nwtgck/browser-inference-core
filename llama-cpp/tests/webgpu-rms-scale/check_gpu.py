@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'tests'))
 spec = importlib.util.spec_from_file_location('rms_scale_tests', ROOT / 'tests/test_webgpu_rms_scale.py')
 tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tests)

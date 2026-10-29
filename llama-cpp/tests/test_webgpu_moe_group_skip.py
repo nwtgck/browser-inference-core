@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-moe-group-skip'
 sys.path[:0] = [str(ROOT / 'scripts'), str(HERE)]
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_moe_group_skip as group
 import emit_factory
 
@@ -30,7 +31,10 @@ class MoeGroupSkip(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.prepared = source.prepare(cls.upstream, cls.directory / 'prepared').parent
-        with patch.object(source.router_tail, 'prepare', return_value={}), \
+        with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(source.router_tail, 'prepare', return_value={}), \
+                patch.object(source.host_encode_assembly, 'prepare'), \
+                patch.object(source.f32_small_m, 'prepare'), \
+                patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                 patch.object(source, 'OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu.cpp']), \
                 patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', group.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
             cls.group_stage = source.prepare(cls.upstream, cls.directory / 'group-stage').parent
@@ -140,13 +144,25 @@ class MoeGroupSkip(unittest.TestCase):
                 self.assertEqual(metadata['gatherParams'], [3, dst, 11, 4, 9, 6, m])
                 self.assertEqual(metadata['mainParams'], [a, x, dst, k, m, 11, 4, 9, 4,
                                                          stride_a, stride_x, m * stride_a + 4, 4 * stride_x + 4])
-                self.assertEqual(metadata['maxTiles'], 13)
+                self.assertEqual(metadata['maxTiles'], 11)
                 self.assertEqual(metadata['vectorized'], vec)
                 self.assertEqual(metadata['tileK'], 8 if kind == 0 else 32)
                 baseline = (shaders / (name + '-baseline.wgsl')).read_text()
                 candidate = (shaders / (name + '-candidate.wgsl')).read_text()
                 self.assertEqual(candidate, baseline.replace('        if (is_valid) {\n            let k_end',
                     '        if (is_valid && output_col_base < rest_token_n) {\n            let k_end'))
+        # Shape permits VEC, but actual offsets/strides do not. The helper must
+        # use the production predicate for both main shaders, rather than force
+        # the former shape-only selector and silently reproduce its bad loads.
+        fields = [0, 32, 4, 11, 4, 2, 4, 1, 3, 7, 3, 33, 136, 37, 152, 6]
+        metadata = json.loads(subprocess.check_output(
+            [str(executable), str(shaders), 'unaligned', *map(str, fields)], text=True))
+        self.assertFalse(metadata['vectorized'])
+        baseline = (shaders / 'unaligned-baseline.wgsl').read_text()
+        candidate = (shaders / 'unaligned-candidate.wgsl').read_text()
+        self.assertIn('src0: array<f32>', candidate)
+        self.assertEqual(candidate, baseline.replace('        if (is_valid) {\n            let k_end',
+            '        if (is_valid && output_col_base < rest_token_n) {\n            let k_end'))
 
     @unittest.skipUnless(shutil.which('c++') and shutil.which('cc'), 'C/C++ compilers required')
     def test_self_authored_fixture_oracle_and_factory_generation(self):
@@ -163,15 +179,17 @@ class MoeGroupSkip(unittest.TestCase):
         for case in cases:
             for name, expected in case['hashes'].items():
                 self.assertEqual(hashlib.sha256((work / 'fixtures' / case['name'] / (name + '.bin')).read_bytes()).hexdigest(), expected)
-            for name in ('gather', 'baseline', 'candidate'):
+            for name in ('gather', 'gather-baseline', 'baseline', 'candidate'):
                 self.assertEqual(hashlib.sha256((work / 'shaders' / (case['name'] + '-' + name + '.wgsl')).read_bytes()).hexdigest(), case['shaderHashes'][name])
+        for case in cases:
+            self.assertNotEqual(case['shaderHashes']['gather'], case['shaderHashes']['gather-baseline'])
         profiled = emit_factory.build(self.upstream, self.prepared, self.directory / 'profile-factory', profile=True)
         for case in cases:
             result = json.loads(subprocess.check_output([str(profiled), str(work / 'shaders'), case['name'] + '-profile', *map(str, case['args'])], text=True))
             self.assertEqual(result['mainParams'], case['mainParams'])
             self.assertEqual(result['gatherParams'], case['gatherParams'])
             self.assertEqual(result['grid'], case['grid'])
-            for name in ('gather', 'baseline', 'candidate'):
+            for name in ('gather', 'gather-baseline', 'baseline', 'candidate'):
                 self.assertEqual((work / 'shaders' / (case['name'] + '-profile-' + name + '.wgsl')).read_bytes(),
                                  (work / 'shaders' / (case['name'] + '-' + name + '.wgsl')).read_bytes())
         for case in [cases[0], next(c for c in cases if c['experts'] == 4)]:

@@ -12,9 +12,9 @@ option(LCB_MEMORY64 "Use 64-bit WebAssembly memory" OFF)
 option(LCB_FILE_BACKED_PLE "Build the reviewed Qwen4Exp file-backed rows extension" ${LCB_MEMORY64})
 option(LCB_QSA_ALL_POOLS "Skip QSA ranking when every pool is selected" ON)
 option(LCB_WEBGPU "Link the WebGPU backend" OFF)
-# Compatibility workaround for the pinned backend, not a new BF16 kernel.
+# Keep distribution defaults until retained BF16 passes target-model validation.
 # See docs/webgpu-bf16-projector.md for memory/precision costs and removal criteria.
-option(LCB_WEBGPU_BF16_PROJECTOR "Expand vision BF16 weights to F32 for the pinned WebGPU backend" ON)
+option(LCB_WEBGPU_BF16_PROJECTOR "Enable reviewed vision BF16 loader handling" ON)
 option(LCB_JSPI "Suspend WebGPU calls with JSPI" ${LCB_WEBGPU})
 option(LCB_ASYNCIFY "Suspend WebGPU calls with Asyncify" OFF)
 set(LCB_MAXIMUM_MEMORY "4294967296" CACHE STRING "Maximum WebAssembly linear memory in bytes")
@@ -54,6 +54,7 @@ execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scr
     COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_bindings.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/bridge/mtmd-vision-bf16.h"
     "${LCB_LLAMA_SOURCE}/include/llama.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml-alloc.h"
@@ -116,6 +117,7 @@ endif()
 # All browser profiles are single-threaded, including CPU and WebGPU.
 # The overlay retains upstream behavior in native/pthread builds.
 include(cmake/MtmdAudioOverlay.cmake)
+include(cmake/MtmdBf16Runtime.cmake)
 
 if(LCB_WEBGPU AND LCB_WEBGPU_BF16_PROJECTOR)
     include(cmake/MtmdOverlay.cmake)
@@ -195,7 +197,7 @@ else()
         target_link_options(core PRIVATE -sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=2097152)
     endif()
 endif()
-target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${LCB_LLAMA_SOURCE}"
+target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/bridge" "${LCB_LLAMA_SOURCE}"
     "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/ggml/include")
 target_link_libraries(core PRIVATE llama-common mtmd llama)
 

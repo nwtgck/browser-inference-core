@@ -15,10 +15,10 @@ OUTPUT_SHA256 = '3fcfceade964ab4cad60621acca0f69f3eb54272cb2ca6d17f7d8b92c51ee41
 CONTRACT_INPUTS = {
     SOURCE_PATH: INPUT_SHA256,
     'src/llama-sampler.h': 'd39c6bfd6c966acde7bfaeb55f08c176b3d9078bc5e8e8de2eee504fc66c258b',
-    'src/llama-context.cpp': '4e61e010041a60f2ed0b17d9b88d9723dc43f6b72e6c81541c55cccea89d93a2',
+    'src/llama-context.cpp': 'f76532e7d7c510426bb4f96f1c1bcf4ca5321790b07b56ce9446d793feef8d35',
     'src/llama-context.h': 'c5123eb0b1b4426737a70a3a616d8ba48b646143b596fa3f42d20ab57b2fb9e5',
     'src/llama-vocab.h': '7123e342371b46887d12dc01a7261ff064b651a3c0ce1d99f61c224fd8a55d79',
-    'src/llama-model.cpp': '56d2f2d012a4cffa2ac39f8b4b7bc09ad456b8963ed2376a9c42c10757ade9bd',
+    'src/llama-model.cpp': '73ce1788faa7531554a7a1bbf4e6db63807c067b02adc5e5697968a70818cd04',
     'src/llama-vocab.cpp': '9cd7874651e10e0c154eeac9d31e947c5b6cc821bad332ae48cc0bd1db5fdefa',
     'include/llama.h': 'c0854771d3760a41642c4e59429c5b3b9fc774887c59d37eeadc4527681732cd',
     'ggml/src/ggml-backend.cpp': '79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0',

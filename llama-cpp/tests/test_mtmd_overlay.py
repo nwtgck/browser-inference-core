@@ -94,6 +94,6 @@ class MtmdOverlayTests(unittest.TestCase):
         self.assertEqual((upstream / "tools/mtmd/clip.cpp").read_bytes(), original)
         compiler = shutil.which("clang++")
         if compiler:
-            subprocess.run([compiler, "-std=c++17", "-fsyntax-only", str(destination),
+            subprocess.run([compiler, "-std=c++17", "-fsyntax-only", "-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1", str(destination),
                 "-I" + str(upstream / "include"), "-I" + str(upstream / "ggml/include"),
                 "-I" + str(upstream / "tools/mtmd"), "-I" + str(ROOT / "bridge")], check=True)

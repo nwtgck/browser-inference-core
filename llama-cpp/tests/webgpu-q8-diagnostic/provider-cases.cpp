@@ -27,7 +27,7 @@ int main(){try{
   const unsigned created_before=created,dispatched=wgpu::dispatches;
   check(f.run(variant,2,1,out)==4 && created==created_before && wgpu::dispatches==dispatched);
   check(f.run(variant,1,0,out)==0 && out.dispatches==0 && wgpu::dispatches==dispatched);
-  const auto key=RecordingLibrary::make_mul_mat_vec_key(ggml_webgpu_mat_context(f.ctx,&f.a,&f.x,&f.dst),false);
+  const auto key=RecordingLibrary::make_mul_mat_vec_key(ggml_webgpu_mat_context(f.ctx,&f.a,&f.x,&f.dst),false,false);
   const bool independent=(variant>=2&&variant<=4)||(variant==0&&key.subgroup_size);
   check(out.actual_algorithm==uint32_t(independent?2:1));
   const unsigned prepared=created;const auto digest=std::vector<uint8_t>(out.shader_sha256,out.shader_sha256+32);

@@ -95,8 +95,8 @@ class SsmConvSilu(unittest.TestCase):
         self.assertFalse((self.prepared / 'ggml-wgsl-shaders.hpp').exists())
         for name, expected in fusion.CONTRACT_INPUTS.items():
             self.assertEqual(hashlib.sha256((self.upstream / name).read_bytes()).hexdigest(), expected)
-        final = {'ggml-webgpu.cpp': source.OUTPUT_SHA256,
-                 'ggml-webgpu-shader-lib.hpp': source.SSM_HEADER_OUTPUT_SHA256,
+        final = {'ggml-webgpu.cpp': source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'],
+                 'ggml-webgpu-shader-lib.hpp': source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'],
                  'ggml-webgpu-ssm-conv-silu.hpp': fusion.OUTPUTS['ggml-webgpu-ssm-conv-silu.hpp']}
         for name, expected in final.items():
             self.assertEqual(hashlib.sha256((self.prepared / name).read_bytes()).hexdigest(), expected)

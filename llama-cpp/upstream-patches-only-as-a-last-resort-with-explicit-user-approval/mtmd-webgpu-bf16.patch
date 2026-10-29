@@ -1,31 +1,68 @@
 --- a/clip.cpp
 +++ b/clip.cpp
-@@ -8,6 +8,7 @@
+@@ -8,6 +8,14 @@
  #include "ggml-cpp.h"
  #include "ggml-alloc.h"
  #include "ggml-backend.h"
 +#include "mtmd-bf16.h"
++#include "mtmd-vision-bf16-internal.h"
++#if LCB_MTMD_WEBGPU_BF16_RUNTIME != 1
++#error "Vision BF16 loader and compile-target capability disagree"
++#endif
++#include "mtmd-retained-upload.h"
++#include "mtmd-retained-graph.h"
++#include "mtmd-retained-roles.h"
  #include "gguf.h"
  
  #include <algorithm>
-@@ -2480,6 +2481,16 @@
+@@ -145,6 +153,7 @@
+ 
+ 
+ struct clip_ctx {
++    const mtmd_vision_bf16_storage vision_bf16_storage;
+     clip_model model;
+ 
+     gguf_context_ptr ctx_gguf;
+@@ -174,7 +183,9 @@
+ 
+     bool support_batch = false;
+ 
+-    clip_ctx(clip_context_params & ctx_params) {
++    clip_ctx(clip_context_params & ctx_params,
++             mtmd_vision_bf16_storage storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
++        vision_bf16_storage(storage) {
+         flash_attn_type = ctx_params.flash_attn_type;
+         no_alloc = ctx_params.no_alloc;
+         backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+@@ -2480,6 +2491,17 @@
          auto & hparams = model.hparams;
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
-+        // Lcore-only workaround: the pinned WebGPU backend rejects BF16 matmul,
-+        // which can send the expensive vision projections to the CPU. Use its
-+        // existing F32 path without rewriting the file or pretending BF16 kernels
-+        // exist. Leave CPU, audio, F16/F32 and quantized weights unchanged.
-+        // Revisit when the pinned backend gains BF16 support; see
-+        // docs/webgpu-bf16-projector.md in lcore for removal criteria.
-+        const bool expand_bf16 = model.modality == CLIP_MODALITY_VISION &&
++        // Keep the established expansion path as the distribution default.
++        // The opt-in mode retains original storage and validates model roles,
++        // every graph shape and actual scheduler assignments instead.
++        const bool webgpu_vision = model.modality == CLIP_MODALITY_VISION &&
 +            lcb_mtmd_is_webgpu(ctx_clip.backend);
++        const bool retain_bf16 = webgpu_vision && lcb_mtmd_retain_bf16(ctx_clip.vision_bf16_storage);
++        const bool expand_bf16 = webgpu_vision && !retain_bf16;
 +        size_t expanded_tensors = 0;
 +        size_t expanded_source_bytes = 0;
++        size_t retained_tensors = 0;
++        size_t retained_source_bytes = 0;
  
          auto fin = open_ifstream_binary(fname);
          if (!fin) {
-@@ -2521,7 +2532,21 @@
+@@ -2494,7 +2516,8 @@
+         // get offsets
+         for (int64_t i = 0; i < gguf_get_n_tensors(ctx_gguf.get()); ++i) {
+             const char * name = gguf_get_tensor_name(ctx_gguf.get(), i);
+-            tensor_offset[name] = gguf_get_data_offset(ctx_gguf.get()) + gguf_get_tensor_offset(ctx_gguf.get(), i);
++            tensor_offset[name] = lcb_mtmd_add_bytes(gguf_get_data_offset(ctx_gguf.get()),
++                                                     gguf_get_tensor_offset(ctx_gguf.get(), i));
+         }
+ 
+         // create data context
+@@ -2521,7 +2544,24 @@
              }
              if (cur) {
                  tensors_to_load.push_back(cur);
@@ -44,15 +81,27 @@
 +                if (convert) {
 +                    ++expanded_tensors;
 +                    expanded_source_bytes += ggml_nbytes(cur);
++                } else if (retain_bf16 && cur->type == GGML_TYPE_BF16) {
++                    ++retained_tensors;
++                    retained_source_bytes = lcb_mtmd_add_bytes(retained_source_bytes, ggml_nbytes(cur));
 +                }
                  ggml_set_name(data_tensor, cur->name);
                  loaded_tensor_names.insert(name);
                  cur = data_tensor;
-@@ -4195,11 +4220,15 @@
+@@ -4193,24 +4233,38 @@
+                 GGML_ASSERT(false && "unknown projector type");
+         }
  
++        // Validate roles before allocating weights or constructing a graph.
++        if (retain_bf16) {
++            lcb_mtmd_check_retained_roles(model, ctx_clip.ctx_data.get());
++        }
++
          // load data
          {
 +            lcb_bf16_upload bf16_upload;
++            lcb_mtmd_retained_reader retained_reader;
++            lcb_mtmd_upload_queue retained_queue(retain_bf16 ? ctx_clip.backend : nullptr);
              std::vector<uint8_t> read_buf;
  
              // start loading event
@@ -65,7 +114,12 @@
              }
  
              // compute total tensor data size for progress reporting
-@@ -4211,6 +4240,9 @@
+             size_t total_data_size = 0;
+             for (auto & t : tensors_to_load) {
+-                total_data_size += ggml_nbytes(t);
++                total_data_size = lcb_mtmd_add_bytes(total_data_size, ggml_nbytes(t));
+             }
+ 
              // alloc memory and offload data
              ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx_clip.backend);
              ctx_clip.buf.reset(ggml_backend_alloc_ctx_tensors_from_buft(ctx_clip.ctx_data.get(), buft));
@@ -75,7 +129,15 @@
              ggml_backend_buffer_set_usage(ctx_clip.buf.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
              // read the weight from file
              if (!ctx_clip.no_alloc) {
-@@ -4225,15 +4257,31 @@
+@@ -4221,27 +4275,79 @@
+                     auto it_off = tensor_offset.find(t->name);
+                     GGML_ASSERT(it_off != tensor_offset.end() && "no offset for tensor");
+                     const size_t offset = it_off->second;
+-                    fin.seekg(offset, std::ios::beg);
++                    if (offset > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
++                        throw std::runtime_error("vision tensor file offset exceeds stream range");
++                    }
++                    fin.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
                      if (!fin) {
                          throw std::runtime_error(string_format("%s: failed to seek for tensor %s\n", __func__, t->name));
                      }
@@ -92,6 +154,22 @@
 +                        bf16_upload.read(fin, num_bytes, [&](const float * data, size_t at, size_t size) {
 +                            ggml_backend_tensor_set(cur, data, at, size);
 +                        });
++                    } else if (retain_bf16) {
++                        if (cur->type != t->type || ggml_nbytes(cur) != num_bytes) {
++                            throw std::runtime_error("retained vision storage does not match file metadata");
++                        }
++                        auto checkpoint = [&](size_t consumed) {
++                            const size_t done = lcb_mtmd_add_bytes(data_loaded, consumed);
++                            const float progress = total_data_size == 0 ? 0.0f : float(double(done) / double(total_data_size));
++                            if (progress_callback && !progress_callback(progress, progress_callback_user_data)) {
++                                throw std::runtime_error("model loading cancelled by progress_callback");
++                            }
++                        };
++                        retained_reader.read(fin, num_bytes, [&](const uint8_t * data, size_t at, size_t size) {
++                            // reserve() can wait, so re-check cancellation after it.
++                            if (retained_queue.reserve(size)) checkpoint(at);
++                            ggml_backend_tensor_set(cur, data, at, size);
++                        }, checkpoint);
 +                    } else if (ggml_backend_buft_is_host(buft)) {
                          // for the CPU and Metal backend, we can read directly into the tensor
                          fin.read(reinterpret_cast<char *>(cur->data), num_bytes);
@@ -103,16 +181,28 @@
 +                            throw std::runtime_error("truncated image tensor data");
 +                        }
                          ggml_backend_tensor_set(cur, read_buf.data(), 0, num_bytes);
-+                    }
+                     }
+-                    data_loaded += num_bytes;
 +                    if (!fin) {
 +                        throw std::runtime_error("truncated image tensor data");
-                     }
-                     data_loaded += num_bytes;
++                    }
++                    data_loaded = lcb_mtmd_add_bytes(data_loaded, num_bytes);
                      if (progress_callback && total_data_size > 0) {
-@@ -4242,6 +4290,13 @@
+                         const float progress = (float)data_loaded / (float)total_data_size;
+                         if (!progress_callback(progress, progress_callback_user_data)) {
                              throw std::runtime_error(string_format("%s: model loading cancelled by progress_callback\n", __func__));
                          }
                      }
++                }
++                if (retain_bf16) {
++                    retained_queue.drain();
++                    // Publication must follow the last wait and cancellation check.
++                    if (progress_callback && !progress_callback(1.0f, progress_callback_user_data)) {
++                        throw std::runtime_error("model loading cancelled by progress_callback");
++                    }
++                    LOG_INF("lcb_clip: bf16-storage mode=retain-checked tensors=%zu source_bytes=%zu resident_bytes=%zu scratch_bytes=%zu queue_budget_bytes=%zu\n",
++                            retained_tensors, retained_source_bytes, retained_source_bytes,
++                            retained_reader.scratch_bytes(), lcb_mtmd_upload_queue::budget_bytes);
 +                }
 +                if (expand_bf16) {
 +                    // Zero means this successful load had no BF16 tensors; absence
@@ -123,12 +213,101 @@
                  }
                  LOG_DBG("%s: loaded %zu tensors from %s\n", __func__, tensors_to_load.size(), fname.c_str());
              } else {
-@@ -5246,6 +5301,32 @@
+@@ -4374,7 +4480,15 @@
+     // only initialize backend buffers, but do not allocate them yet
+     static support_info_graph reserve_compute_meta(clip_ctx & ctx_clip, const clip_image_f32_batch & batch) {
+         ggml_cgraph * gf = clip_get_graph_builder(&ctx_clip, batch)->build();
+-        ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
++        const bool retained = lcb_mtmd_retain_bf16(ctx_clip.vision_bf16_storage) && ctx_clip.model.modality == CLIP_MODALITY_VISION &&
++                              lcb_mtmd_is_webgpu(ctx_clip.backend);
++        lcb_mtmd_retained_graph plan;
++        plan.prepare(ctx_clip.ctx_data.get(), gf, ctx_clip.sched.get(), ctx_clip.backend, retained);
++        const bool reserved = ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
++        if (retained && !reserved) {
++            throw std::runtime_error("failed to reserve retained vision compute graph");
++        }
++        plan.verify_sources();
+ 
+         ctx_clip.mem_compute.clear();
+         for (size_t i = 0; i < ctx_clip.backend_ptrs.size(); ++i) {
+@@ -4567,6 +4681,12 @@
+ };
+ 
+ struct clip_init_result clip_init(const char * fname, struct clip_context_params ctx_params) {
++    return lcb_clip_init_with_vision_bf16_storage(
++        fname, ctx_params, MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
++}
++
++clip_init_result lcb_clip_init_with_vision_bf16_storage(
++        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage) {
+     clip_ctx * ctx_vision = nullptr;
+     clip_ctx * ctx_audio = nullptr;
+     clip_ctx * ctx_gen_audio = nullptr;
+@@ -4579,8 +4699,11 @@
+         bool skip_audio = false;
+ 
+         if (loader.has_vision) {
+-            ctx_vision = new clip_ctx(ctx_params);
++            ctx_vision = new clip_ctx(ctx_params, storage);
+             loader.load_hparams(ctx_vision->model, CLIP_MODALITY_VISION);
++            if (lcb_mtmd_retain_bf16(storage)) {
++                lcb_mtmd_check_retained_backend(storage, ctx_params.use_gpu, lcb_mtmd_is_webgpu(ctx_vision->backend));
++            }
+             loader.load_tensors(*ctx_vision);
+             loader.init_ctx(*ctx_vision);
+             if (ctx_params.warmup) {
+@@ -5227,7 +5350,17 @@
+ 
+     // if buffers are not allocated, we need to do a warmup run to allocate them
+     if (!ctx->is_allocated) {
+-        clip_model_loader::warmup(*ctx, *params->imgs);
++        if (lcb_mtmd_retain_bf16(ctx->vision_bf16_storage) && ctx->model.modality == CLIP_MODALITY_VISION && lcb_mtmd_is_webgpu(ctx->backend)) {
++            try {
++                clip_model_loader::warmup(*ctx, *params->imgs);
++            } catch (const std::exception & error) {
++                ggml_backend_sched_reset(ctx->sched.get());
++                LOG_ERR("lcb_clip: retained warmup rejected: %s\n", error.what());
++                return false;
++            }
++        } else {
++            clip_model_loader::warmup(*ctx, *params->imgs);
++        }
+     }
+ 
+     if (params->gen_process != CLIP_GEN_PROCESS_GEN_UNKNOWN && params->gen_state == nullptr) {
+@@ -5243,9 +5376,60 @@
+     // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)
+     ggml_tensor * embeddings = params->out_embd ? ggml_graph_node(gf, -1) : nullptr;
+ 
++    const bool retained = lcb_mtmd_retain_bf16(ctx->vision_bf16_storage) && ctx->model.modality == CLIP_MODALITY_VISION &&
++                          lcb_mtmd_is_webgpu(ctx->backend);
++    lcb_mtmd_retained_graph retained_plan;
++    try {
++        retained_plan.prepare(ctx->ctx_data.get(), gf, ctx->sched.get(), ctx->backend, retained);
++    } catch (const std::exception & error) {
++        ggml_backend_sched_reset(ctx->sched.get());
++        LOG_ERR("lcb_clip: retained graph rejected: %s\n", error.what());
++        return false;
++    }
++
      if (!ggml_backend_sched_alloc_graph(ctx->sched.get(), gf)) {
          LOG_ERR("%s: failed to allocate compute graph\n", __func__);
          return false;
 +    }
 +
++
++    try {
++        retained_plan.verify_allocated(ctx->sched.get());
++    } catch (const std::exception & error) {
++        ggml_backend_sched_reset(ctx->sched.get());
++        LOG_ERR("lcb_clip: retained allocation rejected: %s\n", error.what());
++        return false;
++    }
++    if (retained) {
++        LOG_INF("lcb_clip: retained graph consumers=%zu webgpu_compute_bytes=%zu cpu_compute_bytes=%zu\n",
++                retained_plan.consumer_count(), ggml_backend_sched_get_buffer_size(ctx->sched.get(), ctx->backend),
++                ggml_backend_sched_get_buffer_size(ctx->sched.get(), ctx->backend_cpu));
++    }
 +
 +    if (ctx->model.modality == CLIP_MODALITY_VISION &&
 +            lcb_mtmd_is_webgpu(ctx->backend)) {
@@ -143,7 +322,8 @@
 +            ggml_backend_t assigned = ggml_backend_sched_get_tensor_backend(ctx->sched.get(), node);
 +            if (assigned == ctx->backend_cpu) {
 +                ++cpu;
-+                cpu_bf16 += node->src[0] && node->src[0]->type == GGML_TYPE_BF16;
++                cpu_bf16 += (node->src[0] && node->src[0]->type == GGML_TYPE_BF16) ||
++                            (node->src[1] && node->src[1]->type == GGML_TYPE_BF16);
 +            } else if (assigned == ctx->backend) {
 +                ++webgpu;
 +            } else {

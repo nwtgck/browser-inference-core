@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-async-tensor-copy'
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_async_tensor_copy as async_copy
 import prepare_webgpu_tensor_copy as tensor_copy
 
@@ -55,7 +56,7 @@ class AsyncTensorCopy(unittest.TestCase):
         before = {p: (self.upstream / p).read_bytes() for p in async_copy.CONTRACT_INPUTS}
         with tempfile.TemporaryDirectory(prefix='async-copy-identity-') as temporary:
             result = self.prepare(Path(temporary))
-            self.assertEqual(tensor_copy.digest(result), source.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(result), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
             self.assertEqual(source.iq3s_subgroup.INPUTS['ggml-webgpu.cpp'], async_copy.OUTPUT_SHA256)
             self.assertRegex(result.read_text(), r'/\* \.cpy_tensor_async\s+= \*/\s*ggml_backend_webgpu_cpy_tensor_async,')
         self.assertEqual(before, {p: (self.upstream / p).read_bytes() for p in before})
@@ -64,10 +65,14 @@ class AsyncTensorCopy(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='async-copy-guards-') as temporary:
             root = Path(temporary)
             with patch.object(async_copy, 'prepare'), patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+            patch.object(source, 'replace_iq3s_field_embedding'), without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
+                    patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', async_copy.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.rms_scale.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
                 baseline = source.prepare(self.upstream, root / 'base')

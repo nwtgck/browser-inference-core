@@ -91,7 +91,7 @@ int main(int argc, char ** argv) {
             Fixture f; RecordingLibrary lib;
             auto get = [&](int64_t k) {
                 f.a.ne[0]=f.x.ne[0]=k;
-                return lib.get_mul_mat_vec_pipeline(f.c,false);
+                return lib.get_mul_mat_vec_pipeline(f.c,false,true);
             };
             const auto first=get(tuned_first?2560:640),second=get(tuned_first?640:2560);
             require(first.id!=second.id,"same-WG tuned/fallback cache collision");
@@ -104,7 +104,7 @@ int main(int argc, char ** argv) {
         if (argc==2) std::filesystem::create_directories(argv[1]);
         for (const uint32_t sg : {4u,8u,16u,32u,64u}) {
             f.c.min_subgroup_size=f.c.max_subgroup_size=sg;
-            const auto pipeline=lib.get_mul_mat_vec_pipeline(f.c,false);
+            const auto pipeline=lib.get_mul_mat_vec_pipeline(f.c,false,true);
             require(std::find(ids.begin(),ids.end(),pipeline.id)==ids.end(),"fixed-width cache distinction");
             ids.push_back(pipeline.id);
             const uint32_t rows=128/sg*4;
@@ -119,14 +119,14 @@ int main(int argc, char ** argv) {
             require(pipeline.wgsl.find("virtual_tid += active_count")!=std::string::npos,"partial logical lane completion");
             require(pipeline.wgsl.find("if (owns_rows && subgroup_invocation_id == 0u")!=std::string::npos,"extra subgroup output guard");
             require(pipeline.wgsl.find("subgroupAdd(acc[0][row])")!=std::string::npos,"single subgroup reduction per row");
-            require(lib.get_mul_mat_vec_pipeline(f.c,false).id==pipeline.id,"repeat tuned cache hit");
+            require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id==pipeline.id,"repeat tuned cache hit");
             // Execute the production decision-to-dispatch calculation, including
             // tails, broadcast batches and two-dimensional surplus workgroups.
             for (const int64_t m : {1024,1025,6144,10240}) {
                 f.a.ne[1]=f.dst.ne[0]=m;
                 f.a.ne[2]=f.a.ne[3]=2;
                 f.x.ne[2]=f.x.ne[3]=f.dst.ne[2]=f.dst.ne[3]=4;
-                const auto cached=lib.get_mul_mat_vec_pipeline(f.c,false);
+                const auto cached=lib.get_mul_mat_vec_pipeline(f.c,false,true);
                 const auto grid=production_dispatch(cached,&f.dst,257);
                 const uint32_t groups=static_cast<uint32_t>((m+rows-1)/rows)*16;
                 require(grid[0]<=257 && grid[1]<=257 && grid[0]*grid[1]>=groups,"production split dispatch coverage");
@@ -144,26 +144,26 @@ int main(int argc, char ** argv) {
             if (argc==2) std::ofstream(std::filesystem::path(argv[1])/("q8-independent-sg"+std::to_string(sg)+".wgsl"))<<pipeline.wgsl;
             f.reset();
         }
-        const auto tuned=lib.get_mul_mat_vec_pipeline(f.c,false);
+        const auto tuned=lib.get_mul_mat_vec_pipeline(f.c,false,true);
         f.a.ne[0]=f.x.ne[0]=10240;
-        const auto baseline=lib.get_mul_mat_vec_pipeline(f.c,false);
+        const auto baseline=lib.get_mul_mat_vec_pipeline(f.c,false,true);
         require(decisions(baseline).wg_size==256 && decisions(baseline).outputs_per_wg==4,"long K fallback");
         require(baseline.name=="mul_mat_vec_q8_0_f32_sg_reduce","fallback profile identity preserved");
         if (argc==2) std::ofstream(std::filesystem::path(argv[1])/"q8-baseline.wgsl")<<baseline.wgsl;
         f.reset();f.c.min_subgroup_size=4;f.c.max_subgroup_size=8;
-        require(lib.get_mul_mat_vec_pipeline(f.c,false).id==baseline.id,"variable subgroup fallback cache");
+        require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id==baseline.id,"variable subgroup fallback cache");
         f.reset();f.a.ne[1]=f.dst.ne[0]=1023;
-        require(lib.get_mul_mat_vec_pipeline(f.c,false).id==baseline.id,"small M fallback cache");
+        require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id==baseline.id,"small M fallback cache");
         f.reset();f.dst.type=GGML_TYPE_F16;
-        require(lib.get_mul_mat_vec_pipeline(f.c,false).id==baseline.id,"output type fallback cache");
+        require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id==baseline.id,"output type fallback cache");
         f.reset();f.c.src2=&f.ids;
-        require(lib.get_mul_mat_vec_pipeline(f.c,false).id==baseline.id,"indexed context exclusion cache");
+        require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id==baseline.id,"indexed context exclusion cache");
         f.reset();f.x.type=GGML_TYPE_F16;
-        require(lib.get_mul_mat_vec_pipeline(f.c,false).id!=tuned.id,"F16 cache distinction");
+        require(lib.get_mul_mat_vec_pipeline(f.c,false,true).id!=tuned.id,"F16 cache distinction");
         f.reset();
-        require(lib.get_mul_mat_vec_pipeline(f.c,true).id!=tuned.id,"overlap cache distinction");
+        require(lib.get_mul_mat_vec_pipeline(f.c,true,true).id!=tuned.id,"overlap cache distinction");
         f.reset();f.c.vendor="nvidia";f.c.supports_dot_product=true;
-        const auto mmvq=lib.get_mul_mat_vec_pipeline(f.c,false);
+        const auto mmvq=lib.get_mul_mat_vec_pipeline(f.c,false,true);
         require(decisions(mmvq).wg_size==256 && mmvq.id!=tuned.id,"MMVQ cache exclusion");
         ggml_webgpu_mul_mat_vec_pipeline_key a{},b{};a.workgroup_size=b.workgroup_size=128;b.subgroup_size=8;
         require(!(a==b),"subgroup key equality");

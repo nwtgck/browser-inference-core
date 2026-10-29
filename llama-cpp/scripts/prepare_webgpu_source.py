@@ -26,28 +26,42 @@ import prepare_webgpu_ssm_conv_silu as ssm_conv_silu
 import prepare_webgpu_moe_group_skip as moe_group_skip
 import prepare_webgpu_router_tail as router_tail
 import prepare_webgpu_q8_diagnostic as q8_diagnostic
+import prepare_webgpu_host_encode_assembly as host_encode_assembly
+import prepare_webgpu_profile_query_budget as profile_query_budget
+import prepare_webgpu_f32_small_m as f32_small_m
+import prepare_webgpu_moe_gather_logical32 as moe_gather_logical32
+import prepare_webgpu_iq3s_field_loads as iq3s_field_loads
+import prepare_webgpu_matmul_vec4_layout as matmul_vec4_layout
+import prepare_webgpu_moe_tight_tile_bound as moe_tight_tile_bound
+import prepare_webgpu_iq3s_row_split as iq3s_row_split
+import prepare_webgpu_f32_matvec_epilogue as f32_matvec_epilogue
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '4b66eeacddb5927aaed6c67e351b190eb5de3662937a9e8fed8760fdd4a8a27d'
+OUTPUT_SHA256 = 'd5228a8a36613fa8ae7341bb96eee04f318aed5ccd73aa85e57164d118a70a2b'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
 # Historical name retained for consumers of the final shared shader library.
-SSM_HEADER_OUTPUT_SHA256 = '4ca71dcd2df778ffbe3f1678c525e03a646f68fa8345d14168ac91c16a452656'
+SSM_HEADER_OUTPUT_SHA256 = 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2'
+# OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
+# Later stages keep their own contracts; these identities describe compiled files.
+FINAL_OUTPUTS = {profile: {name: f32_matvec_epilogue.OUTPUTS[profile][name]
+                           for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp')}
+                 for profile in (False, True)}
 
 # Why: bound read staging and queued model-load work across tensors.
 # Why not wait after every write: amortize synchronization over a charged batch;
 # browser transport thresholds are version-specific, not this loader's contract.
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
-LOADER_PATCH_SHA256 = 'ddb01246fb2a7901359c0bc576023ce0a0f2c5898ee46623f71c86c9eb6f7f3f'
-LOADER_OUTPUT_SHA256 = '96aefafbf214482f3116af5ee4de0c8a4e53d6da999077cf8492526f0c52837e'
+LOADER_PATCH_SHA256 = 'e83cc330b66ad4683799b4e9a52ed2bc862195cf0a025729a80cc20452b3561a'
+LOADER_OUTPUT_SHA256 = '121845c207be9a409ea6a3d39692603d91576911feb7b30fe1be00f64b946617'
 LOADER_INPUTS = {
     "src/llama-model-loader.cpp": "fc7ab08ffda8f94ff2a1ae6ddff034b9a90d2eb1d532309bd14a388e1bfa83e3",
     "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
@@ -66,6 +80,18 @@ def patch_environment(work: Path) -> dict[str, str]:
         env.pop(key, None)
     env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
     return env
+
+
+def replace_iq3s_field_embedding(work: Path, source: Path, patch_root: Path, env: dict[str, str], headers: dict[str, Path]) -> None:
+    # This is mandatory in production; prefix-only tests exclude the whole stage.
+    # Missing original-stage output must fail closed rather than skip replacement.
+    headers[iq3s_field_loads.HEADER_NAME] = iq3s_field_loads.prepare(
+        work, source, patch_root, env, previous_header=headers[iq3s_field_loads.HEADER_NAME])
+
+
+def replace_iq3s_row_split_embedding(work: Path, source: Path, patch_root: Path, env: dict[str, str], headers: dict[str, Path], *, gpu_profile: bool) -> None:
+    headers[iq3s_row_split.HEADER_NAME] = iq3s_row_split.prepare(
+        work, source, patch_root, env, previous_header=headers[iq3s_row_split.HEADER_NAME], gpu_profile=gpu_profile)
 
 
 def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIRECTORY, gpu_profile: bool = False) -> Path:
@@ -125,6 +151,12 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(ssm_conv_silu.prepare(work, source, patch_root, env))
         hc_headers.update(moe_group_skip.prepare(work, source, patch_root, env))
         hc_headers.update(router_tail.prepare(work, source, patch_root, env))
+        host_encode_assembly.prepare(work, source, patch_root, env)
+        f32_small_m.prepare(work, source, patch_root, env)
+        hc_headers.update(moe_gather_logical32.prepare(work, source, patch_root, env))
+        # Preserve the original IQ3 stage contract, then replace only its final
+        # dedicated embedding. Every selector, cache key and host source stays.
+        replace_iq3s_field_embedding(work, source, patch_root, env, hc_headers)
         sampler = sampler_single_sync.prepare(work, source, patch_root, env)
         if tensor_copy.digest(target) != OUTPUT_SHA256:
             raise ValueError('Unexpected combined WebGPU source identity')
@@ -133,8 +165,13 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         if tensor_copy.digest(header) != SSM_HEADER_OUTPUT_SHA256:
             raise ValueError('Unexpected combined shader-library header identity')
         if gpu_profile:
+            profile_query_budget.prepare(work, source, patch_root, env)
             hc_headers.update(q8_diagnostic.prepare(work, source, patch_root, env))
-        else:
+        matmul_vec4_layout.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        moe_tight_tile_bound.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        replace_iq3s_row_split_embedding(work, source, patch_root, env, hc_headers, gpu_profile=gpu_profile)
+        hc_headers.update(f32_matvec_epilogue.prepare(work, source, patch_root, env, gpu_profile=gpu_profile))
+        if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)
         # Do not emit an embedded WGSL header here: the sibling shader library

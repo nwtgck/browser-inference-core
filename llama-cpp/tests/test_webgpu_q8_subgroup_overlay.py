@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_q8_subgroup as q8
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
 spec = importlib.util.spec_from_file_location('q8_subgroup_factory', ROOT / 'tests/webgpu-q8-subgroup/emit_factory.py')
@@ -33,7 +34,7 @@ class Q8SubgroupOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             factory.prepare(self.upstream, out)
-            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.SSM_HEADER_OUTPUT_SHA256)
+            self.assertEqual(copy.digest(out / 'ggml-webgpu-shader-lib.hpp'), source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
             self.assertEqual(copy.digest(out / q8.HEADER_NAME), q8.HEADER_SHA256)
             self.assertFalse((out / 'ggml-wgsl-shaders.hpp').exists())
             embedded = (out / q8.HEADER_NAME).read_text()
@@ -49,10 +50,14 @@ class Q8SubgroupOverlay(unittest.TestCase):
             with patch.object(source.rms_scale, 'prepare', return_value={}), \
                     patch.object(source.async_tensor_copy, 'prepare'), \
                     patch.object(source.iq3s_subgroup, 'prepare', return_value={}), \
+                    patch.object(source, 'replace_iq3s_field_embedding'), without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), \
                     patch.object(source.host_input_snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
+                    patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu.cpp']), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', q8.OUTPUTS['ggml-webgpu-shader-lib.hpp']):
                 source.prepare(self.upstream, root / 'base')

@@ -119,7 +119,7 @@ int main(int argc,char ** argv){
         }
         for(bool tuned_first:{false,true}){
             Fixture f;RecordingLibrary lib;
-            auto get=[&](bool tuned){f.c.min_subgroup_size=f.c.max_subgroup_size=tuned?16:8;return lib.get_mul_mat_id_vec_pipeline(f.c);};
+            auto get=[&](bool tuned){f.c.min_subgroup_size=f.c.max_subgroup_size=tuned?16:8;return lib.get_mul_mat_id_vec_pipeline(f.c,true);};
             const auto first=get(tuned_first),second=get(!tuned_first);
             require(first.id!=second.id,"tuned/fallback cache identity");
             require(get(tuned_first).id==first.id&&get(!tuned_first).id==second.id,"mixed order cache reuse");
@@ -128,7 +128,7 @@ int main(int argc,char ** argv){
         if(argc>=2)std::filesystem::create_directories(argv[1]);
         for(uint32_t sg:{16u,32u,64u}){
             f.c.min_subgroup_size=f.c.max_subgroup_size=sg;
-            const auto p=lib.get_mul_mat_id_vec_pipeline(f.c);
+            const auto p=lib.get_mul_mat_id_vec_pipeline(f.c,true);
             require(std::find(pipelines.begin(),pipelines.end(),p.id)==pipelines.end(),"fixed subgroup cache identity");pipelines.push_back(p.id);
             require(decision(p).wg_size==128&&decision(p).outputs_per_wg==4*(128/sg),"subgroup decisions");
             require(p.name=="mul_mat_id_vec_iq3_s_f32_independent_sg"+std::to_string(sg)+"_wg128","profile identity");
@@ -140,15 +140,15 @@ int main(int argc,char ** argv){
             require(p.wgsl.find("let active_count = subgroupAdd(1u)")!=std::string::npos,"partial active width");
             require(p.wgsl.find("virtual_tid += active_count")!=std::string::npos,"partial logical lane completion");
             require(p.wgsl.find("if (owns_rows && subgroup_invocation_id == 0u")!=std::string::npos,"extra subgroup output guard");
-            require(lib.get_mul_mat_id_vec_pipeline(f.c).id==p.id,"repeat subgroup cache hit");
+            require(lib.get_mul_mat_id_vec_pipeline(f.c,true).id==p.id,"repeat subgroup cache hit");
             if(argc>=2)std::ofstream(std::filesystem::path(argv[1])/("iq3s-independent-sg"+std::to_string(sg)+".wgsl"))<<p.wgsl;
         }
         f.c.min_subgroup_size=f.c.max_subgroup_size=8;
-        const auto baseline=lib.get_mul_mat_id_vec_pipeline(f.c);
+        const auto baseline=lib.get_mul_mat_id_vec_pipeline(f.c,true);
         require(decision(baseline).wg_size==256&&decision(baseline).outputs_per_wg==4,"baseline decisions retained");
         require(baseline.name=="mul_mat_id_vec_iq3_s_f32_sg_reduce","baseline profile retained");
         ReferenceLibrary reference;
-        require(reference.get_mul_mat_id_vec_pipeline(f.c).wgsl==baseline.wgsl,"fallback differs from actual pristine factory");
+        require(reference.get_mul_mat_id_vec_pipeline(f.c,true).wgsl==baseline.wgsl,"fallback differs from actual pristine factory");
         if(argc>=2)std::ofstream(std::filesystem::path(argv[1])/"iq3s-baseline.wgsl")<<baseline.wgsl;
         ggml_webgpu_mul_mat_id_pipeline_key key0{},key16{};key0.workgroup_size=key16.workgroup_size=128;key16.subgroup_size=16;
         require(!(key0==key16),"same-WG subgroup key equality");

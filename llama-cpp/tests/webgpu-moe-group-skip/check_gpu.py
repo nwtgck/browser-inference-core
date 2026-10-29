@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts')]
 import prepare_webgpu_source as source
 import prepare_webgpu_moe_group_skip as group
+import prepare_webgpu_moe_gather_logical32 as gather
 from emit_factory import build
 from make_fixtures import generate
 
@@ -42,11 +43,15 @@ def main() -> int:
     executable = build(upstream, prepared, work / 'host')
     manifest = generate(upstream, work, executable, large=args.large)
     identity = {
-        'scope': 'Actual canonical/prepared matrix factories and upstream gather/emitter; self-authored inputs only',
+        'scope': 'Actual canonical/prepared matrix and gather factories/emitter; self-authored inputs only',
         'upstreamCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=upstream, text=True).strip(),
         'patchSha256': group.PATCH_SHA256,
         'preparedHeaderSha256': hashlib.sha256((prepared / 'ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(),
         'matrixEmbeddingSha256': group.HEADER_SHA256,
+        'gatherPatchSha256': gather.PATCH_SHA256,
+        'gatherEmbeddingSha256': gather.HEADER_SHA256,
+        'gatherReviewedInputs': gather.CONTRACT_INPUTS,
+        'gatherVariantNames': ['gather-baseline', 'gather'],
         'fixtureManifestSha256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
         'reviewedInputs': group.CONTRACT_INPUTS,
         'variantNames': ['baseline', 'candidate'],

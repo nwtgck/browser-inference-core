@@ -9,12 +9,12 @@ PATCH_NAME = 'ggml-webgpu-q8-diagnostic.patch'
 PATCH_SHA256 = 'a27bdcdbd74dd7c3b39b9bd94075adfda59e2803729dae9ee9d72383b4691ab7'
 BASE = Path('ggml/src/ggml-webgpu')
 INPUTS = {
-    'ggml-webgpu.cpp': '4b66eeacddb5927aaed6c67e351b190eb5de3662937a9e8fed8760fdd4a8a27d',
-    'ggml-webgpu-shader-lib.hpp': '4ca71dcd2df778ffbe3f1678c525e03a646f68fa8345d14168ac91c16a452656',
+    'ggml-webgpu.cpp': '7dcb5ae7d2f60c0010b6e6b2e31232b1efc563cdce3f16fab2ebbfc440c88054',
+    'ggml-webgpu-shader-lib.hpp': 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': 'c19bd1f96ae466a93560eee0121891d98f44ea4ee3cdf68010bfe5275d4c5650',
-    'ggml-webgpu-shader-lib.hpp': '7a0c78ef92adb745329777bc44d9e08d24ba68ff6ba4955047f8bb623628ce4b',
+    'ggml-webgpu.cpp': 'c604ef0c3a962bcca567c91a0911f77ae456aad3d8e7d939524a4b73764a98ec',
+    'ggml-webgpu-shader-lib.hpp': '629f60c48495fa0c3b1b0bb123f9938100961adac78cc5df232393c220eae171',
 }
 CONTRACT_INPUTS = {
     'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',

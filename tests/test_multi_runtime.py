@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -28,6 +29,33 @@ def write_manifest(root, data):
                       'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
                      for p in sorted(root.rglob('*')) if p.is_file() and p != root / 'manifest.json']
     (root / 'manifest.json').write_text(json.dumps(data))
+
+class RuntimeValidatorImports(unittest.TestCase):
+    def test_llama_validator_loads_from_root_with_no_runtime_scripts_on_sys_path(self):
+        # A fresh isolated interpreter cannot inherit imports from earlier tests.
+        command = '''
+import importlib.util
+import sys
+spec = importlib.util.spec_from_file_location('root_package', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+validator = module.runtime_module('llama-cpp')
+assert callable(validator.validate)
+validator.validate_bf16_metadata({})
+try:
+    validator.validate_bf16_metadata({'visionBf16Storage': {'version': 999}})
+except ValueError:
+    pass
+else:
+    raise AssertionError('The real BF16 validator must still reject incompatible metadata')
+print('runtime validator imported and checked')
+'''
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run([sys.executable, '-I', '-B', '-c', command, str(ROOT / 'scripts/package_runtime.py')],
+                                    cwd=temporary, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), 'runtime validator imported and checked')
+
 
 class MultiRuntime(unittest.TestCase):
     def setUp(self):

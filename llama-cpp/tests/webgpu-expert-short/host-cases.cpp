@@ -71,27 +71,27 @@ int main(int argc, char ** argv) {
         }
         for (ggml_type type : {GGML_TYPE_Q5_1,GGML_TYPE_IQ4_NL}) {
             Fixture f;f.a.type=type;RecordingLibrary lib;ReferenceLibrary reference;
-            const auto small=lib.get_mul_mat_id_vec_pipeline(f.context);
-            const auto baseline=reference.get_mul_mat_id_vec_pipeline(f.context);
+            const auto small=lib.get_mul_mat_id_vec_pipeline(f.context,true);
+            const auto baseline=reference.get_mul_mat_id_vec_pipeline(f.context,true);
             require(size(small)==128 && size(baseline)==256,"actual factory size");
             require(small.name==baseline.name+"_wg128","profile label");
             require(small.wgsl.find("@workgroup_size(128)")!=std::string::npos,"actual WGSL size");
-            require(lib.get_mul_mat_id_vec_pipeline(f.context).id==small.id,"repeat cache hit");
+            require(lib.get_mul_mat_id_vec_pipeline(f.context,true).id==small.id,"repeat cache hit");
             f.a.ne[0]=f.x.ne[0]=1024;
-            require(lib.get_mul_mat_id_vec_pipeline(f.context).id==small.id,"same selected bucket hit");
+            require(lib.get_mul_mat_id_vec_pipeline(f.context,true).id==small.id,"same selected bucket hit");
             f.a.ne[0]=f.x.ne[0]=1056;
-            const auto large=lib.get_mul_mat_id_vec_pipeline(f.context);
+            const auto large=lib.get_mul_mat_id_vec_pipeline(f.context,true);
             require(large.id!=small.id && size(large)==256,"workgroup-specific cache separation");
             require(large.name==baseline.name && large.wgsl==baseline.wgsl,"fallback is byte-identical to upstream factory");
             f.a.ne[0]=f.x.ne[0]=640;f.a.ne[1]=f.dst.ne[0]=255;
-            require(lib.get_mul_mat_id_vec_pipeline(f.context).id==large.id,"small row fallback cache");
+            require(lib.get_mul_mat_id_vec_pipeline(f.context,true).id==large.id,"small row fallback cache");
             f.a.ne[1]=f.dst.ne[0]=2560;f.a.ne[2]=11;
-            const auto other=lib.get_mul_mat_id_vec_pipeline(f.context);
+            const auto other=lib.get_mul_mat_id_vec_pipeline(f.context,true);
             require(other.id!=small.id && other.wgsl!=small.wgsl,"expert count cache separation");
             f.a.ne[2]=512;f.a.type=GGML_TYPE_Q8_0;
-            require(size(lib.get_mul_mat_id_vec_pipeline(f.context))==256,"other quant unchanged");
+            require(size(lib.get_mul_mat_id_vec_pipeline(f.context,true))==256,"other quant unchanged");
             f.a.type=type;
-            require(lib.get_mul_mat_id_vec_pipeline(f.context).id==small.id,"fallback never poisons selected cache");
+            require(lib.get_mul_mat_id_vec_pipeline(f.context,true).id==small.id,"fallback never poisons selected cache");
             if(argc==2) {
                 std::filesystem::create_directories(argv[1]);
                 const auto name=type==GGML_TYPE_Q5_1?"Q5_1":"IQ4_NL";
@@ -105,7 +105,7 @@ int main(int argc, char ** argv) {
             auto emit=[&](ggml_type type,int k,int m,int mode,bool shared,int stored) {
                 Fixture f;f.a.type=type;f.a.ne[0]=f.x.ne[0]=k;f.a.ne[1]=f.dst.ne[0]=m;
                 f.x.ne[1]=shared?1:10;RecordingLibrary lib;
-                const auto pipeline=lib.get_mul_mat_id_vec_pipeline(f.context);
+                const auto pipeline=lib.get_mul_mat_id_vec_pipeline(f.context,true);
                 if(!first)out<<",\n";
                 first=false;
                 out<<"{\"type\":\""<<(type==GGML_TYPE_Q5_1?"Q5_1":"IQ4_NL")

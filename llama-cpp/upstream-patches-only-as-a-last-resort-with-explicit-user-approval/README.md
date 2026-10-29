@@ -9,37 +9,45 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`338fce6511c744893cc0d3d958b275f40552c7a4`. Re-evaluate compatibility at each pin
+`8642541b255bfb5dc39cd351a178be09013a55d6`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
-See [the current upstream review](../docs/llama-338fce-review.md) for reviewed
-contracts and validation boundaries. The [v0.7.0 review](../docs/llama-v0.7.0-review.md)
-records the preceding pin and remains historical context.
+See [the current upstream review](../docs/llama-v0.8.0-review.md) for reviewed
+contracts and validation boundaries. The [338fce review](../docs/llama-338fce-review.md)
+and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 
 ## Vision BF16 compatibility/performance
 
-- **Patch:** `mtmd-webgpu-bf16.patch`.
-- **Accepted purpose:** avoid the unusably slow vision-projector path identified
-  by the project owner as necessary to fix. This is not general permission to
-  optimize every model in downstream code.
-- **Scope:** vision BF16 (Brain Floating Point 16) weights in the selected WebGPU
-  build variants, controlled by `LCB_WEBGPU_BF16_PROJECTOR`. No audio-weight
-  expansion and no change to stored model files.
-- **Integration:** one `tools/mtmd/clip.cpp` build-tree copy, with the local
-  conversion helper in `bridge/mtmd-bf16.h`. Internal loader coupling remains a
-  maintenance cost even though the upstream checkout is unchanged.
-- **v0.5.0 maintenance:** upstream now owns the graph-allocation failure check.
-  Keep it as unchanged context and insert the existing placement diagnostics
-  after it, instead of backporting the same guard again. The conversion helper,
-  loader changes, profile scope, and independent audio patch are unchanged.
-- **No-patch alternatives:** compatible weight formats, the existing CPU path,
-  or waiting for suitable upstream support; these do not necessarily satisfy
-  the required multimodal performance.
-- **Validation and costs:** see [the existing design and tests](../docs/webgpu-bf16-projector.md),
-  including increased resident storage and the limits of synthetic checks.
-- **Removal condition:** upstream provides the required working, acceptably fast
-  path on the target profiles, or the owner drops the requirement. Verify it
-  with the affected models before retiring the workaround.
+- **Patches:** `mtmd-webgpu-bf16.patch`, `mtmd-vision-bf16-runtime.patch`,
+  and `mtmd-vision-bf16-clip-runtime.patch`.
+- **Accepted scope:** the owner's explicit BF16-memory request permits per-load
+  immutable storage selection in the same runtime. Existing entries remain
+  legacy-expand; explicit retain-checked uses original BF16 storage and rejects
+  unreviewed roles/graphs/placement instead of retrying in F32 or on CPU.
+- **Integration:** checked build-tree clip.cpp and mtmd.cpp copies, preserving
+  upstream parameter-record layouts. The thin mtmd API plumbing exists in every
+  profile; WebGPU loader handling remains under `LCB_WEBGPU_BF16_PROJECTOR`.
+  Other profiles use a minimal clip copy that rejects unsupported retained GPU
+  vision only at existing modality classification, before weight allocation;
+  audio-only loads keep their original behavior without a second metadata parse.
+  Explicit CPU loads retain upstream storage and are not WebGPU acceptance.
+- **Coupling:** retained upload/graph helpers use public ggml interfaces;
+  `mtmd-retained-roles.h` explicitly uses pinned private clip_model fields. The
+  source contract, compile-target check, generated ABI and provenance expose
+  this maintenance cost. Vendor, audio, model builders and shaders stay intact.
+- **Compatibility:** ordinary assets contain both modes without extra variants
+  or build directories. No global/TLS selector or post-load mutator is added.
+  Upstream owns the graph-allocation failure check; preserve it unchanged.
+- **No-patch alternatives:** keep established expansion, compatible weight
+  formats, the existing CPU path or defer retention. Disabling the whole overlay
+  also removes independent safety/diagnostics and can restore full-tensor scratch.
+- **Validation and limits:** [storage design](../docs/webgpu-bf16-projector.md).
+  CPU/synthetic/source-extracted tests do not establish actual browser/model
+  correctness, physical peak or equal speed. Defaults are not switched on that
+  evidence alone. New shaders and wider role acceptance are separate scope.
+- **Removal:** upstream supplies the required storage, safety and performance
+  contract, or the owner withdraws the requirement; retire API/plumbing/tests
+  coherently without changing immutable artifacts or unrelated overlays.
 
 ## Non-pthread Wasm audio preprocessing
 
@@ -225,7 +233,7 @@ commit with different bytes or invent a future artifact identity.
 - **Integration:** reuse ordinary WebGPU source preparation and its CMake hook to
   replace only `src/llama-model-loader.cpp` on `llama`. No additional options,
   variants, workflow inputs or publication gates. CPU builds stay upstream.
-- **Reviewed inputs:** 620d2225cc436ab0b001e3200e590e3b286ef9ab; exact loader,
+- **Reviewed inputs:** 8642541b255bfb5dc39cd351a178be09013a55d6; exact loader,
   file-reader and target-layout identities augment existing backend/API guards.
   Copies are isolated; upstream sources are never rewritten. Updater preflight
   and provenance use the same preparation. Input drift requires semantic review.
@@ -238,15 +246,24 @@ commit with different bytes or invent a future artifact identity.
   final partial batches, callback cancellation and ordinary C++ exceptions drain
   pending work, and the helper releases its backend through RAII. No global
   tensor-set, inference or WEIGHTS-buffer waits are added. Other buffer types and
-  backends retain their existing upload behavior and optional validation.
+  backends retain their existing upload behavior and optional validation. A
+  smaller aligned chunk can admit four charged uploads per batch, but is selected
+  only when it preserves read/upload counts and does not increase the projected
+  `(wait count, pending charge)` state. Pure constant-time selection accounts for
+  the current queue or a device handoff; it does not acquire or wait for a backend.
 - **Validation/limits:** focused deterministic CPU queue tests extract the actual
   generated helper, checking pre-write waits, cross-tensor/device accounting,
-  auxiliary charges, overflow, cleanup and initialization failure. The complete
-  generated loader passes native syntax checking against pinned upstream headers;
+  auxiliary charges, overflow, cleanup and initialization failure. Independent
+  32-bit and 64-bit integer references cover chunk selection, exact-multiple
+  fallback, cross-tensor regressions and positive adoption; these are not Wasm
+  ABI executions. The complete generated loader passes native syntax checking
+  against pinned upstream headers;
   actual overlay/target/provenance contracts remain tested. These are not full
   Wasm builds or browser/GPU tests. The 32 MiB bound covers charged loader uploads,
-  not total Wasm, process, driver or GPU memory. Existing completion/device-loss
-  behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
+  not total Wasm, process, driver or GPU memory. Actual pending peaks can rise
+  from three to four chunks within that unchanged cap; lower read-vector maxima
+  do not establish unchanged physical or Wasm high-water memory. Existing
+  completion/device-loss behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
   OOM/device-loss recovery is not claimed. See
   [bounded WebGPU model uploads](../docs/webgpu-model-upload-budget.md).
 - **Removal:** equivalent upstream support, withdrawal of the requirement, or costs
@@ -411,6 +428,15 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing indexed matvec path or wait for upstream support.
 - **Removal:** equivalent upstream support or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Lane-selected fields in indexed IQ3_S matvec
+
+- **Patch:** `ggml-webgpu-iq3s-field-loads.patch`.
+- **Scope:** replace only the existing independent indexed IQ3_S embedded shader. Each half-lane reads its selected qs word, and qh/sign/scale fields use their containing aligned word. Keep the 110-byte block representation, decoder arithmetic and addition order, partial-subgroup main, IDs, bindings, selector, cache key and fallback paths unchanged. Canonical templates and other quantization/ordinary/cooperative shaders are unchanged.
+- **Integration:** append a source-bound stage after the original IQ3 stage. Patch only a private accumulator copy and regenerate the dedicated header with the pinned upstream emitter. Preserve the original stage output hash as an intermediate contract; provenance records the actual final compiled header separately. No additional runtime buffers, probes or synchronization are introduced.
+- **Validation and limits:** actual factory output for logical widths 16/32/64 is source-bound. Synthetic numerical comparisons covered width16 full and reported-width32 partial execution, input updates, skipped IDs, binding ends and guards. Target-device performance, full hardware width32/64, Mac/Metal and complete-model quality/performance are not established. Source read-expression counts are not physical bandwidth measurements.
+- **No-patch alternative:** retain the existing independent indexed matvec or wait for upstream equivalent field loads.
+- **Removal:** upstream equivalent support, withdrawal of this optimization, or removal of its parent indexed IQ3 implementation; remove this stage, patch, build dependencies, tests and provenance together.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.
@@ -474,7 +500,7 @@ not establish target-device speed.
 - **Patch:** `ggml-webgpu-router-tail.patch`.
 - **Approval and scope:** the owner's continuing performance investigation explicitly authorizes this generic F32 GET_ROWS/RESHAPE/SUM_ROWS/CLAMP/DIV/RESHAPE fusion. Preserve the selected IDs, original maximum-workgroup reduction tree, clamp and direct division. No softmax, sorting, quantization or model-specific behavior changes.
 - **Aliasing:** disjoint bindings use three storage buffers. Only one-token, one-workgroup execution may merge overlapping probability/output ranges into one storage binding; all selected loads precede a uniform storage barrier and every store. IDs stay disjoint from the full union. Multi-token overlap retains the existing staged path, with no extra model scratch or weight copy.
-- **Integration:** compose at the end of the ordinary WebGPU source preparation, before the optional profile-only Q8 diagnostic. Emit only dedicated helper/shader headers. CPU profiles and the base bindings/schema remain unchanged.
+- **Integration:** compose near the end of the ordinary WebGPU source preparation, before host assembly and the optional profile-only Q8 diagnostic. Emit only dedicated helper/shader headers. CPU profiles and the base bindings/schema remain unchanged.
 - **Coupling:** pin the six-node graph and view/use-count contracts, allocator behavior, typed buffers/device limits, four baseline WGSL sources, shader preprocessor/emitter, host/header inputs, patch and outputs. Reject intermediate OUTPUT/side users, unsupported views, callback subgraphs and invalid or overlapping ranges before pipeline creation.
 - **No-patch alternative:** retain the four staged dispatches or wait for equivalent upstream graph fusion.
 - **Validation and limits:** actual-ggml graph/allocator and extracted dispatcher/factory tests, normal/profile syntax checks and synthetic software-GPU byte comparisons cover the guarded paths. These do not establish target-device speed or full-model quality. See `tests/webgpu-router-tail/README.md`.
@@ -489,3 +515,87 @@ not establish target-device speed.
 - **Integration:** apply a final profile-only stage after the other overlays. Normal final source and common generated ABI remain byte-identical. Pin upstream factory/decoder/submit contracts, patch, stage outputs, bridge contract and the mechanically extracted upstream public-domain SHA-256 reference, including extraction boundaries. Separate extension records use generated native layout queries and a compiled schema fingerprint; absent exports remain optional for older artifacts.
 - **Validation and limits:** focused source-bound native tests cover the ABI, cache, shader identity, dispatch, lifetime and guarded fallback; these do not establish real-device speed or model quality. Only the existing profiler supplies GPU timestamps.
 - **Removal:** when upstream provides an equivalent optional diagnostic or the owner withdraws it, remove its profile stage, bridge, schema generator, build/provenance wiring and tests together.
+
+## Synchronous host dispatch assembly
+
+- **Patch:** `ggml-webgpu-host-encode-assembly.patch`.
+- **Approval and scope:** explicitly authorized by the owner in the current performance-work session. Reduce temporary owning copies in the existing single/multi WebGPU builders. No new ABI, graph rewrite, kernel, selector, profile or host-application policy.
+- **No-patch alternative:** keep the current builders and their temporary allocations; the existing exact bind-group cache already avoids warm creation calls. This change does not improve cache hit rate.
+- **Contract:** a stack view borrows single-op parameters, entries and pipeline only until synchronous staging/encoding finishes. Cache and queued command ownership remain unchanged. Profile results retain owning pipeline names. Reserve temporary vectors within the existing arena slot bound and retain original parameter padding, binding key, upload/dispatch order and batch boundaries.
+- **Caller observation:** the internal single builder takes const references. Moving named vectors into it no longer empties them. Every current caller returns immediately or only records the fused operation count before returning; none reads the vectors afterward. Recheck those call sites on upstream updates.
+- **Integration:** append a checked source stage after router-tail and before the optional profile diagnostic. Pin upstream contracts, composed input, patch and output. No shader/header or common ABI changes.
+- **Validation and limits:** source-extracted allocation tests use relative baseline comparisons, and the existing cache/queue/free/failure scenarios and complete normal/profile source checks remain required. Native mock allocations are not browser/GPU timings and do not establish model throughput or target-device improvement.
+- **Removal condition:** remove the stage, provenance/build wiring and tests when upstream provides equivalent synchronous assembly without the copies, or the owner drops the optimization.
+
+## Profile query capacity with multi-dispatch operations
+
+- **Patch:** `ggml-webgpu-profile-query-budget.patch`.
+- **Approval and scope:** the owner's session-wide authorization permits agent-decided upstream patches. This profile-only correctness repair follows a source-bound counterexample showing that a valid multi-dispatch operation could exceed the existing profile QuerySet before the next collection. It is separate from normal submission tuning.
+- **No-patch alternative:** leave profiling disabled or restrict profiled graphs to avoid the problematic boundary. Neither makes arbitrary accepted profiled batches safe.
+- **Contract:** every timestamped dispatch consumes one arena slot. Reserve queries using that actual slot capacity, including nominal-batch overshoot, and assert during profile initialization that the capacity is at most half the query limit. Keep collection after complete graph batches; do not flush inside the builder or introduce new encoder/name ownership.
+- **Integration:** run a checked profile-only stage immediately before the optional Q8 diagnostic. Pin upstream contracts, input, patch and prefix output. Normal prepared source and the shared ABI/schema/shaders remain byte-identical.
+- **Validation and limits:** extracted actual graph/build/arena control tests retain the failing baseline at the query boundary, the repaired behavior, capacity and arena rejection, plus normal byte invariance. The Encode callback supplies source-derived multi-dispatch counts; this CPU model is not a GPU or full GGML graph/factory execution. Actual profile runtime validation remains a separate check.
+- **Removal condition:** remove the stage and its preparation/build/provenance/test wiring when upstream reserves queries for every accepted batch or supplies an equivalent safe collection boundary.
+
+
+## F32 small-M prefill register tiles
+
+- **Patch:** `ggml-webgpu-f32-small-m.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this agent-selected geometry specialization. Only F32/F32/F32 matrices with K>=128, M1..4 and N>=5, without subgroup matrices or source overlap, use narrower existing register tiles. Existing N<=4 matvec routing, other types and fallback geometries remain unchanged.
+- **Contract:** use the pinned upstream register-tile WGSL and TK8 accumulation unchanged. M1 uses tileM1; M2..4 use tileM4. Both use tileN1 and a 1x32 workgroup. Effective geometry is part of pipeline equality/hash before lookup, and profile names distinguish it. Parameter bytes, binding layout and dispatch grid remain unchanged.
+- **Integration:** a checked header-only stage follows host assembly and precedes optional profile stages. Normal/profile shader-library identities change; host source, shared bindings/schema and canonical WGSL inputs do not. No extra runtime profile or native API is added.
+- **Validation and limits:** source-bound admission/cache/factory/dispatch checks cover boundaries and guarded fallbacks. Private software-GPU geometry comparisons informed the scope; target-device/model speed and model quality are not established by those results. Revalidate arithmetic, layouts and performance before widening the scope.
+- **Removal:** remove this stage and its metadata/tests when upstream provides a suitable equivalent or the specialization is no longer useful. Re-review upstream factory, key, geometry decisions, reg-tile loads/accumulation and dispatch contracts on pin changes.
+
+
+## MoE gather logical lane groups
+
+- **Patch:** `ggml-webgpu-moe-gather-logical32.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this agent-selected specialization. Distribute only the existing skipped-slot zero loop among logical groups of at most 32 lanes; the grouping is independent of hardware subgroup features. Preserve expert counting, prefix/tile construction and slot-position atomics.
+- **Contract:** shared storage and its expert capacity, existing barriers/atomics, seven parameter words, five bindings, gather grid, cache key and factory label remain unchanged. Partial final groups skip only zeroing; supported input/index/binding contracts are not widened. Matrix and matvec arithmetic are unchanged.
+- **Integration:** a checked stage after F32 small-M embeds only the derived gather in a dedicated header and changes its factory source selection. Canonical upstream files and the existing matrix group-skip stage remain intact. Normal/profile library and gather identities are recorded separately from the base ABI/schema.
+- **Validation and limits:** source-bound stage, ownership, factory/cache and unchanged-dispatch checks cover skipped/live slots and workgroup boundaries. Private software-GPU checks informed the candidate; benefits are not universal, and target-device/model performance is not established.
+- **Removal:** remove the stage and its build/provenance plumbing when upstream supplies an equivalent or it ceases to be useful. Re-review gather ownership, metadata capacity, factory specialization and downstream dispatch ordering on upstream changes.
+
+## Floating-point matmul vec4 layout guards
+
+- **Patches:** `ggml-webgpu-matmul-vec4-layout.patch` and `ggml-webgpu-matmul-vec4-layout-profile.patch`.
+- **Approval and scope:** the owner's session-wide authorization includes correctness repairs discovered by the performance tests. Existing F32/F16 ordinary and indexed matrix/vector factories selected vec4 on shape alone, allowing accepted padded or offset views to read rounded-down addresses. This repair uses the existing scalar fallback.
+- **Contract:** test actual binding-relative input offsets, including merged source bindings, and active higher-dimensional strides before the factory cache lookup. Matrix stores also require the destination offset to align to four elements. Keep existing shape/type guards, scalar/vector cache dimensions, aligned shader bytes, uniforms, bindings, grids, quantized paths and gather behavior. Extent-one strides are unused.
+- **Integration:** append a checked stage after the existing normal/profile prefixes. The profile patch accounts for the optional diagnostic's separate key builder. Preserve every earlier input/output pin; record final compiled identities separately. No vendor files or shader source are modified.
+- **No-patch alternative:** callers can materialize aligned contiguous inputs, or avoid the affected layouts. This does not repair accepted operations using existing views.
+- **Validation and limits:** source-bound caller/factory checks compare both profile modes, alignment residues, active/unused strides, merged offsets, cache order and unchanged shader/parameter contracts. Full pinned-header syntax and actual runtime checks are distinct gates. Falling back changes the existing reduction partition; incorrectly addressed outputs are not a numerical oracle. This correctness repair makes no speed or model-quality claim.
+- **Removal:** retire the stage and associated preparation/build/provenance/tests when upstream checks the same layout conditions or supplies unaligned-safe loads/stores. Re-review binding rebasing and factory/key ownership on upstream updates.
+
+## Tight routing-independent MoE tile capacity
+
+- **Patch:** `ggml-webgpu-moe-tight-tile-bound.patch`.
+- **Approval and scope:** the owner's session-wide authorization covers this narrow host-only optimization. Keep the current slot width L=32 and replace only its shared capacity helper after the checked normal/profile final stages. No shader, graph, parameter, key, indirect dispatch or runtime readback is added.
+- **Bound:** with nominal slots S, experts E and A=min(E,S), use A+floor((S-A)/L). For a nonempty experts and V valid slots, sum ceil(c_e/L)=a+sum floor((c_e-1)/L)<=a+floor((V-a)/L)<=A+floor((S-A)/L). Assign one slot to A experts and concentrate the remainder to attain this generic bound. Duplicate IDs and skipped slots remain supported; real routing occupancy is not assumed.
+- **Allocation and dispatch:** descriptor capacity, aligned binding size and direct matrix workgroups use the same helper. The result is at most S and does not add uint32 arithmetic overflow. Existing tensor-product, size_t, device capacity and grid admission limits remain unchanged. Single-token matvec dispatch is unchanged.
+- **Integration:** preserve every earlier stage pin as a historical contract, append a checked stage with separate normal/profile source identities, and record actual final compiled copies. Canonical templates and the upstream checkout remain untouched.
+- **No-patch alternative:** retain the conservative existing allocation/dispatch upper bound or wait for an upstream equivalent.
+- **Validation and limits:** source-bound integer/extremal routing, real ggml allocator, recorded binding/grid and normal/profile syntax checks cover the shared contract. Reduced empty workgroups or descriptor bytes are not measured speed or peak-memory claims; target-device/model performance remains unestablished.
+- **Removal:** remove the stage, patch, preparation/build/provenance and related tests when upstream provides an equivalent bound or the owner drops it. Recheck gather descriptor emission and tensor/device arithmetic contracts on upstream updates.
+
+## Independent IQ3 four-row loop splitting
+
+- **Patch:** `ggml-webgpu-iq3s-row-split.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow agent-selected specialization. Split only the existing independent indexed IQ3_S accumulator's row0..3 loop into row0..1 and row2..3, keeping its four accumulators. Do not change the canonical accumulator, ordinary/cooperative shaders, selector or supported subgroup widths.
+- **Contract:** the existing factory supplies OUTPUTS_PER_WG=4. Preserve one source-level activation-block load, every row's decoder/FP expression and K order, return layout, main/partial-subgroup completion, reductions, parameters, bindings, geometry, cache and queue behavior. Pin and recheck this factory contract rather than applying the literal two-row split to another row count.
+- **Integration:** append a checked dedicated-header stage after tight tile capacity. Copy the field-load stage's pinned derived accumulator, patch only its IQ3 branch and re-embed with the same main/common declarations. Retain every earlier stage identity as history; provenance records the final compiled header separately. Normal/profile host source, other headers and the shared ABI/schema are unchanged.
+- **No-patch alternative:** keep the existing single four-row loop or wait for an upstream equivalent. This avoids maintaining another source specialization.
+- **Validation and limits:** source-bound inverse/row-order/tail checks and actual factory/cache tests cover fixed widths16/32/64. Private software hot-only comparisons informed the choice; native load/register behavior, streaming/model performance and target-device gains are not established. Reusing the same mathematical source order is not a universal cross-compiler FP-bit guarantee.
+- **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
+
+
+## Four-row F32 matvec scale/sigmoid epilogue
+
+- **Patches:** `ggml-webgpu-f32-matvec-epilogue.patch` and `ggml-webgpu-f32-matvec-epilogue-profile.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow agent-selected fusion. Only dense F32/F32/F32 matvecs with K1..16384, M4, N1 and batch1, followed by SCALE, SIGMOID and SCALE, are eligible. No model branch or new public API is added.
+- **No-patch alternative:** retain the existing matvec plus the existing three-operation scale/unary/scale fusion, for two dispatches in total.
+- **Contract:** retain the original dot arithmetic, row assignment, reduction and workgroup geometry; append the three existing epilogue expressions only at the final store. Require graph use-count/callback visibility checks and all input/output payload and aligned binding ranges to be disjoint. A dead matvec allocation may be reused by the final output. Unsupported graphs, buffers, limits and kinds retain existing fallback.
+- **Ownership and cache:** the default-none key and sixteen parameter words retain their original behavior. A distinct typed epilogue key carries no coefficients; four copied coefficient values extend only the fused path to eighty bytes. Check the actual uniform arena slot and legacy 128-byte binding. Buffer facts are local to one admission attempt; no permanent capability cache, runtime probe or timing resource is introduced.
+- **Integration:** append a checked normal/profile source stage after the existing final stages, with a dedicated embedded main and canonical accumulator/declarations. Keep historical pins, vendor sources, other dtype shaders and the generated public ABI unchanged. Profile diagnostics keep the default-none path.
+- **Validation and limits:** source-bound graph/gallocr, physical range, factory/cache, params and full translation-unit tests cover admission and fallback. Private software comparisons informed this candidate; they do not establish model, target-device or cold-start improvement. Actual runtime correctness and performance remain separate gates.
+- **Removal:** remove the stage and its provenance/build/tests when upstream supplies the equivalent fusion or the owner drops the specialization. Re-review graph fusion, allocator reuse, binding rebasing, parameter staging, factory keys and canonical shader arithmetic after upstream updates.

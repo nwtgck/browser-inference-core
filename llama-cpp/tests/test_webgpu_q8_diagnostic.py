@@ -17,6 +17,8 @@ import prepare_webgpu_source as source
 import prepare_webgpu_q8_diagnostic as diagnostic
 import generate_webgpu_q8_diagnostic as extension
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def normalized_base_generation(outputs, upstream):
     schema_text = outputs['schema.json']
@@ -58,13 +60,15 @@ def function(text, marker):
 
 
 def factory_code(prepared, *, provider=False):
-    text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     prefix = (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text()
     prefix = prefix.replace('#include <vector>', '#include <vector>\n#include <array>\n#include <optional>\n#include <set>\n#include <functional>\n#include "ggml-webgpu-q8-diagnostic-sha256.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"')
     prefix = prefix.replace('    std::string wgsl;', '    std::string wgsl;\n    std::array<uint8_t,32> diagnostic_sha256{};\n    unsigned pipeline=0;')
     prefix = prefix.replace('static unsigned created = 0;', 'static unsigned created = 0;\nstatic std::function<void()> prepare_hook;')
     prefix = prefix.replace('    return {++created, name, nullptr, code};', '    if(prepare_hook){auto hook=std::move(prepare_hook);prepare_hook={};hook();}\n    webgpu_pipeline result{++created,name,nullptr,code};result.pipeline=result.id;return result;')
     chunks = [prefix]
+    if provider:
+        chunks.append('#include "ggml-webgpu-f32-matvec-epilogue.hpp"')
     for marker in ('template <typename T> inline void ggml_webgpu_hash_combine(', 'struct ggml_webgpu_shader_lib_context {',
                    'inline uint32_t ggml_webgpu_q8_short_workgroup(', 'inline uint32_t ggml_webgpu_q4_short_workgroup(',
                    'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size(', 'inline bool ggml_webgpu_can_use_mmvq('):
@@ -76,7 +80,7 @@ def factory_code(prepared, *, provider=False):
     a = text.index('    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(')
     chunks.append(text[a:text.index('    webgpu_pipeline get_mul_mat_fast_pipeline(', a)])
     if provider:
-        chunks.append('webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &,bool){throw std::runtime_error("unexpected matrix");}')
+        chunks.append('webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &,bool,bool){throw std::runtime_error("unexpected matrix");}')
     chunks.append('};')
     return '\n'.join(chunks)
 
@@ -106,7 +110,7 @@ class Q8Diagnostic(unittest.TestCase):
         return exe
 
     def test_actual_factory_cache_auto_and_processed_wgsl_digest(self):
-        normal = (self.normal / 'ggml-webgpu-shader-lib.hpp').read_text()
+        normal = explicit_layout_argument((self.normal / 'ggml-webgpu-shader-lib.hpp').read_text())
         reference = ('class ReferenceLibrary { int device=0; pre_wgsl::Preprocessor preprocessor; '
                      'std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key,webgpu_pipeline,ggml_webgpu_mul_mat_vec_pipeline_key_hash> mul_mat_vec_pipelines; public: '
                      + function(normal, '    webgpu_pipeline get_mul_mat_vec_pipeline(') + '};')
@@ -120,16 +124,17 @@ class Q8Diagnostic(unittest.TestCase):
 
     def test_actual_provider_params_submission_and_suspension_lifetime(self):
         backend = (self.profile / 'ggml-webgpu.cpp').read_text()
-        library = (self.profile / 'ggml-webgpu-shader-lib.hpp').read_text()
+        library = explicit_layout_argument((self.profile / 'ggml-webgpu-shader-lib.hpp').read_text())
         code = factory_code(self.profile, provider=True).replace(
             'extern "C" const ggml_type_traits * ggml_get_type_traits(',
             'extern "C" __attribute__((weak)) const ggml_type_traits * ggml_get_type_traits(')
         code += '\n' + (HERE / 'provider-prefix.cpp').read_text()
         for marker in ('struct webgpu_encoded_op {', 'struct webgpu_dispatch_desc {',
-                       'struct ggml_webgpu_merged_binding_range {', 'struct webgpu_profile_operation_guard {'):
+                       'struct ggml_webgpu_merged_binding_range {', 'struct webgpu_profile_operation_guard {',
+                       'struct webgpu_dispatch_view {'):
             code += '\n' + function(backend, marker) + ';'
         code += '\n' + function(library, 'struct ggml_webgpu_mul_mat_shader_decisions {') + ';'
-        for marker in ('static inline void compute_2d_workgroups(', 'static size_t ggml_webgpu_tensor_offset(',
+        for marker in ('static inline uint32_t ggml_webgpu_u32_from_f32(', 'static inline void compute_2d_workgroups(', 'static size_t ggml_webgpu_tensor_offset(',
                        'static wgpu::Buffer ggml_webgpu_tensor_buf(',
                        'static size_t ggml_webgpu_tensor_align_offset(const ggml_tensor *',
                        'static size_t ggml_webgpu_tensor_misalignment(const ggml_tensor *',
@@ -142,9 +147,11 @@ class Q8Diagnostic(unittest.TestCase):
                        'static uint32_t ggml_webgpu_tensor_merged_element_offset(',
                        'static wgpu::BindGroupEntry ggml_webgpu_make_bind_group_entry(',
                        'static wgpu::BindGroupEntry ggml_webgpu_make_tensor_bind_group_entry(',
+                       'static webgpu_encoded_op ggml_backend_webgpu_build_impl(',
                        'static webgpu_encoded_op ggml_backend_webgpu_build_multi(',
+                       'static bool ggml_webgpu_mul_mat_vec4_aligned(',
                        'static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context('):
-            code += '\n' + function(backend, marker)
+            code += '\n' + ('template<class Dispatch>\n' if 'ggml_backend_webgpu_build_impl(' in marker else '') + function(backend, marker)
         code += '\nstatic void ggml_webgpu_quantize_q8_dispatch(webgpu_context &,ggml_tensor *,ggml_tensor *,ggml_tensor *,std::vector<webgpu_dispatch_desc> &){throw std::runtime_error("unexpected MMVQ");}'
         code += '\ntemplate<bool Diagnostic>\n' + function(backend, 'static webgpu_encoded_op ggml_webgpu_mul_mat_impl(')
         code += '\nstatic std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context & ctx,ggml_cgraph * g,int i,int & count){count=1;auto * d=g->nodes[i];return ggml_webgpu_mul_mat_impl<false>(ctx,d->src[0],d->src[1],d);}'
@@ -226,11 +233,15 @@ class Q8Diagnostic(unittest.TestCase):
         identity = json.loads((HERE / 'inputs.json').read_text())
         for name, expected in identity['public_source_sha256'].items():
             self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), expected)
-        for name, expected in diagnostic.INPUTS.items():
+        self.assertEqual(source.profile_query_budget.INPUT_SHA256, source.OUTPUT_SHA256)
+        self.assertEqual(diagnostic.INPUTS['ggml-webgpu.cpp'], source.profile_query_budget.OUTPUT_SHA256)
+        for name, expected in source.FINAL_OUTPUTS[False].items():
             self.assertEqual(hashlib.sha256((self.normal / name).read_bytes()).hexdigest(), expected)
         self.assertFalse((self.normal / 'ggml-webgpu-q8-diagnostic.h').exists())
-        for name, expected in diagnostic.OUTPUTS.items():
+        for name, expected in source.FINAL_OUTPUTS[True].items():
             self.assertEqual(hashlib.sha256((self.profile / name).read_bytes()).hexdigest(), expected)
+        for prepared in (self.normal, self.profile):
+            self.assertEqual(hashlib.sha256((prepared / source.iq3s_row_split.HEADER_NAME).read_bytes()).hexdigest(), source.iq3s_row_split.HEADER_SHA256)
         original = (self.upstream / diagnostic.SHA_SOURCE).read_text()
         fragment = original[original.index(diagnostic.SHA_BEGIN):original.index(diagnostic.SHA_END)]
         self.assertIn(fragment, (self.profile / 'ggml-webgpu-q8-diagnostic-sha256.hpp').read_text())
@@ -339,7 +350,7 @@ class Q8Diagnostic(unittest.TestCase):
             self.assertEqual((build / 'generated/jspi-exports.json').read_text(), '[]')
         # The source overlay also removes its own stale profile-only sibling headers.
         source.prepare(self.upstream, self.profile)
-        self.assertEqual(hashlib.sha256((self.profile / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), source.OUTPUT_SHA256)
+        self.assertEqual(hashlib.sha256((self.profile / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
         self.assertFalse((self.profile / 'ggml-webgpu-q8-diagnostic.h').exists())
         source.prepare(self.upstream, self.profile, gpu_profile=True)
 

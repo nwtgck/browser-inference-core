@@ -10,8 +10,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
 import prepare_webgpu_iq3s_subgroup as iq3
+import prepare_webgpu_iq3s_field_loads as fields
+import prepare_webgpu_iq3s_row_split as rows
 import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
+
+from matmul_vec4_test_support import explicit_layout_argument
 
 
 def prepare_base(upstream: Path, output: Path) -> None:
@@ -27,18 +31,29 @@ def prepare_base(upstream: Path, output: Path) -> None:
 
 
 def prepare(upstream: Path, output: Path) -> None:
+    if os.environ.get('LCB_TEST_IQ3S_BASE'):
+        raise ValueError('Current IQ3_S numerical checks require the final embedding; historical prefixes are native-test-only')
     prepare_base(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) in (iq3.OUTPUTS[header.name], source.SSM_HEADER_OUTPUT_SHA256):
-        if copy.digest(output / iq3.HEADER_NAME) != iq3.HEADER_SHA256:
-            raise ValueError('Unexpected integrated IQ3_S embedding')
-        return
+    if copy.digest(header) != source.FINAL_OUTPUTS[False][header.name] or copy.digest(output / iq3.HEADER_NAME) != rows.HEADER_SHA256:
+        raise ValueError('Unexpected final IQ3_S embedding')
+
+
+def prepare_historical_prefix(upstream: Path, output: Path) -> None:
+    """Native prefix fixtures only; never the current numerical-checker path."""
+    if not os.environ.get('LCB_TEST_IQ3S_BASE'):
+        raise ValueError('Historical IQ3_S preparation requires an explicit prefix')
+    prepare_base(upstream, output)
+    header = output / 'ggml-webgpu-shader-lib.hpp'
     with tempfile.TemporaryDirectory(prefix='iq3s-stage-') as tmp:
         work = Path(tmp)
         (work / iq3.BASE).mkdir(parents=True)
         for name in iq3.INPUTS:
             shutil.copyfile(output / name, work / iq3.BASE / name)
         extra = iq3.prepare(work, upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work))
+        extra[iq3.HEADER_NAME] = fields.prepare(
+            work, upstream, ROOT / source.PATCH_DIRECTORY, source.patch_environment(work),
+            previous_header=extra[iq3.HEADER_NAME])
         for name in ('ggml-webgpu.cpp', header.name):
             shutil.copyfile(work / iq3.BASE / name, output / name)
         for name, path in extra.items():
@@ -46,7 +61,7 @@ def prepare(upstream: Path, output: Path) -> None:
 
 
 def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
-    header = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    header = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     cpp = (prepared / 'ggml-webgpu.cpp').read_text()
     prefix = (ROOT / 'tests/webgpu-expert-short/host-prefix.cpp').read_text()
     prefix = prefix.replace('    throw std::runtime_error("Unexpected recording type");',
@@ -54,7 +69,7 @@ def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
         '    if(type==GGML_TYPE_IQ3_S)return &iq3;\n    throw std::runtime_error("Unexpected recording type");')
     start = header.index('    webgpu_pipeline get_mul_mat_id_vec_pipeline(')
     end = header.index('    webgpu_pipeline get_unary_pipeline(', start)
-    original = (upstream / iq3.BASE / 'ggml-webgpu-shader-lib.hpp').read_text()
+    original = explicit_layout_argument((upstream / iq3.BASE / 'ggml-webgpu-shader-lib.hpp').read_text())
     reference_start = original.index('    webgpu_pipeline get_mul_mat_id_vec_pipeline(')
     reference_end = original.index('    webgpu_pipeline get_unary_pipeline(', reference_start)
     chunks = [prefix, '#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"\n#include <limits>',
@@ -81,6 +96,7 @@ def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
         ''', original[reference_start:reference_end], '};',
         (Path(__file__).with_name('dispatch-prefix.cpp')).read_text(),
         function(cpp, 'static inline void compute_2d_workgroups('),
+               (function(cpp, 'static bool ggml_webgpu_mul_mat_vec4_aligned(') if 'static bool ggml_webgpu_mul_mat_vec4_aligned(' in cpp else ''),
         function(cpp, 'static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec('),
         (Path(__file__).with_name('host-cases.cpp')).read_text()]
     output.mkdir(parents=True, exist_ok=True)

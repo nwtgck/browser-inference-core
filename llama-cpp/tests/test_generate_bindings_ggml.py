@@ -89,6 +89,7 @@ class GgmlBindings(unittest.TestCase):
                     '-I' + str(source / 'include'),
                     '-I' + str(source / 'ggml/include'),
                     '-I' + str(source / 'tools/mtmd'), str(output / 'bindings.cpp'),
+                    '-I' + str(ROOT / 'bridge'),
                 ], check=True, capture_output=True, text=True)
 
     def test_public_ggml_functions_records_and_exports(self):
@@ -172,6 +173,7 @@ class GgmlBindings(unittest.TestCase):
                     '-I' + str(source / 'include'),
                     '-I' + str(source / 'ggml/include'),
                     '-I' + str(source / 'tools/mtmd'),
+                    '-I' + str(ROOT / 'bridge'),
                     str(output / 'bindings.cpp'),
                 ], check=True, capture_output=True, text=True)
 

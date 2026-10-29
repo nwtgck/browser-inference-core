@@ -1,0 +1,32 @@
+{
+  "llamaCommit": "8642541b255bfb5dc39cd351a178be09013a55d6",
+  "files": {
+    "tools/mtmd/clip.cpp": "2038a73e6a799fda103cd30c61882c275997399904294c8e7d421b6bb8a1e490",
+    "tools/mtmd/clip-model.h": "354ddff1ca02867af94f4687a523ebd2be44d75561170a6b1a5b94a6d965359b",
+    "tools/mtmd/clip-impl.h": "6e26e8594b988c910dd23331e3d85e0f2deaade0a5759462fcfeae112a2d3bfd",
+    "tools/mtmd/clip-graph.h": "cbb70fe4e5d6a364b463b6d22e2619f6f61036cd8262b9ec99ee7935035e1446",
+    "tools/mtmd/models/llava.cpp": "b150542a0adf4945c90b21cfca317edc975941c0a7b5cb7cc3139fc9a5d55cf0",
+    "tools/mtmd/models/siglip.cpp": "5b7c773c3730626d42b7a24ad7bca9c0c937c8b28ceb7253163fb6d582015015",
+    "tools/mtmd/models/qwen2vl.cpp": "78c89875dd44a2faa295cebc2ea8ca781735b9c2cfa992751106aa1e51b229a6",
+    "tools/mtmd/models/qwen3vl.cpp": "26e0da9db8258d5dcb6c3b75edea86caeeb9bad3ac4f378c5d508f7304d74781",
+    "tools/mtmd/models/gemma4v.cpp": "776bc47dacb61ad815bc867c584590a13842147991d79947882087d7690dd6ac",
+    "tools/mtmd/models/lfm3vl.cpp": "534c9793d9df562e991f16cb4d54b02a75cabb4858083d1d83cb208f6c687af1",
+    "ggml/src/ggml-backend.cpp": "79ade6b83b3d042e43e035fa81d2c672211a552af9af38e410a047e4ba2723a0",
+    "ggml/src/ggml-alloc.c": "9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39",
+    "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e",
+    "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d",
+    "ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl": "89d5cef5182e5ce308d4a0bc77c232301836e7d7bfb0d61e46f0ca775b43640c",
+    "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl": "4fdbbaf3b3d3b7c965786b62a58b6b35ceb6d2f80b29e53f4a027904d3243f18",
+    "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl": "9421bdb7ac569e03e8483365653c28b95e659702f8ff849310b2c077ee64290f",
+    "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl": "c461aa2108b752504f47338e41b14ee6570abdd831cd83652e052147c89d69ef",
+    "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl": "2d1cb611caf10b72d20b021772806ca4b3ea4f40c9d7a93941e135dacf859f81",
+    "ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl": "1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555",
+    "ggml/src/ggml.c": "45e90696c4a766d5747f3443f817cd3be11f0110cf93cd16926698c0f49ed083",
+    "ggml/include/ggml.h": "2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7",
+    "ggml/include/ggml-backend.h": "0e5e8e1f16d11ebbf501e38bc6705d79eee819b5f0b17476533f2100ed9674e2",
+    "ggml/include/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+    "tools/mtmd/clip.h": "c3c7c57eb7bdea4ce092de237552caa235d46126415c14e54857729294610658",
+    "tools/mtmd/mtmd.cpp": "f91c03efc4d6c655b3e2aae7d5d7f6b7e15bd63903f17ca981d60dced6642492",
+    "tools/mtmd/mtmd.h": "888dc7949d75044c62b15b53ba08eded81e81f9e0e110da78b33c76ddbd58be5"
+  }
+}

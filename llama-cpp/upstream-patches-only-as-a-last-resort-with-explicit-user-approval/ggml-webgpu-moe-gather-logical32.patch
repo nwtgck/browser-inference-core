@@ -1,0 +1,54 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -11,6 +11,7 @@
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
++#include "ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp"
+ #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+@@ -2699,7 +2700,7 @@
+         defines.push_back(std::string("TILE_N_SLOTS=") +
+                           std::to_string(WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N) + "u");
+ 
+-        auto processed     = preprocessor.preprocess(wgsl_mul_mat_id_gather, defines);
++        auto processed     = preprocessor.preprocess(wgsl_mul_mat_id_gather_logical32, defines);
+         auto decisions     = std::make_shared<ggml_webgpu_generic_shader_decisions>();
+         decisions->wg_size = context.max_wg_size;
+ 
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl
+@@ -85,16 +85,22 @@
+         }
+     }
+ 
+-    // the matmul writes only the rows that an expert owns, so zero the rows of the skipped slots
+-    for (var i: u32 = 0; i < ids_slots_num; i += 1) {
+-        let row = i / params.n_expert_used;
+-        let col = i % params.n_expert_used;
+-        if (ids[params.offset_ids + row * params.stride_ids_1 + col] != -1) {
+-            continue;
+-        }
+-        let dst_row = params.offset_dst + i * params.m;
+-        for (var r = thread_id; r < params.m; r += WG_SIZE) {
+-            dst[dst_row + r] = 0.0f;
++    let zero_lanes = min(32u, WG_SIZE);
++    let zero_groups = WG_SIZE / zero_lanes;
++    let zero_group = thread_id / zero_lanes;
++    let zero_lane = thread_id % zero_lanes;
++    if (zero_group < zero_groups) {
++        // the matmul writes only the rows that an expert owns, so zero the rows of the skipped slots
++        for (var i = zero_group; i < ids_slots_num; i += zero_groups) {
++            let row = i / params.n_expert_used;
++            let col = i % params.n_expert_used;
++            if (ids[params.offset_ids + row * params.stride_ids_1 + col] != -1) {
++                continue;
++            }
++            let dst_row = params.offset_dst + i * params.m;
++            for (var r = zero_lane; r < params.m; r += zero_lanes) {
++                dst[dst_row + r] = 0.0f;
++            }
+         }
+     }
+ }

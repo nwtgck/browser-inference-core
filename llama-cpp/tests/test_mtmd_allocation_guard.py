@@ -1,4 +1,4 @@
-"""Focused regression for the v0.5.0 allocation hunk, not a full upstream build.
+"""Focused regression for the v0.8.0 allocation hunk, not a full upstream build.
 
 The short input below is independent of the patch under test. The separate
 real-upstream tests still apply every hunk and compile the full translation unit.
@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 
-# Allocation boundary in tools/mtmd/clip.cpp at upstream v0.5.0:
-# 7fe450e19305b828c199d602c23a8337aaa1f03b. Do not derive this input from the
+# Allocation boundary in tools/mtmd/clip.cpp at upstream v0.8.0:
+# 8642541b255bfb5dc39cd351a178be09013a55d6. Do not derive this input from the
 # patch's minus/context lines: doing so would also accept the obsolete backport.
 ALLOCATION_GUARD = r'''    if (!ggml_backend_sched_alloc_graph(ctx->sched.get(), gf)) {
         LOG_ERR("%s: failed to allocate compute graph\n", __func__);
@@ -29,6 +29,11 @@ UPSTREAM_FRAGMENT = (
     "    // build the inference graph\n"
     "    ggml_backend_sched_reset(ctx->sched.get());\n"
     "    ggml_cgraph * gf = clip_get_graph_builder(ctx, imgs, params)->build();\n"
+    "\n"
+    "    // the last node is the embedding tensor, code2wav has no out_embd\n"
+    "    // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)\n"
+    "    ggml_tensor * embeddings = params->out_embd ? ggml_graph_node(gf, -1) : nullptr;\n"
+    "\n"
     + ALLOCATION_GUARD +
     "\n"
     "    // set inputs\n"
@@ -69,7 +74,11 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         changed = "\n".join(line[1:] for line in self.hunk.splitlines() if line.startswith(("+", "-")))
         self.assertNotIn("ggml_backend_sched_alloc_graph", changed)
         self.assertNotIn("failed to allocate compute graph", changed)
-        self.assertNotIn("return false;", changed)
+        removed = "\n".join(line[1:] for line in self.hunk.splitlines() if line.startswith("-"))
+        self.assertNotIn("return false;", removed)
+        # New retained-mode failures also return false; they do not replace the
+        # upstream-owned allocation failure boundary.
+        self.assertIn("retained_plan.verify_allocated", result)
         guard_end = result.index(ALLOCATION_GUARD) + len(ALLOCATION_GUARD)
         diagnostic_start = result.index("    if (ctx->model.modality == CLIP_MODALITY_VISION")
         inputs = result.index("    // set inputs")

@@ -1,0 +1,57 @@
+--- a/clip.cpp
++++ b/clip.cpp
+@@ -8,6 +8,10 @@
+ #include "ggml-cpp.h"
+ #include "ggml-alloc.h"
+ #include "ggml-backend.h"
++#include "mtmd-vision-bf16-internal.h"
++#if LCB_MTMD_WEBGPU_BF16_RUNTIME != 0
++#error "Vision BF16 loader and compile-target capability disagree"
++#endif
+ #include "gguf.h"
+ 
+ #include <algorithm>
+@@ -145,6 +149,7 @@
+ 
+ 
+ struct clip_ctx {
++    const mtmd_vision_bf16_storage vision_bf16_storage;
+     clip_model model;
+ 
+     gguf_context_ptr ctx_gguf;
+@@ -174,7 +179,9 @@
+ 
+     bool support_batch = false;
+ 
+-    clip_ctx(clip_context_params & ctx_params) {
++    clip_ctx(clip_context_params & ctx_params,
++             mtmd_vision_bf16_storage storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
++        vision_bf16_storage(storage) {
+         flash_attn_type = ctx_params.flash_attn_type;
+         no_alloc = ctx_params.no_alloc;
+         backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+@@ -4567,6 +4574,12 @@
+ };
+ 
+ struct clip_init_result clip_init(const char * fname, struct clip_context_params ctx_params) {
++    return lcb_clip_init_with_vision_bf16_storage(
++        fname, ctx_params, MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
++}
++
++clip_init_result lcb_clip_init_with_vision_bf16_storage(
++        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage) {
+     clip_ctx * ctx_vision = nullptr;
+     clip_ctx * ctx_audio = nullptr;
+     clip_ctx * ctx_gen_audio = nullptr;
+@@ -4579,7 +4592,10 @@
+         bool skip_audio = false;
+ 
+         if (loader.has_vision) {
+-            ctx_vision = new clip_ctx(ctx_params);
++            // This copy has no checked WebGPU loader. Reject only vision, at
++            // the existing classification boundary and before weight allocation.
++            lcb_mtmd_check_retained_backend(storage, ctx_params.use_gpu, false);
++            ctx_vision = new clip_ctx(ctx_params, storage);
+             loader.load_hparams(ctx_vision->model, CLIP_MODALITY_VISION);
+             loader.load_tensors(*ctx_vision);
+             loader.init_ctx(*ctx_vision);

@@ -68,6 +68,24 @@ class Distribution(unittest.TestCase):
         manifest_path.write_text(json.dumps(manifest))
         with self.assertRaisesRegex(ValueError,'Browser module preparation output mismatch'):
             validate(self.package,check_npm_pack=False)
+    def test_runtime_storage_capability_survives_normal_distribution(self):
+        capability={'version':1,'modes':['legacy-expand','retain-checked'],'default':'legacy-expand'}
+        for variant in VARIANTS:
+            path=self.root/'build/cpu-wasm32'/variant/'provenance.json'
+            data=json.loads(path.read_text()); data['visionBf16Storage']=capability
+            path.write_text(json.dumps(data))
+        self.assemble()
+        validate(self.package, check_npm_pack=False)
+        manifest=json.loads((self.package/'manifest.json').read_text())
+        self.assertEqual(set(manifest['profiles']['cpu-wasm32']['variants']),set(VARIANTS))
+        for info in manifest['profiles']['cpu-wasm32']['variants'].values():
+            self.assertEqual(info['visionBf16Storage'],capability)
+        path=self.root/'build/cpu-wasm32/test/provenance.json'
+        data=json.loads(path.read_text()); data['visionBf16Storage']['default']='retain-checked'
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError,'BF16 runtime capability'):
+            self.assemble()
+
     def test_payload_tampering_is_rejected(self):
         (self.package/'profiles/cpu-wasm32/browser/core.wasm').write_bytes(b'bad')
         with self.assertRaises(ValueError): validate(self.package)

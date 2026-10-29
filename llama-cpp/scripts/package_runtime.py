@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.append(str(Path(__file__).resolve().parent))
+from verify_bf16_build import validate_metadata as validate_bf16_metadata
+
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT.parent / 'scripts'))
 from package_inputs import copy_regular, copy_regular_tree, read_regular, regular_path
@@ -96,6 +99,7 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
     for name, profile in manifest['profiles'].items():
         if set(profile['variants'])!=set(VARIANTS): raise ValueError(f'Missing or unknown variant: {name}')
         for variant, info in profile['variants'].items():
+            validate_bf16_metadata(info)
             if info['profile']!=name or info['variant']!=variant or info['variantConfiguration']!=VARIANTS[variant]:
                 raise ValueError(f'Variant provenance mismatch: {name}/{variant}')
             if info['sourceCommit']!=manifest['sourceCommit'] or info['llamaCommit']!=manifest['llamaCommit']:
@@ -134,6 +138,7 @@ def build_package(build_root: Path, destination: Path, profiles: list[str], *, l
             for variant in VARIANTS:
                 build=build_root/name/variant
                 data=json.loads(read_regular(build/'provenance.json'))
+                validate_bf16_metadata(data)
                 if data['profile']!=name: raise ValueError('Profile mismatch')
                 if data['variant']!=variant or data['variantConfiguration']!=VARIANTS[variant]:
                     raise ValueError(f'Variant provenance mismatch: {name}/{variant}')

@@ -14,16 +14,18 @@ import prepare_webgpu_q8_subgroup as q8
 import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
+from matmul_vec4_test_support import explicit_layout_argument
+
 
 def prepare(upstream: Path, output: Path) -> None:
     source.prepare(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) != source.SSM_HEADER_OUTPUT_SHA256 or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
+    if copy.digest(header) != source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'] or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
         raise ValueError('Unexpected integrated Q8 subgroup output')
 
 
 def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
-    text = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     backend = (prepared / 'ggml-webgpu.cpp').read_text()
     dispatch_start = backend.index('    if (use_mat_vec) {', backend.index('    // Calculate workgroup dimensions', backend.index('static webgpu_encoded_op ggml_webgpu_mul_mat(')))
     dispatch_end = backend.index('    } else {', dispatch_start)

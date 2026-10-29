@@ -84,6 +84,14 @@ class ChatBindingSurface(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('save', result.stderr)
 
+    def test_caps_adapter_rejects_the_previous_boolean_map_signature(self):
+        signature = 'select_overload<common_json(const common_chat_templates *)>(&common_chat_templates_get_caps)'
+        self.assertIn(signature, self.bridge)
+        result = self.compile(self.bridge.replace(
+            signature, 'select_overload<std::map<std::string, bool>(const common_chat_templates *)>(&common_chat_templates_get_caps)'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('common_chat_templates_get_caps', result.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()

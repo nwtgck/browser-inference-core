@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-host-input-snapshot'
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_host_input_snapshot as snapshot
 import prepare_webgpu_tensor_copy as tensor_copy
 
@@ -51,7 +52,7 @@ class HostInputSnapshot(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='host-snapshot-identity-') as temporary:
             directory = Path(temporary)
             target = self.prepare(directory)
-            self.assertEqual(tensor_copy.digest(target), source.OUTPUT_SHA256)
+            self.assertEqual(tensor_copy.digest(target), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])
             self.assertEqual(tensor_copy.digest(directory / 'ggml-backend.cpp'), snapshot.BACKEND_OUTPUT_SHA256)
             self.assertEqual(tensor_copy.digest(directory / 'ggml-backend-host-snapshot.h'), snapshot.HEADER_OUTPUT_SHA256)
             self.assertEqual(tensor_copy.digest(ROOT / source.PATCH_DIRECTORY / snapshot.PATCH_NAME), snapshot.PATCH_SHA256)
@@ -65,10 +66,13 @@ class HostInputSnapshot(unittest.TestCase):
     def test_module_guards_reject_contract_patch_input_output_and_existing_source_drift(self):
         with tempfile.TemporaryDirectory(prefix='host-snapshot-drift-') as temporary:
             root = Path(temporary)
-            with patch.object(snapshot, 'prepare', return_value={}), \
+            with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
+                    patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', snapshot.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.ssm_conv_silu.INPUTS['ggml-webgpu-shader-lib.hpp']):
                 baseline = self.prepare(root / 'base')
@@ -145,10 +149,13 @@ class HostInputSnapshot(unittest.TestCase):
                     self.assertEqual(harness.function(actual, name), harness.function(upstream, name))
             # Compare the previous composed provider, not pristine upstream: this
             # stage must retain checked async-copy and ordered-readback behavior.
-            with patch.object(snapshot, 'prepare', return_value={}), \
+            with without_final_matvec_stages(source), patch.object(source.moe_tight_tile_bound, 'prepare'), patch.object(source.matmul_vec4_layout, 'prepare'), patch.object(snapshot, 'prepare', return_value={}), \
                     patch.object(source.ssm_conv_silu, 'prepare', return_value={}), \
                     patch.object(source.moe_group_skip, 'prepare', return_value={}), \
                 patch.object(source.router_tail, 'prepare', return_value={}), \
+                    patch.object(source.host_encode_assembly, 'prepare'), \
+                    patch.object(source.f32_small_m, 'prepare'), \
+                    patch.object(source.moe_gather_logical32, 'prepare', return_value={}), \
                     patch.object(source, 'OUTPUT_SHA256', snapshot.INPUT_SHA256), \
                     patch.object(source, 'SSM_HEADER_OUTPUT_SHA256', source.ssm_conv_silu.INPUTS['ggml-webgpu-shader-lib.hpp']):
                 before = self.prepare(directory / 'before').read_text()

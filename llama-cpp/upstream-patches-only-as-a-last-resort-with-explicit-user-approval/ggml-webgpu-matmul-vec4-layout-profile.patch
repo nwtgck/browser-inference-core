@@ -1,0 +1,202 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -1800,6 +1800,21 @@
+     });
+ }
+ 
++// VEC shaders divide binding-relative offsets and active strides by four.
++// Test the actual wire offset (including merged bindings), not view_offs alone.
++static bool ggml_webgpu_mul_mat_vec4_aligned(const ggml_tensor * tensor, uint32_t offset) {
++    if ((tensor->type != GGML_TYPE_F32 && tensor->type != GGML_TYPE_F16) || offset % 4 != 0) {
++        return false;
++    }
++    const size_t vector_bytes = tensor->type == GGML_TYPE_F32 ? 16u : 8u;
++    for (int axis = 1; axis < GGML_MAX_DIMS; ++axis) {
++        if (tensor->ne[axis] > 1 && (tensor->nb[axis] & (vector_bytes - 1)) != 0) {
++            return false;
++        }
++    }
++    return true;
++}
++
+ static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context(webgpu_context & ctx,
+                                                                ggml_tensor * src0, ggml_tensor * src1,
+                                                                ggml_tensor * dst) {
+@@ -1842,17 +1857,6 @@
+     std::vector<webgpu_dispatch_desc> dispatches;
+     const bool src_overlap = ggml_webgpu_tensor_binding_overlap(ctx->global_ctx, src0, src1) && !use_mmvq;
+ 
+-    if constexpr (Diagnostic) {
+-        pipeline = *explicit_pipeline;
+-    } else if (use_mat_vec) {
+-        if (use_mmvq) {
+-            ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
+-        }
+-        pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(shader_lib_ctx, src_overlap);
+-    } else {
+-        pipeline = ctx->shader_lib->get_mul_mat_fast_pipeline(shader_lib_ctx, src_overlap);
+-    }
+-
+     uint32_t offset_src0   = (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type));
+     uint32_t offset_src1   = (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type));
+     size_t   merged_offset = 0;
+@@ -1866,10 +1870,26 @@
+         offset_src1   = ggml_webgpu_tensor_merged_element_offset(src1, merged_range);
+     }
+ 
++    const uint32_t offset_dst =
++        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
++    const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0) &&
++                              ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1);
++    if constexpr (Diagnostic) {
++        pipeline = *explicit_pipeline;
++    } else if (use_mat_vec) {
++        if (use_mmvq) {
++            ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
++        }
++        pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(shader_lib_ctx, src_overlap, vec4_aligned);
++    } else {
++        pipeline = ctx->shader_lib->get_mul_mat_fast_pipeline(shader_lib_ctx, src_overlap,
++                                                             vec4_aligned && offset_dst % 4 == 0);
++    }
++
+     // Build params
+     std::vector<uint32_t> params = { offset_src0,
+                                      offset_src1,
+-                                     (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type)),
++                                     offset_dst,
+                                      (uint32_t) dst->ne[0],
+                                      (uint32_t) dst->ne[1],
+                                      (uint32_t) src0->ne[0],
+@@ -2012,7 +2032,9 @@
+             shader_lib_ctx.indexed_buffer_remaining[i] = entry.offset <= physical ? physical - entry.offset : 0;
+         }
+     }
+-    webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx);
++    const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, params[0]) &&
++                              ggml_webgpu_mul_mat_vec4_aligned(src1, params[1]);
++    webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx, vec4_aligned);
+ 
+     uint32_t wg_x = 1;
+     uint32_t wg_y = 1;
+@@ -2063,8 +2085,16 @@
+ 
+     std::vector<webgpu_dispatch_desc> dispatches;
+ 
++    const uint32_t offset_src0 =
++        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type));
++    const uint32_t offset_src1 =
++        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type));
++    const uint32_t offset_dst =
++        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
++    const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0) &&
++                              ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1) && offset_dst % 4 == 0;
+     gather_pipeline = ctx->shader_lib->get_mul_mat_id_gather_pipeline(shader_lib_ctx);
+-    main_pipeline   = ctx->shader_lib->get_mul_mat_id_pipeline(shader_lib_ctx);
++    main_pipeline   = ctx->shader_lib->get_mul_mat_id_pipeline(shader_lib_ctx, vec4_aligned);
+ 
+     const uint32_t param_n_expert      = (uint32_t) src0->ne[2];
+     const uint32_t param_n_expert_used = (uint32_t) dst->ne[1];
+@@ -2073,7 +2103,7 @@
+     // params for mul_mat_id_gather.wgsl
+     std::vector<uint32_t> gather_params = {
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src2) / ggml_type_size(src2->type)),
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type)),
++        offset_dst,
+         param_n_expert,
+         param_n_expert_used,
+         param_n_tokens,
+@@ -2110,9 +2140,9 @@
+ 
+     // params for mul_mat_id.wgsl
+     std::vector<uint32_t> main_params = {
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type)),
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type)),
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type)),
++        offset_src0,
++        offset_src1,
++        offset_dst,
+         (uint32_t) src0->ne[0],
+         (uint32_t) src0->ne[1],
+         param_n_expert,
+@@ -5788,7 +5818,8 @@
+              !(a.offset <= b.offset ? a.size <= b.offset - a.offset : b.size <= a.offset - b.offset))) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
+     }
+     const auto context = ggml_webgpu_mat_context(ctx, tensors[0], tensors[1], dst);
+-    auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(context, false);
++    // Q8_0 uses the quantized loader, never the floating-point vec4 specialization.
++    auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(context, false, false);
+     if (req.variant == 0 && key.use_mmvq) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
+     if (req.variant) {
+         key.use_mmvq = false;
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2327,11 +2327,11 @@
+         return quantize_q8_pipelines[key];
+     }
+ 
+-    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
++    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_vec_pipeline_key key = {};
+         key.src0_type                            = context.src0->type;
+         key.src1_type                            = context.src1->type;
+-        key.vectorized = (context.src0->ne[0] % 4 == 0 &&
++        key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+                              0;
+@@ -2351,8 +2351,8 @@
+     std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key, webgpu_pipeline,
+                        ggml_webgpu_mul_mat_vec_pipeline_key_hash> q8_diagnostic_pipelines;
+ 
+-    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
+-        return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap));
++    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
++        return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap, vec4_aligned));
+     }
+ 
+     webgpu_pipeline prepare_q8_diagnostic_pipeline(const ggml_webgpu_shader_lib_context & context,
+@@ -2542,11 +2542,11 @@
+         return mul_mat_vec_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
++    webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_pipeline_key key = {};
+         key.src0_type                        = context.src0->type;
+         key.src1_type                        = context.src1->type;
+-        key.vectorized          = (context.src0->ne[0] % 4 == 0 && context.dst->ne[0] % 4 == 0 &&
++        key.vectorized          = (vec4_aligned && context.src0->ne[0] % 4 == 0 && context.dst->ne[0] % 4 == 0 &&
+                                    (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                                       1 :
+                                       0;
+@@ -2754,12 +2754,12 @@
+         return pipeline;
+     }
+ 
+-    webgpu_pipeline get_mul_mat_id_pipeline(const ggml_webgpu_shader_lib_context & context) {
++    webgpu_pipeline get_mul_mat_id_pipeline(const ggml_webgpu_shader_lib_context & context, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_id_pipeline_key key = {};
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
+-        key.vectorized = (context.src0->ne[0] % 4 == 0 && context.src0->ne[1] % 4 == 0 &&
++        key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 && context.src0->ne[1] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+                              0;
+@@ -2887,12 +2887,12 @@
+         return mul_mat_id_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_mul_mat_id_vec_pipeline(const ggml_webgpu_shader_lib_context & context) {
++    webgpu_pipeline get_mul_mat_id_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_id_pipeline_key key = {};
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
+-        key.vectorized = (context.src0->ne[0] % 4 == 0 &&
++        key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+                              0;

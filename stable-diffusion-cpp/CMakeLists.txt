@@ -31,6 +31,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${SDCB_GGML_SOURCE}/include/ggml.h"
     "${SDCB_GGML_SOURCE}/include/ggml-backend.h"
     "${SDCB_GGML_SOURCE}/include/ggml-cpu.h"
+    "${SDCB_GGML_SOURCE}/include/ggml-alloc.h"
     "${SDCB_GGML_SOURCE}/include/gguf.h")
 if(SDCB_MEMORY64 AND NOT SDCB_JSPI)
     message(FATAL_ERROR "The memory64 profile requires JSPI")
@@ -136,7 +137,11 @@ if(SDCB_NATIVE_CHECK)
     target_compile_definitions(browser-boundary-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
     target_include_directories(browser-boundary-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
     target_link_libraries(browser-boundary-test PRIVATE core stable-diffusion)
+    add_executable(public-graph-test tests/public-graph-test.cpp)
+    target_include_directories(public-graph-test PRIVATE "${SDCB_GGML_SOURCE}/include")
+    target_link_libraries(public-graph-test PRIVATE core stable-diffusion)
     enable_testing()
+    add_test(NAME public-graph COMMAND public-graph-test)
     foreach(name image-causal anima-attention anima-context webgpu-rope webgpu-attention-softmax)
         add_executable(${name}-test tests/${name}-test.cpp)
         target_compile_definitions(${name}-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
