@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.append(str(Path(__file__).resolve().parent))
 from verify_bf16_build import validate_metadata as validate_bf16_metadata
 
 ROOT=Path(__file__).resolve().parents[1]

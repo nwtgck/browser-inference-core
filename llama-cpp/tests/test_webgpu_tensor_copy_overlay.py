@@ -103,6 +103,9 @@ class TensorCopyBuildCommand(unittest.TestCase):
                     if config.get('gpuProfile'):
                         commands += [{'file': name, 'command': 'c++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c ' + name}
                                      for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
+                    commands += [{'file': name,
+                                  'command': 'c++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(config['webgpu'])) + ' -c ' + name}
+                                 for name in ('clip.cpp', 'mtmd.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     argv = ['build.py', '--profile', profile, '--variant', variant]
                     with self.subTest(profile=profile, variant=variant), patch.object(builder, 'ROOT', root), \

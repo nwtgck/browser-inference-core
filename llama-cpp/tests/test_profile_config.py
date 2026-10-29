@@ -66,6 +66,9 @@ class ProfileConfiguration(unittest.TestCase):
                         commands += [{'file': '/build/generated/' + name,
                                       'command': 'em++ -DLCB_WEBGPU_Q8_DIAGNOSTIC=1 -c /build/generated/' + name}
                                      for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
+                    commands += [{'file': '/build/generated/' + name,
+                                  'command': 'em++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(profiles[profile]['webgpu'])) + ' -c /build/generated/' + name}
+                                 for name in ('clip.cpp', 'mtmd.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     with self.subTest(profile=profile, variant=variant), \
                          patch.object(build, 'ROOT', root), \
