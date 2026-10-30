@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -21,32 +22,39 @@ from test_webgpu_bind_group_cache import definition, function
 HERE = ROOT / 'tests/webgpu-host-encode-assembly'
 
 
-def extracted_model(actual, header):
-    model = (ROOT / 'tests/webgpu-bind-group-cache/mock-harness.cpp').read_text().split('static void assert_values(')[0]
-    for marker, name in {
-        'ACTUAL_CREATE_BUFFER': 'ggml_webgpu_create_buffer',
-        'ACTUAL_MAKE_ENTRY': 'ggml_webgpu_make_bind_group_entry',
-        'ACTUAL_SUBMIT': 'ggml_backend_webgpu_submit_commands',
-        'ACTUAL_GRAPH_COMPUTE': 'ggml_backend_webgpu_graph_compute',
-        'ACTUAL_BUFFER_FREE': 'ggml_backend_webgpu_buffer_free_buffer',
-    }.items():
-        value = function(actual, name)
-        if marker == 'ACTUAL_GRAPH_COMPUTE' and 'static ggml_status ggml_backend_webgpu_graph_compute_impl(' in actual:
-            value = (definition(actual, 'struct webgpu_profile_operation_guard {') + 'template<class Encode>\n' +
-                     function(actual, 'ggml_backend_webgpu_graph_compute_impl') + value)
-            model = model.replace('bool batch_compute_passes = true;', 'bool batch_compute_passes = true; bool operation_in_progress = false;')
-            model = model.replace('enum ggml_status { GGML_STATUS_SUCCESS };', 'enum ggml_status { GGML_STATUS_SUCCESS, GGML_STATUS_FAILED };')
-        model = model.replace('// @' + marker + '@', value)
-    helpers = function(actual, 'ggml_backend_webgpu_build_multi') + function(actual, 'ggml_backend_webgpu_build')
-    if 'struct webgpu_dispatch_view {' in actual:
-        helpers = (definition(actual, 'struct webgpu_dispatch_view {') + 'template<class Dispatch>\n' +
-                   function(actual, 'ggml_backend_webgpu_build_impl') + helpers)
-    model = model.replace('// @ACTUAL_BUILD_MULTI@', helpers)
-    for marker, name in {'ACTUAL_PARAM_ARENA': 'webgpu_param_arena', 'ACTUAL_CACHE': 'webgpu_bind_group_cache',
-                         'ACTUAL_ENCODED_OP': 'webgpu_encoded_op', 'ACTUAL_DISPATCH_DESC': 'webgpu_dispatch_desc'}.items():
-        model = model.replace('// @' + marker + '@', definition(actual, 'struct ' + name + ' {'))
-    model = model.replace('struct webgpu_pipeline { wgpu::ComputePipeline pipeline; std::string name; };',
-                          definition(header, 'struct webgpu_pipeline {'))
+# The mock fragments used below have no preprocessor directives. Match the
+# complete lexical tokens, rejecting comments and string literals as substitutes
+# for executable code, while accepting clang-format whitespace changes.
+_CPP_TOKEN = re.compile(
+    r'\s+|//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
+    r'|[A-Za-z_]\w*|0[xX][0-9a-fA-F]+|[0-9]+(?:\.[0-9]+)?|->|::|==|!=|<=|>=|&&|\|\||\+\+|--|<<|>>|[^\s]'
+)
+
+
+def cpp_tokens(text):
+    return [(m.group(), m.start(), m.end()) for m in _CPP_TOKEN.finditer(text)
+            if not m.group().isspace()]
+
+
+def replace_cpp_fragment_once(text, before, after, error):
+    expected = [token for token, _, _ in cpp_tokens(before)]
+    if not expected:
+        raise ValueError(error + ': empty search')
+    tokens = cpp_tokens(text)
+    size = len(expected)
+    matches = [(tokens[i][1], tokens[i + size - 1][2])
+               for i in range(len(tokens) - size + 1)
+               if tokens[i][0] == expected[0]
+               and [token for token, _, _ in tokens[i:i + size]] == expected]
+    if len(matches) != 1:
+        raise ValueError(error + ': ' + before)
+    start, end = matches[0]
+    # Leave the original indentation before the first token intact.
+    replacement = after.lstrip(' \t') if before[:1] in (' ', '\t') else after
+    return text[:start] + replacement + text[end:]
+
+
+def instrument_mock_api(model):
     replacements = [
         ('void SetPipeline(ComputePipeline value) { pipeline = std::move(value); }',
          "void SetPipeline(ComputePipeline value) { event('P', uintptr_t(value.Get())); pipeline = std::move(value); }"),
@@ -59,9 +67,46 @@ def extracted_model(actual, header):
          "ComputePassEncoder BeginComputePass(const ComputePassDescriptor * = nullptr) { event('C'); return ComputePassEncoder(encoded); }"),
     ]
     for before, after in replacements:
-        if model.count(before) != 1:
-            raise ValueError('Host allocation model API changed: ' + before)
-        model = model.replace(before, after)
+        model = replace_cpp_fragment_once(model, before, after, 'Host allocation model API changed')
+    return model
+
+
+def extracted_model(actual, header):
+    harness = (ROOT / 'tests/webgpu-bind-group-cache/mock-harness.cpp').read_text()
+    marker = 'static void assert_values('
+    if harness.count(marker) != 1:
+        raise ValueError('Host allocation model harness boundary changed')
+    model = harness.split(marker, 1)[0]
+    model = instrument_mock_api(model)
+    model = replace_cpp_fragment_once(
+        model, 'struct webgpu_pipeline { wgpu::ComputePipeline pipeline; std::string name; };',
+        definition(header, 'struct webgpu_pipeline {'), 'Host allocation model pipeline changed')
+    for marker, name in {
+        'ACTUAL_CREATE_BUFFER': 'ggml_webgpu_create_buffer',
+        'ACTUAL_MAKE_ENTRY': 'ggml_webgpu_make_bind_group_entry',
+        'ACTUAL_SUBMIT': 'ggml_backend_webgpu_submit_commands',
+        'ACTUAL_GRAPH_COMPUTE': 'ggml_backend_webgpu_graph_compute',
+        'ACTUAL_BUFFER_FREE': 'ggml_backend_webgpu_buffer_free_buffer',
+    }.items():
+        value = function(actual, name)
+        if marker == 'ACTUAL_GRAPH_COMPUTE' and 'static ggml_status ggml_backend_webgpu_graph_compute_impl(' in actual:
+            value = (definition(actual, 'struct webgpu_profile_operation_guard {') + 'template<class Encode>\n' +
+                     function(actual, 'ggml_backend_webgpu_graph_compute_impl') + value)
+            model = replace_cpp_fragment_once(model, 'bool batch_compute_passes = true;',
+                                               'bool batch_compute_passes = true; bool operation_in_progress = false;',
+                                               'Host allocation model graph state changed')
+            model = replace_cpp_fragment_once(model, 'enum ggml_status { GGML_STATUS_SUCCESS };',
+                                               'enum ggml_status { GGML_STATUS_SUCCESS, GGML_STATUS_FAILED };',
+                                               'Host allocation model status type changed')
+        model = model.replace('// @' + marker + '@', value)
+    helpers = function(actual, 'ggml_backend_webgpu_build_multi') + function(actual, 'ggml_backend_webgpu_build')
+    if 'struct webgpu_dispatch_view {' in actual:
+        helpers = (definition(actual, 'struct webgpu_dispatch_view {') + 'template<class Dispatch>\n' +
+                   function(actual, 'ggml_backend_webgpu_build_impl') + helpers)
+    model = model.replace('// @ACTUAL_BUILD_MULTI@', helpers)
+    for marker, name in {'ACTUAL_PARAM_ARENA': 'webgpu_param_arena', 'ACTUAL_CACHE': 'webgpu_bind_group_cache',
+                         'ACTUAL_ENCODED_OP': 'webgpu_encoded_op', 'ACTUAL_DISPATCH_DESC': 'webgpu_dispatch_desc'}.items():
+        model = model.replace('// @' + marker + '@', definition(actual, 'struct ' + name + ' {'))
     if '// @ACTUAL_' in model:
         raise ValueError('Incomplete actual helper extraction')
     return model
@@ -172,6 +217,112 @@ class HostEncodeAssembly(unittest.TestCase):
                     self.assertLess(after['allocationsPerOp'], before['allocationsPerOp'])
             self.assertEqual(old['mockBindGroupEntryBytes'], new['mockBindGroupEntryBytes'])
             self.assertEqual(old['actualPipelineStructBytesInThisMock'], new['actualPipelineStructBytesInThisMock'])
+
+
+class HostEncodeFormattingRegression(unittest.TestCase):
+    def test_formatted_mock_instrumentation_and_pipeline_replacement(self):
+        harness = (ROOT / 'tests/webgpu-bind-group-cache/mock-harness.cpp').read_text()
+        model = harness.split('static void assert_values(', 1)[0]
+        instrumented = instrument_mock_api(model)
+        for kind in 'PBDEC':
+            with self.subTest(kind=kind):
+                self.assertEqual(instrumented.count("event('" + kind + "'"), 1)
+        pipeline = replace_cpp_fragment_once(
+            instrumented, 'struct webgpu_pipeline { wgpu::ComputePipeline pipeline; std::string name; };',
+            'struct webgpu_pipeline { int replacement; };', 'Host allocation model pipeline changed')
+        self.assertEqual(pipeline.count('int replacement;'), 1)
+        self.assertNotIn('wgpu::ComputePipeline pipeline;\n    std::string name;', pipeline)
+
+    def test_replacement_tolerates_formatting_without_changing_tokens(self):
+        before = 'void SetPipeline(ComputePipeline value) { pipeline = std::move(value); }'
+        tokens = [token for token, _, _ in cpp_tokens(before)]
+        for whitespace in (' ', '\n    ', '\t\n\t'):
+            with self.subTest(whitespace=whitespace):
+                formatted = whitespace.join(tokens)
+                self.assertEqual(replace_cpp_fragment_once(formatted, before, 'REPLACED', 'mismatch'), 'REPLACED')
+
+    def test_replacement_rejects_semantic_and_ambiguous_changes(self):
+        before = 'void SetPipeline(ComputePipeline value) { pipeline = std::move(value); }'
+        cases = (
+            'void SetPipeline(ComputePipeline value) { pipeline = std::move(other); }',
+            'void SetPipelineElse(ComputePipeline value) { pipeline = std::move(value); }',
+            'void SetPipeline(ComputePipeline value) { pipeline = std::move(value2); }',
+            'void SetPipeline(ComputePipeline value) { pipeline = std::move(value); }' * 2,
+            'const char * name = \"' + before + '\";',
+            '// ' + before,
+            '/* ' + before + ' */',
+            'void SetPipeline(ComputePipeline value) { /* change */ pipeline = std::move(value); }',
+        )
+        for code in cases:
+            with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'mismatch'):
+                replace_cpp_fragment_once(code, before, 'REPLACED', 'mismatch')
+
+    @unittest.skipUnless(shutil.which('c++'), 'C++ compiler required')
+    def test_instrumented_mock_passes_synthetic_cpp_execution(self):
+        harness = (ROOT / 'tests/webgpu-bind-group-cache/mock-harness.cpp').read_text()
+        instrumented = instrument_mock_api(harness.split('static void assert_values(', 1)[0])
+        model = (definition(instrumented, 'struct ComputePassEncoder {') +
+                 definition(instrumented, 'struct CommandEncoder {'))
+        code = r'''#include <cassert>
+#include <cstdint>
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <vector>
+namespace wgpu {
+struct ComputePipeline { void * Get() const { return (void *)1; } };
+struct BindGroup { void * Get() const { return (void *)2; } explicit operator bool() const { return true; } };
+struct ComputePassDescriptor {};
+struct invocation { BindGroup group; ComputePipeline pipeline; };
+using commands = std::vector<invocation>;
+struct CommandBuffer { std::shared_ptr<commands> encoded; };
+std::vector<char> events;
+void event(char kind, uintptr_t = 0, uint32_t = 0, uint32_t = 0, uint32_t = 0) { events.push_back(kind); }
+''' + model + r'''
+}
+int main() {
+    auto commands = std::make_shared<wgpu::commands>();
+    wgpu::CommandEncoder encoder(commands);
+    auto pass = encoder.BeginComputePass();
+    pass.SetPipeline({});
+    pass.SetBindGroup(0, {});
+    pass.DispatchWorkgroups(1, 2, 3);
+    pass.End();
+    assert((wgpu::events == std::vector<char>{'C', 'P', 'B', 'D', 'E'}));
+    assert(commands->size() == 1);
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='format-mock-') as temporary:
+            src, exe = Path(temporary) / 'model.cpp', Path(temporary) / 'model'
+            src.write_text(code)
+            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', str(src), '-o', str(exe)], check=True)
+            subprocess.run([str(exe)], check=True)
+
+    def test_extraction_composes_both_normal_and_profile_paths(self):
+        for profile in (False, True):
+            actual = ('static ggml_status ggml_backend_webgpu_graph_compute_impl(' +
+                      'struct webgpu_dispatch_view {' if profile else 'normal')
+            with self.subTest(profile=profile), \
+                    patch('test_webgpu_host_encode_assembly.function', return_value='static void helper() {}'), \
+                    patch('test_webgpu_host_encode_assembly.definition', return_value='struct generated {};'):
+                model = extracted_model(actual, 'dummy header')
+                self.assertNotIn('// @ACTUAL_', model)
+                self.assertIn("event('P'", model)
+                self.assertIn('struct generated {};', model)
+                self.assertEqual('operation_in_progress = false;' in model, profile)
+
+    def test_instrumentation_rejects_source_drift(self):
+        harness = (ROOT / 'tests/webgpu-bind-group-cache/mock-harness.cpp').read_text()
+        model = harness.split('static void assert_values(', 1)[0]
+        for original, changed in (
+            ('pipeline = std::move(value);', 'pipeline = std::move(other);'),
+            ('assert(encoded && group);', 'assert(encoded || group);'),
+            ('return ComputePassEncoder(encoded);', 'return ComputePassEncoder(nullptr);'),
+        ):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Host allocation model API changed'):
+                instrument_mock_api(model.replace(original, changed, 1))
+        with self.assertRaisesRegex(ValueError, 'Host allocation model API changed'):
+            instrument_mock_api(model + 'void End() {}')
 
 
 if __name__ == '__main__':
