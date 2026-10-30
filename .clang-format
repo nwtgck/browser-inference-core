@@ -1,0 +1,15 @@
+# Match the 4-space, pointer-separated style used by bicore's C++ adapters.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 120
+BreakBeforeBraces: Attach
+PointerAlignment: Middle
+ReferenceAlignment: Pointer
+DerivePointerAlignment: false
+SortIncludes: Never
+ReflowComments: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakStringLiterals: false

@@ -24,7 +24,7 @@ inline size_t lcb_mtmd_add_bytes(size_t left, size_t right) {
 // reimplemented here: the caller uses the ordinary ggml tensor-set entry point,
 // which owns partial-word writes for odd BF16 element counts.
 class lcb_mtmd_retained_reader {
-public:
+  public:
     static constexpr size_t chunk_bytes = 512 * 1024;
 
     template <typename Write, typename Check>
@@ -46,9 +46,11 @@ public:
         }
     }
 
-    size_t scratch_bytes() const { return scratch ? chunk_bytes : 0; }
+    size_t scratch_bytes() const {
+        return scratch ? chunk_bytes : 0;
+    }
 
-private:
+  private:
     std::unique_ptr<uint8_t[]> scratch;
 };
 
@@ -58,7 +60,7 @@ private:
 // handled by the existing backend (including its fatal WebGPU error handling),
 // not converted into successful model publication or a recoverable error here.
 class lcb_mtmd_upload_queue {
-public:
+  public:
     static constexpr size_t budget_bytes = 32 * 1024 * 1024;
     static constexpr size_t write_overhead = 24; // up to two head/tail parameter writes
 
@@ -66,7 +68,9 @@ public:
     lcb_mtmd_upload_queue(const lcb_mtmd_upload_queue &) = delete;
     lcb_mtmd_upload_queue & operator=(const lcb_mtmd_upload_queue &) = delete;
 
-    ~lcb_mtmd_upload_queue() { drain(); }
+    ~lcb_mtmd_upload_queue() {
+        drain();
+    }
 
     // Charge BEFORE handing data to the backend: a partly submitted failed write
     // must still be drained. A false return means no synchronization occurred.
@@ -74,7 +78,8 @@ public:
         if (!backend) {
             throw std::runtime_error("missing retained vision upload backend");
         }
-        if (bytes == 0) return false;
+        if (bytes == 0)
+            return false;
         if (bytes > budget_bytes - write_overhead) {
             throw std::runtime_error("retained vision upload exceeds queue budget");
         }
@@ -95,9 +100,11 @@ public:
         }
     }
 
-    size_t pending_bytes() const { return pending; }
+    size_t pending_bytes() const {
+        return pending;
+    }
 
-private:
+  private:
     ggml_backend_t backend;
     size_t pending = 0;
 };

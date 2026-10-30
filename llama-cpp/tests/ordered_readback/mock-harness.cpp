@@ -16,15 +16,20 @@
 
 namespace wgpu {
 enum class BufferUsage { None = 0, CopySrc = 1, CopyDst = 2, MapRead = 4 };
-static BufferUsage operator|(BufferUsage a, BufferUsage b) { return BufferUsage(int(a) | int(b)); }
+static BufferUsage operator|(BufferUsage a, BufferUsage b) {
+    return BufferUsage(int(a) | int(b));
+}
 enum class MapMode { Read };
 enum class CallbackMode { AllowSpontaneous };
 enum class WaitStatus { Success, TimedOut, Error };
 enum class MapAsyncStatus { Success, Error, Aborted, CallbackCancelled };
 enum class QueueWorkDoneStatus { Success, Error, CallbackCancelled };
 using StringView = std::string;
-struct Future { std::function<void()> complete; bool mapping; };
-}
+struct Future {
+    std::function<void()> complete;
+    bool mapping;
+};
+} // namespace wgpu
 struct runtime {
     std::vector<std::function<void()>> pending;
     std::vector<std::string> trace;
@@ -37,7 +42,9 @@ struct runtime {
     void drain() {
         auto work = std::move(pending);
         pending.clear();
-        for (auto & f : work) { f(); }
+        for (auto & f : work) {
+            f();
+        }
     }
 };
 namespace wgpu {
@@ -50,16 +57,23 @@ struct storage {
 struct Buffer {
     std::shared_ptr<storage> p;
     Buffer() = default;
-    Buffer(runtime & r, size_t size, BufferUsage usage) : p(std::make_shared<storage>(storage{&r, std::vector<uint8_t>(size), usage})) {}
-    bool operator==(std::nullptr_t) const { return !p; }
-    explicit operator bool() const { return bool(p); }
-    size_t GetSize() const { return p->bytes.size(); }
+    Buffer(runtime & r, size_t size, BufferUsage usage)
+        : p(std::make_shared<storage>(storage{&r, std::vector<uint8_t>(size), usage})) {}
+    bool operator==(std::nullptr_t) const {
+        return !p;
+    }
+    explicit operator bool() const {
+        return bool(p);
+    }
+    size_t GetSize() const {
+        return p->bytes.size();
+    }
     void Destroy() {
         assert(!p->mapped && !p->map_pending);
         p->destroyed = true;
         ++p->r->destroys;
     }
-    template<class Callback>
+    template <class Callback>
     Future MapAsync(MapMode, size_t offset, size_t size, CallbackMode, Callback callback) const {
         assert(!p->destroyed && !p->mapped && !p->map_pending);
         assert(offset % 8 == 0 && size % 4 == 0 && offset + size <= p->bytes.size());
@@ -67,13 +81,16 @@ struct Buffer {
         p->r->trace.push_back("map-request");
         p->map_pending = true;
         return {[s = p, callback] {
-            s->r->drain();
-            if (s->r->before_map_completion) { s->r->before_map_completion(); }
-            s->r->trace.push_back("map-complete");
-            s->map_pending = false;
-            s->mapped = s->r->map_status == MapAsyncStatus::Success;
-            callback(s->r->map_status, "map diagnostic");
-        }, true};
+                    s->r->drain();
+                    if (s->r->before_map_completion) {
+                        s->r->before_map_completion();
+                    }
+                    s->r->trace.push_back("map-complete");
+                    s->map_pending = false;
+                    s->mapped = s->r->map_status == MapAsyncStatus::Success;
+                    callback(s->r->map_status, "map diagnostic");
+                },
+                true};
     }
     const void * GetConstMappedRange(size_t offset, size_t size) const {
         assert(p->mapped && !p->map_pending && !p->destroyed && offset + size <= p->bytes.size());
@@ -88,8 +105,15 @@ struct Buffer {
         p->r->trace.push_back("unmap");
     }
 };
-struct BufferDescriptor { size_t size; BufferUsage usage; const char * label; bool mappedAtCreation; };
-struct CommandBuffer { std::function<void()> run; };
+struct BufferDescriptor {
+    size_t size;
+    BufferUsage usage;
+    const char * label;
+    bool mappedAtCreation;
+};
+struct CommandBuffer {
+    std::function<void()> run;
+};
 struct CommandEncoder {
     runtime * r;
     CommandBuffer command;
@@ -106,7 +130,9 @@ struct CommandEncoder {
             std::copy_n(src.p->bytes.begin() + src_offset, size, dst.p->bytes.begin() + dst_offset);
         };
     }
-    CommandBuffer Finish() { return command; }
+    CommandBuffer Finish() {
+        return command;
+    }
 };
 struct Device {
     runtime * r;
@@ -115,7 +141,9 @@ struct Device {
         ++r->allocations;
         return Buffer(*r, desc->size, desc->usage);
     }
-    CommandEncoder CreateCommandEncoder() { return {r, {}}; }
+    CommandEncoder CreateCommandEncoder() {
+        return {r, {}};
+    }
 };
 struct Queue {
     runtime * r;
@@ -126,10 +154,13 @@ struct Queue {
             r->pending.push_back(commands[i].run);
         }
     }
-    template<class Callback>
-    Future OnSubmittedWorkDone(CallbackMode, Callback callback) {
+    template <class Callback> Future OnSubmittedWorkDone(CallbackMode, Callback callback) {
         r->trace.push_back("queue-wait-request");
-        return {[r = r, callback] { r->drain(); callback(r->queue_status, "queue diagnostic"); }, false};
+        return {[r = r, callback] {
+                    r->drain();
+                    callback(r->queue_status, "queue diagnostic");
+                },
+                false};
     }
 };
 struct Instance {
@@ -137,11 +168,13 @@ struct Instance {
     WaitStatus WaitAny(Future future, uint64_t) {
         (future.mapping ? r->map_waits : r->queue_waits)++;
         r->trace.push_back(future.mapping ? "map-wait" : "queue-wait");
-        if (r->wait_status == WaitStatus::Success) { future.complete(); }
+        if (r->wait_status == WaitStatus::Success) {
+            future.complete();
+        }
         return r->wait_status;
     }
 };
-}
+} // namespace wgpu
 struct webgpu_global_context_struct {
     runtime r;
     wgpu::Instance instance{&r};
@@ -151,9 +184,17 @@ struct webgpu_global_context_struct {
     std::recursive_mutex mutex;
 };
 using webgpu_global_context = std::shared_ptr<webgpu_global_context_struct>;
-struct webgpu_context_struct { webgpu_global_context global_ctx; };
-struct ggml_backend_webgpu_context { std::shared_ptr<webgpu_context_struct> webgpu_ctx; };
-struct ggml_backend_webgpu_buffer_context { wgpu::Buffer buffer; std::string label; webgpu_global_context global_ctx; };
+struct webgpu_context_struct {
+    webgpu_global_context global_ctx;
+};
+struct ggml_backend_webgpu_context {
+    std::shared_ptr<webgpu_context_struct> webgpu_ctx;
+};
+struct ggml_backend_webgpu_buffer_context {
+    wgpu::Buffer buffer;
+    std::string label;
+    webgpu_global_context global_ctx;
+};
 struct ggml_backend_buffer;
 struct ggml_backend;
 using ggml_backend_buffer_t = ggml_backend_buffer *;
@@ -166,23 +207,34 @@ struct ggml_tensor {
 };
 using get_hook = void (*)(ggml_backend_t, const ggml_tensor *, void *, size_t, size_t);
 struct ggml_backend_buffer {
-    struct { void (*get_tensor)(ggml_backend_buffer_t, const ggml_tensor *, void *, size_t, size_t); } iface;
+    struct {
+        void (*get_tensor)(ggml_backend_buffer_t, const ggml_tensor *, void *, size_t, size_t);
+    } iface;
     void * context;
 };
 struct ggml_backend {
-    struct { get_hook get_tensor_async; void (*synchronize)(ggml_backend_t); } iface;
+    struct {
+        get_hook get_tensor_async;
+        void (*synchronize)(ggml_backend_t);
+    } iface;
     void * context;
 };
-static void * const webgpu_ptr_base = (void *) (uintptr_t) 0x1000;
-static size_t ggml_nbytes(const ggml_tensor * tensor) { return tensor->nbytes; }
-template<class... Args> [[noreturn]] static void mock_abort(const char * format, Args... args) {
+static void * const webgpu_ptr_base = (void *)(uintptr_t)0x1000;
+static size_t ggml_nbytes(const ggml_tensor * tensor) {
+    return tensor->nbytes;
+}
+template <class... Args> [[noreturn]] static void mock_abort(const char * format, Args... args) {
     char message[512];
     std::snprintf(message, sizeof(message), format, args...);
     throw std::runtime_error(message);
 }
-#define GGML_ASSERT(condition) do { if (!(condition)) throw std::logic_error(#condition); } while (0)
+#define GGML_ASSERT(condition)                                                                                         \
+    do {                                                                                                               \
+        if (!(condition))                                                                                              \
+            throw std::logic_error(#condition);                                                                        \
+    } while (0)
 #define GGML_ABORT(...) mock_abort(__VA_ARGS__)
-#define WEBGPU_LOG_DEBUG(message) ((void) 0)
+#define WEBGPU_LOG_DEBUG(message) ((void)0)
 #define WEBGPU_CPU_PROFILE_TOTAL_START(id)
 #define WEBGPU_CPU_PROFILE_TOTAL_END(id, ctx)
 #define WEBGPU_RUNTIME_WAIT_TIMEOUT_MS 30000u
@@ -197,12 +249,15 @@ struct fixture {
     webgpu_global_context g = std::make_shared<webgpu_global_context_struct>();
     ggml_backend_webgpu_context backend_ctx{std::make_shared<webgpu_context_struct>(webgpu_context_struct{g})};
     ggml_backend backend{{// @REGISTERED_HOOK@
-        , ggml_backend_webgpu_synchronize}, &backend_ctx};
+                          , ggml_backend_webgpu_synchronize},
+                         &backend_ctx};
     ggml_backend_webgpu_buffer_context buffer_ctx{wgpu::Buffer(g->r, 128, wgpu::BufferUsage::CopySrc), "tensor", g};
     ggml_backend_buffer buffer{{ggml_backend_webgpu_buffer_get_tensor}, &buffer_ctx};
-    ggml_tensor tensor{nullptr, &buffer, (void *) 0x1008, 0, 32};
+    ggml_tensor tensor{nullptr, &buffer, (void *)0x1008, 0, 32};
     fixture() {
-        for (size_t i = 0; i < 128; ++i) { buffer_ctx.buffer.p->bytes[i] = uint8_t(i); }
+        for (size_t i = 0; i < 128; ++i) {
+            buffer_ctx.buffer.p->bytes[i] = uint8_t(i);
+        }
     }
     void producer(uint8_t value) {
         g->r.pending.push_back([this, value] {
@@ -235,9 +290,11 @@ static void foreign_get(ggml_backend_buffer_t buffer, const ggml_tensor *, void 
     r->trace.push_back("foreign-get");
     std::memset(data, 93, size);
 }
-template<class Action> static void expect_runtime_failure(Action action, const char * message) {
+template <class Action> static void expect_runtime_failure(Action action, const char * message) {
     bool failed = false;
-    try { action(); } catch (const std::runtime_error & error) {
+    try {
+        action();
+    } catch (const std::runtime_error & error) {
         failed = true;
         assert(std::string(error.what()).find(message) != std::string::npos);
     }
@@ -248,32 +305,40 @@ int main() {
     // but both paths retain the actual staging-copy/map/unmap and output bytes.
     for (bool hook : {false, true}) {
         fixture f;
-        if (!hook) { f.backend.iface.get_tensor_async = nullptr; }
+        if (!hook) {
+            f.backend.iface.get_tensor_async = nullptr;
+        }
         uint8_t output[20];
         std::fill_n(output, 20, 0xcc);
         bool inside_call = true;
         f.g->r.before_map_completion = [&] {
             assert(inside_call);
-            for (uint8_t byte : output) { assert(byte == 0xcc); }
+            for (uint8_t byte : output) {
+                assert(byte == 0xcc);
+            }
         };
         f.producer(77);
         f.get(output + 2);
         inside_call = false;
         assert(f.g->r.queue_waits == (hook ? 0 : 1));
         assert_success_order(f);
-        for (int i = 0; i < 20; ++i) { assert(output[i] == (i >= 2 && i < 18 ? 77 : 0xcc)); }
+        for (int i = 0; i < 20; ++i) {
+            assert(output[i] == (i >= 2 && i < 18 ? 77 : 0xcc));
+        }
         assert(f.g->r.pending.empty());
         // No pending operation owns the caller's output. Immediate reuse after return is safe.
         std::fill_n(output, 20, 42);
         f.g->r.drain();
-        for (uint8_t byte : output) { assert(byte == 42); }
+        for (uint8_t byte : output) {
+            assert(byte == 42);
+        }
     }
     // Every byte alignment and tail is handled by the unchanged real buffer getter.
     for (size_t tensor_offset = 0; tensor_offset < 4; ++tensor_offset) {
         for (size_t offset = 0; offset < 4; ++offset) {
             for (size_t size = 1; size <= 17; ++size) {
                 fixture f;
-                f.tensor.data = (void *) (uintptr_t) (0x1008 + tensor_offset);
+                f.tensor.data = (void *)(uintptr_t)(0x1008 + tensor_offset);
                 uint8_t output[21];
                 std::fill_n(output, 21, 0xcc);
                 f.get(output + 2, offset, size);
@@ -291,7 +356,7 @@ int main() {
         ggml_backend_buffer foreign{{foreign_get}, nullptr};
         f.tensor.view_src = &base;
         f.tensor.buffer = &foreign;
-        f.tensor.data = (void *) 0xdead;
+        f.tensor.data = (void *)0xdead;
         f.tensor.view_offs = 3;
         uint8_t output[5];
         f.get(output, 2, 5);
@@ -344,11 +409,16 @@ int main() {
         fixture f;
         uint8_t output[4] = {};
         bool failed = false;
-        try { f.get(output, 31, 4); } catch (const std::logic_error &) { failed = true; }
+        try {
+            f.get(output, 31, 4);
+        } catch (const std::logic_error &) {
+            failed = true;
+        }
         assert(failed && f.g->r.submissions == 0 && f.g->r.queue_waits == 0 && f.g->r.map_waits == 0);
     }
     // Existing map/wait status checks must abort before mapped access or host memcpy.
-    for (auto status : {wgpu::MapAsyncStatus::Error, wgpu::MapAsyncStatus::Aborted, wgpu::MapAsyncStatus::CallbackCancelled}) {
+    for (auto status :
+         {wgpu::MapAsyncStatus::Error, wgpu::MapAsyncStatus::Aborted, wgpu::MapAsyncStatus::CallbackCancelled}) {
         fixture f;
         f.g->r.map_status = status;
         uint8_t output[4] = {1, 2, 3, 4};
@@ -359,7 +429,9 @@ int main() {
         fixture f;
         f.g->r.wait_status = status;
         uint8_t output[4] = {1, 2, 3, 4};
-        expect_runtime_failure([&] { f.get(output, 0, 4); }, status == wgpu::WaitStatus::TimedOut ? "Buffer map wait timed out" : "Buffer map wait failed");
+        expect_runtime_failure([&] { f.get(output, 0, 4); }, status == wgpu::WaitStatus::TimedOut
+                                                                 ? "Buffer map wait timed out"
+                                                                 : "Buffer map wait failed");
         assert(output[0] == 1 && output[3] == 4 && f.g->r.mapped_reads == 0);
     }
     // Fallback errors retain their existing queue-work diagnostic and do not read the foreign buffer.
@@ -372,5 +444,6 @@ int main() {
         expect_runtime_failure([&] { f.get(output, 0, 4); }, "Queue work failed with status");
         assert(output[0] == 1 && output[3] == 4 && f.g->r.map_waits == 0);
     }
-    std::cout << "PASS: actual ordered_readback hook, generic entry, staging getter and wait/map helpers (CPU model only)\n";
+    std::cout
+        << "PASS: actual ordered_readback hook, generic entry, staging getter and wait/map helpers (CPU model only)\n";
 }

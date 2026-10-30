@@ -10,9 +10,14 @@
 #include <vector>
 
 static constexpr uint64_t MiB = 1024 * 1024;
-struct device { int id; uint64_t queued = 0; };
+struct device {
+    int id;
+    uint64_t queued = 0;
+};
 using ggml_backend_dev_t = device *;
-struct backend { device * dev; };
+struct backend {
+    device * dev;
+};
 using ggml_backend_t = backend *;
 static uint64_t live = 0, waits = 0, initialized = 0, freed = 0;
 static bool fail_init = false;
@@ -20,7 +25,8 @@ static std::vector<int> trace;
 ggml_backend_t ggml_backend_dev_init(device * dev, const char *) {
     trace.push_back(10 + dev->id);
     ++initialized;
-    if (fail_init) return nullptr;
+    if (fail_init)
+        return nullptr;
     ++live;
     return new backend{dev};
 }
@@ -33,7 +39,8 @@ void ggml_backend_synchronize(backend * value) {
 void ggml_backend_free(backend * value) {
     if (value) {
         assert(value->dev->queued == 0);
-        --live; ++freed;
+        --live;
+        ++freed;
         trace.push_back(30 + value->dev->id);
         delete value;
     }
@@ -44,13 +51,15 @@ void ggml_backend_free(backend * value) {
 namespace width32 {
 using size_t = std::uint32_t;
 #include "model-upload-helper.inc"
-}
+} // namespace width32
 namespace width64 {
 using size_t = std::uint64_t;
 #include "model-upload-helper.inc"
-}
+} // namespace width64
 
-struct state { uint64_t waits, pending; };
+struct state {
+    uint64_t waits, pending;
+};
 static state step(state value, uint64_t charge, uint64_t budget) {
     assert(charge <= budget);
     if (charge > budget - value.pending) {
@@ -94,22 +103,22 @@ static state cycle_reference(uint64_t size, uint64_t chunk, uint64_t pending, ui
         ++completed;
         assert(seen.size() < 32);
     }
-    if (tail != 0) value = step(value, tail + overhead, budget);
+    if (tail != 0)
+        value = step(value, tail + overhead, budget);
     return value;
 }
 
 static uint64_t projection_cases = 0, policy_cases = 0, tensor_sequences = 0, positive_adoptions = 0;
-template<class Helper>
-static void projection_checks() {
+template <class Helper> static void projection_checks() {
     using Size = decltype(Helper{}.pending);
     const uint64_t budget = Helper::budget, overhead = Helper::overhead;
-    for (uint64_t chunk : {uint64_t(1), uint64_t(2), uint64_t(31), uint64_t(1024),
-                           uint64_t(65536), 8 * MiB - 448, 8 * MiB - 32, 8 * MiB}) {
+    for (uint64_t chunk : {uint64_t(1), uint64_t(2), uint64_t(31), uint64_t(1024), uint64_t(65536), 8 * MiB - 448,
+                           8 * MiB - 32, 8 * MiB}) {
         for (uint64_t full = 0; full <= 17; ++full) {
             for (uint64_t tail : {uint64_t(0), chunk / 2, chunk - 1}) {
                 const uint64_t size = full * chunk + tail;
-                for (uint64_t pending : {uint64_t(0), uint64_t(1), overhead, budget / 4 - 1, budget / 4,
-                                         budget / 2, budget - chunk, budget - 1, budget}) {
+                for (uint64_t pending : {uint64_t(0), uint64_t(1), overhead, budget / 4 - 1, budget / 4, budget / 2,
+                                         budget - chunk, budget - 1, budget}) {
                     const auto actual = Helper::project(Size(size), Size(chunk), Size(pending));
                     const auto expected = brute(size, chunk, pending, budget, overhead);
                     assert(actual.waits == expected.waits && actual.pending == expected.pending);
@@ -118,8 +127,8 @@ static void projection_checks() {
             }
         }
     }
-    for (uint64_t size : {uint64_t(std::numeric_limits<Size>::max()),
-                          uint64_t(std::numeric_limits<Size>::max()) - 1, uint64_t(0xffffffff)}) {
+    for (uint64_t size : {uint64_t(std::numeric_limits<Size>::max()), uint64_t(std::numeric_limits<Size>::max()) - 1,
+                          uint64_t(0xffffffff)}) {
         for (uint64_t chunk : {8 * MiB - 448, 8 * MiB - 32, 8 * MiB}) {
             for (uint64_t pending : {uint64_t(0), budget - 1, budget}) {
                 const auto actual = Helper::project(Size(size), Size(chunk), Size(pending));
@@ -131,8 +140,7 @@ static void projection_checks() {
     }
 }
 
-template<class Helper>
-static uint64_t selected(Helper & helper, device & target, uint64_t size, uint64_t alignment) {
+template <class Helper> static uint64_t selected(Helper & helper, device & target, uint64_t size, uint64_t alignment) {
     using Size = decltype(Helper{}.pending);
     const uint64_t old_pending = helper.pending;
     const auto old_backend = helper.backend;
@@ -145,8 +153,7 @@ static uint64_t selected(Helper & helper, device & target, uint64_t size, uint64
     return chunk;
 }
 
-template<class Helper>
-static void upload(Helper & helper, device & target, uint64_t amount) {
+template <class Helper> static void upload(Helper & helper, device & target, uint64_t amount) {
     using Size = decltype(Helper{}.pending);
     helper.reserve(&target, Size(amount));
     target.queued += amount + helper.overhead;
@@ -154,8 +161,7 @@ static void upload(Helper & helper, device & target, uint64_t amount) {
     trace.push_back(40 + target.id);
 }
 
-template<class Helper>
-static void policy_checks() {
+template <class Helper> static void policy_checks() {
     using Size = decltype(Helper{}.pending);
     device a{1}, b{2};
     const uint64_t budget = Helper::budget;
@@ -191,11 +197,16 @@ static void policy_checks() {
         assert(selected(helper, a, 0, 8 * MiB + 1) == 0);
         for (uint64_t alignment : {uint64_t(0), 8 * MiB + 1}) {
             bool threw = false;
-            try { selected(helper, a, 1, alignment); } catch (const std::runtime_error &) { threw = true; }
+            try {
+                selected(helper, a, 1, alignment);
+            } catch (const std::runtime_error &) {
+                threw = true;
+            }
             assert(threw && helper.pending == 0 && helper.backend == nullptr);
         }
         assert(selected(helper, a, 8 * MiB, 8 * MiB) == 8 * MiB); // preferred cap rounds to zero
-        for (uint64_t size : {uint64_t(std::numeric_limits<Size>::max()), uint64_t(std::numeric_limits<Size>::max()) - 1}) {
+        for (uint64_t size :
+             {uint64_t(std::numeric_limits<Size>::max()), uint64_t(std::numeric_limits<Size>::max()) - 1}) {
             for (uint64_t alignment : {uint64_t(8), uint64_t(16), uint64_t(328), uint64_t(440)}) {
                 const uint64_t chunk = selected(helper, a, size, alignment);
                 const uint64_t original = 8 * MiB / alignment * alignment;
@@ -219,12 +230,15 @@ static void policy_checks() {
     uint64_t count = 0;
     {
         Helper helper;
-        for (const auto & [size, alignment] : {std::pair<uint64_t, uint64_t>{50331560, 16}, {25170200, 440}, {16772712, 16}}) {
+        for (const auto & [size, alignment] :
+             {std::pair<uint64_t, uint64_t>{50331560, 16}, {25170200, 440}, {16772712, 16}}) {
             const uint64_t chunk = selected(helper, a, size, alignment);
             uint64_t done = 0;
             while (done < size) {
                 const uint64_t amount = std::min(chunk, size - done);
-                upload(helper, a, amount); done += amount; ++count;
+                upload(helper, a, amount);
+                done += amount;
+                ++count;
             }
             assert(done == size);
         }
@@ -246,7 +260,9 @@ static void policy_checks() {
         uint64_t done = 0, chunks = 0;
         while (done < size) {
             const uint64_t amount = std::min(chunk, size - done);
-            upload(helper, a, amount); done += amount; ++chunks;
+            upload(helper, a, amount);
+            done += amount;
+            ++chunks;
         }
         assert(done == size && chunks == 43);
     }
@@ -263,7 +279,8 @@ static void policy_checks() {
         selected(helper, b, 360448000, 440);
         assert(live == old_live && b.queued == 0 && a.queued != 0);
         throw std::runtime_error("read failed before reserve");
-    } catch (const std::runtime_error &) {}
+    } catch (const std::runtime_error &) {
+    }
     assert(waits == before_failure + 1 && live == 0 && a.queued == 0 && b.queued == 0);
     {
         Helper helper;
@@ -286,7 +303,11 @@ static void policy_checks() {
         upload(helper, a, 4096);
         fail_init = true;
         bool threw = false;
-        try { upload(helper, b, 4096); } catch (const std::runtime_error &) { threw = true; }
+        try {
+            upload(helper, b, 4096);
+        } catch (const std::runtime_error &) {
+            threw = true;
+        }
         assert(threw && helper.pending == 0 && helper.backend == nullptr && live == 0 && a.queued == 0);
         fail_init = false;
         upload(helper, b, 1);
@@ -302,6 +323,6 @@ int main() {
     assert(live == 0);
     std::cout << "{\"passed\":true,\"widths\":[32,64],\"projectionCases\":" << projection_cases
               << ",\"policyCases\":" << policy_cases << ",\"regressionSequences\":" << tensor_sequences
-              << ",\"positiveAdoptions\":" << positive_adoptions
-              << ",\"liveBackends\":" << live << ",\"gpu\":false}" << std::endl;
+              << ",\"positiveAdoptions\":" << positive_adoptions << ",\"liveBackends\":" << live << ",\"gpu\":false}"
+              << std::endl;
 }

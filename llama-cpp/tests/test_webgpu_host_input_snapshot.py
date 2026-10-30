@@ -214,5 +214,32 @@ class HostInputSnapshot(unittest.TestCase):
                 subprocess.run(command + macros + [str(target)], check=True)
 
 
+class InheritedHarnessFormatting(unittest.TestCase):
+    def test_source_composition_accepts_clang_formatted_harness(self):
+        code = harness.before_main((ROOT / 'tests/webgpu-async-tensor-copy/mock-harness.cpp').read_text())
+        self.assertNotIn('int main()', code)
+        # The inherited harness may be formatted separately from the builder.
+        for old in (
+            'struct ggml_backend;using ggml_backend_t=ggml_backend*;',
+            'GGML_BACKEND_DEVICE_TYPE_CPU,GGML_BACKEND_DEVICE_TYPE_GPU',
+            'device_iface iface;enum ggml_backend_dev_type type;',
+            'struct ggml_backend_sched_split { int backend_id=0;ggml_cgraph graph; };',
+            'std::vector<std::function<void()>> pending;',
+            'pending.push_back([=]{std::copy(snapshot.begin(),snapshot.end(),b.p->bytes.begin()+offset);});',
+            'ggml_backend_t backends[1]{};ggml_backend_event_t events[1][1]{};int cur_copy=0;',
+            'bool host_copy(){return ggml_backend_webgpu_cpy_tensor_async(&cpu,&gpu,&src,&dst);}',
+        ):
+            with self.subTest(old=old):
+                self.assertIn('// unique replacement //', harness.replace_once(code, old, '// unique replacement //'))
+
+    def test_replace_once_rejects_ambiguous_and_semantic_changes(self):
+        with self.assertRaisesRegex(ValueError, 'needs review'):
+            harness.replace_once('int a = 1; int a=1;', 'int a=1;', 'unused')
+        with self.assertRaisesRegex(ValueError, 'needs review'):
+            harness.replace_once('int a = 2;', 'int a=1;', 'unused')
+        with self.assertRaisesRegex(ValueError, 'main entrypoint changed'):
+            harness.before_main('int not_main() {}')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -23,9 +23,22 @@ def block(text: str, token: str) -> str:
 
 
 def replace_once(text: str, old: str, new: str) -> str:
-    if text.count(old) != 1:
+    # The inherited C++ harness is clang-formatted independently of these
+    # composition probes. Ignore whitespace between tokens, not within them.
+    tokens = re.findall(r'"(?:\\.|[^"\\])*"|[A-Za-z_]\w*|\d+(?:\.\d+)?|[^\s]', old)
+    pattern = re.compile(r'\s*'.join(map(re.escape, tokens)))
+    matches = list(pattern.finditer(text))
+    if len(matches) != 1:
         raise ValueError('Inherited async harness needs review: ' + old)
-    return text.replace(old, new)
+    match = matches[0]
+    return text[:match.start()] + new + text[match.end():]
+
+
+def before_main(text: str) -> str:
+    entry = re.search(r'(?m)^int\s+main\s*\(\s*\)\s*\{', text)
+    if not entry:
+        raise ValueError('Inherited async harness main entrypoint changed')
+    return text[:entry.start()]
 
 
 def emit(upstream: Path, prepared: Path) -> str:
@@ -33,7 +46,7 @@ def emit(upstream: Path, prepared: Path) -> str:
     generic = (prepared / 'ggml-backend.cpp').read_text()
     cpu = (upstream / 'ggml/src/ggml-cpu/ggml-cpu.cpp').read_text()
     code = (ROOT / 'tests/webgpu-async-tensor-copy/mock-harness.cpp').read_text()
-    code = code[:code.index('int main(){')]
+    code = before_main(code)
     contract = (prepared / 'ggml-backend-host-snapshot.h').read_text()
     contract = contract.replace('#pragma once\n', '').replace('#include "ggml-backend.h"\n', '')
     code = replace_once(code, 'struct ggml_backend;using ggml_backend_t=ggml_backend*;',

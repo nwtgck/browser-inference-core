@@ -16,41 +16,42 @@ inline void lcb_mtmd_check_retained_roles(const clip_model & model, ggml_context
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
         has_bf16 = has_bf16 || t->type == GGML_TYPE_BF16;
     }
-    if (!has_bf16) return;
+    if (!has_bf16)
+        return;
     std::unordered_set<const ggml_tensor *> matrices;
     switch (model.proj_type) {
-        case PROJECTOR_TYPE_MLP:
-            matrices.insert(model.mm_0_w);
-            matrices.insert(model.mm_2_w);
-            break;
-        case PROJECTOR_TYPE_MLP_NORM:
-            matrices.insert(model.mm_0_w);
-            matrices.insert(model.mm_3_w);
-            break;
-        case PROJECTOR_TYPE_QWEN2VL:
-        case PROJECTOR_TYPE_QWEN25VL:
-        case PROJECTOR_TYPE_QWEN3VL:
-        case PROJECTOR_TYPE_LFM3VL:
-            matrices.insert(model.mm_0_w);
-            matrices.insert(model.mm_1_w);
-            break;
-        case PROJECTOR_TYPE_LFM2:
-            matrices.insert(model.mm_1_w);
-            matrices.insert(model.mm_2_w);
-            break;
-        case PROJECTOR_TYPE_GEMMA3:
-            // The standard converter already stores the transposed projection
-            // as F16. Leave it that way; a custom BF16 version is not accepted.
-            break;
-        case PROJECTOR_TYPE_GEMMA4V:
-            matrices.insert(model.mm_input_proj_w);
-            break;
-        default:
-            throw std::runtime_error("retain-checked BF16: projector roles have not been reviewed");
+    case PROJECTOR_TYPE_MLP:
+        matrices.insert(model.mm_0_w);
+        matrices.insert(model.mm_2_w);
+        break;
+    case PROJECTOR_TYPE_MLP_NORM:
+        matrices.insert(model.mm_0_w);
+        matrices.insert(model.mm_3_w);
+        break;
+    case PROJECTOR_TYPE_QWEN2VL:
+    case PROJECTOR_TYPE_QWEN25VL:
+    case PROJECTOR_TYPE_QWEN3VL:
+    case PROJECTOR_TYPE_LFM3VL:
+        matrices.insert(model.mm_0_w);
+        matrices.insert(model.mm_1_w);
+        break;
+    case PROJECTOR_TYPE_LFM2:
+        matrices.insert(model.mm_1_w);
+        matrices.insert(model.mm_2_w);
+        break;
+    case PROJECTOR_TYPE_GEMMA3:
+        // The standard converter already stores the transposed projection
+        // as F16. Leave it that way; a custom BF16 version is not accepted.
+        break;
+    case PROJECTOR_TYPE_GEMMA4V:
+        matrices.insert(model.mm_input_proj_w);
+        break;
+    default:
+        throw std::runtime_error("retain-checked BF16: projector roles have not been reviewed");
     }
     for (const clip_layer & layer : model.layers) {
-        for (const ggml_tensor * t : {layer.q_w, layer.k_w, layer.v_w, layer.o_w, layer.qkv_w,
-                                      layer.ff_up_w, layer.ff_down_w, layer.ff_gate_w}) {
+        for (const ggml_tensor * t : {layer.q_w, layer.k_w, layer.v_w, layer.o_w, layer.qkv_w, layer.ff_up_w,
+                                      layer.ff_down_w, layer.ff_gate_w}) {
             matrices.insert(t);
         }
         if (model.proj_type == PROJECTOR_TYPE_QWEN3VL) {
@@ -63,7 +64,8 @@ inline void lcb_mtmd_check_retained_roles(const clip_model & model, ggml_context
         }
     }
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
-        if (t->type != GGML_TYPE_BF16) continue;
+        if (t->type != GGML_TYPE_BF16)
+            continue;
         const bool matrix = matrices.count(t) && t->ne[2] == 1 && t->ne[3] == 1;
         const bool lookup = model.proj_type == PROJECTOR_TYPE_GEMMA4V && t == model.position_embeddings &&
                             t->ne[2] == 2 && t->ne[3] == 1;

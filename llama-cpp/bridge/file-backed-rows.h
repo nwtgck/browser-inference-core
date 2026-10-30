@@ -19,20 +19,18 @@
 #include <sys/stat.h>
 
 class lcb_file_backed_rows {
-public:
+  public:
     static constexpr size_t max_staging_bytes = 64u * 1024 * 1024;
     static constexpr size_t max_gather_rows = 1024u * 1024;
     static constexpr size_t max_cache_bytes = 8u * 1024 * 1024;
 
-    lcb_file_backed_rows(int fd, uint32_t shard, uint64_t file_bytes,
-                        uint64_t offset, ggml_type type, int64_t columns, int64_t rows,
-                        size_t cache_bytes = max_cache_bytes)
+    lcb_file_backed_rows(int fd, uint32_t shard, uint64_t file_bytes, uint64_t offset, ggml_type type, int64_t columns,
+                         int64_t rows, size_t cache_bytes = max_cache_bytes)
         : shard_(shard), file_bytes_(file_bytes), offset_(offset), columns_(columns), rows_(rows), type_(type),
           cache_budget_(std::min(cache_bytes, max_cache_bytes)) {
         static_assert(sizeof(void *) == 8, "file-backed rows require 64-bit pointers");
         static_assert(sizeof(off_t) >= 8, "file-backed rows require 64-bit file offsets");
-        if (columns <= 0 || rows <= 0 || shard > INT32_MAX ||
-            type < 0 || type >= GGML_TYPE_COUNT) {
+        if (columns <= 0 || rows <= 0 || shard > INT32_MAX || type < 0 || type >= GGML_TYPE_COUNT) {
             throw std::runtime_error("file-backed rows: invalid geometry");
         }
         const auto * traits = ggml_get_type_traits(type);
@@ -54,15 +52,23 @@ public:
         // Own a descriptor, not the loader's transient llama_file. pread never
         // changes the shared open-file cursor, even across multiple contexts.
         fd_ = dup(fd);
-        if (fd_ < 0) throw std::runtime_error("file-backed rows: cannot retain file");
+        if (fd_ < 0)
+            throw std::runtime_error("file-backed rows: cannot retain file");
     }
 
-    ~lcb_file_backed_rows() { if (fd_ >= 0) close(fd_); }
+    ~lcb_file_backed_rows() {
+        if (fd_ >= 0)
+            close(fd_);
+    }
     lcb_file_backed_rows(const lcb_file_backed_rows &) = delete;
     lcb_file_backed_rows & operator=(const lcb_file_backed_rows &) = delete;
 
-    int32_t shard() const { return int32_t(shard_); }
-    int64_t columns() const { return columns_; }
+    int32_t shard() const {
+        return int32_t(shard_);
+    }
+    int64_t columns() const {
+        return columns_;
+    }
 
     size_t elements(size_t count) const {
         if (count > max_gather_rows || count > max_staging_bytes / sizeof(float) / size_t(columns_)) {
@@ -76,7 +82,8 @@ public:
     // Do not publish any of this staging tensor to a backend until this returns.
     void gather(const int32_t * indices, size_t count, std::vector<float> & output) const {
         const size_t n = elements(count);
-        if (count && !indices) throw std::runtime_error("file-backed rows: missing indices");
+        if (count && !indices)
+            throw std::runtime_error("file-backed rows: missing indices");
         std::vector<std::pair<int32_t, size_t>> order;
         order.reserve(count);
         for (size_t i = 0; i < count; ++i) {
@@ -98,7 +105,8 @@ public:
             // mutation is outside the model's immutable-source contract.
             struct stat status;
             if (fstat(fd_, &status) != 0 || status.st_size < 0 || uint64_t(status.st_size) != file_bytes_) {
-                for (auto & entry : cache_entries_) entry = {};
+                for (auto & entry : cache_entries_)
+                    entry = {};
                 throw std::runtime_error("file-backed rows: backing file size changed");
             }
             initialize_cache();
@@ -131,19 +139,25 @@ public:
         return cache_entries_.size() * sizeof(cache_entry) + cache_data_.size() * sizeof(uint64_t);
     }
 
-private:
+  private:
     static constexpr size_t cache_ways = 4;
-    struct cache_entry { int32_t row = -1; uint32_t stamp = 0; };
+    struct cache_entry {
+        int32_t row = -1;
+        uint32_t stamp = 0;
+    };
 
     void initialize_cache() const {
-        if (cache_initialized_) return;
+        if (cache_initialized_)
+            return;
         cache_initialized_ = true;
         cache_row_words_ = (row_bytes_ + sizeof(uint64_t) - 1) / sizeof(uint64_t);
         const size_t set_bytes = cache_ways * (cache_row_words_ * sizeof(uint64_t) + sizeof(cache_entry));
         size_t sets = 1;
-        if (set_bytes > cache_budget_) return;
+        if (set_bytes > cache_budget_)
+            return;
         const size_t useful_sets = (uint64_t(rows_) + cache_ways - 1) / cache_ways;
-        while (sets <= cache_budget_ / set_bytes / 2 && sets < useful_sets) sets *= 2;
+        while (sets <= cache_budget_ / set_bytes / 2 && sets < useful_sets)
+            sets *= 2;
         try {
             // Construct both allocations locally. A failure cannot leave a
             // partially initialized cache, strand a descriptor, or fail a load.
@@ -170,12 +184,16 @@ private:
         }
         // Hash n-gram row IDs rather than mapping their low bits to cache sets.
         uint32_t hash = uint32_t(row);
-        hash ^= hash >> 16; hash *= 0x7feb352du;
-        hash ^= hash >> 15; hash *= 0x846ca68bu; hash ^= hash >> 16;
+        hash ^= hash >> 16;
+        hash *= 0x7feb352du;
+        hash ^= hash >> 15;
+        hash *= 0x846ca68bu;
+        hash ^= hash >> 16;
         const size_t first = (size_t(hash) & cache_set_mask_) * cache_ways;
         if (++cache_clock_ == 0) {
             // A wrap can change recency, never row identity or output bytes.
-            for (auto & entry : cache_entries_) entry = {};
+            for (auto & entry : cache_entries_)
+                entry = {};
             cache_clock_ = 1;
         }
         size_t selected = first;
@@ -185,7 +203,8 @@ private:
                 entry.stamp = cache_clock_;
                 return cache_data_.data() + slot * cache_row_words_;
             }
-            if (entry.stamp < cache_entries_[selected].stamp) selected = slot;
+            if (entry.stamp < cache_entries_[selected].stamp)
+                selected = slot;
         }
         // Read into scratch first. EINTR/short reads are handled by read_exact;
         // an I/O failure must neither overwrite nor publish a cache entry.
@@ -201,8 +220,10 @@ private:
         size_t done = 0;
         while (done < length) {
             const ssize_t count = pread(fd_, bytes + done, length - done, off_t(offset + done));
-            if (count < 0 && errno == EINTR) continue;
-            if (count <= 0) throw std::runtime_error("file-backed rows: read failed");
+            if (count < 0 && errno == EINTR)
+                continue;
+            if (count <= 0)
+                throw std::runtime_error("file-backed rows: read failed");
             done += size_t(count);
         }
     }

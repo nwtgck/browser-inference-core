@@ -8,7 +8,8 @@
 #include <string>
 
 static void require(bool condition, const char * message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
 
 static std::string bf16_data(size_t count) {
@@ -49,10 +50,8 @@ int main() {
     try {
         test_backend_identity();
         lcb_bf16_upload upload;
-        for (size_t count : {size_t(0), size_t(1), size_t(65536),
-                             lcb_bf16_upload::chunk_elements,
-                             lcb_bf16_upload::chunk_elements + 3,
-                             lcb_bf16_upload::chunk_elements * 2 + 7}) {
+        for (size_t count : {size_t(0), size_t(1), size_t(65536), lcb_bf16_upload::chunk_elements,
+                             lcb_bf16_upload::chunk_elements + 3, lcb_bf16_upload::chunk_elements * 2 + 7}) {
             const std::string raw = bf16_data(count);
             std::istringstream input(raw + "next tensor");
             size_t written = 0;
@@ -81,28 +80,39 @@ int main() {
             size_t bytes_written = 0;
             try {
                 upload.read(truncated, size, [&](const float *, size_t, size_t bytes) { bytes_written += bytes; });
-            } catch (const std::runtime_error &) { failed = true; }
+            } catch (const std::runtime_error &) {
+                failed = true;
+            }
             require(failed, "truncated input accepted");
             require(bytes_written < size * 2, "truncated chunk uploaded");
         }
         bool failed = false;
         std::istringstream odd("123");
-        try { upload.read(odd, 3, [](const float *, size_t, size_t) {}); }
-        catch (const std::runtime_error &) { failed = true; }
+        try {
+            upload.read(odd, 3, [](const float *, size_t, size_t) {});
+        } catch (const std::runtime_error &) {
+            failed = true;
+        }
         require(failed && odd.tellg() == 0, "misaligned size consumed input");
         failed = false;
         std::istringstream enormous;
-        try { upload.read(enormous, std::numeric_limits<size_t>::max() - 1, [](const float *, size_t, size_t) {}); }
-        catch (const std::runtime_error &) { failed = true; }
+        try {
+            upload.read(enormous, std::numeric_limits<size_t>::max() - 1, [](const float *, size_t, size_t) {});
+        } catch (const std::runtime_error &) {
+            failed = true;
+        }
         require(failed && enormous.tellg() == 0, "overflow was not rejected before reading");
         failed = false;
         std::istringstream input(bf16_data(lcb_bf16_upload::chunk_elements + 1));
         try {
             upload.read(input, (lcb_bf16_upload::chunk_elements + 1) * 2,
                         [](const float *, size_t, size_t) { throw std::runtime_error("upload failed"); });
-        } catch (const std::runtime_error &) { failed = true; }
+        } catch (const std::runtime_error &) {
+            failed = true;
+        }
         require(failed && input.tellg() == lcb_bf16_upload::chunk_elements * 2, "upload failure swallowed");
-        std::cout << "PASS: registry identity, bounded BF16 upload, all bit patterns, source boundaries, truncation, upload failures\n";
+        std::cout
+            << "PASS: registry identity, bounded BF16 upload, all bit patterns, source boundaries, truncation, upload failures\n";
         return 0;
     } catch (const std::exception & error) {
         std::cerr << error.what() << '\n';

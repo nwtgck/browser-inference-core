@@ -8,7 +8,8 @@
 
 static int checks = 0;
 static void require(bool condition, const char * label) {
-    if (!condition) throw std::runtime_error(label);
+    if (!condition)
+        throw std::runtime_error(label);
     ++checks;
 }
 static std::string serialized(const common_chat_msg & msg) {
@@ -16,7 +17,8 @@ static std::string serialized(const common_chat_msg & msg) {
 }
 int main(int argc, char ** argv) {
     try {
-        if (argc != 2) throw std::runtime_error("supply the pinned Qwen3 template path");
+        if (argc != 2)
+            throw std::runtime_error("supply the pinned Qwen3 template path");
         std::ifstream stream(argv[1]);
         require(bool(stream), "open template");
         const std::string source{std::istreambuf_iterator<char>(stream), {}};
@@ -36,32 +38,40 @@ int main(int argc, char ** argv) {
         suffix.prepend("!");
         require(suffix.tokens == input.tokens, "plain prefix has no token identity");
         suffix.truncate(1);
-        require(suffix.text == "!" && suffix.tokens == std::vector<llama_token>({-1}), "truncate keeps lengths aligned");
+        require(suffix.text == "!" && suffix.tokens == std::vector<llama_token>({-1}),
+                "truncate keeps lengths aligned");
         suffix.append(input);
         common_chat_input prefix;
         prefix.append("prefix", 19);
         suffix.prepend(prefix);
-        require(suffix.tokens.size() == suffix.text.size() && suffix.tokens[0] == 19, "chunk append and prepend retain token positions");
+        require(suffix.tokens.size() == suffix.text.size() && suffix.tokens[0] == 19,
+                "chunk append and prepend retain token positions");
 
         common_chat_templates_inputs inputs;
-        inputs.messages = common_chat_msgs_parse_oaicompat(common_json::parse(R"([{"role":"user","content":"Weather in Tokyo?"}])"));
-        inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(R"([{"type":"function","function":{"name":"lookup","description":"Find weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}])"));
+        inputs.messages =
+            common_chat_msgs_parse_oaicompat(common_json::parse(R"([{"role":"user","content":"Weather in Tokyo?"}])"));
+        inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(
+            R"([{"type":"function","function":{"name":"lookup","description":"Find weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}])"));
         inputs.enable_thinking = false;
         auto templates = common_chat_templates_init(nullptr, source, "", "");
         auto applied = common_chat_templates_apply(templates.get(), inputs);
         require(applied.prompt.str().find("lookup") != std::string::npos, "tool prompt");
         require(applied.prompt.str().find("Weather in Tokyo?") != std::string::npos, "message prompt");
         require(!applied.parser.empty(), "native parser returned without serialization");
-        const std::string generated = "<tool_call>\n{\"name\":\"lookup\",\"arguments\":{\"city\":\"Tokyo\"}}\n</tool_call>";
+        const std::string generated =
+            "<tool_call>\n{\"name\":\"lookup\",\"arguments\":{\"city\":\"Tokyo\"}}\n</tool_call>";
         common_chat_parser_params params(applied);
         auto arena = applied.parser;
         auto parsed = common_chat_peg_parse(arena, common_chat_input(generated), false, params);
         require(parsed.tool_calls.size() == 1 && parsed.tool_calls[0].name == "lookup", "tool parser name");
         require(parsed.tool_calls[0].arguments.find("Tokyo") != std::string::npos, "tool parser arguments");
         params.parser = arena;
-        require(serialized(common_chat_parse(common_chat_input(generated), false, params)) == serialized(parsed), "parser member parity");
+        require(serialized(common_chat_parse(common_chat_input(generated), false, params)) == serialized(parsed),
+                "parser member parity");
         common_chat_peg_parse(arena, common_chat_input(generated.substr(0, 12)), true, params);
-        require(serialized(common_chat_peg_parse(arena, common_chat_input(generated), false, params)) == serialized(parsed), "arena reusable after partial parsing");
+        require(serialized(common_chat_peg_parse(arena, common_chat_input(generated), false, params)) ==
+                    serialized(parsed),
+                "arena reusable after partial parsing");
         common_chat_session session(templates.get(), nullptr, inputs, {});
         require(session.has_template() && session.prompt().str() == applied.prompt.str(), "session template parity");
         templates.reset(); // The bridge does not retain the templates handle.
@@ -80,7 +90,8 @@ int main(int argc, char ** argv) {
             require(diffs.size() == 1 && diffs[0].content_delta == "lo", "incremental content diff");
         }
         require(snapshot.content == "hel", "snapshot survives session destruction");
-        require(serialized(common_chat_parse(common_chat_input(generated), false, params)) == serialized(parsed), "copied arena survives templates destruction");
+        require(serialized(common_chat_parse(common_chat_input(generated), false, params)) == serialized(parsed),
+                "copied arena survives templates destruction");
         std::cout << "chat-native: " << checks << " checks passed (no Wasm marshalling)\n";
         return 0;
     } catch (const std::exception & error) {

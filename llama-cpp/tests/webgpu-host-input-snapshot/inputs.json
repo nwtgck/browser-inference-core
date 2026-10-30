@@ -1,7 +1,7 @@
 {
   "scope": "Synthetic CPU model; actual registry/scheduler/provider bodies; no GPU or throughput evidence",
   "module_sha256": "5421e80a77cf1df19784dbfd1676b7603c4e7ccd220ff403d10a2f9ab6987027",
-  "inherited_harness_sha256": "bb3a3812c8e124ed1df09dfd30a882763cf7aee1d6603555cf329445fde786ee",
+  "inherited_harness_sha256": "caf596f427177d84049f61835059222a3223b0db4325452a82d9e4f3f4da78c5",
   "patch_sha256": "c652f72f19affbe2b274e6715c248e757ce40eabc93452f407777dd2bbba806a",
   "input_sha256": "363ce73b31868f5676303b5cd6c6e02155802bde61f2918946d3879feeb99fbd",
   "output_sha256": "e294d19c5b912b5d289b9e43c64dcbfe7864ff2fe7b458326a3a526914139c86",
