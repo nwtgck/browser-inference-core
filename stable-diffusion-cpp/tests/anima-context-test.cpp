@@ -12,11 +12,11 @@ namespace {
 int cache_allocations = 0;
 int fail_cache_allocations = 0;
 int failed_cache_allocations = 0;
-}
+} // namespace
 
 #ifdef SDCB_TEST_WRAP_CACHE_ALLOC
-extern "C" ggml_backend_buffer_t __real_ggml_backend_alloc_ctx_tensors(ggml_context*, ggml_backend_t);
-extern "C" ggml_backend_buffer_t __wrap_ggml_backend_alloc_ctx_tensors(ggml_context* ctx, ggml_backend_t backend) {
+extern "C" ggml_backend_buffer_t __real_ggml_backend_alloc_ctx_tensors(ggml_context *, ggml_backend_t);
+extern "C" ggml_backend_buffer_t __wrap_ggml_backend_alloc_ctx_tensors(ggml_context * ctx, ggml_backend_t backend) {
     auto tensor = ggml_get_first_tensor(ctx);
     if (tensor != nullptr && std::string(ggml_get_name(tensor)).rfind("anima.context.", 0) == 0) {
         ++cache_allocations;
@@ -33,7 +33,7 @@ extern "C" ggml_backend_buffer_t __wrap_ggml_backend_alloc_ctx_tensors(ggml_cont
 namespace {
 using namespace image_test;
 struct TinyNet : Anima::AnimaNet {
-    explicit TinyNet(const Anima::AnimaConfig& config) : AnimaNet(config) {
+    explicit TinyNet(const Anima::AnimaConfig & config) : AnimaNet(config) {
         // Keep 64-dimensional rotary heads, matching the actual AnimaRunner.
         blocks["llm_adapter"] = std::make_shared<Anima::LLMAdapter>(64, 64, 64, 2, 1);
     }
@@ -41,13 +41,14 @@ struct TinyNet : Anima::AnimaNet {
 struct TinyRunner : Anima::AnimaRunner {
     std::shared_ptr<ModelManager> manager;
     std::filesystem::path fixture_dir;
-    std::map<std::string, ggml_tensor*> tensors;
+    std::map<std::string, ggml_tensor *> tensors;
 
-    static void fill(const std::map<std::string, ggml_tensor*>& tensors, unsigned seed) {
-        for (const auto& [name, tensor] : tensors) {
+    static void fill(const std::map<std::string, ggml_tensor *> & tensors, unsigned seed) {
+        for (const auto & [name, tensor] : tensors) {
             auto v = values(ggml_nelements(tensor), seed++, 1024.f);
             if (name.find("norm") != std::string::npos && name.find("weight") != std::string::npos) {
-                for (auto& item : v) item += 1.f;
+                for (auto & item : v)
+                    item += 1.f;
             }
             write(tensor, v);
         }
@@ -55,15 +56,15 @@ struct TinyRunner : Anima::AnimaRunner {
     void load_fixture(ggml_backend_t backend) {
         std::random_device random;
         for (int attempt = 0; attempt < 16 && fixture_dir.empty(); ++attempt) {
-            auto candidate = std::filesystem::temp_directory_path() /
-                             ("bicore-anima-test-" + std::to_string(random()));
-            if (std::filesystem::create_directory(candidate)) fixture_dir = std::move(candidate);
+            auto candidate = std::filesystem::temp_directory_path() / ("bicore-anima-test-" + std::to_string(random()));
+            if (std::filesystem::create_directory(candidate))
+                fixture_dir = std::move(candidate);
         }
         require(!fixture_dir.empty(), "temporary directory creation failed");
         auto path = (fixture_dir / "weights.gguf").string();
         auto source = context();
-        std::map<std::string, ggml_tensor*> copies;
-        for (const auto& [name, tensor] : tensors) {
+        std::map<std::string, ggml_tensor *> copies;
+        for (const auto & [name, tensor] : tensors) {
             auto copy = ggml_dup_tensor(source.get(), tensor);
             ggml_set_name(copy, name.c_str());
             copies[name] = copy;
@@ -72,7 +73,8 @@ struct TinyRunner : Anima::AnimaRunner {
         require(storage != nullptr, "fixture allocation failed");
         fill(copies, 4);
         std::unique_ptr<gguf_context, decltype(&gguf_free)> file(gguf_init_empty(), gguf_free);
-        for (const auto& [name, tensor] : copies) gguf_add_tensor(file.get(), tensor);
+        for (const auto & [name, tensor] : copies)
+            gguf_add_tensor(file.get(), tensor);
         require(gguf_write_to_file(file.get(), path.c_str(), false), "fixture write failed");
         manager = std::make_shared<ModelManager>();
         manager->set_n_threads(1);
@@ -81,7 +83,7 @@ struct TinyRunner : Anima::AnimaRunner {
         residency_manager = manager;
         require(manager->add_file(path), "fixture registration failed");
         require(manager->register_param_tensors(ModelComponent::Diffusion, tensors,
-                                               ModelManager::ResidencyMode::ParamBackend, backend, backend),
+                                                ModelManager::ResidencyMode::ParamBackend, backend, backend),
                 "parameter registration failed");
         require(manager->load_all_params_eagerly(), "fixture loading failed");
     }
@@ -102,7 +104,8 @@ struct TinyRunner : Anima::AnimaRunner {
             load_fixture(backend);
         } catch (...) {
             manager.reset();
-            if (!fixture_dir.empty()) std::filesystem::remove_all(fixture_dir);
+            if (!fixture_dir.empty())
+                std::filesystem::remove_all(fixture_dir);
             throw;
         }
     }
@@ -110,14 +113,19 @@ struct TinyRunner : Anima::AnimaRunner {
         runner_end();
         manager.reset();
         std::error_code ignored;
-        if (!fixture_dir.empty()) std::filesystem::remove_all(fixture_dir, ignored);
+        if (!fixture_dir.empty())
+            std::filesystem::remove_all(fixture_dir, ignored);
     }
-    void initialize(unsigned seed) { fill(tensors, seed); }
-    ggml_tensor* cached(uint64_t id) {
+    void initialize(unsigned seed) {
+        fill(tensors, seed);
+    }
+    ggml_tensor * cached(uint64_t id) {
         auto ctx = get_context();
         return get_cache_tensor_by_name(Anima::context_cache_name(ctx, id));
     }
-    bool empty_cache() const { return cache_.empty(); }
+    bool empty_cache() const {
+        return cache_.empty();
+    }
 };
 
 struct Inputs {
@@ -126,7 +134,7 @@ struct Inputs {
     sd::Tensor<float> text{{64, 5, 1}, values(320, 9, 128.f)};
     sd::Tensor<int32_t> ids{{3}, {1, 8, 16}};
     sd::Tensor<float> weights{{3}, {1.f, 0.75f, -0.5f}};
-    sd::Tensor<float> run(TinyRunner& runner, uint64_t id) {
+    sd::Tensor<float> run(TinyRunner & runner, uint64_t id) {
         DiffusionParams params;
         params.x = &image;
         params.timesteps = &time;
@@ -169,9 +177,11 @@ void reuse_and_lifetime(ggml_backend_t backend, bool flash) {
         require(!expected.empty() && !actual.empty(), "Anima compute failed");
         close(expected.values(), actual.values());
         auto text = cached.cached(1);
-        require(text != nullptr && text->buffer != nullptr && text->view_src == nullptr, "cached tensor lacks independent ownership");
+        require(text != nullptr && text->buffer != nullptr && text->view_src == nullptr,
+                "cached tensor lacks independent ownership");
         require(text->ne[0] == 64 && text->ne[1] == 3 && ggml_is_contiguous(text), "wrong compact cached shape");
-        require(std::string(text->name).find("anima.context.") == 0, "graph construction renamed a persistent cached tensor");
+        require(std::string(text->name).find("anima.context.") == 0,
+                "graph construction renamed a persistent cached tensor");
     }
     auto saved = read(cached.cached(1));
     // A second immutable condition does not overwrite the first one.
@@ -220,7 +230,8 @@ void padding_composition(ggml_backend_t backend) {
     compact.runner_end();
     physical.runner_end();
     std::vector<int32_t> ids(513);
-    for (size_t i = 0; i < ids.size(); ++i) ids[i] = 1 + i % 37;
+    for (size_t i = 0; i < ids.size(); ++i)
+        ids[i] = 1 + i % 37;
     input.ids = sd::Tensor<int32_t>({513}, ids);
     input.weights = sd::Tensor<float>({513}, std::vector<float>(513, 1.f));
     expected = input.run(physical, 1);
@@ -241,7 +252,8 @@ void allocation_failure(ggml_backend_t backend) {
     require(!actual.empty(), "allocation fallback did not produce output");
     close(expected.values(), actual.values());
     require(cache_allocations == before + 1 && failed_cache_allocations == 1, "expected one failing cache allocation");
-    require(runner.context_cache_disabled && runner.empty_cache(), "failed cache was retained or immediately re-enabled");
+    require(runner.context_cache_disabled && runner.empty_cache(),
+            "failed cache was retained or immediately re-enabled");
     actual = input.run(runner, 1);
     close(expected.values(), actual.values());
     require(cache_allocations == before + 1, "disabled sampling cache was retried again");
@@ -261,10 +273,11 @@ void options(ggml_backend_t backend) {
                                 "anima_context_cache=false,anima_compact_context=false");
     require(!disabled.context_cache_enabled && !disabled.net.compact_context_enabled, "Anima option parsing failed");
     GGMLRunnerContext ctx;
-    ctx.get_cache_tensor = [](const std::string&) -> ggml_tensor* { return nullptr; };
-    ctx.cache_tensor = [](const std::string&, ggml_tensor*) {};
+    ctx.get_cache_tensor = [](const std::string &) -> ggml_tensor * { return nullptr; };
+    ctx.cache_tensor = [](const std::string &, ggml_tensor *) {};
     require(!Anima::context_cache_name(ctx, 1).empty(), "valid cache key rejected");
-    require(Anima::context_cache_name(ctx, 0).empty() && Anima::context_cache_name(ctx, 4).empty(), "invalid cache ID accepted");
+    require(Anima::context_cache_name(ctx, 0).empty() && Anima::context_cache_name(ctx, 4).empty(),
+            "invalid cache ID accepted");
     auto original = Anima::context_cache_name(ctx, 1);
     ctx.flash_attn_enabled = true;
     require(Anima::context_cache_name(ctx, 1) != original, "flash setting reuses incompatible cache");
@@ -278,9 +291,12 @@ void options(ggml_backend_t backend) {
 
 int main() {
     try {
-        sd_set_log_callback([](sd_log_level_t level, const char* text, void*) {
-            if (level >= SD_LOG_WARN) std::fputs(text, stderr);
-        }, nullptr);
+        sd_set_log_callback(
+            [](sd_log_level_t level, const char * text, void *) {
+                if (level >= SD_LOG_WARN)
+                    std::fputs(text, stderr);
+            },
+            nullptr);
         auto backend = image_test::cpu();
         identifiers();
         options(backend.get());
@@ -288,8 +304,9 @@ int main() {
         reuse_and_lifetime(backend.get(), true);
         padding_composition(backend.get());
         allocation_failure(backend.get());
-        std::puts("Anima context ID, whole-runner parity, cache ownership/lifetime, padding and allocation fallback passed (synthetic CPU)");
-    } catch (const std::exception& error) {
+        std::puts(
+            "Anima context ID, whole-runner parity, cache ownership/lifetime, padding and allocation fallback passed (synthetic CPU)");
+    } catch (const std::exception & error) {
         std::fprintf(stderr, "Anima context regression failed: %s\n", error.what());
         return 1;
     }

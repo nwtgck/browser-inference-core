@@ -29,7 +29,7 @@ void verify_live_registry(ggml_backend_t backend) {
         }
     }
 #else
-    (void) backend;
+    (void)backend;
 #endif
 }
 
@@ -43,22 +43,23 @@ struct ConstructionBudget {
     explicit ConstructionBudget(ggml_backend_t source) : real(source), backend(*source) {
         device.context = this;
         device.iface.get_name = [](ggml_backend_dev_t) { return "WebGPU-construction-budget"; };
-        device.iface.supports_op = [](ggml_backend_dev_t dev, const ggml_tensor* node) {
-            auto& self = *static_cast<ConstructionBudget*>(dev->context);
-            if ((node->op == GGML_OP_IM2COL || node->op == GGML_OP_MUL_MAT) && ggml_nbytes(node) > 32768) return false;
+        device.iface.supports_op = [](ggml_backend_dev_t dev, const ggml_tensor * node) {
+            auto & self = *static_cast<ConstructionBudget *>(dev->context);
+            if ((node->op == GGML_OP_IM2COL || node->op == GGML_OP_MUL_MAT) && ggml_nbytes(node) > 32768)
+                return false;
             return ggml_backend_supports_op(self.real, node);
         };
         backend.device = &device;
     }
 };
 
-bool is_compute(const ggml_tensor* node) {
+bool is_compute(const ggml_tensor * node) {
     return node->op != GGML_OP_NONE && node->op != GGML_OP_VIEW && node->op != GGML_OP_RESHAPE &&
            node->op != GGML_OP_PERMUTE && node->op != GGML_OP_TRANSPOSE;
 }
 
-std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool bounded,
-                             ggml_type type, bool sink, bool masked) {
+std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool bounded, ggml_type type, bool sink,
+                             bool masked) {
     sd::RunnerCache cache(backend);
     std::vector<float> result;
     {
@@ -66,8 +67,8 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
         auto computation = context();
         ConstructionBudget budget(backend);
         auto selected = bounded ? &budget.backend : backend;
-        ggml_tensor* input;
-        ggml_tensor* output;
+        ggml_tensor * input;
+        ggml_tensor * output;
         Buffer parameters(nullptr, ggml_backend_buffer_free);
         if (convolution) {
             input = ggml_new_tensor_4d(params.get(), GGML_TYPE_F32, 32, 32, 4, 1);
@@ -77,8 +78,8 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
             require(parameters != nullptr, "convolution parameter allocation");
             write(weight, values(ggml_nelements(weight), 7, 128));
             write(bias, values(4, 3, 128));
-            output = ggml_ext_conv_2d(computation.get(), input, weight, bias,
-                                       1, 1, 1, 1, 1, 1, false, false, false, 1.f, selected);
+            output = ggml_ext_conv_2d(computation.get(), input, weight, bias, 1, 1, 1, 1, 1, 1, false, false, false,
+                                      1.f, selected);
         } else {
             constexpr int width = 16, heads = 2, queries = 65, keys = 97;
             input = ggml_new_tensor_3d(params.get(), GGML_TYPE_F32, width, queries, 1);
@@ -90,21 +91,25 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
             require(parameters != nullptr, "attention parameter allocation");
             write(k, values(ggml_nelements(k), 12, 32));
             write(v, values(ggml_nelements(v), 13, 32));
-            if (sinks) write(sinks, std::vector<float>(heads, std::log(435.f)));
+            if (sinks)
+                write(sinks, std::vector<float>(heads, std::log(435.f)));
             if (mask) {
                 auto values = image_test::values(ggml_nelements(mask), 3, 8);
-                for (size_t i = 0; i < values.size(); ++i) if (i % keys == 3) values[i] = -INFINITY;
+                for (size_t i = 0; i < values.size(); ++i)
+                    if (i % keys == 3)
+                        values[i] = -INFINITY;
                 write(mask, values);
             }
-            output = ggml_ext_attention_ext(computation.get(), selected, input, k, v, heads, mask,
-                                             false, false, 1.f, false, sinks);
+            output = ggml_ext_attention_ext(computation.get(), selected, input, k, v, heads, mask, false, false, 1.f,
+                                            false, sinks);
         }
         auto graph = image_test::graph(computation.get(), output);
         require((count(graph, GGML_OP_SET) != 0) == bounded, "incorrect bounded-path selection");
         if (bounded) {
             for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
                 auto node = ggml_graph_node(graph, i);
-                require(!is_compute(node) || ggml_backend_supports_op(backend, node), "real backend rejected bounded node");
+                require(!is_compute(node) || ggml_backend_supports_op(backend, node),
+                        "real backend rejected bounded node");
             }
         }
         auto allocation = allocate(backend, graph);
@@ -135,10 +140,8 @@ std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
     require(parameters != nullptr, "parameter batch input allocation");
     auto output = ggml_new_tensor_2d(computation.get(), GGML_TYPE_F32, width, rows * branches);
     for (int i = 0; i < branches; ++i) {
-        auto part = ggml_scale_bias(computation.get(), input,
-                                    0.5f + float(i + 1) / 257.f, float(i % 17 - 8) / 32.f);
-        output = ggml_set_inplace(computation.get(), output, part,
-                                  output->nb[1], output->nb[2], output->nb[3],
+        auto part = ggml_scale_bias(computation.get(), input, 0.5f + float(i + 1) / 257.f, float(i % 17 - 8) / 32.f);
+        output = ggml_set_inplace(computation.get(), output, part, output->nb[1], output->nb[2], output->nb[3],
                                   size_t(i) * rows * output->nb[1]);
     }
     auto graph = image_test::graph(computation.get(), output);
@@ -146,8 +149,7 @@ std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
             "parameter batch graph lost an observable dispatch");
     for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
         auto node = ggml_graph_node(graph, i);
-        require(!is_compute(node) || ggml_backend_supports_op(backend, node),
-                "backend rejected parameter batch node");
+        require(!is_compute(node) || ggml_backend_supports_op(backend, node), "backend rejected parameter batch node");
     }
     auto allocation = allocate(backend, graph);
     std::vector<float> result;
@@ -170,11 +172,14 @@ std::vector<float> run_softmax_rows(ggml_backend_t backend, int width, bool inpl
     auto sinks = sink ? ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, 2) : nullptr;
     Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
     require(parameters != nullptr, "softmax parameter allocation");
-    if (mask) write(mask, values(ggml_nelements(mask), 7, 16));
-    if (sinks) write(sinks, {std::log(435.f), std::log(17.f)});
-    auto output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, .0883883476f, 0.f) :
-                            ggml_soft_max_ext(computation.get(), input, mask, .0883883476f, 0.f);
-    if (sinks) ggml_soft_max_add_sinks(output, sinks);
+    if (mask)
+        write(mask, values(ggml_nelements(mask), 7, 16));
+    if (sinks)
+        write(sinks, {std::log(435.f), std::log(17.f)});
+    auto output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, .0883883476f, 0.f)
+                          : ggml_soft_max_ext(computation.get(), input, mask, .0883883476f, 0.f);
+    if (sinks)
+        ggml_soft_max_add_sinks(output, sinks);
     require(ggml_backend_supports_op(backend, output), "backend rejected softmax cache probe");
     auto graph = image_test::graph(computation.get(), output);
     auto allocation = allocate(backend, graph);
@@ -182,7 +187,8 @@ std::vector<float> run_softmax_rows(ggml_backend_t backend, int width, bool inpl
     for (unsigned seed : {3u, 23u}) {
         write(input, values(ggml_nelements(input), seed, 8));
         compute(backend, graph);
-        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+        auto current = read(output);
+        result.insert(result.end(), current.begin(), current.end());
     }
     return result;
 }
@@ -194,13 +200,15 @@ std::vector<float> run_shared_rope(ggml_backend_t backend, bool shared) {
     Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
     require(parameters != nullptr, "RoPE parameter allocation");
     const auto prepared = Rope::prepare_matrix(computation.get(), pe);
-    auto apply = [&](ggml_tensor* x) { return shared ? Rope::apply_rope_prepared(computation.get(), x, prepared) :
-                                                     Rope::apply_rope(computation.get(), x, pe); };
+    auto apply = [&](ggml_tensor * x) {
+        return shared ? Rope::apply_rope_prepared(computation.get(), x, prepared)
+                      : Rope::apply_rope(computation.get(), x, pe);
+    };
     auto a = apply(input);
     auto b = apply(ggml_scale(computation.get(), input, .75f));
     auto output = ggml_concat(computation.get(), a, b, 1);
     auto graph = image_test::graph(computation.get(), output);
-    for (int i=0; i<ggml_graph_n_nodes(graph); ++i) {
+    for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
         auto node = ggml_graph_node(graph, i);
         require(!is_compute(node) || ggml_backend_supports_op(backend, node), "backend rejected shared RoPE");
     }
@@ -208,9 +216,10 @@ std::vector<float> run_shared_rope(ggml_backend_t backend, bool shared) {
     std::vector<float> result;
     for (unsigned seed : {5u, 31u}) {
         write(input, values(ggml_nelements(input), seed, 16));
-        write(pe, values(ggml_nelements(pe), seed+7, 8));
+        write(pe, values(ggml_nelements(pe), seed + 7, 8));
         compute(backend, graph);
-        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+        auto current = read(output);
+        result.insert(result.end(), current.begin(), current.end());
     }
     return result;
 }
@@ -225,22 +234,27 @@ std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, 
     auto packed_input = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, 2 * inner, tokens);
     auto gate = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, inner, tokens);
     auto up = ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, inner, tokens);
-    std::vector<ggml_tensor*> modulation;
-    for (int i = 0; i < 4; ++i) modulation.push_back(ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, width, 2));
+    std::vector<ggml_tensor *> modulation;
+    for (int i = 0; i < 4; ++i)
+        modulation.push_back(ggml_new_tensor_2d(params.get(), GGML_TYPE_F32, width, 2));
     Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
     require(parameters != nullptr, "Qwen elementwise parameter allocation");
     ConstructionBudget construction(backend);
-    GGMLRunnerContext ctx; ctx.ggml_ctx = computation.get(); ctx.backend = &construction.backend;
+    GGMLRunnerContext ctx;
+    ctx.ggml_ctx = computation.get();
+    ctx.backend = &construction.backend;
     auto prepared = optimized ? Block::prepare_modulation(&ctx, modulation, prefix == 0) : std::nullopt;
     require(!optimized || bool(prepared), "Qwen modulation support on requested backend");
-    ggml_tensor* output = nullptr;
+    ggml_tensor * output = nullptr;
     for (int i = 0; i < 4; ++i) {
-        auto part = prepared ? Block::modulate_prepared(computation.get(), input, prepared->target[i], prepared->prefix[i], prefix) :
-                               Block::modulate(computation.get(), input, modulation[i], prefix, i % 2 == 1);
+        auto part = prepared ? Block::modulate_prepared(computation.get(), input, prepared->target[i],
+                                                        prepared->prefix[i], prefix)
+                             : Block::modulate(computation.get(), input, modulation[i], prefix, i % 2 == 1);
         part = ggml_reshape_1d(computation.get(), part, ggml_nelements(part));
         output = output ? ggml_concat(computation.get(), output, part, 0) : part;
     }
-    ggml_tensor* activated = optimized ? Block::try_webgpu_swiglu(&ctx, packed ? packed_input : gate, packed ? nullptr : up) : nullptr;
+    ggml_tensor * activated =
+        optimized ? Block::try_webgpu_swiglu(&ctx, packed ? packed_input : gate, packed ? nullptr : up) : nullptr;
     require(!optimized || activated != nullptr, "Qwen GLU support on requested backend");
     if (!activated) {
         if (packed) {
@@ -261,13 +275,16 @@ std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, 
     auto allocation = allocate(backend, g);
     std::vector<float> result;
     for (unsigned seed : {5u, 23u}) {
-        auto original = values(ggml_nelements(input), seed, 16); write(input, original);
+        auto original = values(ggml_nelements(input), seed, 16);
+        write(input, original);
         write(packed_input, values(ggml_nelements(packed_input), seed + 2, 3));
         write(gate, values(ggml_nelements(gate), seed + 3, 3));
         write(up, values(ggml_nelements(up), seed + 4, 5));
-        for (int i = 0; i < 4; ++i) write(modulation[i], values(ggml_nelements(modulation[i]), seed + i, 8));
+        for (int i = 0; i < 4; ++i)
+            write(modulation[i], values(ggml_nelements(modulation[i]), seed + i, 8));
         compute(backend, g);
-        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+        auto current = read(output);
+        result.insert(result.end(), current.begin(), current.end());
         close(original, read(input));
     }
     return result;
@@ -286,17 +303,18 @@ std::vector<float> run_large_rows(ggml_backend_t backend, int kind, bool inplace
     write(mul, values(8, 11, 16));
     write(mask, values(8 * 257, 7, 8));
     write(sinks, values(257, 19, 8));
-    ggml_tensor* output;
+    ggml_tensor * output;
     if (kind == 0) {
-        output = inplace ? ggml_norm_inplace(computation.get(), input, 1e-5f) :
-                           ggml_norm(computation.get(), input, 1e-5f);
+        output =
+            inplace ? ggml_norm_inplace(computation.get(), input, 1e-5f) : ggml_norm(computation.get(), input, 1e-5f);
     } else if (kind == 1 || kind == 2) {
-        output = inplace ? ggml_rms_norm_inplace(computation.get(), input, 1e-5f) :
-                           ggml_rms_norm(computation.get(), input, 1e-5f);
-        if (kind == 2) output = ggml_mul(computation.get(), output, mul);
+        output = inplace ? ggml_rms_norm_inplace(computation.get(), input, 1e-5f)
+                         : ggml_rms_norm(computation.get(), input, 1e-5f);
+        if (kind == 2)
+            output = ggml_mul(computation.get(), output, mul);
     } else {
-        output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, 0.125f, 0.f) :
-                           ggml_soft_max_ext(computation.get(), input, mask, 0.125f, 0.f);
+        output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, 0.125f, 0.f)
+                         : ggml_soft_max_ext(computation.get(), input, mask, 0.125f, 0.f);
         ggml_soft_max_add_sinks(output, sinks);
     }
     auto g = image_test::graph(computation.get(), output);
@@ -310,53 +328,61 @@ std::vector<float> run_large_rows(ggml_backend_t backend, int kind, bool inplace
         write(input, values(ggml_nelements(input), seed, 4));
         verify_live_registry(backend);
         compute(backend, g);
-        auto current = read(output); result.insert(result.end(), current.begin(), current.end());
+        auto current = read(output);
+        result.insert(result.end(), current.begin(), current.end());
     }
     return result;
 }
 
 } // namespace
 
-extern "C" int sdc_test_webgpu_performance(const char* backend_name) {
+extern "C" int sdc_test_webgpu_performance(const char * backend_name) {
     try {
         Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
-        if (!backend) return -1;
-        if (ggml_backend_is_cpu(backend.get())) ggml_backend_cpu_set_n_threads(backend.get(), 1);
+        if (!backend)
+            return -1;
+        if (ggml_backend_is_cpu(backend.get()))
+            ggml_backend_cpu_set_n_threads(backend.get(), 1);
         auto reference = cpu();
         for (auto type : {GGML_TYPE_F16, GGML_TYPE_F32}) {
             auto expected = run_graph(reference.get(), true, false, type, false, false);
             auto actual = run_graph(backend.get(), true, true, type, false, false);
             close(expected, actual, 2e-4f, 2e-3f);
         }
-        for (bool sink : {false, true}) for (bool masked : {false, true}) {
-            auto expected = run_graph(reference.get(), false, false, GGML_TYPE_F32, sink, masked);
-            auto actual = run_graph(backend.get(), false, true, GGML_TYPE_F32, sink, masked);
-            close(expected, actual, 2e-4f, 2e-3f);
-        }
-        for (bool packed : {false, true}) for (int prefix : {0, 3}) {
-            auto expected = run_qwen_elementwise(reference.get(), false, packed, prefix);
-            auto actual = run_qwen_elementwise(backend.get(), true, packed, prefix);
-            close(expected, actual, 3e-5f, 3e-4f);
-        }
+        for (bool sink : {false, true})
+            for (bool masked : {false, true}) {
+                auto expected = run_graph(reference.get(), false, false, GGML_TYPE_F32, sink, masked);
+                auto actual = run_graph(backend.get(), false, true, GGML_TYPE_F32, sink, masked);
+                close(expected, actual, 2e-4f, 2e-3f);
+            }
+        for (bool packed : {false, true})
+            for (int prefix : {0, 3}) {
+                auto expected = run_qwen_elementwise(reference.get(), false, packed, prefix);
+                auto actual = run_qwen_elementwise(backend.get(), true, packed, prefix);
+                close(expected, actual, 3e-5f, 3e-4f);
+            }
         for (int branches : {1, 32, 33, 97}) {
             auto expected = run_parameter_batches(reference.get(), branches);
             auto actual = run_parameter_batches(backend.get(), branches);
             close(expected, actual, 2e-5f, 2e-4f);
         }
         for (int width : {17, 257, 4095, 4096, 4097, 16385}) {
-            for (bool inplace : {false, true}) for (bool masked : {false, true}) for (bool sink : {false, true}) {
-                auto expected = run_softmax_rows(reference.get(), width, inplace, masked, sink);
-                auto actual = run_softmax_rows(backend.get(), width, inplace, masked, sink);
-                close(expected, actual, 3e-6f, 3e-4f);
-            }
+            for (bool inplace : {false, true})
+                for (bool masked : {false, true})
+                    for (bool sink : {false, true}) {
+                        auto expected = run_softmax_rows(reference.get(), width, inplace, masked, sink);
+                        auto actual = run_softmax_rows(backend.get(), width, inplace, masked, sink);
+                        close(expected, actual, 3e-6f, 3e-4f);
+                    }
         }
         close(run_shared_rope(reference.get(), false), run_shared_rope(backend.get(), true), 2e-5f, 2e-4f);
-        for (int kind = 0; kind < 4; ++kind) for (bool inplace : {false, true}) {
-            close(run_large_rows(reference.get(), kind, inplace),
-                  run_large_rows(backend.get(), kind, inplace), 3e-5f, 3e-4f);
-        }
+        for (int kind = 0; kind < 4; ++kind)
+            for (bool inplace : {false, true}) {
+                close(run_large_rows(reference.get(), kind, inplace), run_large_rows(backend.get(), kind, inplace),
+                      3e-5f, 3e-4f);
+            }
         return 1;
-    } catch (const std::exception& error) {
+    } catch (const std::exception & error) {
         std::fprintf(stderr, "WebGPU performance arithmetic/copy probe: %s\n", error.what());
         return -2;
     }

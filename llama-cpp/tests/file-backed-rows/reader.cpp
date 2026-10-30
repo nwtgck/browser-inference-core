@@ -22,14 +22,24 @@ void * operator new(size_t size) {
         ++allocation_failures;
         throw std::bad_alloc();
     }
-    if (void * result = std::malloc(size ? size : 1)) return result;
+    if (void * result = std::malloc(size ? size : 1))
+        return result;
     throw std::bad_alloc();
 }
-void operator delete(void * pointer) noexcept { std::free(pointer); }
-void operator delete(void * pointer, size_t) noexcept { std::free(pointer); }
+void operator delete(void * pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete(void * pointer, size_t) noexcept {
+    std::free(pointer);
+}
 struct allocation_fault {
-    explicit allocation_fault(size_t bytes) { fail_allocation_bytes = bytes; allocation_failures = 0; }
-    ~allocation_fault() { fail_allocation_bytes = 0; }
+    explicit allocation_fault(size_t bytes) {
+        fail_allocation_bytes = bytes;
+        allocation_failures = 0;
+    }
+    ~allocation_fault() {
+        fail_allocation_bytes = 0;
+    }
 };
 
 // The wrapper can force partial reads, interruptions and a later hard failure.
@@ -41,8 +51,14 @@ struct pread_faults {
     size_t fail_call = 0;
     bool eof = false;
     static pread_faults * active;
-    pread_faults() { if (active) throw std::runtime_error("nested pread fixture"); active = this; }
-    ~pread_faults() { active = nullptr; }
+    pread_faults() {
+        if (active)
+            throw std::runtime_error("nested pread fixture");
+        active = this;
+    }
+    ~pread_faults() {
+        active = nullptr;
+    }
     pread_faults(const pread_faults &) = delete;
     pread_faults & operator=(const pread_faults &) = delete;
 };
@@ -52,10 +68,13 @@ extern "C" ssize_t __wrap_pread(int fd, void * buffer, size_t count, off_t offse
     if (auto * faults = pread_faults::active) {
         ++faults->calls;
         if (faults->interruptions) {
-            --faults->interruptions; errno = EINTR; return -1;
+            --faults->interruptions;
+            errno = EINTR;
+            return -1;
         }
         if (faults->calls == faults->fail_call) {
-            errno = EIO; return faults->eof ? 0 : -1;
+            errno = EIO;
+            return faults->eof ? 0 : -1;
         }
         count = std::min(count, faults->max_bytes);
     }
@@ -63,18 +82,30 @@ extern "C" ssize_t __wrap_pread(int fd, void * buffer, size_t count, off_t offse
 }
 
 static void check(bool condition, const char * message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
-template<class F> static void rejects(F && f) {
+template <class F> static void rejects(F && f) {
     bool failed = false;
-    try { f(); } catch (const std::runtime_error &) { failed = true; }
+    try {
+        f();
+    } catch (const std::runtime_error &) {
+        failed = true;
+    }
     check(failed, "expected reader rejection");
 }
 struct temporary_file {
     FILE * value = std::tmpfile();
-    temporary_file() { check(value != nullptr, "tmpfile"); }
-    ~temporary_file() { if (value) std::fclose(value); }
-    int fd() const { return fileno(value); }
+    temporary_file() {
+        check(value != nullptr, "tmpfile");
+    }
+    ~temporary_file() {
+        if (value)
+            std::fclose(value);
+    }
+    int fd() const {
+        return fileno(value);
+    }
 };
 static void write_at(int fd, uint64_t offset, const void * bytes, size_t count) {
     check(pwrite(fd, bytes, count, off_t(offset)) == ssize_t(count), "pwrite");
@@ -84,9 +115,11 @@ static void compare_rows(ggml_type type, int64_t columns, uint64_t offset) {
     const size_t row_bytes = ggml_row_size(type, columns);
     const auto * traits = ggml_get_type_traits(type);
     std::vector<float> input(columns * rows);
-    for (size_t i = 0; i < input.size(); ++i) input[i] = std::sin(float(i) * 0.37f) * 2;
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin(float(i) * 0.37f) * 2;
     std::vector<uint64_t> packed((row_bytes * rows + 7) / 8);
-    if (type == GGML_TYPE_F32) std::memcpy(packed.data(), input.data(), input.size() * sizeof(float));
+    if (type == GGML_TYPE_F32)
+        std::memcpy(packed.data(), input.data(), input.size() * sizeof(float));
     else {
         check(traits->from_float_ref != nullptr, "reference quantizer");
         traits->from_float_ref(input.data(), packed.data(), columns * rows);
@@ -104,14 +137,15 @@ static void compare_rows(ggml_type type, int64_t columns, uint64_t offset) {
     check(lseek(file.fd(), 13, SEEK_SET) == 13, "set shared cursor");
     reader.gather(ids.data(), ids.size(), actual);
     check(lseek(file.fd(), 0, SEEK_CUR) == 13, "pread changed cursor");
-    std::fclose(file.value); file.value = nullptr;
+    std::fclose(file.value);
+    file.value = nullptr;
     std::vector<float> again;
     reader.gather(ids.data(), ids.size(), again);
     check(actual == again, "descriptor lifetime");
 
     // Compare against a real CPU ggml_get_rows graph, not a mocked gather.
-    auto ctx = std::unique_ptr<ggml_context, decltype(&ggml_free)>(
-        ggml_init({2 * 1024 * 1024, nullptr, false}), ggml_free);
+    auto ctx =
+        std::unique_ptr<ggml_context, decltype(&ggml_free)>(ggml_init({2 * 1024 * 1024, nullptr, false}), ggml_free);
     check(bool(ctx), "ggml context");
     auto * tensor = ggml_new_tensor_2d(ctx.get(), type, columns, rows);
     std::memcpy(tensor->data, packed.data(), row_bytes * rows);
@@ -136,7 +170,8 @@ static void positioned_read_failures() {
     constexpr size_t columns = 160, rows = 3;
     const uint64_t offset = (uint64_t(1) << 32) + 83;
     std::array<float, columns * rows> data{};
-    for (size_t i = 0; i < data.size(); ++i) data[i] = float(i) * 0.125f;
+    for (size_t i = 0; i < data.size(); ++i)
+        data[i] = float(i) * 0.125f;
     temporary_file file;
     const uint64_t bytes = offset + sizeof(data);
     check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate fault fixture");
@@ -164,7 +199,8 @@ static void positioned_read_failures() {
     for (bool eof : {false, true}) {
         {
             pread_faults faults;
-            faults.fail_call = 2; faults.eof = eof;
+            faults.fail_call = 2;
+            faults.eof = eof;
             rejects([&] { reader.gather(indices.data(), indices.size(), output); });
             check(faults.calls == 2, "continued reading after a hard failure");
         }
@@ -186,10 +222,13 @@ static void persistent_cache() {
         const size_t row_bytes = ggml_row_size(type, columns);
         const auto * traits = ggml_get_type_traits(type);
         std::vector<float> floats(columns * rows);
-        for (size_t i = 0; i < floats.size(); ++i) floats[i] = std::sin(float(i) * .15f);
+        for (size_t i = 0; i < floats.size(); ++i)
+            floats[i] = std::sin(float(i) * .15f);
         std::vector<uint64_t> packed((row_bytes * rows + 7) / 8);
-        if (type == GGML_TYPE_F32) std::memcpy(packed.data(), floats.data(), floats.size() * sizeof(float));
-        else traits->from_float_ref(floats.data(), packed.data(), floats.size());
+        if (type == GGML_TYPE_F32)
+            std::memcpy(packed.data(), floats.data(), floats.size() * sizeof(float));
+        else
+            traits->from_float_ref(floats.data(), packed.data(), floats.size());
         const uint64_t offset = (uint64_t(1) << 32) + 83;
         temporary_file file;
         const uint64_t bytes = offset + row_bytes * rows;
@@ -234,7 +273,9 @@ static void persistent_cache() {
             const int32_t miss = eof ? 7 : 6;
             {
                 pread_faults faults;
-                faults.max_bytes = 17; faults.fail_call = 2; faults.eof = eof;
+                faults.max_bytes = 17;
+                faults.fail_call = 2;
+                faults.eof = eof;
                 rejects([&] { cached.gather(&miss, 1, output); });
                 check(faults.calls == 2, "failed miss continued reading");
             }
@@ -262,15 +303,18 @@ static void persistent_cache() {
         check(baseline.cache_bytes() == 0, "disabled cache allocated storage");
         // Two native contexts may use the same immutable model concurrently.
         std::array<std::future<bool>, 4> tasks;
-        for (auto & task : tasks) task = std::async(std::launch::async, [&] {
-            std::vector<float> concurrent;
-            for (int i = 0; i < 100; ++i) {
-                cached.gather(indices.data(), indices.size(), concurrent);
-                if (concurrent != expected) return false;
-            }
-            return true;
-        });
-        for (auto & task : tasks) check(task.get(), "concurrent gathers changed row bytes");
+        for (auto & task : tasks)
+            task = std::async(std::launch::async, [&] {
+                std::vector<float> concurrent;
+                for (int i = 0; i < 100; ++i) {
+                    cached.gather(indices.data(), indices.size(), concurrent);
+                    if (concurrent != expected)
+                        return false;
+                }
+                return true;
+            });
+        for (auto & task : tasks)
+            check(task.get(), "concurrent gathers changed row bytes");
         check(cached.cache_bytes() <= budget, "cache grew after eviction/concurrency");
     }
 }
@@ -286,7 +330,7 @@ static void cache_resource_bounds() {
     lcb_file_backed_rows baseline(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 0);
     baseline.gather(indices.data(), indices.size(), expected);
     lcb_file_backed_rows cached(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows,
-                               std::numeric_limits<size_t>::max());
+                                std::numeric_limits<size_t>::max());
     cached.gather(indices.data(), indices.size(), output);
     // 90 packed bytes round to 96, plus 8 metadata bytes, 65,536 slots.
     check(output == expected && cached.cache_bytes() == 65536 * 104, "full geometry cache budget");
@@ -301,7 +345,7 @@ static void cache_resource_bounds() {
     }
     {
         lcb_file_backed_rows huge_row(file.fd(), 1, bytes, 0, GGML_TYPE_F32,
-                                     lcb_file_backed_rows::max_staging_bytes / sizeof(float), 1);
+                                      lcb_file_backed_rows::max_staging_bytes / sizeof(float), 1);
         allocation_fault fault(lcb_file_backed_rows::max_staging_bytes);
         huge_row.gather(nullptr, 0, output);
         check(allocation_failures == 0 && output.empty() && huge_row.cache_bytes() == 0,
@@ -356,8 +400,13 @@ int main() {
         // A backing file truncated after successful load must fail during gather.
         lcb_file_backed_rows reader(f.fd(), 0, 4096, 0, GGML_TYPE_F32, 32, 32);
         check(ftruncate(f.fd(), 7) == 0, "truncate after load");
-        int32_t index = 0; std::vector<float> output;
+        int32_t index = 0;
+        std::vector<float> output;
         rejects([&] { reader.gather(&index, 1, output); });
-        std::cout << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs, truncation, partial reads, EINTR, hard failures, deduplication, bounded persistent cache, LRU eviction and concurrent contexts\n";
-    } catch (const std::exception & e) { std::cerr << e.what() << '\n'; return 1; }
+        std::cout
+            << "PASS bounded positioned reads, lifetime, quantization/get_rows equivalence, >4GiB, invalid inputs, truncation, partial reads, EINTR, hard failures, deduplication, bounded persistent cache, LRU eviction and concurrent contexts\n";
+    } catch (const std::exception & e) {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 }

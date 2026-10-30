@@ -7,4 +7,4 @@ struct WebgpuTestLimits {
     bool subgroups = true;
     bool subgroup_matrix = false;
 };
-bool webgpu_test_supports(const ggml_tensor* op, const WebgpuTestLimits& limits = {});
+bool webgpu_test_supports(const ggml_tensor * op, const WebgpuTestLimits & limits = {});

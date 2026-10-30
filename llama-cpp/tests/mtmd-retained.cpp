@@ -18,11 +18,14 @@
 static int checks = 0;
 static void require(bool value, const char * reason) {
     ++checks;
-    if (!value) throw std::runtime_error(reason);
+    if (!value)
+        throw std::runtime_error(reason);
 }
 template <typename F> static void rejected(F f, const char * text) {
     bool caught = false;
-    try { f(); } catch (const std::runtime_error & error) {
+    try {
+        f();
+    } catch (const std::runtime_error & error) {
         caught = true;
         require(std::string(error.what()).find(text) != std::string::npos, "wrong rejection reason");
     }
@@ -33,7 +36,8 @@ static ggml_context * context() {
     p.mem_size = 4 * 1024 * 1024;
     p.no_alloc = true;
     auto * ctx = ggml_init(p);
-    if (!ctx) throw std::runtime_error("test metadata allocation failed");
+    if (!ctx)
+        throw std::runtime_error("test metadata allocation failed");
     return ctx;
 }
 struct fixture {
@@ -43,10 +47,12 @@ struct fixture {
     ggml_backend_buffer_t buffer = nullptr;
     ggml_backend_sched_t sched = nullptr;
     fixture() {
-        if (!cpu) throw std::runtime_error("test CPU backend unavailable");
+        if (!cpu)
+            throw std::runtime_error("test CPU backend unavailable");
         ggml_backend_cpu_set_n_threads(cpu, 1);
         sched = ggml_backend_sched_new(&cpu, nullptr, 1, 256, false, false);
-        if (!sched) throw std::runtime_error("test scheduler allocation failed");
+        if (!sched)
+            throw std::runtime_error("test scheduler allocation failed");
     }
     ~fixture() {
         ggml_backend_sched_free(sched);
@@ -57,7 +63,8 @@ struct fixture {
     }
     void allocate() {
         buffer = ggml_backend_alloc_ctx_tensors(weights, cpu);
-        if (!buffer) throw std::runtime_error("test weights allocation failed");
+        if (!buffer)
+            throw std::runtime_error("test weights allocation failed");
         ggml_backend_buffer_set_usage(buffer, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
     }
     ggml_cgraph * graph(ggml_tensor * result) {
@@ -70,21 +77,27 @@ struct fixture {
 static void test_reader() {
     lcb_mtmd_retained_reader reader;
     const size_t chunk = lcb_mtmd_retained_reader::chunk_bytes;
-    for (size_t size : {size_t(0), size_t(1), size_t(2), size_t(3), size_t(131072), chunk - 1, chunk, chunk + 1, chunk * 2 + 7}) {
+    for (size_t size :
+         {size_t(0), size_t(1), size_t(2), size_t(3), size_t(131072), chunk - 1, chunk, chunk + 1, chunk * 2 + 7}) {
         std::string raw(size, '\0');
-        for (size_t i = 0; i < size; ++i) raw[i] = char(i * 19 + (i >> 8));
+        for (size_t i = 0; i < size; ++i)
+            raw[i] = char(i * 19 + (i >> 8));
         std::istringstream input(raw + "NEXT");
         std::string output;
         std::vector<size_t> progress;
-        reader.read(input, size, [&](const uint8_t * data, size_t off, size_t bytes) {
-            require(off == output.size(), "raw upload has a gap");
-            require(bytes > 0 && bytes <= chunk, "raw upload is not bounded");
-            output.append(reinterpret_cast<const char *>(data), bytes);
-        }, [&](size_t consumed) {
-            require(consumed <= size, "source progress exceeds tensor");
-            if (!progress.empty()) require(consumed >= progress.back(), "source progress regressed");
-            progress.push_back(consumed);
-        });
+        reader.read(
+            input, size,
+            [&](const uint8_t * data, size_t off, size_t bytes) {
+                require(off == output.size(), "raw upload has a gap");
+                require(bytes > 0 && bytes <= chunk, "raw upload is not bounded");
+                output.append(reinterpret_cast<const char *>(data), bytes);
+            },
+            [&](size_t consumed) {
+                require(consumed <= size, "source progress exceeds tensor");
+                if (!progress.empty())
+                    require(consumed >= progress.back(), "source progress regressed");
+                progress.push_back(consumed);
+            });
         require(output == raw, "raw data changed");
         require(input.peek() == 'N', "raw upload crossed tensor boundary");
         require(progress.front() == 0 && progress.back() == size, "start/final checkpoint missing");
@@ -93,36 +106,58 @@ static void test_reader() {
     for (size_t size : {size_t(2), chunk, chunk + 2}) {
         std::istringstream input(std::string(size - 1, 'x'));
         size_t submitted = 0;
-        rejected([&] { reader.read(input, size, [&](const uint8_t *, size_t, size_t n) { submitted += n; }, [](size_t) {}); }, "truncated");
+        rejected(
+            [&] {
+                reader.read(
+                    input, size, [&](const uint8_t *, size_t, size_t n) { submitted += n; }, [](size_t) {});
+            },
+            "truncated");
         require(submitted < size, "truncated final chunk was uploaded");
     }
     for (size_t size : {size_t(0), size_t(2), chunk + 3}) {
         std::istringstream input(std::string(size, 'x'));
-        rejected([&] { reader.read(input, size, [](const uint8_t *, size_t, size_t) {
-            throw std::runtime_error("write must not be reached");
-        }, [](size_t) { throw std::runtime_error("cancelled initially"); }); }, "cancelled initially");
+        rejected(
+            [&] {
+                reader.read(
+                    input, size,
+                    [](const uint8_t *, size_t, size_t) { throw std::runtime_error("write must not be reached"); },
+                    [](size_t) { throw std::runtime_error("cancelled initially"); });
+            },
+            "cancelled initially");
         require(input.tellg() == 0, "initial cancellation consumed input");
     }
     {
         std::istringstream input("abc");
         bool cancelled = false;
-        rejected([&] { reader.read(input, 3, [&](const uint8_t *, size_t, size_t) { cancelled = true; }, [&](size_t) {
-            if (cancelled) throw std::runtime_error("cancelled in final write");
-        }); }, "cancelled in final write");
+        rejected(
+            [&] {
+                reader.read(
+                    input, 3, [&](const uint8_t *, size_t, size_t) { cancelled = true; },
+                    [&](size_t) {
+                        if (cancelled)
+                            throw std::runtime_error("cancelled in final write");
+                    });
+            },
+            "cancelled in final write");
     }
     {
         std::istringstream input(std::string(chunk + 1, 'x'));
-        rejected([&] { reader.read(input, chunk + 1, [](const uint8_t *, size_t, size_t) {
-            throw std::runtime_error("write failed");
-        }, [](size_t) {}); }, "write failed");
+        rejected(
+            [&] {
+                reader.read(
+                    input, chunk + 1, [](const uint8_t *, size_t, size_t) { throw std::runtime_error("write failed"); },
+                    [](size_t) {});
+            },
+            "write failed");
         require(input.tellg() == std::streampos(chunk), "write failure read another chunk");
     }
     require(lcb_mtmd_add_bytes(SIZE_MAX - 1, 1) == SIZE_MAX, "checked addition rejected boundary");
-    rejected([] { (void) lcb_mtmd_add_bytes(SIZE_MAX, 1); }, "address space");
+    rejected([] { (void)lcb_mtmd_add_bytes(SIZE_MAX, 1); }, "address space");
     lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, false, false);
     lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, false, true);
     lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, true, true);
-    rejected([] { lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, true, false); }, "unavailable");
+    rejected([] { lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, true, false); },
+             "unavailable");
     require(lcb_mtmd_retain_bf16(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED), "retain mode is disabled");
     require(!lcb_mtmd_retain_bf16(MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND), "legacy mode retained BF16");
     lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND, true, false);
@@ -149,71 +184,97 @@ static void test_queue() {
         require(q.pending_bytes() == 0, "invalid write modified budget");
     }
     require(waits == 2, "empty destructor synchronized");
-    rejected([&] { Q q(&backend); q.reserve(100); throw std::runtime_error("write failure"); }, "write failure");
+    rejected(
+        [&] {
+            Q q(&backend);
+            q.reserve(100);
+            throw std::runtime_error("write failure");
+        },
+        "write failure");
     require(waits == 3, "exception destroyed buffer before retiring writes");
-    rejected([] { Q q(nullptr); q.reserve(1); }, "backend");
+    rejected(
+        [] {
+            Q q(nullptr);
+            q.reserve(1);
+        },
+        "backend");
     // Matches the loader's final sequence: drain, then check cancellation.
     bool cancelled = false;
     backend.context = &cancelled;
     backend.iface.synchronize = [](ggml_backend_t b) { *static_cast<bool *>(b->context) = true; };
-    rejected([&] {
-        Q q(&backend); q.reserve(2); q.drain();
-        if (cancelled) throw std::runtime_error("cancelled while draining");
-    }, "cancelled while draining");
+    rejected(
+        [&] {
+            Q q(&backend);
+            q.reserve(2);
+            q.drain();
+            if (cancelled)
+                throw std::runtime_error("cancelled while draining");
+        },
+        "cancelled while draining");
 }
 
 static void test_matmul() {
-    for (int k : {3, 16, 127}) for (int cols : {1, 4}) {
-        fixture f;
-        const int rows = 9;
-        ggml_tensor * w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, k, rows);
-        ggml_tensor * x = ggml_new_tensor_2d(f.activations, GGML_TYPE_F32, k, cols);
-        ggml_set_input(x);
-        ggml_tensor * y = ggml_mul_mat(f.activations, w, x);
-        ggml_set_output(y);
-        auto * g = f.graph(y);
-        f.allocate();
-        std::vector<ggml_bf16_t> values(k * rows);
-        std::vector<float> input(k * cols);
-        for (size_t i = 0; i < values.size(); ++i) values[i] = ggml_fp32_to_bf16(float(int(i % 7) - 3));
-        for (size_t i = 0; i < input.size(); ++i) input[i] = float(int(i % 5) - 2);
-        // Exercise the SAME bounded raw writer used by the overlay with real
-        // tensor_set, including a BF16 tensor with an odd number of elements.
-        std::istringstream file(std::string(reinterpret_cast<const char *>(values.data()), values.size() * 2));
-        lcb_mtmd_retained_reader reader;
-        lcb_mtmd_upload_queue q(f.cpu);
-        reader.read(file, ggml_nbytes(w), [&](const uint8_t * p, size_t off, size_t n) {
-            q.reserve(n); ggml_backend_tensor_set(w, p, off, n);
-        }, [](size_t) {});
-        q.drain();
-        lcb_mtmd_retained_graph plan;
-        plan.prepare(f.weights, g, f.sched, f.cpu, true);
-        require(plan.consumer_count() == 1, "matmul not guarded");
-        require(ggml_backend_sched_reserve(f.sched, g), "test reserve failed");
-        plan.verify_sources();
-        require(ggml_backend_sched_get_tensor_backend(f.sched, y) == nullptr, "reserve no longer resets assignments; review guard");
-        plan.prepare(f.weights, g, f.sched, f.cpu, true);
-        require(ggml_backend_sched_alloc_graph(f.sched, g), "test allocate failed");
-        plan.verify_allocated(f.sched);
-        require(w->type == GGML_TYPE_BF16 && ggml_nbytes(w) == values.size() * 2, "resident weight expanded");
-        ggml_backend_tensor_set(x, input.data(), 0, input.size() * 4);
-        require(ggml_backend_sched_graph_compute(f.sched, g) == GGML_STATUS_SUCCESS, "test compute failed");
-        std::vector<float> output(rows * cols);
-        ggml_backend_tensor_get(y, output.data(), 0, output.size() * 4);
-        for (int c = 0; c < cols; ++c) for (int r = 0; r < rows; ++r) {
-            double expected = 0;
-            for (int i = 0; i < k; ++i) expected += double(ggml_bf16_to_fp32(values[r * k + i])) * input[c * k + i];
-            require(output[c * rows + r] == expected, "retained matmul differs from independent reference");
+    for (int k : {3, 16, 127})
+        for (int cols : {1, 4}) {
+            fixture f;
+            const int rows = 9;
+            ggml_tensor * w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, k, rows);
+            ggml_tensor * x = ggml_new_tensor_2d(f.activations, GGML_TYPE_F32, k, cols);
+            ggml_set_input(x);
+            ggml_tensor * y = ggml_mul_mat(f.activations, w, x);
+            ggml_set_output(y);
+            auto * g = f.graph(y);
+            f.allocate();
+            std::vector<ggml_bf16_t> values(k * rows);
+            std::vector<float> input(k * cols);
+            for (size_t i = 0; i < values.size(); ++i)
+                values[i] = ggml_fp32_to_bf16(float(int(i % 7) - 3));
+            for (size_t i = 0; i < input.size(); ++i)
+                input[i] = float(int(i % 5) - 2);
+            // Exercise the SAME bounded raw writer used by the overlay with real
+            // tensor_set, including a BF16 tensor with an odd number of elements.
+            std::istringstream file(std::string(reinterpret_cast<const char *>(values.data()), values.size() * 2));
+            lcb_mtmd_retained_reader reader;
+            lcb_mtmd_upload_queue q(f.cpu);
+            reader.read(
+                file, ggml_nbytes(w),
+                [&](const uint8_t * p, size_t off, size_t n) {
+                    q.reserve(n);
+                    ggml_backend_tensor_set(w, p, off, n);
+                },
+                [](size_t) {});
+            q.drain();
+            lcb_mtmd_retained_graph plan;
+            plan.prepare(f.weights, g, f.sched, f.cpu, true);
+            require(plan.consumer_count() == 1, "matmul not guarded");
+            require(ggml_backend_sched_reserve(f.sched, g), "test reserve failed");
+            plan.verify_sources();
+            require(ggml_backend_sched_get_tensor_backend(f.sched, y) == nullptr,
+                    "reserve no longer resets assignments; review guard");
+            plan.prepare(f.weights, g, f.sched, f.cpu, true);
+            require(ggml_backend_sched_alloc_graph(f.sched, g), "test allocate failed");
+            plan.verify_allocated(f.sched);
+            require(w->type == GGML_TYPE_BF16 && ggml_nbytes(w) == values.size() * 2, "resident weight expanded");
+            ggml_backend_tensor_set(x, input.data(), 0, input.size() * 4);
+            require(ggml_backend_sched_graph_compute(f.sched, g) == GGML_STATUS_SUCCESS, "test compute failed");
+            std::vector<float> output(rows * cols);
+            ggml_backend_tensor_get(y, output.data(), 0, output.size() * 4);
+            for (int c = 0; c < cols; ++c)
+                for (int r = 0; r < rows; ++r) {
+                    double expected = 0;
+                    for (int i = 0; i < k; ++i)
+                        expected += double(ggml_bf16_to_fp32(values[r * k + i])) * input[c * k + i];
+                    require(output[c * rows + r] == expected, "retained matmul differs from independent reference");
+                }
+            ggml_tensor replacement = *w;
+            y->src[0] = &replacement;
+            rejected([&] { plan.verify_sources(); }, "copied");
+            y->src[0] = w;
+            auto * original = x->buffer;
+            x->buffer = w->buffer;
+            rejected([&] { plan.verify_allocated(f.sched); }, "shares");
+            x->buffer = original;
         }
-        ggml_tensor replacement = *w;
-        y->src[0] = &replacement;
-        rejected([&] { plan.verify_sources(); }, "copied");
-        y->src[0] = w;
-        auto * original = x->buffer;
-        x->buffer = w->buffer;
-        rejected([&] { plan.verify_allocated(f.sched); }, "shares");
-        x->buffer = original;
-    }
 }
 
 static void test_rows() {
@@ -231,16 +292,18 @@ static void test_rows() {
     require(ggml_backend_sched_alloc_graph(f.sched, g), "rows allocate failed");
     plan.verify_allocated(f.sched);
     std::vector<ggml_bf16_t> values(35);
-    for (size_t i = 0; i < values.size(); ++i) values[i] = ggml_fp32_to_bf16(float(i));
+    for (size_t i = 0; i < values.size(); ++i)
+        values[i] = ggml_fp32_to_bf16(float(i));
     const int32_t indices[] = {4, 0, 3, 4};
     ggml_backend_tensor_set(table, values.data(), 0, values.size() * 2);
     ggml_backend_tensor_set(idx, indices, 0, sizeof(indices));
     require(ggml_backend_sched_graph_compute(f.sched, g) == GGML_STATUS_SUCCESS, "rows compute failed");
     float output[28];
     ggml_backend_tensor_get(y, output, 0, sizeof(output));
-    for (int r = 0; r < 4; ++r) for (int c = 0; c < 7; ++c) {
-        require(output[r * 7 + c] == indices[r] * 7 + c, "rows numerical mismatch");
-    }
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 7; ++c) {
+            require(output[r * 7 + c] == indices[r] * 7 + c, "rows numerical mismatch");
+        }
 }
 
 static void test_rejections() {
@@ -248,11 +311,13 @@ static void test_rejections() {
     for (bool cast : {false, true}) {
         fixture f;
         auto * w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
-        auto * copied = cast ? ggml_cast(f.activations, w, GGML_TYPE_F32) : ggml_cont(f.activations, ggml_transpose(f.activations, w));
+        auto * copied = cast ? ggml_cast(f.activations, w, GGML_TYPE_F32)
+                             : ggml_cont(f.activations, ggml_transpose(f.activations, w));
         auto * g = f.graph(copied);
         f.allocate();
         lcb_mtmd_retained_graph plan;
-        rejected([&] { plan.prepare(f.weights, g, f.sched, f.cpu, true); }, cast ? "unsupported operation" : "unsupported weight operand");
+        rejected([&] { plan.prepare(f.weights, g, f.sched, f.cpu, true); },
+                 cast ? "unsupported operation" : "unsupported weight operand");
     }
     {
         fixture f;
@@ -298,8 +363,8 @@ static void test_rejections() {
 
 static void test_roles() {
     for (projector_type kind : {PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_MLP_NORM, PROJECTOR_TYPE_QWEN2VL,
-                               PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2,
-                               PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3, PROJECTOR_TYPE_GEMMA4V}) {
+                                PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2,
+                                PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3, PROJECTOR_TYPE_GEMMA4V}) {
         fixture f;
         clip_model m{};
         m.proj_type = kind;
@@ -316,8 +381,12 @@ static void test_roles() {
         clip_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA3;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, type, 16, 16);
-        if (type == GGML_TYPE_BF16) rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
-        else { lcb_mtmd_check_retained_roles(m, f.weights); ++checks; }
+        if (type == GGML_TYPE_BF16)
+            rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
+        else {
+            lcb_mtmd_check_retained_roles(m, f.weights);
+            ++checks;
+        }
     }
     {
         fixture f;
@@ -333,7 +402,12 @@ static void test_roles() {
 
 int main() {
     try {
-        test_reader(); test_queue(); test_matmul(); test_rows(); test_rejections(); test_roles();
+        test_reader();
+        test_queue();
+        test_matmul();
+        test_rows();
+        test_rejections();
+        test_roles();
         std::cout << "PASS: " << checks << " checks; real ggml CPU contract/numerical tests, not GPU acceptance\n";
         return 0;
     } catch (const std::exception & e) {

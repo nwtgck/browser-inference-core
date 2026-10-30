@@ -14,7 +14,8 @@
 // Backend display names include an adapter suffix ("WebGPU: ..."). Match the
 // registry identity instead, without requiring the WebGPU library in host tests.
 inline bool lcb_mtmd_is_webgpu(ggml_backend_t backend) {
-    if (!backend) return false;
+    if (!backend)
+        return false;
     ggml_backend_dev_t device = ggml_backend_get_device(backend);
     ggml_backend_reg_t registry = device ? ggml_backend_dev_backend_reg(device) : nullptr;
     const char * name = registry ? ggml_backend_reg_name(registry) : nullptr;
@@ -30,15 +31,14 @@ inline bool lcb_mtmd_is_webgpu(ggml_backend_t backend) {
 // and reuse it across tensors rather than staging a second complete weight.
 // See docs/webgpu-bf16-projector.md before retaining this on an upstream update.
 class lcb_bf16_upload {
-public:
+  public:
     // 256K elements need 0.5 MiB of BF16 input + 1 MiB of F32 output scratch.
     static constexpr size_t chunk_elements = 256 * 1024;
 
     // source_bytes counts on-disk BF16 bytes; Write receives F32 byte offsets
     // and lengths. Write must consume/copy the chunk before returning because
     // the next iteration reuses it; it must not retain destination.data().
-    template <typename Write>
-    void read(std::istream & input, size_t source_bytes, Write write) {
+    template <typename Write> void read(std::istream & input, size_t source_bytes, Write write) {
         if (source_bytes % sizeof(ggml_bf16_t) != 0) {
             throw std::runtime_error("unaligned BF16 tensor data");
         }
@@ -64,7 +64,7 @@ public:
         }
     }
 
-private:
+  private:
     std::vector<ggml_bf16_t> source;
     std::vector<float> destination;
 };

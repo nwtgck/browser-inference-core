@@ -75,10 +75,10 @@ struct ggml_webgpu_q8_diagnostic_report_v1 {
 // Borrowed pointers; copy request before the first suspension. No retained tensor
 // pointers. Existing bind-group buffer refs follow their generation invalidation.
 // report is pure output. An undersized capacity causes no writes to report.
-typedef int32_t (*ggml_backend_webgpu_q8_diagnostic_v1_t)(
-    ggml_backend_t backend, struct ggml_tensor * dst,
-    const struct ggml_webgpu_q8_diagnostic_request_v1 * request,
-    struct ggml_webgpu_q8_diagnostic_report_v1 * report, uint32_t report_capacity);
+typedef int32_t (*ggml_backend_webgpu_q8_diagnostic_v1_t)(ggml_backend_t backend, struct ggml_tensor * dst,
+                                                          const struct ggml_webgpu_q8_diagnostic_request_v1 * request,
+                                                          struct ggml_webgpu_q8_diagnostic_report_v1 * report,
+                                                          uint32_t report_capacity);
 // Fixed-width bridge surface. Only run is a JSPI export; PREPARE may suspend.
 // Hosts must share one idle/busy gate with the ordinary native API, keep borrowed
 // objects alive until completion, and use metadata leaves only while idle.
@@ -86,8 +86,8 @@ typedef int32_t (*ggml_backend_webgpu_q8_diagnostic_v1_t)(
 // direct heap mutation. After unexpected rejection/device loss/timeout, poison
 // and discard the runtime; do not individually free objects still in use.
 uint32_t lcb_webgpu_q8_diagnostic_version(uint64_t backend);
-int32_t lcb_webgpu_q8_diagnostic_run_v1(uint64_t backend, uint64_t dst,
-    uint64_t request, uint64_t report, uint32_t report_capacity);
+int32_t lcb_webgpu_q8_diagnostic_run_v1(uint64_t backend, uint64_t dst, uint64_t request, uint64_t report,
+                                        uint32_t report_capacity);
 #ifdef __cplusplus
 }
 #endif

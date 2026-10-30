@@ -1,19 +1,28 @@
-};
+}
+;
 int main(int argc, char ** argv) {
-    if (argc != 3) { throw std::runtime_error("output-directory workgroup-size"); }
+    if (argc != 3) {
+        throw std::runtime_error("output-directory workgroup-size");
+    }
     const std::string directory = argv[1];
     const uint32_t wg = std::stoul(argv[2]);
-    if (wg < 32 || wg > 1024 || (wg & (wg - 1))) { throw std::runtime_error("workgroup"); }
+    if (wg < 32 || wg > 1024 || (wg & (wg - 1))) {
+        throw std::runtime_error("workgroup");
+    }
     ggml_tensor source{}, other{}, output{};
     source.type = other.type = output.type = GGML_TYPE_F32;
     for (auto * tensor : {&source, &other, &output}) {
-        for (auto & n : tensor->ne) { n = 1; }
+        for (auto & n : tensor->ne) {
+            n = 1;
+        }
     }
     source.data = reinterpret_cast<void *>(uintptr_t(0x10000));
     other.data = reinterpret_cast<void *>(uintptr_t(0x20000));
     output.data = reinterpret_cast<void *>(uintptr_t(0x30000));
     ggml_webgpu_shader_lib_context context{};
-    context.src0 = &source; context.src1 = &other; context.dst = &output;
+    context.src0 = &source;
+    context.src1 = &other;
+    context.dst = &output;
     context.max_wg_size = wg;
     Library library;
     auto save = [&](const std::string & name, const webgpu_pipeline & pipeline) {
@@ -37,5 +46,7 @@ int main(int argc, char ** argv) {
     save("div_inplace", library.get_binary_pipeline(context, false));
     save("router_tail", library.get_router_tail_pipeline(wg, false));
     save("router_tail_merged", library.get_router_tail_pipeline(wg, true));
-    if (library.get_router_tail_pipeline(wg, false).id == library.get_router_tail_pipeline(wg, true).id) { return 4; }
+    if (library.get_router_tail_pipeline(wg, false).id == library.get_router_tail_pipeline(wg, true).id) {
+        return 4;
+    }
 }

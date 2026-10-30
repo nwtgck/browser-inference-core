@@ -35,22 +35,26 @@ void sdc_ggml_tallocr_new(uint64_t, uint64_t);
 }
 
 namespace {
-void require(bool condition, const char *message) {
-    if (!condition) throw std::runtime_error(message);
+void require(bool condition, const char * message) {
+    if (!condition)
+        throw std::runtime_error(message);
 }
-template<class T> uint64_t address(T *pointer) {
+template <class T> uint64_t address(T * pointer) {
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer));
 }
 struct Owned {
     uint64_t pointer;
     void (*release)(uint64_t);
-    ~Owned() { if (pointer) release(pointer); }
+    ~Owned() {
+        if (pointer)
+            release(pointer);
+    }
 };
-bool abort_compute(void *data) {
+bool abort_compute(void * data) {
     ++*static_cast<int *>(data);
     return true;
 }
-void expected(const std::array<float, 8> &actual, const std::array<float, 8> &wanted) {
+void expected(const std::array<float, 8> & actual, const std::array<float, 8> & wanted) {
     for (size_t i = 0; i < actual.size(); ++i) {
         require(std::abs(actual[i] - wanted[i]) < 1e-5f, "public graph numerical result changed");
     }
@@ -94,12 +98,14 @@ void run() {
     // A genuine in-compute callback abort is followed by a successful recomputation.
     int aborts = 0;
     sdc_ggml_backend_cpu_set_abort_callback(backend.pointer, address(&abort_compute), address(&aborts));
-    require(sdc_ggml_backend_graph_compute(backend.pointer, graph) == GGML_STATUS_ABORTED, "abort callback was ignored");
+    require(sdc_ggml_backend_graph_compute(backend.pointer, graph) == GGML_STATUS_ABORTED,
+            "abort callback was ignored");
     require(aborts > 0, "abort callback was never called");
     sdc_ggml_backend_cpu_set_abort_callback(backend.pointer, 0, 0);
     a.fill(2);
     sdc_ggml_backend_tensor_set(left, address(a.data()), 0, sizeof(a));
-    require(sdc_ggml_backend_graph_compute(backend.pointer, graph) == GGML_STATUS_SUCCESS, "graph did not recover after abort");
+    require(sdc_ggml_backend_graph_compute(backend.pointer, graph) == GGML_STATUS_SUCCESS,
+            "graph did not recover after abort");
     sdc_ggml_backend_tensor_get(output, address(values.data()), 0, sizeof(values));
     expected(values, {96, 96, 132, 132, 0, 0, 12, 12});
 
@@ -107,18 +113,21 @@ void run() {
     sdc_ggml_tallocr_new(address(&allocator), buffer.pointer);
     require(address(allocator.buffer) == buffer.pointer && allocator.alignment > 0, "record return bridge changed");
     bool rejected = false;
-    try { sdc_ggml_graph_plan(0, graph, 1, 0); }
-    catch (const std::invalid_argument &) { rejected = true; }
+    try {
+        sdc_ggml_graph_plan(0, graph, 1, 0);
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
     require(rejected, "null record return storage was accepted");
 }
-}
+} // namespace
 
 int main() {
     try {
         run();
         std::puts("public graph ABI: construction, compute, reuse, abort/recovery and records passed");
         return 0;
-    } catch (const std::exception &error) {
+    } catch (const std::exception & error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 1;
     }
