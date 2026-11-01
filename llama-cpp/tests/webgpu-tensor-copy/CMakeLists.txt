@@ -22,7 +22,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/backend-before.txt" "${backend_sources}"
 get_target_property(before ggml-webgpu SOURCES)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/before.txt" "${before}")
 add_library(llama STATIC "${LCB_LLAMA_SOURCE}/src/llama-model-loader.cpp")
-set_property(TARGET llama PROPERTY SOURCES "llama-model-loader.cpp;llama-sampler.cpp;${LCB_LLAMA_SOURCE}/src/llama.cpp;${LCB_LLAMA_SOURCE}/src/llama-model.cpp;${LCB_LLAMA_SOURCE}/src/models/qwen4exp.cpp;${LCB_LLAMA_SOURCE}/src/models/llama.cpp")
+set_property(TARGET llama PROPERTY SOURCES "llama-model-loader.cpp;llama-sampler.cpp;llama-context.cpp;${LCB_LLAMA_SOURCE}/src/llama.cpp;${LCB_LLAMA_SOURCE}/src/llama-model.cpp;${LCB_LLAMA_SOURCE}/src/models/qwen4exp.cpp;${LCB_LLAMA_SOURCE}/src/models/llama.cpp")
 get_target_property(llama_before llama SOURCES)
 include(../../cmake/WebgpuSourceOverlay.cmake)
 if(LCB_TEST_FILE_ROWS)

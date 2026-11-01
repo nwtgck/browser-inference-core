@@ -29,6 +29,31 @@ list(APPEND LCB_SOURCE_SOURCES "${LCB_SOURCE_OVERLAY}/ggml-webgpu.cpp")
 set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 
+# The provider is Emdawn-only. Native builds retain the original host writer.
+if(EMSCRIPTEN)
+    get_target_property(LCB_CHECKPOINT_SOURCES llama SOURCES)
+    set(LCB_CHECKPOINT_MATCHES 0)
+    set(LCB_CHECKPOINT_REPLACED "")
+    foreach(LCB_CHECKPOINT_SOURCE IN LISTS LCB_CHECKPOINT_SOURCES)
+        if(LCB_CHECKPOINT_SOURCE STREQUAL "llama-context.cpp")
+            math(EXPR LCB_CHECKPOINT_MATCHES "${LCB_CHECKPOINT_MATCHES} + 1")
+            list(APPEND LCB_CHECKPOINT_REPLACED "${LCB_SOURCE_OVERLAY}/llama-context.cpp")
+        else()
+            list(APPEND LCB_CHECKPOINT_REPLACED "${LCB_CHECKPOINT_SOURCE}")
+        endif()
+    endforeach()
+    if(NOT LCB_CHECKPOINT_MATCHES EQUAL 1)
+        message(FATAL_ERROR "Upstream context source layout changed; review checkpoint readback overlay")
+    endif()
+    set_property(TARGET llama PROPERTY SOURCES "${LCB_CHECKPOINT_REPLACED}")
+    set_source_files_properties("${LCB_SOURCE_OVERLAY}/llama-context.cpp"
+        TARGET_DIRECTORY llama PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+    # Moving this TU must not expose it to a target-wide model include override.
+    # Clang's quoted-only search preserves the original source-directory order.
+    set_property(SOURCE "${LCB_SOURCE_OVERLAY}/llama-context.cpp" TARGET_DIRECTORY llama
+        APPEND PROPERTY COMPILE_OPTIONS "-iquote" "${LCB_LLAMA_SOURCE}/src")
+endif()
+
 # The optional snapshot contract also changes the scheduler in ggml-base.
 # Preserve every other source and its order, and fail on upstream layout drift.
 get_target_property(LCB_BACKEND_SOURCES ggml-base SOURCES)
@@ -382,3 +407,23 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-aligned-word-load.patch"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py"
     ${LCB_WORD_LOAD_SHADER_INPUTS})
+
+# The host checkpoint writer and provider share one versioned registry contract.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_checkpoint_readback.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-checkpoint-batch-readback.patch"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-io.h"
+    "${LCB_LLAMA_SOURCE}/src/CMakeLists.txt"
+    "${LCB_LLAMA_SOURCE}/include/llama.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-backend.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-reg.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/ggml-webgpu.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/CMakeLists.txt"
+)

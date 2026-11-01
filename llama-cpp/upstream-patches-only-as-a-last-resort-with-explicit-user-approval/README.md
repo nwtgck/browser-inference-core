@@ -660,3 +660,39 @@ not establish target-device speed.
 - **No-patch alternative:** retain the eager following-word read or wait for the equivalent upstream correction. Supported runtime settings do not change these helper statements.
 - **Validation and limits:** inverse checks preserve all nonhelper bytes; bounded scalar byte oracles cover all four offset residues, complete nonaligned spans and minimal aligned bindings. Source range traces cover the Q4_0 final word and GET_ROWS consumer. Native translation-unit/include tests and finite GPU checks remain distinct from full runtime, model-quality, performance and target-device validation.
 - **Removal:** remove this patch, final preparation stage, renamed embedding and associated build/provenance/tests when upstream supplies the same behavior or the owner drops it. Re-review all generated consumers, chunk ownership and actual include composition at each upstream update.
+
+## Bounded WebGPU host checkpoint readback
+
+- **Patch:** `ggml-webgpu-checkpoint-batch-readback.patch`.
+- **Accepted scope:** the owner's inference-performance work permits batching
+  existing host checkpoint reads while preserving the host snapshot format,
+  synchronization, caller ownership and normal large-read memory policy.
+- **Integration:** every browser WebGPU profile prepares one checked context TU
+  and the WebGPU provider plus a shared versioned registry-contract header.
+  CMake replaces the context only under Emscripten and preserves its original
+  quoted-header lookup on that one source. CPU-only and native context sources,
+  ON_DEVICE and file writers, public ABI/schema, shaders and model graphs stay
+  upstream. Pristine vendor source is never changed.
+- **Contract:** group only consecutive small requests on the same device, at
+  most 256 entries and 4 MiB of staging per batch. A request is never split.
+  Single requests and large requests keep the scalar getter. The optional
+  callback may decline only before enqueue, map or destination write; failures
+  after work begins are terminal. Request order, including destination aliases,
+  is preserved. An explicit one-shot flush is inside existing state API error
+  handling; destructors do no readback or retry. Caller memory remains owned
+  until the blocking call returns.
+- **Coupling:** pinned context writer/callers, tensor/view buffer conventions,
+  registry and WebGPU staging/map helpers. Normal/profile composition, shared
+  headers, patch, source contracts and final copies are recorded. Reassess these
+  boundaries when upstream changes rather than widening a hash allowlist.
+- **Evidence and limits:** CPU packing/writer controls and a tiny authored model
+  on normal Wasm64 verify exact checkpoint/restore/logit/token results, fewer
+  maps for multi-read snapshots, unchanged single-read behavior and bounded
+  destination lifetime on a copy failure. These do not establish browser,
+  real-model performance, app cancellation, device-loss recovery or large-model
+  memory peaks. No target-device speedup is claimed.
+- **No-patch alternative:** keep upstream's per-tensor blocking getters or wait
+  for a corresponding upstream batched state writer/backend contract.
+- **Removal:** equivalent upstream support or withdrawal of this optimization;
+  remove the checked patch, optional header/proc, context source replacement,
+  preparation, tests and provenance together, preserving published artifacts.

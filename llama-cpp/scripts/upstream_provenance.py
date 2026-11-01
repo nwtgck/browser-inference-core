@@ -25,6 +25,7 @@ import prepare_webgpu_q4_short as q4_short
 import prepare_webgpu_q6_short as q6_short
 import prepare_webgpu_quant_half_pairs as quant_half_pairs
 import prepare_webgpu_direct_mapped_read as direct_mapped_read
+import prepare_webgpu_checkpoint_readback as checkpoint_readback
 import prepare_webgpu_quant_wide_m as quant_wide_m
 import prepare_webgpu_q4_subgroup as q4_subgroup
 import prepare_webgpu_aligned_word_load as aligned_word_load
@@ -232,6 +233,7 @@ def collect(root: Path, manifest: dict) -> dict:
         f32_small_m_compiled = None
         moe_gather_logical32_compiled = None
         host_snapshot_compiled = None
+        checkpoint_compiled = None
         if copy_enabled:
             prepared = webgpu_source.prepare(vendor, Path(temporary) / 'webgpu',
                                              patch_root=root / PATCH_DIRECTORY)
@@ -282,6 +284,8 @@ def collect(root: Path, manifest: dict) -> dict:
             f32_small_m_compiled = {'ggml-webgpu-shader-lib.hpp': file_identity(prepared.parent / 'ggml-webgpu-shader-lib.hpp')}
             moe_gather_logical32_compiled = {name: file_identity(prepared.parent / name) for name in
                                             ['ggml-webgpu-shader-lib.hpp', moe_gather_logical32.HEADER_NAME]}
+            checkpoint_compiled = {name: file_identity(prepared.parent / name) for name in
+                                   ["ggml-webgpu.cpp", *checkpoint_readback.GENERATED_NAMES]}
             host_snapshot_compiled = {name: file_identity(prepared.parent / name) for name in
                                       ['ggml-webgpu.cpp', 'ggml-backend.cpp', 'ggml-backend-host-snapshot.h']}
         webgpu_copies = {variant: webgpu_compiled for variant in copy_enabled}
@@ -488,6 +492,25 @@ def collect(root: Path, manifest: dict) -> dict:
                                 ['scripts/prepare_webgpu_async_tensor_copy.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Use the existing optional async copy hook for checked same-queue WebGPU copies and CPU-to-WebGPU uploads after synchronizing the CPU producer; unsupported cases retain the generic fallback. No target-device speedup is claimed.',
+        }, {
+            'id': 'webgpu-checkpoint-batch-readback',
+            'kind': 'build-tree-source-overlay',
+            'upstreamSources': {path: file_identity(vendor / path) for path in
+                                [webgpu_source.SOURCE_PATH, checkpoint_readback.CONTEXT_PATH]},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / checkpoint_readback.PATCH_NAME)},
+            'compiledCopies': checkpoint_compiled,
+            'compiledCopiesByProfileVariant': {variant: checkpoint_compiled for variant in copy_enabled},
+            'reviewedInputs': checkpoint_readback.CONTRACT_INPUTS,
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': checkpoint_readback.REVIEWED_DAWN_HEADERS},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_checkpoint_readback.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'toolchain': 'Emscripten',
+                            'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_checkpoint_readback.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Group consecutive small host-checkpoint tensor reads through the versioned optional registry hook. Bound each staging batch to 4 MiB and 256 whole requests, preserve request and destination alias order, and retain scalar reads for single or large requests. Decline only before enqueue or host writes; operational failures are terminal. Explicit host flush stays inside existing state API error handling, with destination lifetime and context synchronization unchanged. The Emscripten-only context replacement preserves original quoted-header lookup; native context, ON_DEVICE and file writers remain upstream. No target-model or target-device speedup is established.',
         }, {
             'id': 'webgpu-host-input-snapshot',
             'kind': 'build-tree-source-overlay',
@@ -1088,7 +1111,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

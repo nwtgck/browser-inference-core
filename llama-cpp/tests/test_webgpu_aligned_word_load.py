@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
 import prepare_webgpu_aligned_word_load as word
-from webgpu_prefix_context import without_shared_word_load
+from webgpu_prefix_context import without_shared_word_load, without_checkpoint_readback
 sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -66,6 +66,9 @@ def execute_helper(code, data, offset, allow_oob=False):
 class AlignedWordLoad(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        prefix = without_checkpoint_readback(source)
+        prefix.__enter__()
+        cls.addClassCleanup(prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='aligned-word-load-')
         cls.addClassCleanup(cls.temp.cleanup)
