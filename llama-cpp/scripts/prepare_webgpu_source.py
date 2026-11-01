@@ -37,6 +37,7 @@ import prepare_webgpu_iq3s_row_split as iq3s_row_split
 import prepare_webgpu_f32_matvec_epilogue as f32_matvec_epilogue
 import prepare_webgpu_q6_short as q6_short
 import prepare_webgpu_quant_half_pairs as quant_half_pairs
+import prepare_webgpu_direct_mapped_read as direct_mapped_read
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -53,7 +54,7 @@ SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d94751198193
 SSM_HEADER_OUTPUT_SHA256 = 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2'
 # OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
 # Later stages keep their own contracts; these identities describe compiled files.
-FINAL_OUTPUTS = {profile: {name: quant_half_pairs.OUTPUTS[profile][name]
+FINAL_OUTPUTS = {profile: {name: direct_mapped_read.OUTPUTS[profile][name]
                            for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp')}
                  for profile in (False, True)}
 
@@ -175,6 +176,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(f32_matvec_epilogue.prepare(work, source, patch_root, env, gpu_profile=gpu_profile))
         q6_short.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         hc_headers.update(quant_half_pairs.prepare(work, source, patch_root, env, gpu_profile=gpu_profile))
+        direct_mapped_read.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)

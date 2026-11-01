@@ -353,3 +353,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/quant_inner_loops.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl"
     "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py")
+
+# Emdawn can copy an aligned mapped range into the final caller destination.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_direct_mapped_read.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-direct-mapped-read.patch")

@@ -32,6 +32,9 @@ class QuantHalfPairs(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='quant-half-pairs-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        tail = patch.object(source.direct_mapped_read, 'prepare')
+        tail.start()
+        cls.addClassCleanup(tail.stop)
         cls.before, cls.final, cls.derived = {}, {}, {}
         for profile in (False, True):
             with patch.object(pairs, 'prepare', return_value={}):
@@ -113,7 +116,7 @@ class QuantHalfPairs(unittest.TestCase):
             self.assertIn('${LCB_LLAMA_SOURCE}/' + name, cmake)
         self.assertEqual(sha(ROOT / source.PATCH_DIRECTORY / pairs.PATCH_NAME), pairs.PATCH_SHA256)
         self.assertEqual(pairs.INPUTS, source.q6_short.OUTPUTS)
-        self.assertEqual(pairs.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual(pairs.OUTPUTS, source.direct_mapped_read.INPUTS)
         for profile in (False, True):
             final = self.final[profile]; stamps = {p.name: p.stat().st_mtime_ns for p in final.iterdir()}
             source.prepare(self.upstream, final, gpu_profile=profile)
