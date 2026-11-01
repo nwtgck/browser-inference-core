@@ -18,6 +18,7 @@ import prepare_webgpu_q4_short as q4
 from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def prepare(upstream, output):
@@ -34,6 +35,7 @@ def build_host(upstream, prepared, output):
     for name in ('q8', 'expert', 'q4'):
         chunks.append(function(text, 'inline uint32_t ggml_webgpu_' + name + '_short_workgroup('))
     chunks.append(function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('))
+    chunks.append(q4_subgroup_helpers(text))
     chunks.append(function(text, 'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size('))
     chunks += [text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')],

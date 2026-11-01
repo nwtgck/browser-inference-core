@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def build(upstream: Path, baseline: Path, candidate: Path, output: Path, *, profile: bool) -> Path:
@@ -25,6 +26,7 @@ def build(upstream: Path, baseline: Path, candidate: Path, output: Path, *, prof
                    'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size(',
                    'inline bool ggml_webgpu_can_use_mmvq(']:
         chunks.append(definition(header, marker) + (';' if marker.startswith('struct ') else ''))
+    chunks.append(q4_subgroup_helpers(header))
     chunks.append(header[header.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):header.index('/** Cpy **/')])
     for name, prepared in [('baseline', baseline), ('candidate', candidate)]:
         hpp = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()

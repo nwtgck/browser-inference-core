@@ -39,6 +39,7 @@ class UpstreamPatchPolicy(unittest.TestCase):
             'ggml-webgpu-router-tail.patch',
             'ggml-webgpu-iq3s-id-subgroup.patch',
             'ggml-webgpu-iq3s-field-loads.patch', 'ggml-webgpu-iq3s-row-split.patch', 'ggml-webgpu-moe-tight-tile-bound.patch',
+            'ggml-webgpu-q4-subgroup-matvec.patch',
             'ggml-webgpu-quant-wide-m.patch',
             'ggml-webgpu-direct-mapped-read.patch',
             'ggml-webgpu-quant-half-pairs.patch',

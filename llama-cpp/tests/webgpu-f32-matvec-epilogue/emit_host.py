@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def build(upstream: Path, prepared: Path, output: Path, library: Path, *, profile: bool) -> Path:
@@ -19,6 +20,7 @@ def build(upstream: Path, prepared: Path, output: Path, library: Path, *, profil
                    'inline uint32_t ggml_webgpu_q8_short_workgroup(', 'inline uint32_t ggml_webgpu_q4_short_workgroup(',
                    'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size(', 'inline bool ggml_webgpu_can_use_mmvq('):
         chunks.append(definition(header, marker) + (';' if marker.startswith('struct ') else ''))
+    chunks.append(q4_subgroup_helpers(header))
     chunks += [header[header.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):header.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                definition(header, 'struct ggml_webgpu_mul_mat_shader_decisions {') + ';', '''class RecordingLibrary {
 int device=0; pre_wgsl::Preprocessor preprocessor;

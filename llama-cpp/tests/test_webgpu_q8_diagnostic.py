@@ -18,6 +18,7 @@ import prepare_webgpu_q8_diagnostic as diagnostic
 import generate_webgpu_q8_diagnostic as extension
 
 from matmul_vec4_test_support import explicit_layout_argument
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def normalized_base_generation(outputs, upstream):
@@ -73,6 +74,7 @@ def factory_code(prepared, *, provider=False):
                    'inline uint32_t ggml_webgpu_q8_short_workgroup(', 'inline uint32_t ggml_webgpu_q4_short_workgroup(',
                    'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size(', 'inline bool ggml_webgpu_can_use_mmvq('):
         chunks.append(function(text, marker) + (';' if marker.startswith('struct ') else ''))
+    chunks.append(q4_subgroup_helpers(text))
     a = text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {')
     chunks.append(text[a:text.index('struct ggml_webgpu_quantize_q8_pipeline_key {', a)])
     chunks.append('class RecordingLibrary { int device=0;pre_wgsl::Preprocessor preprocessor;\n'

@@ -33,6 +33,9 @@ class QuantWideM(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='quant-wide-m-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        q4_tail = patch.object(source.q4_subgroup, 'prepare')
+        q4_tail.start()
+        cls.addClassCleanup(q4_tail.stop)
         cls.before, cls.final = {}, {}
         for profile in (False, True):
             with patch.object(wide, 'prepare'):
@@ -93,7 +96,7 @@ class QuantWideM(unittest.TestCase):
 
     def test_final_recipe_dependencies_and_idempotence(self):
         self.assertEqual(wide.INPUTS, source.direct_mapped_read.OUTPUTS)
-        self.assertEqual(wide.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual(wide.OUTPUTS, source.q4_subgroup.INPUTS)
         self.assertEqual(wide.CONTRACT_INPUTS, source.quant_half_pairs.CONTRACT_INPUTS)
         self.assertEqual(wide.EMBEDDED_HEADER_SHA256, source.quant_half_pairs.HEADER_SHA256)
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()

@@ -5,6 +5,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / 'tests'))
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def definition(text, marker):
@@ -47,6 +49,7 @@ extern "C" const ggml_type_traits * ggml_get_type_traits(ggml_type type) {
         for name in ('q4', 'q8'):
             chunks.append(definition(text, 'inline uint32_t ggml_webgpu_' + name + '_short_workgroup('))
         chunks += [definition(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('),
+                   q4_subgroup_helpers(text),
                    text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                    definition(text, 'inline bool ggml_webgpu_can_use_mmvq('), '''
 class Library {

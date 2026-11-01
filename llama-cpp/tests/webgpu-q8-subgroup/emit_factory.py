@@ -15,6 +15,7 @@ import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from matvec_subgroup_test_support import q4_subgroup_helpers
 
 
 def prepare(upstream: Path, output: Path) -> None:
@@ -38,6 +39,7 @@ def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
         function(text, 'inline uint32_t ggml_webgpu_q8_short_workgroup('),
         function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
         function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('),
+        q4_subgroup_helpers(text),
         text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):
              text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
         function(text, 'inline bool ggml_webgpu_can_use_mmvq('),

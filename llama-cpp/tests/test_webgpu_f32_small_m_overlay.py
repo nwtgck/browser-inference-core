@@ -39,7 +39,7 @@ class F32SmallMOverlay(unittest.TestCase):
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
         # Inspect the geometry stage before the later quantized specialization.
-        with patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_wide_m, 'prepare'):
+        with patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_wide_m, 'prepare'):
             cls.matrix_normal = source.prepare(cls.upstream, cls.directory / 'matrix-normal').parent
             cls.matrix_profile = source.prepare(cls.upstream, cls.directory / 'matrix-profile', gpu_profile=True).parent
 
