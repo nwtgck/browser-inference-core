@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_source as source
 import prepare_webgpu_subgroup_size_control as optional
 sys.path.insert(0, str(ROOT / 'tests'))
-from webgpu_prefix_context import without_subgroup_size_control
+from webgpu_prefix_context import without_subgroup_size_control, without_q6_subgroup
 from webgpu_embedding_test_support import embedding_sha256, legacy_fixed_sources
 
 
@@ -28,6 +28,9 @@ class SubgroupSizeControl(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='subgroup-size-control-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        q6_prefix = without_q6_subgroup(source)
+        q6_prefix.__enter__()
+        cls.addClassCleanup(q6_prefix.__exit__, None, None, None)
         cls.before, cls.final = {}, {}
         for profile in (False, True):
             with without_subgroup_size_control(source):

@@ -1,12 +1,12 @@
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -319,6 +319,47 @@
+@@ -319,6 +319,53 @@
      const uint64_t y = (total + maximum - 1) / maximum;
      const uint64_t width = (total + y - 1) / y;
      return y <= maximum && width <= maximum ? sg : 0;
 +}
 +
-+// Shape and range admission is independent of the subgroup-width policy.
++// Tensor-shape admission is independent of the subgroup-width policy.
 +// A later explicit-width caller must establish the same capability contract.
 +inline bool ggml_webgpu_q4_matvec_subgroup_eligible(const ggml_webgpu_shader_lib_context & context,
 +                                                  bool use_mmvq, bool src_overlap) {
@@ -17,11 +17,17 @@
 +        context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
 +        (a->type != GGML_TYPE_Q4_0 && a->type != GGML_TYPE_Q4_K) ||
 +        x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
-+        a->ne[0] < 1024 || a->ne[0] > 4096 ||
++        a->ne[0] < 1024 || a->ne[0] > 17408 ||
 +        a->ne[0] % (a->type == GGML_TYPE_Q4_0 ? 32 : 256) != 0 ||
-+        a->ne[1] < 4096 || a->ne[1] > UINT32_MAX - 127u ||
++        a->ne[1] < (a->ne[0] <= 4096 ? 4096 : 2560) || a->ne[1] > UINT32_MAX - 127u ||
 +        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
 +        return false;
++    }
++    // Keep the established short-input broadcast contract unchanged.
++    if (a->ne[0] > 4096) {
++        for (int axis = 2; axis < 4; ++axis) {
++            if (a->ne[axis] != 1 || x->ne[axis] != 1 || dst->ne[axis] != 1) { return false; }
++        }
 +    }
 +    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
 +    for (int axis = 2; axis < 4; ++axis) {
@@ -48,7 +54,7 @@
  }
  
  struct webgpu_pipeline {
-@@ -2359,6 +2400,9 @@
+@@ -2359,6 +2406,9 @@
          key.src_overlap = src_overlap;
          key.epilogue = context.matvec_epilogue;
          key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);

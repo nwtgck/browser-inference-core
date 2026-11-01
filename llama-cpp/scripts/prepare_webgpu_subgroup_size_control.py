@@ -15,13 +15,13 @@ PATCHES = {False: ('ggml-webgpu-subgroup-size-control.patch',
 SHARED_PATCH = ('ggml-webgpu-subgroup-size-control-shared.patch',
  'bceb8c48605ffd4a9da75536fffffb1595d9314e0330edecf5aaabaf09663bdb')
 INPUTS = {False: {'ggml-webgpu.cpp': '57d577c17ef1b87c088005defa103906ec124ce93b2429ace86e88028b638cbf',
-         'ggml-webgpu-shader-lib.hpp': '87e20119da7064dda8210c6130b1e43a4aaf83c644ae5e58a691009f709405a8'},
+         'ggml-webgpu-shader-lib.hpp': 'e0b874393679689e988471b83d7dff7926b9b28e68a3dc71c46d06df178fe1b9'},
  True: {'ggml-webgpu.cpp': 'e3bce48df987e216db5094bfb9eaf56f53fdaabb75f06cb9ad2cabbda24e000d',
-        'ggml-webgpu-shader-lib.hpp': '01f9e59fe52a3f1865398d96478a7ce9bafb174c320809ede04384ba269acd0a'}}
+        'ggml-webgpu-shader-lib.hpp': 'f83bd98f1a0b31caa5b6bb1fdbb46d44dc44066e98d367306feaf3005ee01b23'}}
 OUTPUTS = {False: {'ggml-webgpu.cpp': '708de1eb3c267527d65cdb097a06d2ae71437f2ce4880071de42acbe098ffc55',
-         'ggml-webgpu-shader-lib.hpp': '39abf727d68b02a6d7cb13ab2825cfb3766703f0b2ac069610c9a72c32925037'},
+         'ggml-webgpu-shader-lib.hpp': '4947500704450e61424926a34ea69346b70900944896f5e7495eeed0b4d69725'},
  True: {'ggml-webgpu.cpp': '0d7f1dcb2ad06124a83fa6c33f2b388418268ba0d26d6d12262ccb299b860445',
-        'ggml-webgpu-shader-lib.hpp': '2887340563216cc371d6fd3433c668e476db05e4ebb4da91e22dc15c44a09f56'}}
+        'ggml-webgpu-shader-lib.hpp': '91eb008a1ca86b10143027e5080b4ca0469512d3625d4028984e11e89e3cf716'}}
 SHARED_INPUTS = {'ggml-webgpu-q8-subgroup-shaders.hpp': 'b1b86048fbb6b9a58834a4b5ee5552ac2704641cbf4db3c996c1a85674ea302b',
  'ggml-webgpu-batch-readback.hpp': '62a542146fb2e57cb1b9539d4fd0cde2a3f73c00ca7893600fbc6401430bf24a'}
 GENERATED_OUTPUTS = {'ggml-webgpu-optional-pipeline.hpp': 'f2645457e2dc70b592a34b5d35262c26a60d3f8b0c7d2e3570eb1ee53a201f5e',

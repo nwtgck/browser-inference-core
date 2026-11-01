@@ -207,6 +207,13 @@ const ggml_type_traits * ggml_get_type_traits(ggml_type type) {
         t.type_name = "q4_K";
         return t;
     }();
+    static const ggml_type_traits q6 = [] {
+        ggml_type_traits t{};
+        t.type_name = "q6_K";
+        return t;
+    }();
+    if (type == GGML_TYPE_Q6_K)
+        return &q6;
     if (type == GGML_TYPE_Q8_0)
         return &q8;
     if (type == GGML_TYPE_Q4_0)
@@ -214,6 +221,9 @@ const ggml_type_traits * ggml_get_type_traits(ggml_type type) {
     if (type == GGML_TYPE_Q4_K)
         return &q4k;
     throw std::runtime_error("Unexpected recording type");
+}
+bool ggml_is_quantized(ggml_type type) {
+    return type == GGML_TYPE_Q4_0 || type == GGML_TYPE_Q4_K || type == GGML_TYPE_Q6_K || type == GGML_TYPE_Q8_0;
 }
 void ggml_abort(const char *, int, const char *, ...) {
     throw std::runtime_error("Recorded fatal GGML error");
@@ -383,6 +393,30 @@ int main(int argc, char ** argv) {
                 require(created == before_create + 1 && pushes == before_push && waits == before_wait,
                         "Q4 canonical revisit added compile/scope/wait");
             }
+            f.a.ne[0] = f.x.ne[0] = type == GGML_TYPE_Q4_0 ? 10240 : 17408;
+            f.a.ne[1] = f.dst.ne[0] = 2560;
+            require(candidate::ggml_webgpu_q4_requested_subgroup_size(context, false, false) == 16,
+                    "Q4 long K requested eligibility");
+            require(patched.get_mul_mat_vec_pipeline(context, false, false).pipeline.Get() == requested.pipeline.Get(),
+                    "Q4 long K must reuse requested shader key");
+            const auto old_long = original.get_mul_mat_vec_pipeline(
+                f.context<baseline::ggml_webgpu_shader_lib_context>(8, 32, false), false, false);
+            const auto push_long = pushes, wait_long = waits;
+            const auto fallback_long = rejected.get_mul_mat_vec_pipeline(context, false, false);
+            require(decisions(fallback_long).wg_size == 256 &&
+                        fallback_long.pipeline.Get()->code == old_long.pipeline.Get()->code && pushes == push_long &&
+                        waits == wait_long,
+                    "Q4 long K rejection must rebuild canonical without retry");
+            for (int tensor = 0; tensor < 3; ++tensor)
+                for (int axis = 2; axis < 4; ++axis) {
+                    auto & value = (tensor == 0 ? f.a : tensor == 1 ? f.x : f.dst).ne[axis];
+                    value = 2;
+                    require(candidate::ggml_webgpu_q4_requested_subgroup_size(context, false, false) == 0,
+                            "Q4 long requested rejects each batch axis");
+                    value = 1;
+                }
+            f.a.ne[0] = f.x.ne[0] = 2048;
+            f.a.ne[1] = f.dst.ne[0] = 4097;
             for (const auto range : {std::pair{0u, 32u}, {16u, 16u}, {32u, 64u}, {4u, 8u}, {32u, 8u}}) {
                 auto c = f.context<candidate::ggml_webgpu_shader_lib_context>(range.first, range.second, true);
                 require(candidate::ggml_webgpu_q4_requested_subgroup_size(c, false, false) == 0,
@@ -436,6 +470,190 @@ int main(int argc, char ** argv) {
             q8.context<candidate::ggml_webgpu_shader_lib_context>(16, 16, true), false, false);
         require(fixed_old.pipeline.Get()->code == fixed_new.pipeline.Get()->code && fixed_old.name == fixed_new.name,
                 "Composition changed fixed Q8");
+        // New dtype admission uses the same complete factories, typed cache and
+        // canonical callback as existing Q4/Q8; no duplicate selector model.
+        {
+            auto f = fixture(GGML_TYPE_Q6_K);
+            f.a.ne[1] = f.dst.ne[0] = 2048;
+            for (unsigned sg : {16u, 32u}) {
+                auto c = f.context<candidate::ggml_webgpu_shader_lib_context>(sg, sg, true);
+                const auto p = patched.get_mul_mat_vec_pipeline(c, false, false);
+                require(decisions(p).wg_size == 128 && decisions(p).logical_subgroup_size == sg &&
+                            decisions(p).outputs_per_wg == 4 * (128 / sg),
+                        "Q6 fixed geometry");
+                require(patched.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == p.pipeline.Get(),
+                        "Q6 warm identity");
+                write(output / ("q6_K-fixed-sg" + std::to_string(sg) + ".wgsl"), p.pipeline.Get()->code);
+            }
+            auto c = f.context<candidate::ggml_webgpu_shader_lib_context>(8, 32, true);
+            const auto requested = patched.get_mul_mat_vec_pipeline(c, false, false);
+            const auto fixed = patched.get_mul_mat_vec_pipeline(
+                f.context<candidate::ggml_webgpu_shader_lib_context>(16, 16, true), false, false);
+            require(without_attribute(requested.pipeline.Get()->code) == fixed.pipeline.Get()->code,
+                    "Q6 requested changed arithmetic");
+            write(output / "q6_K-requested.wgsl", requested.pipeline.Get()->code);
+            const auto requested_key = candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(c, false, false);
+            candidate::ggml_webgpu_shader_lib rejected(device, instance, state);
+            inject = WGPUErrorType_Validation;
+            const auto first = rejected.get_mul_mat_vec_pipeline(c, false, false);
+            require(decisions(first).wg_size == 128 && decisions(first).outputs_per_wg == 4 &&
+                        decisions(first).logical_subgroup_size == 0,
+                    "Q6 rejected request must preserve short-K cooperative geometry");
+            const auto old = original.get_mul_mat_vec_pipeline(
+                f.context<baseline::ggml_webgpu_shader_lib_context>(8, 32, false), false, false);
+            require(first.pipeline.Get()->code == old.pipeline.Get()->code && first.name == old.name,
+                    "Q6 short fallback bytes");
+            f.a.ne[0] = f.x.ne[0] = 2560;
+            require(candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(c, false, false) == requested_key,
+                    "Q6 requested shape-independent key");
+            const auto saved_push = pushes, saved_wait = waits;
+            const auto longer = rejected.get_mul_mat_vec_pipeline(c, false, false);
+            require(decisions(longer).wg_size == 256 && decisions(longer).outputs_per_wg == 4 && pushes == saved_push &&
+                        waits == saved_wait,
+                    "Rejected Q6 key must rebuild canonical context without retry");
+            const auto old_long = original.get_mul_mat_vec_pipeline(
+                f.context<baseline::ggml_webgpu_shader_lib_context>(8, 32, false), false, false);
+            require(longer.pipeline.Get()->code == old_long.pipeline.Get()->code, "Q6 long fallback bytes");
+            f.a.ne[0] = f.x.ne[0] = 2048;
+            require(rejected.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == first.pipeline.Get(),
+                    "Q6 fallback restore");
+            require(production_dispatch(requested, &f.dst, 65535) == std::array<uint32_t, 2>{64, 1} &&
+                        production_dispatch(first, &f.dst, 65535) == std::array<uint32_t, 2>{512, 1},
+                    "Q6 actual host grid");
+            for (int64_t k : {1792, 2047, 2048, 2049, 2560, 10751, 10752, 11008})
+                for (int64_t m : {2047, 2048, 2049, 65536}) {
+                    f.a.ne[0] = f.x.ne[0] = k;
+                    f.a.ne[1] = f.dst.ne[0] = m;
+                    const bool yes = (k >= 2048 && k <= 10752 && k % 256 == 0 && m >= 2048);
+                    require(candidate::ggml_webgpu_q6_matvec_subgroup_eligible(c, false, false) == yes,
+                            "Q6 K/M boundary");
+                    require(candidate::ggml_webgpu_q6_requested_subgroup_size(c, false, false) == (yes ? 16u : 0u),
+                            "Q6 shared requested eligibility");
+                }
+            for (unsigned which = 0; which < 20; ++which) {
+                auto bad = fixture(GGML_TYPE_Q6_K);
+                auto b = bad.context<candidate::ggml_webgpu_shader_lib_context>(16, 16, true);
+                bool mmvq = false, overlap = false;
+                switch (which) {
+                case 0:
+                    bad.a.type = GGML_TYPE_Q4_K;
+                    break;
+                case 1:
+                    bad.x.type = GGML_TYPE_F16;
+                    break;
+                case 2:
+                    bad.dst.type = GGML_TYPE_F16;
+                    break;
+                case 3:
+                    b.src2 = &bad.ids;
+                    break;
+                case 4:
+                    bad.x.ne[1] = bad.dst.ne[1] = 2;
+                    break;
+                case 5:
+                    b.max_wg_size = 127;
+                    break;
+                case 6:
+                    mmvq = true;
+                    break;
+                case 7:
+                    overlap = true;
+                    break;
+                case 8:
+                    bad.a.ne[2] = 0;
+                    break;
+                case 9:
+                    bad.a.ne[3] = -1;
+                    break;
+                case 10:
+                    bad.x.ne[2] = bad.dst.ne[2] = 0;
+                    break;
+                case 11:
+                    bad.x.ne[3] = bad.dst.ne[3] = int64_t(UINT32_MAX) + 1;
+                    break;
+                case 12:
+                    bad.a.ne[2] = 3;
+                    bad.x.ne[2] = bad.dst.ne[2] = 4;
+                    break;
+                case 13:
+                    bad.x.ne[3] = 2;
+                    break;
+                case 14:
+                    bad.x.ne[2] = bad.dst.ne[2] = UINT32_MAX;
+                    break;
+                case 15:
+                    bad.a.ne[1] = bad.dst.ne[0] = int64_t(UINT32_MAX) - 126;
+                    break;
+                case 16:
+                    b.src0 = nullptr;
+                    break;
+                case 17:
+                    b.src1 = nullptr;
+                    break;
+                case 18:
+                    b.dst = nullptr;
+                    break;
+                case 19:
+                    b.matvec_epilogue = decltype(b.matvec_epilogue)(1);
+                    break;
+                }
+                require(!candidate::ggml_webgpu_q6_matvec_subgroup_eligible(b, mmvq, overlap), "Q6 exclusion");
+            }
+            f = fixture(GGML_TYPE_Q6_K);
+            c = f.context<candidate::ggml_webgpu_shader_lib_context>(8, 32, true);
+            for (int axis = 2; axis < 4; ++axis) {
+                f.a.ne[axis] = 2;
+                f.x.ne[axis] = f.dst.ne[axis] = 4;
+                require(candidate::ggml_webgpu_q6_matvec_subgroup_eligible(c, false, false), "Q6 legal broadcast");
+                f.a.ne[axis] = f.x.ne[axis] = f.dst.ne[axis] = 1;
+            }
+            for (const auto range : {std::pair{0u, 32u}, std::pair{16u, 16u}, std::pair{32u, 64u}, std::pair{4u, 8u},
+                                     std::pair{32u, 8u}}) {
+                auto b = f.context<candidate::ggml_webgpu_shader_lib_context>(range.first, range.second, true);
+                require(candidate::ggml_webgpu_q6_requested_subgroup_size(b, false, false) == 0,
+                        "Q6 invalid requested range");
+            }
+            for (unsigned sg : {8u, 64u}) {
+                auto b = f.context<candidate::ggml_webgpu_shader_lib_context>(sg, sg, true);
+                require(candidate::ggml_webgpu_q6_matvec_subgroup_size(b, false, false) == 0,
+                        "Q6 unsupported fixed width");
+            }
+            c.subgroup_size_control_enabled = false;
+            require(candidate::ggml_webgpu_q6_requested_subgroup_size(c, false, false) == 0, "Q6 feature absence");
+            c.supports_subgroups = false;
+            require(candidate::ggml_webgpu_q6_matvec_subgroup_size(c, false, false) == 0, "Q6 subgroups absence");
+            auto q4 = fixture(GGML_TYPE_Q4_K);
+            auto q8 = Fixture{};
+            require(!(requested_key ==
+                      candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(
+                          q4.context<candidate::ggml_webgpu_shader_lib_context>(8, 32, true), false, false)) &&
+                        !(requested_key ==
+                          candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(
+                              q8.context<candidate::ggml_webgpu_shader_lib_context>(8, 32, true), false, false)),
+                    "Q6 dtype cache separation");
+        }
+        {
+            auto f = fixture(GGML_TYPE_Q6_K);
+            f.a.ne[0] = f.x.ne[0] = 256;
+            f.a.ne[1] = f.dst.ne[0] = 512;
+            f.x.ne[1] = f.dst.ne[1] = 32;
+            auto c = f.context<candidate::ggml_webgpu_shader_lib_context>(16, 16, true);
+            const auto selected = patched.get_mul_mat_fast_pipeline(c, false, true);
+            using D = candidate::ggml_webgpu_mul_mat_shader_decisions;
+            const auto & d = *static_cast<const D *>(selected.context.get());
+            require(d.tile_m == 8 && d.tile_n == 4 && d.tile_k == 32 && d.wg_size == 64 &&
+                        selected.name.find("_half_pairs_m8") != std::string::npos,
+                    "Q6 C8 final current factory at grid8");
+            write(output / "q6_K-c8.wgsl", selected.pipeline.Get()->code);
+            f.a.ne[1] = f.dst.ne[0] = 448;
+            const auto scalar = patched.get_mul_mat_fast_pipeline(c, false, true);
+            require(static_cast<const D *>(scalar.context.get())->tile_m == 4 &&
+                        scalar.name.find("_half_pairs") == std::string::npos,
+                    "Q6 grid7 scalar fallback");
+            f.a.ne[1] = f.dst.ne[0] = 512;
+            require(patched.get_mul_mat_fast_pipeline(c, false, true).pipeline.Get() == selected.pipeline.Get(),
+                    "Q6 C8 cache return");
+        }
         require(futures.empty(), "Pending mock callbacks");
         std::cout << "{\"passed\":true,\"checks\":" << checks << ",\"created\":" << created << ",\"pushes\":" << pushes
                   << ",\"pops\":" << pops << ",\"waits\":" << waits << ",\"gpu\":false}\n";

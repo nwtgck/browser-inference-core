@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
-from webgpu_prefix_context import without_final_matvec_stages
+from webgpu_prefix_context import without_final_matvec_stages, without_shared_word_load
 import prepare_webgpu_f32_small_m as small
 import prepare_webgpu_tensor_copy as copy
 
@@ -39,7 +39,7 @@ class F32SmallMOverlay(unittest.TestCase):
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
         # Inspect the geometry stage before the later quantized specialization.
-        with patch.object(source.aligned_word_load, 'prepare', return_value={}), patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_wide_m, 'prepare'):
+        with without_shared_word_load(source), patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_wide_m, 'prepare'):
             cls.matrix_normal = source.prepare(cls.upstream, cls.directory / 'matrix-normal').parent
             cls.matrix_profile = source.prepare(cls.upstream, cls.directory / 'matrix-profile', gpu_profile=True).parent
 

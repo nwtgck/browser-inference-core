@@ -9,7 +9,26 @@
      quant_shared_mode shared_mode = quant_shared_mode::scalar;
      // 0: existing geometry, 1/4: F32 small-M register tiles.
      uint32_t  small_m_tile;
-@@ -2562,7 +2562,9 @@
+@@ -2557,12 +2557,27 @@
+         const int64_t k = context.src0->ne[0];
+         const bool q4_blocks = (key.src0_type == GGML_TYPE_Q4_0 && k > 0 && k % 32 == 0) ||
+                                (key.src0_type == GGML_TYPE_Q4_K && k > 0 && k % 256 == 0);
+-        if (q4_blocks && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++        uint64_t q6_c8_groups = 0;
++        if (key.src0_type == GGML_TYPE_Q6_K && k > 0 && k % 256 == 0 &&
++            context.dst->ne[0] >= 64 && context.dst->ne[0] % 64 == 0 && context.dst->ne[1] >= 32 &&
++            context.dst->ne[2] > 0 && context.dst->ne[3] > 0) {
++            // Count C8 output workgroups, including batches, only up to the
++            // minimum parallel grid. Avoid overflow for large tensor extents.
++            q6_c8_groups = 1;
++            for (const int64_t factor : {context.dst->ne[0] / 64,
++                                        context.dst->ne[1] / 32 + (context.dst->ne[1] % 32 != 0),
++                                        context.dst->ne[2], context.dst->ne[3]}) {
++                q6_c8_groups = std::min<uint64_t>(8, q6_c8_groups * std::min<uint64_t>(8, factor));
++            }
++        }
++        if ((q4_blocks || q6_c8_groups >= 8) && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
+             context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
              !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
              WEBGPU_MUL_MAT_TILE_N == 4 && WEBGPU_MUL_MAT_WG_SIZE_M == 8 &&
              WEBGPU_MUL_MAT_WG_SIZE_N == 8 && WEBGPU_MUL_MAT_REG_TILE_K_QUANT == 32) {
@@ -20,7 +39,7 @@
          }
  
          auto it = mul_mat_fast_pipelines.find(key);
-@@ -2570,12 +2572,13 @@
+@@ -2570,12 +2585,13 @@
              return it->second;
          }
  
@@ -36,7 +55,7 @@
              shader_src = wgsl_mul_mat_reg_tile_half_pairs;
          }
          std::vector<std::string> defines;
-@@ -2712,8 +2715,8 @@
+@@ -2712,8 +2728,8 @@
              variant += "_small_m" + std::to_string(key.small_m_tile);
          }
  

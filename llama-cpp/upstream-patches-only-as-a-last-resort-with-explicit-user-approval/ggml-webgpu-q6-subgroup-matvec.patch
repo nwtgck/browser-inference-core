@@ -1,0 +1,70 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -410,6 +410,50 @@
+     return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? 16 : 0;
+ }
+ 
++
++// Keep tensor-shape admission independent of fixed or requested width policy.
++inline bool ggml_webgpu_q6_matvec_subgroup_eligible(const ggml_webgpu_shader_lib_context & context,
++                                                   bool use_mmvq, bool src_overlap) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    if (!a || !x || !dst || context.src2 || use_mmvq || src_overlap || context.max_wg_size < 128 ||
++        context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
++        a->type != GGML_TYPE_Q6_K || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] < 2048 || a->ne[0] > 10752 || a->ne[0] % 256 != 0 ||
++        a->ne[1] < 2048 || a->ne[1] > UINT32_MAX - 127u ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
++        return false;
++    }
++    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
++    for (int axis = 2; axis < 4; ++axis) {
++        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
++            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
++            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
++            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
++            return false;
++        }
++        output_elements *= static_cast<uint64_t>(x->ne[axis]);
++    }
++    return true;
++}
++
++inline uint32_t ggml_webgpu_q6_matvec_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                  bool use_mmvq, bool src_overlap) {
++    const uint32_t sg = context.min_subgroup_size;
++    if (!context.supports_subgroups || sg != context.max_subgroup_size || (sg != 16 && sg != 32)) {
++        return 0;
++    }
++    return ggml_webgpu_q6_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
++}
++
++inline uint32_t ggml_webgpu_q6_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                     bool use_mmvq, bool src_overlap) {
++    if (!context.supports_subgroups || !context.subgroup_size_control_enabled ||
++        context.min_subgroup_size == 0 || context.min_subgroup_size >= context.max_subgroup_size ||
++        context.min_subgroup_size > 16 || context.max_subgroup_size < 16) { return 0; }
++    return ggml_webgpu_q6_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? 16 : 0;
++}
+ 
+ struct webgpu_pipeline {
+     wgpu::ComputePipeline pipeline;
+@@ -2477,10 +2521,16 @@
+         if (!key.subgroup_size) {
+             key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         }
++        if (!key.subgroup_size) {
++            key.subgroup_size = ggml_webgpu_q6_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
++        }
+         if (allow_requested && !key.subgroup_size) {
+             key.requested_subgroup_size = ggml_webgpu_q8_requested_subgroup_size(context, key.use_mmvq, src_overlap);
+             if (!key.requested_subgroup_size) {
+                 key.requested_subgroup_size = ggml_webgpu_q4_requested_subgroup_size(context, key.use_mmvq, src_overlap);
++            }
++            if (!key.requested_subgroup_size) {
++                key.requested_subgroup_size = ggml_webgpu_q6_requested_subgroup_size(context, key.use_mmvq, src_overlap);
+             }
+             if (key.requested_subgroup_size) { key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::requested_size; }
+         }

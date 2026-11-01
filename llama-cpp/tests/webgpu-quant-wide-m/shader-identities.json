@@ -69,12 +69,20 @@
   "mul_mat_reg_tile_q5_1_f32-candidate.wgsl": "a6654215e651bb1bf2ffdf913ecb2bb27c5187f5317f3ff9fe9651344ca0b343",
   "mul_mat_reg_tile_q5_K_f32-baseline.wgsl": "caf4f3d3ffa4106305cd4a2c04eeceeb4038368305411c3635e93a315b8c3d0a",
   "mul_mat_reg_tile_q5_K_f32-candidate.wgsl": "caf4f3d3ffa4106305cd4a2c04eeceeb4038368305411c3635e93a315b8c3d0a",
+  "mul_mat_reg_tile_q6_K_f16-baseline.wgsl": "628ab70c637398c0d8276130181d93677bdef1b23b6935a5ea2d6deb70278914",
+  "mul_mat_reg_tile_q6_K_f16-candidate.wgsl": "628ab70c637398c0d8276130181d93677bdef1b23b6935a5ea2d6deb70278914",
   "mul_mat_reg_tile_q6_K_f32-baseline.wgsl": "0a2d85cd9d118ee930888668fa7e5be0e9b0f3a831dd86ee3b3ef3081482c8f3",
   "mul_mat_reg_tile_q6_K_f32-candidate.wgsl": "0a2d85cd9d118ee930888668fa7e5be0e9b0f3a831dd86ee3b3ef3081482c8f3",
+  "mul_mat_reg_tile_q6_K_f32_half_pairs_m8-baseline.wgsl": "0a2d85cd9d118ee930888668fa7e5be0e9b0f3a831dd86ee3b3ef3081482c8f3",
+  "mul_mat_reg_tile_q6_K_f32_half_pairs_m8-candidate.wgsl": "3900cdb7dc383a3c93da5db9a9c2cc6cbde7528aaa2620976af784cab8543a24",
+  "mul_mat_reg_tile_q6_K_f32_src_overlap-baseline.wgsl": "5fdf90f6437172aeebba6293184d548b6eae19ce33b19a8ad703f64b17acd3c7",
+  "mul_mat_reg_tile_q6_K_f32_src_overlap-candidate.wgsl": "5fdf90f6437172aeebba6293184d548b6eae19ce33b19a8ad703f64b17acd3c7",
   "mul_mat_reg_tile_q8_0_f32-baseline.wgsl": "b6c6e591af4a5dab1f8a1994bd8217241e6474ca1e40b3e3f9607366363eb4e8",
   "mul_mat_reg_tile_q8_0_f32-candidate.wgsl": "b6c6e591af4a5dab1f8a1994bd8217241e6474ca1e40b3e3f9607366363eb4e8",
   "mul_mat_subgroup_matrix_q4_0_f32-baseline.wgsl": "bc948fcb21f2889e2684b9c3973ec76f1fb42438d40f36bea0b20318f252a2b7",
   "mul_mat_subgroup_matrix_q4_0_f32-candidate.wgsl": "bc948fcb21f2889e2684b9c3973ec76f1fb42438d40f36bea0b20318f252a2b7",
   "mul_mat_subgroup_matrix_q4_K_f32-baseline.wgsl": "f9b066e559e71303d518283f0036dcf2fc59bc647315355244a160adf05d57f6",
-  "mul_mat_subgroup_matrix_q4_K_f32-candidate.wgsl": "f9b066e559e71303d518283f0036dcf2fc59bc647315355244a160adf05d57f6"
+  "mul_mat_subgroup_matrix_q4_K_f32-candidate.wgsl": "f9b066e559e71303d518283f0036dcf2fc59bc647315355244a160adf05d57f6",
+  "mul_mat_subgroup_matrix_q6_K_f32-baseline.wgsl": "b12cd409d87fed20758147e6f7b97f613d1393498bddfd040d61181e3f6b86f2",
+  "mul_mat_subgroup_matrix_q6_K_f32-candidate.wgsl": "b12cd409d87fed20758147e6f7b97f613d1393498bddfd040d61181e3f6b86f2"
 }

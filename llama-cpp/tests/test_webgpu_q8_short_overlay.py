@@ -16,6 +16,7 @@ import prepare_webgpu_q8_short as q8
 
 from matmul_vec4_test_support import explicit_layout_argument
 from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix, legacy_fixed_sources
 
 
 def function(text, marker):
@@ -24,10 +25,12 @@ def function(text, marker):
 
 
 def build_host(upstream, prepared, output):
-    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
+    # Preserve fixed/forced recording without modeling optional SDK creation.
+    fixed = legacy_fixed_sources(prepared)
+    text = explicit_layout_argument(fixed['ggml-webgpu-shader-lib.hpp'])
     here = ROOT / 'tests/webgpu-q8-short'
     chunks = [
-        (here / 'host-prefix.cpp').read_text(),
+        canonical_prefix((here / 'host-prefix.cpp').read_text(), prepared),
         '#include "ggml-webgpu-q8-subgroup-shaders.hpp"',
         function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
         function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',

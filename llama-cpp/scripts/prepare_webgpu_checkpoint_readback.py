@@ -23,13 +23,13 @@ CONTRACT_INPUTS = {'ggml/include/ggml-backend.h': '0e5e8e1f16d11ebbf501e38bc6705
  'src/llama-context.h': 'c5123eb0b1b4426737a70a3a616d8ba48b646143b596fa3f42d20ab57b2fb9e5',
  'src/llama-io.h': 'cc5bd88ceeb9c859384d1cece26fce2ed73bcf16eb6a5fa4b571dfa2c06613fe'}
 REVIEWED_DAWN_HEADERS = dict(tensor_copy.DAWN_HEADERS)
-INPUTS = {False: {'ggml-webgpu-shader-lib.hpp': '87e20119da7064dda8210c6130b1e43a4aaf83c644ae5e58a691009f709405a8',
+INPUTS = {False: {'ggml-webgpu-shader-lib.hpp': 'e0b874393679689e988471b83d7dff7926b9b28e68a3dc71c46d06df178fe1b9',
          'ggml-webgpu.cpp': 'ef3e19338638464151e5416591e435deb62cb0d4974be45e61e4b8ec7bba0335'},
- True: {'ggml-webgpu-shader-lib.hpp': '01f9e59fe52a3f1865398d96478a7ce9bafb174c320809ede04384ba269acd0a',
+ True: {'ggml-webgpu-shader-lib.hpp': 'f83bd98f1a0b31caa5b6bb1fdbb46d44dc44066e98d367306feaf3005ee01b23',
         'ggml-webgpu.cpp': '9a6c93ab8c9bfb1736224e5943e3eb899e83aa4cbdaeacd9ff6f533158527791'}}
-OUTPUTS = {False: {'ggml-webgpu-shader-lib.hpp': '87e20119da7064dda8210c6130b1e43a4aaf83c644ae5e58a691009f709405a8',
+OUTPUTS = {False: {'ggml-webgpu-shader-lib.hpp': 'e0b874393679689e988471b83d7dff7926b9b28e68a3dc71c46d06df178fe1b9',
          'ggml-webgpu.cpp': '57d577c17ef1b87c088005defa103906ec124ce93b2429ace86e88028b638cbf'},
- True: {'ggml-webgpu-shader-lib.hpp': '01f9e59fe52a3f1865398d96478a7ce9bafb174c320809ede04384ba269acd0a',
+ True: {'ggml-webgpu-shader-lib.hpp': 'f83bd98f1a0b31caa5b6bb1fdbb46d44dc44066e98d367306feaf3005ee01b23',
         'ggml-webgpu.cpp': 'e3bce48df987e216db5094bfb9eaf56f53fdaabb75f06cb9ad2cabbda24e000d'}}
 GENERATED_OUTPUTS = {'ggml/src/ggml-backend-tensor-get-batch.h': '01c4b471ade51ddb6fd91e1d474e00943813f2d598e0192ab7d8caf571c3978a',
  'ggml/src/ggml-webgpu/ggml-webgpu-batch-readback-geometry.hpp': 'f6e9cd0d46a7c32a112f870a705c735be070224f586ae97a2d513a20e75e7f0a',

@@ -106,10 +106,38 @@ int main(int argc, char ** argv) {
                     factory(f, true, false, output);
                 }
             }
-            for (const int64_t k : {-1, 0, 992, 1025, 4097, 4352}) {
+            for (const int64_t k : {-1, 0, 992, 1025, 4097, 17664}) {
                 Fixture f(type, k);
                 f.min_sg = f.max_sg = sg;
                 require(!f.eligible() && f.select() == 0, "K boundary and partial-block rejection");
+            }
+            for (const int64_t k : {4352, 5120, 10240, 17408}) {
+                for (const int64_t m : {2560, 2561, 5120, 17408}) {
+                    Fixture f(type, k, m);
+                    f.min_sg = f.max_sg = sg;
+                    require(f.eligible() && f.select() == sg, "Long K complete blocks admitted");
+                    factory(f, true, false, output);
+                }
+                Fixture below(type, k, 2559);
+                require(!below.eligible(), "Long K row boundary");
+                for (int tensor = 0; tensor < 3; ++tensor)
+                    for (int axis = 2; axis < 4; ++axis) {
+                        Fixture b(type, k, 2560);
+                        (tensor == 0 ? b.a : tensor == 1 ? b.x : b.dst).ne[axis] = 2;
+                        require(!b.eligible(), "Long K requires all six batch axes one");
+                    }
+                Fixture b(type, k, 2560);
+                b.a.ne[2] = 2;
+                b.x.ne[2] = b.dst.ne[2] = 4;
+                require(!b.eligible(), "Long K broadcast remains canonical");
+            }
+            {
+                Fixture edge(type, type == GGML_TYPE_Q4_0 ? 4128 : 4352, 2560);
+                require(edge.eligible(), "First long complete block");
+            }
+            {
+                Fixture edge(type, type == GGML_TYPE_Q4_0 ? 17440 : 17664, 2560);
+                require(!edge.eligible(), "First complete block after maximum");
             }
             for (const int64_t m :
                  std::array<int64_t, 5>{-1, 0, 4095, int64_t(UINT32_MAX) - 126, int64_t(UINT32_MAX) + 1}) {
@@ -192,7 +220,7 @@ int main(int argc, char ** argv) {
             require(f.eligible() && f.select() == 0, "Shape eligibility does not fabricate a fixed subgroup width");
             factory(f, false, false, output);
         }
-        for (const int64_t k : {768, 4352}) {
+        for (const int64_t k : {768, 17664}) {
             Fixture f(type, k);
             require(f.select() == 0, "Out-of-range complete blocks keep old selection");
             factory(f, false, false, output);
