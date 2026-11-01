@@ -1,0 +1,49 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1258,7 +1258,7 @@
+ };
+ 
+ struct ggml_webgpu_mul_mat_pipeline_key {
+-    enum class quant_shared_mode : uint32_t { scalar, half_pairs };
++    enum class quant_shared_mode : uint32_t { scalar, half_pairs, half_pairs_m8 };
+     quant_shared_mode shared_mode = quant_shared_mode::scalar;
+     // 0: existing geometry, 1/4: F32 small-M register tiles.
+     uint32_t  small_m_tile;
+@@ -2562,7 +2562,9 @@
+             !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
+             WEBGPU_MUL_MAT_TILE_N == 4 && WEBGPU_MUL_MAT_WG_SIZE_M == 8 &&
+             WEBGPU_MUL_MAT_WG_SIZE_N == 8 && WEBGPU_MUL_MAT_REG_TILE_K_QUANT == 32) {
+-            key.shared_mode = shared_mode::half_pairs;
++            // Keep small column counts and partial row tiles on the existing geometry.
++            key.shared_mode = context.dst->ne[0] >= 64 && context.dst->ne[0] % 64 == 0 &&
++                              context.dst->ne[1] >= 32 ? shared_mode::half_pairs_m8 : shared_mode::half_pairs;
+         }
+ 
+         auto it = mul_mat_fast_pipelines.find(key);
+@@ -2570,12 +2572,13 @@
+             return it->second;
+         }
+ 
+-        const uint32_t tile_m = key.small_m_tile ? key.small_m_tile : WEBGPU_MUL_MAT_TILE_M;
++        const uint32_t tile_m = key.shared_mode == shared_mode::half_pairs_m8 ? 8u :
++                                (key.small_m_tile ? key.small_m_tile : WEBGPU_MUL_MAT_TILE_M);
+         const uint32_t tile_n = key.small_m_tile ? 1u : WEBGPU_MUL_MAT_TILE_N;
+         const uint32_t wg_m   = key.small_m_tile ? 1u : WEBGPU_MUL_MAT_WG_SIZE_M;
+         const uint32_t wg_n   = key.small_m_tile ? 32u : WEBGPU_MUL_MAT_WG_SIZE_N;
+         const char * shader_src = key.use_subgroup_matrix ? wgsl_mul_mat_subgroup_matrix : wgsl_mul_mat_reg_tile;
+-        if (key.shared_mode == shared_mode::half_pairs) {
++        if (key.shared_mode != shared_mode::scalar) {
+             shader_src = wgsl_mul_mat_reg_tile_half_pairs;
+         }
+         std::vector<std::string> defines;
+@@ -2712,8 +2715,8 @@
+             variant += "_small_m" + std::to_string(key.small_m_tile);
+         }
+ 
+-        if (key.shared_mode == shared_mode::half_pairs) {
+-            variant += "_half_pairs";
++        if (key.shared_mode != shared_mode::scalar) {
++            variant += key.shared_mode == shared_mode::half_pairs_m8 ? "_half_pairs_m8" : "_half_pairs";
+         }
+ 
+         auto processed = preprocessor.preprocess(shader_src, defines);

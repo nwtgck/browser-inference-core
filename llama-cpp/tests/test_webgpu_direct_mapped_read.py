@@ -26,6 +26,9 @@ class DirectMappedRead(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='direct-mapped-read-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        wide = patch.object(source.quant_wide_m, 'prepare')
+        wide.start()
+        cls.addClassCleanup(wide.stop)
         cls.before, cls.final = {}, {}
         for profile in (False, True):
             with patch.object(direct, 'prepare'):
@@ -93,7 +96,7 @@ class DirectMappedRead(unittest.TestCase):
 
     def test_final_identity_dependencies_and_idempotence(self):
         self.assertEqual(direct.INPUTS, source.quant_half_pairs.OUTPUTS)
-        self.assertEqual(direct.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual(direct.OUTPUTS, source.quant_wide_m.INPUTS)
         self.assertEqual(direct.CONTRACT_INPUTS, source.ordered_readback.CONTRACT_INPUTS)
         self.assertEqual(direct.REVIEWED_DAWN_HEADERS, source.tensor_copy.DAWN_HEADERS)
         self.assertEqual(sha(ROOT / source.PATCH_DIRECTORY / direct.PATCH_NAME), direct.PATCH_SHA256)
