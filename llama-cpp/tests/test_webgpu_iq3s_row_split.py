@@ -40,6 +40,9 @@ class Iq3sRowSplit(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix='iq3s-row-split-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
+        tail = patch.object(source.quant_half_pairs, 'prepare', return_value={})
+        tail.start()
+        cls.addClassCleanup(tail.stop)
         cls.before, cls.final, cls.stage_inputs = {}, {}, {}
         prefix = patch.object(source.q6_short, 'prepare')
         prefix.start()

@@ -1,0 +1,161 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -9,2 +9,3 @@
+ #include "ggml-webgpu-f32-matvec-epilogue-shaders.hpp"
++#include "ggml-webgpu-quant-half-pairs-shaders.hpp"
+ #include "ggml-webgpu-q8-subgroup-shaders.hpp"
+@@ -1259,2 +1260,4 @@
+ struct ggml_webgpu_mul_mat_pipeline_key {
++    enum class quant_shared_mode : uint32_t { scalar, half_pairs };
++    quant_shared_mode shared_mode = quant_shared_mode::scalar;
+     // 0: existing geometry, 1/4: F32 small-M register tiles.
+@@ -1270,3 +1273,3 @@
+                use_subgroup_matrix == other.use_subgroup_matrix && src_overlap == other.src_overlap &&
+-               small_m_tile == other.small_m_tile;
++               small_m_tile == other.small_m_tile && shared_mode == other.shared_mode;
+     }
+@@ -1277,2 +1280,3 @@
+         size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, static_cast<uint32_t>(key.shared_mode));
+         ggml_webgpu_hash_combine(seed, key.small_m_tile);
+@@ -2549,2 +2553,16 @@
+ 
++        // The paired shared template is reviewed only for this fixed geometry.
++        // Keep scalar global loads and the existing host routing/parameter ABI.
++        using shared_mode = ggml_webgpu_mul_mat_pipeline_key::quant_shared_mode;
++        const int64_t k = context.src0->ne[0];
++        const bool q4_blocks = (key.src0_type == GGML_TYPE_Q4_0 && k > 0 && k % 32 == 0) ||
++                               (key.src0_type == GGML_TYPE_Q4_K && k > 0 && k % 256 == 0);
++        if (q4_blocks && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++            context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
++            !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
++            WEBGPU_MUL_MAT_TILE_N == 4 && WEBGPU_MUL_MAT_WG_SIZE_M == 8 &&
++            WEBGPU_MUL_MAT_WG_SIZE_N == 8 && WEBGPU_MUL_MAT_REG_TILE_K_QUANT == 32) {
++            key.shared_mode = shared_mode::half_pairs;
++        }
++
+         auto it = mul_mat_fast_pipelines.find(key);
+@@ -2559,2 +2577,5 @@
+         const char * shader_src = key.use_subgroup_matrix ? wgsl_mul_mat_subgroup_matrix : wgsl_mul_mat_reg_tile;
++        if (key.shared_mode == shared_mode::half_pairs) {
++            shader_src = wgsl_mul_mat_reg_tile_half_pairs;
++        }
+         std::vector<std::string> defines;
+@@ -2691,2 +2712,6 @@
+             variant += "_small_m" + std::to_string(key.small_m_tile);
++        }
++
++        if (key.shared_mode == shared_mode::half_pairs) {
++            variant += "_half_pairs";
+         }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile_half_pairs.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile_half_pairs.wgsl
+@@ -9,3 +9,3 @@
+ #include "common_decls.tmpl"
+-#include "mul_mat_decls.tmpl"
++#include "mul_mat_half_pairs_decls.tmpl"
+ 
+@@ -65,3 +65,3 @@
+ 
+-var<workgroup> shmem: array<f16, TILE_SRC0_SHMEM + TILE_SRC1_SHMEM>;
++var<workgroup> shmem: array<vec2<f16>, (TILE_SRC0_SHMEM + TILE_SRC1_SHMEM) / 2u>;
+ 
+@@ -124,4 +124,4 @@
+ 
+-        for (var k_inner = 0u; k_inner < k_end; k_inner++) {
+-            var src0_tile: array<f16, TILE_M>;
++        for (var k_inner = 0u; k_inner < k_end; k_inner += 2u) {
++            var src0_pair: array<vec2<f16>, TILE_M>;
+             for (var tm = 0u; tm < TILE_M; tm++) {
+@@ -129,3 +129,3 @@
+                 let src0_idx = k_inner + src0_m * TILE_K;
+-                src0_tile[tm] = shmem[src0_idx];
++                src0_pair[tm] = shmem[src0_idx / 2u];
+             }
+@@ -134,5 +134,6 @@
+                 let src1_idx = src1_n * TILE_K + k_inner;
+-                let src1_val = shmem[TILE_SRC0_SHMEM + src1_idx];
++                let src1_pair = shmem[(TILE_SRC0_SHMEM + src1_idx) / 2u];
+                 for (var tm = 0u; tm < TILE_M; tm++) {
+-                      acc[tm][tn] += f32(src0_tile[tm]) * f32(src1_val);
++                    acc[tm][tn] += f32(src0_pair[tm].x) * f32(src1_pair.x);
++                    acc[tm][tn] += f32(src0_pair[tm].y) * f32(src1_pair.y);
+                 }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
+@@ -29,5 +29,3 @@
+ 
+-fn store_shmem(val: f16, idx: u32) {
+-    shmem[idx] = val;
+-}
++// scalar store helper unused by paired loaders
+ #endif // SCALAR
+@@ -36,3 +34,3 @@
+ #define QUANT_OUT_TYPE f16
+-#include "quant_inner_loops.tmpl"
++#include "quant_half_pairs_inner_loops.tmpl"
+ 
+@@ -64,3 +62,3 @@
+ fn init_shmem_src1(thread_id: u32, batch_offset: u32, offset_n: u32, k_outer: u32) {
+-    for (var elem_idx = thread_id * VEC_SIZE; elem_idx < TILE_SRC1_SHMEM; elem_idx += TOTAL_WORKGROUP_SIZE * VEC_SIZE) {
++    for (var elem_idx = thread_id * 2u; elem_idx < TILE_SRC1_SHMEM; elem_idx += TOTAL_WORKGROUP_SIZE * 2u) {
+         let tile_n = elem_idx / TILE_K;
+@@ -70,7 +68,5 @@
+         let src1_idx = batch_offset + global_n * params.stride_11 + global_k;
+-        let src1_val = select(
+-            SRC1_TYPE(0.0),
+-            SRC1[src1_idx/VEC_SIZE],
+-            global_n < params.n && global_k < params.k);
+-        store_shmem(SHMEM_TYPE(src1_val), TILE_SRC0_SHMEM + elem_idx);
++        let src1_val0 = select(f32(0.0), src1[src1_idx], global_n < params.n && global_k < params.k);
++        let src1_val1 = select(f32(0.0), src1[src1_idx + 1u], global_n < params.n && global_k + 1u < params.k);
++        shmem[(TILE_SRC0_SHMEM + elem_idx) / 2u] = vec2<f16>(f16(src1_val0), f16(src1_val1));
+     }
+@@ -348,6 +344,4 @@
+ fn store_shmem_kquants(val: vec4<f16>, idx: u32) {
+-    shmem[idx] = val.x;
+-    shmem[idx + 1] = val.y;
+-    shmem[idx + 2] = val.z;
+-    shmem[idx + 3] = val.w;
++    shmem[idx / 2u] = val.xy;
++    shmem[idx / 2u + 1u] = val.zw;
+ }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/quant_half_pairs_inner_loops.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/quant_half_pairs_inner_loops.tmpl
+@@ -1,21 +1,21 @@
+ #ifdef U32_DEQUANT_HELPERS
++#ifdef INIT_SRC0_SHMEM_Q4_0
+ fn dequant_q4_0_packed_to_shmem(q_packed: u32, d: f16, dst_idx: u32) {
+-    let scale = QUANT_OUT_TYPE(d);
+-    for (var k = 0u; k < 4u; k++) {
+-        let q_byte = get_byte(q_packed, k);
+-        let q_hi = (QUANT_OUT_TYPE((q_byte >> 4) & 0xFu) - QUANT_OUT_TYPE(8.0)) * scale;
+-        let q_lo = (QUANT_OUT_TYPE(q_byte & 0xFu) - QUANT_OUT_TYPE(8.0)) * scale;
+-        QUANT_SHMEM[dst_idx + k] = q_lo;
+-        QUANT_SHMEM[dst_idx + k + 16u] = q_hi;
++    let scale = f16(d);
++    for (var k = 0u; k < 4u; k += 2u) {
++        let q_byte0 = get_byte(q_packed, k);
++        let q_byte1 = get_byte(q_packed, k + 1u);
++        let q_hi0 = (f16((q_byte0 >> 4) & 0xFu) - f16(8.0)) * scale;
++        let q_lo0 = (f16(q_byte0 & 0xFu) - f16(8.0)) * scale;
++        let q_hi1 = (f16((q_byte1 >> 4) & 0xFu) - f16(8.0)) * scale;
++        let q_lo1 = (f16(q_byte1 & 0xFu) - f16(8.0)) * scale;
++        shmem[(dst_idx + k) / 2u] = vec2<f16>(q_lo0, q_lo1);
++        shmem[(dst_idx + k + 16u) / 2u] = vec2<f16>(q_hi0, q_hi1);
+     }
+ }
++#else
++// Q4_0 helper unused in this Q4_K specialization
++#endif
+ 
+-fn dequant_q8_0_packed_to_shmem(q_packed: u32, d: f16, dst_idx: u32) {
+-    let scale = QUANT_OUT_TYPE(d);
+-    for (var k = 0u; k < 4u; k++) {
+-        let q_byte = get_byte_i32(q_packed, k);
+-        let q_val = QUANT_OUT_TYPE(q_byte) * scale;
+-        QUANT_SHMEM[dst_idx + k] = q_val;
+-    }
+-}
++// Q8 helper unused in this Q4 specialization
+ #endif

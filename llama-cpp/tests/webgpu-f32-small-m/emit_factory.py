@@ -15,7 +15,8 @@ from test_webgpu_bind_group_cache import definition as function
 from matmul_vec4_test_support import explicit_layout_argument
 
 
-def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path) -> Path:
+def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path, *, cases_path: Path | None = None,
+               constant_overrides: dict[str, int] | None = None) -> Path:
     old = explicit_layout_argument((baseline / 'ggml-webgpu-shader-lib.hpp').read_text())
     new = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     backend = (prepared / 'ggml-webgpu.cpp').read_text()
@@ -35,7 +36,12 @@ def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path) -> 
                        + ''.join(cases) + 'default: throw std::runtime_error("Unknown recording type"); }}\n'
                        'extern "C" bool ggml_is_quantized(ggml_type type) { return ggml_get_type_traits(type)->is_quantized; }')
     constants = '\n'.join(re.findall(r'^#define WEBGPU_MUL_MAT_(?!VEC_).+$', new, re.M))
+    for name, value in (constant_overrides or {}).items():
+        constants, count = re.subn(r'(?m)^#define ' + re.escape(name) + r'\s+\d+u?$', '#define ' + name + ' ' + str(value), constants)
+        if count != 1:
+            raise ValueError('Unknown recording geometry constant: ' + name)
     chunks = [prefix, '#include <array>\n#include <cassert>\n#define CEIL_DIV(a,b) (((a)+(b)-1)/(b))',
+              '#if __has_include("ggml-webgpu-quant-half-pairs-shaders.hpp")\n#include "ggml-webgpu-quant-half-pairs-shaders.hpp"\n#endif',
               trait_functions, constants, function(new, 'struct ggml_webgpu_shader_lib_context {')]
     support = function(backend, 'static bool ggml_backend_webgpu_device_supports_op(')
     support = support[support.index('case GGML_OP_MUL_MAT:'):support.index('case GGML_OP_MUL_MAT_ID:')]
@@ -64,7 +70,7 @@ def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path) -> 
                ''' + backend[start:end] + '''
                    const uint32_t total_wg=wg_m*wg_n*dst->ne[2]*dst->ne[3];
                    compute_2d_workgroups(total_wg,17,wg_x,wg_y); return {wg_x,wg_y};
-               }''', (Path(__file__).with_name('host-cases.cpp')).read_text()]
+               }''', (cases_path or Path(__file__).with_name('host-cases.cpp')).read_text()]
     output.mkdir(parents=True, exist_ok=True)
     shaders = upstream / 'ggml/src/ggml-webgpu/wgsl-shaders'
     subprocess.run([sys.executable, str(shaders / 'embed_wgsl.py'), '--input_dir', str(shaders),
@@ -74,7 +80,7 @@ def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path) -> 
     executable = output / 'host'
     compiled = subprocess.run(['c++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror',
                                '-I' + str(upstream / 'ggml/include'), '-I' + str(upstream / 'ggml/src/ggml-webgpu'),
-                               '-I' + str(output), str(code), '-o', str(executable)], capture_output=True, text=True)
+                               '-I' + str(prepared), '-I' + str(output), str(code), '-o', str(executable)], capture_output=True, text=True)
     if compiled.returncode:
         raise RuntimeError(compiled.stderr)
     return executable

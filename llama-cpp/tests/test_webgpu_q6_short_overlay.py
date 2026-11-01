@@ -30,6 +30,9 @@ class Q6ShortOverlay(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='q6-short-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        tail = patch.object(source.quant_half_pairs, 'prepare', return_value={})
+        tail.start()
+        cls.addClassCleanup(tail.stop)
         cls.before, cls.final = {}, {}
         for profile in (False, True):
             with patch.object(q6, 'prepare'):
@@ -45,7 +48,7 @@ class Q6ShortOverlay(unittest.TestCase):
             for name in q6.INPUTS[profile]:
                 self.assertEqual(sha(old / name), q6.INPUTS[profile][name])
                 self.assertEqual(sha(final / name), q6.OUTPUTS[profile][name])
-                self.assertEqual(q6.OUTPUTS[profile][name], source.FINAL_OUTPUTS[profile][name])
+                self.assertEqual(q6.OUTPUTS[profile][name], source.quant_half_pairs.INPUTS[profile][name])
             with tempfile.TemporaryDirectory() as tmp:
                 work = Path(tmp); target = work / q6.BASE; target.mkdir(parents=True)
                 shutil.copy2(final / 'ggml-webgpu-shader-lib.hpp', target / 'ggml-webgpu-shader-lib.hpp')

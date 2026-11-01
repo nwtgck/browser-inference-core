@@ -30,6 +30,9 @@ class F32MatvecEpilogue(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix='f32-matvec-epilogue-')
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
+        tail = patch.object(source.quant_half_pairs, 'prepare', return_value={})
+        tail.start()
+        cls.addClassCleanup(tail.stop)
         cls.before, cls.after = {}, {}
         prefix = patch.object(source.q6_short, 'prepare')
         prefix.start()
