@@ -31,6 +31,9 @@ class F32MatvecEpilogue(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.directory = Path(cls.temp.name)
         cls.before, cls.after = {}, {}
+        prefix = patch.object(source.q6_short, 'prepare')
+        prefix.start()
+        cls.addClassCleanup(prefix.stop)
         for profile in (False, True):
             # Inspect this stage's immediate historical prefix without changing its pins.
             with patch.object(post, 'prepare', return_value={}):

@@ -599,3 +599,13 @@ not establish target-device speed.
 - **Integration:** append a checked normal/profile source stage after the existing final stages, with a dedicated embedded main and canonical accumulator/declarations. Keep historical pins, vendor sources, other dtype shaders and the generated public ABI unchanged. Profile diagnostics keep the default-none path.
 - **Validation and limits:** source-bound graph/gallocr, physical range, factory/cache, params and full translation-unit tests cover admission and fallback. Private software comparisons informed this candidate; they do not establish model, target-device or cold-start improvement. Actual runtime correctness and performance remain separate gates.
 - **Removal:** remove the stage and its provenance/build/tests when upstream supplies the equivalent fusion or the owner drops the specialization. Re-review graph fusion, allocator reuse, binding rebasing, parameter staging, factory keys and canonical shader arithmetic after upstream updates.
+
+
+## Ordinary short-K Q6_K workgroups
+
+- **Patch:** `ggml-webgpu-q6-short-workgroup.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow selector extension. Reuse the existing short-workgroup helper for ordinary Q6_K x F32 single-column matvecs with complete 256-element blocks through K4096. Indexed Q6_K keeps its existing workgroup. The shared helper retains all shape, subgroup-range, device-limit, MMVQ and overlap guards.
+- **Integration:** `scripts/prepare_webgpu_q6_short.py` appends a checked header-only stage after the F32 matvec epilogue. Keep historical patch identities and prefix pins; provenance records the final normal/profile headers separately. Existing cache keys already include workgroup width.
+- **Numerics and limits:** preserve the upstream decoder, dot order, reduction source, four-row tiling, parameters and dispatch grid. A different workgroup may change subgroup reduction topology, so source identity alone does not guarantee bit equality. Authored finite standalone checks use an independent upstream-dequantized Float64 oracle, full-output and input/guard validation, and separate same-workgroup controls. Software Vulkan measurements do not establish Windows, macOS, model-quality or end-to-end speed gains.
+- **No-patch alternative:** retain the upstream 256-lane workgroup, including its idle lanes for these short inputs, or wait for upstream tuning.
+- **Removal:** remove this stage and its metadata/tests when upstream supplies the required generic short-input selection, or when the owner withdraws it. Reassess at every upstream pin change.

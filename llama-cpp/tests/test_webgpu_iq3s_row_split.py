@@ -41,6 +41,9 @@ class Iq3sRowSplit(unittest.TestCase):
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
         cls.before, cls.final, cls.stage_inputs = {}, {}, {}
+        prefix = patch.object(source.q6_short, 'prepare')
+        prefix.start()
+        cls.addClassCleanup(prefix.stop)
         for profile in (False, True):
             captured = cls.directory / f'inputs-{profile}'
             def capture(work, source, patch_root, env, headers, *, gpu_profile):

@@ -1,0 +1,30 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -171,7 +171,7 @@
+     return 128;
+ }
+ 
+-// Q4_K uses 16 lanes per 256 weights. With complete K <= 4096 blocks,
++// Q4_K and ordinary Q6_K use 16 lanes per 256 weights. For complete K <= 4096,
+ // every useful lane visits exactly one block at either workgroup size.
+ // Keep the upstream decoder, reduction, output tiling and dispatch grid.
+ inline uint32_t ggml_webgpu_q4_short_workgroup(const ggml_webgpu_shader_lib_context & context,
+@@ -183,7 +183,8 @@
+     const uint32_t sg_min = context.min_subgroup_size;
+     const uint32_t sg_max = context.max_subgroup_size;
+     if (!a || !x || !dst || !context.supports_subgroups || use_mmvq || src_overlap ||
+-        a->type != GGML_TYPE_Q4_K || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        (a->type != GGML_TYPE_Q4_K && (indexed || a->type != GGML_TYPE_Q6_K)) ||
++        x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
+         a->ne[0] <= 0 || a->ne[0] > 4096 || a->ne[0] % 256 != 0 ||
+         a->ne[1] <= 0 || x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] ||
+         sg_min < 4 || sg_max > 128 || sg_min > sg_max ||
+@@ -2354,7 +2355,7 @@
+         key.src_overlap = src_overlap;
+         key.epilogue = context.matvec_epilogue;
+         key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+-        key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
++        key.workgroup_size = key.subgroup_size ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
+ 
