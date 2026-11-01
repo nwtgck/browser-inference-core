@@ -27,6 +27,7 @@ import prepare_webgpu_quant_half_pairs as quant_half_pairs
 import prepare_webgpu_direct_mapped_read as direct_mapped_read
 import prepare_webgpu_quant_wide_m as quant_wide_m
 import prepare_webgpu_q4_subgroup as q4_subgroup
+import prepare_webgpu_aligned_word_load as aligned_word_load
 import prepare_sampler_single_sync as sampler_single_sync
 import prepare_webgpu_scale_unary as scale_unary
 import prepare_webgpu_q8_subgroup as q8_subgroup
@@ -322,6 +323,11 @@ def collect(root: Path, manifest: dict) -> dict:
                            for variant in copy_enabled}
         epilogue_copies.update({variant: {name: diagnostic_files[name] for name in epilogue_names}
                                for variant in diagnostic_enabled})
+        word_names = [*aligned_word_load.EMBEDDING_OUTPUTS, 'ggml-webgpu-shader-lib.hpp', aligned_word_load.HEADER_NAME]
+        word_copies = {variant: {name: file_identity(prepared.parent / name) for name in word_names}
+                       for variant in copy_enabled}
+        word_copies.update({variant: {name: diagnostic_files[name] for name in word_names}
+                            for variant in diagnostic_enabled})
 
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
@@ -694,6 +700,35 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'Require actual binding-relative input offsets and active strides to align to floating-point vec4 loads; check matrix output offsets too. Otherwise use the existing scalar shader. Preserve aligned keys and WGSL, uniform/binding ABI, dispatch geometry, quantized paths and gather semantics. Historical prefix pins remain distinct from final compiled identities.',
         }, {
+            'id': 'webgpu-aligned-word-load',
+            'kind': 'build-tree-wgsl-helper-overlay',
+            'upstreamSource': {'path': aligned_word_load.SOURCE_PATH,
+                               **file_identity(vendor / aligned_word_load.SOURCE_PATH)},
+            'patch': {'path': f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}',
+                      **file_identity(root / PATCH_DIRECTORY / aligned_word_load.PATCH_NAME)},
+            'reviewedTemplateInputSha256': aligned_word_load.TEMPLATE_INPUT_SHA256,
+            'preparedTemplate': {'logicalUpstreamPath': aligned_word_load.SOURCE_PATH,
+                                 'bytes': aligned_word_load.TEMPLATE_OUTPUT_BYTES,
+                                 'sha256': aligned_word_load.TEMPLATE_OUTPUT_SHA256},
+            'canonicalEmbeddingInput': aligned_word_load.CANONICAL_INPUT_IDENTITY,
+            'canonicalEmbeddingName': aligned_word_load.HEADER_NAME,
+            'compiledCopies': (next(iter(word_copies.values())) if word_copies else None),
+            'compiledCopiesByProfileVariant': word_copies,
+            'reviewedInputs': aligned_word_load.CONTRACT_INPUTS,
+            'consumerInputsByComposition': {('profile' if profile else 'normal'): values
+                                            for profile, values in aligned_word_load.CONSUMER_INPUT_IDENTITIES.items()},
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in aligned_word_load.INPUTS.items()},
+            'finalOutputs': {('profile' if profile else 'normal'): values
+                             for profile, values in aligned_word_load.OUTPUTS.items()},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_aligned_word_load.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(copy_enabled)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_aligned_word_load.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'For load_u32_at_src and load_u32_at_src0, return the containing word before reading the following word when byte_offset is four-byte aligned. Keep nonaligned two-word joining and all other shader, selector, binding, grid and ABI bytes. Explicitly include a renamed canonical embedding and update only the inventoried dedicated helper bodies after historical stages. This does not validate incomplete four-byte spans, partial-field overreads, all dtype bounds, or target-device behavior.',
+        }, {
             'id': 'webgpu-q4-fixed-subgroup-matvec',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}',
@@ -702,6 +737,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'compiledCopiesByProfileVariant': wide_copies,
             'reviewedInputs': q4_subgroup.CONTRACT_INPUTS,
             'reviewedEmbeddingSha256': q4_subgroup.EMBEDDED_HEADER_SHA256,
+            'finalOutputsScope': 'Outputs of this intermediate stage; compiledCopies identify the final composition.',
             'prefixInputs': {('profile' if profile else 'normal'): values
                              for profile, values in q4_subgroup.INPUTS.items()},
             'finalOutputs': {('profile' if profile else 'normal'): values
@@ -1052,7 +1088,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

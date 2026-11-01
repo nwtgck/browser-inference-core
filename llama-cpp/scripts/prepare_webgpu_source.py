@@ -40,6 +40,7 @@ import prepare_webgpu_quant_half_pairs as quant_half_pairs
 import prepare_webgpu_direct_mapped_read as direct_mapped_read
 import prepare_webgpu_quant_wide_m as quant_wide_m
 import prepare_webgpu_q4_subgroup as q4_subgroup
+import prepare_webgpu_aligned_word_load as aligned_word_load
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
@@ -56,7 +57,7 @@ SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d94751198193
 SSM_HEADER_OUTPUT_SHA256 = 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2'
 # OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
 # Later stages keep their own contracts; these identities describe compiled files.
-FINAL_OUTPUTS = {profile: {name: q4_subgroup.OUTPUTS[profile][name]
+FINAL_OUTPUTS = {profile: {name: aligned_word_load.OUTPUTS[profile][name]
                            for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp')}
                  for profile in (False, True)}
 
@@ -181,12 +182,13 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         direct_mapped_read.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         quant_wide_m.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         q4_subgroup.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        hc_headers.update(aligned_word_load.prepare(work, source, patch_root, env,
+                                                   gpu_profile=gpu_profile, headers=hc_headers))
         if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)
-        # Do not emit an embedded WGSL header here: the sibling shader library
-        # must continue to use upstream's generated shaders. Narrow matrix-only
-        # specializations use dedicated embedded headers, never shadowing it.
+        # The final shared-word stage explicitly includes its renamed canonical
+        # embedding. Never shadow upstream's generated canonical basename.
         for name, generated in hc_headers.items():
             destination = output / name
             if not destination.exists() or destination.read_bytes() != generated.read_bytes():

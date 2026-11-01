@@ -1,0 +1,30 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
+@@ -30,9 +30,11 @@
+     let word_idx = byte_offset / 4u;
+     let shift = (byte_offset & 0x3u) * 8u;
+     let lo = src[word_idx];
++    if (shift == 0u) {
++        return lo;
++    }
+     let hi = src[word_idx + 1u];
+-    let shifted = (lo >> shift) | (hi << (32u - shift));
+-    return select(shifted, lo, shift == 0u);
++    return (lo >> shift) | (hi << (32u - shift));
+ }
+ 
+ fn load_f16_at_src(byte_offset: u32) -> f16 {
+@@ -66,9 +68,11 @@
+     let word_idx = byte_offset / 4u;
+     let shift = (byte_offset & 0x3u) * 8u;
+     let lo = SRC0[word_idx];
++    if (shift == 0u) {
++        return lo;
++    }
+     let hi = SRC0[word_idx + 1u];
+-    let shifted = (lo >> shift) | (hi << (32u - shift));
+-    return select(shifted, lo, shift == 0u);
++    return (lo >> shift) | (hi << (32u - shift));
+ }
+ 
+ fn load_f16_at_src0(byte_offset: u32) -> f16 {

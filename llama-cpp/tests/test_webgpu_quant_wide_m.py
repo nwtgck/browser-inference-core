@@ -15,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import prepare_webgpu_quant_wide_m as wide
 from test_webgpu_bind_group_cache import definition
 import test_webgpu_quant_half_pairs as pair_tests
@@ -29,6 +30,9 @@ sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 class QuantWideM(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='quant-wide-m-')
         cls.addClassCleanup(cls.temp.cleanup)

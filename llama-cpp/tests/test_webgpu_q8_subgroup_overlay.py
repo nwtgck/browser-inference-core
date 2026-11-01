@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_q8_subgroup as q8
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
@@ -25,6 +26,9 @@ spec.loader.exec_module(factory)
 class Q8SubgroupOverlay(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         if not (cls.upstream / q8.BASE / 'ggml-webgpu-shader-lib.hpp').is_file():
             raise unittest.SkipTest('Set LCB_TEST_LLAMA_SOURCE')

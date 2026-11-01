@@ -19,6 +19,7 @@ import generate_webgpu_q8_diagnostic as extension
 
 from matmul_vec4_test_support import explicit_layout_argument
 from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256
 
 
 def normalized_base_generation(outputs, upstream):
@@ -62,7 +63,7 @@ def function(text, marker):
 
 def factory_code(prepared, *, provider=False):
     text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
-    prefix = (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text()
+    prefix = canonical_prefix((ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(), prepared)
     prefix = prefix.replace('#include <vector>', '#include <vector>\n#include <array>\n#include <optional>\n#include <set>\n#include <functional>\n#include "ggml-webgpu-q8-diagnostic-sha256.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"')
     prefix = prefix.replace('    std::string wgsl;', '    std::string wgsl;\n    std::array<uint8_t,32> diagnostic_sha256{};\n    unsigned pipeline=0;')
     prefix = prefix.replace('static unsigned created = 0;', 'static unsigned created = 0;\nstatic std::function<void()> prepare_hook;')
@@ -243,7 +244,7 @@ class Q8Diagnostic(unittest.TestCase):
         for name, expected in source.FINAL_OUTPUTS[True].items():
             self.assertEqual(hashlib.sha256((self.profile / name).read_bytes()).hexdigest(), expected)
         for prepared in (self.normal, self.profile):
-            self.assertEqual(hashlib.sha256((prepared / source.iq3s_row_split.HEADER_NAME).read_bytes()).hexdigest(), source.iq3s_row_split.HEADER_SHA256)
+            self.assertEqual(hashlib.sha256((prepared / source.iq3s_row_split.HEADER_NAME).read_bytes()).hexdigest(), embedding_sha256(prepared, source.iq3s_row_split.HEADER_NAME, source.iq3s_row_split.HEADER_SHA256))
         original = (self.upstream / diagnostic.SHA_SOURCE).read_text()
         fragment = original[original.index(diagnostic.SHA_BEGIN):original.index(diagnostic.SHA_END)]
         self.assertIn(fragment, (self.profile / 'ggml-webgpu-q8-diagnostic-sha256.hpp').read_text())

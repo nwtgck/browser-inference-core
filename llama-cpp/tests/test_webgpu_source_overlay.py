@@ -35,7 +35,7 @@ class WebgpuSourceOverlay(unittest.TestCase):
             self.assertEqual(copy.digest(result.parent / 'ggml-backend.cpp'), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'ggml-backend-host-snapshot.h'), source.host_input_snapshot.HEADER_OUTPUT_SHA256)
             for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_row_split, source.ssm_conv_silu, source.moe_group_skip):
-                self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), module.HEADER_SHA256)
+                self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), source.aligned_word_load.EMBEDDING_OUTPUTS.get(module.HEADER_NAME, module.HEADER_SHA256))
             header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
             loader_stamp = (result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns
@@ -143,6 +143,12 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertIn('GGML_WEBGPU_BATCH_PARAM_UPLOADS', compiled[0]['command'])
                 self.assertEqual(copy.digest(build / 'webgpu-source-overlay/ggml-webgpu-shader-lib.hpp'), source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'])
                 self.assertFalse((build / 'webgpu-source-overlay/ggml-wgsl-shaders.hpp').exists())
+                canonical = build / 'webgpu-source-overlay' / source.aligned_word_load.HEADER_NAME
+                self.assertEqual(copy.digest(canonical), source.aligned_word_load.HEADER_SHA256)
+                before_sources = (build / 'before.txt').read_text().split(';')
+                after_sources = (build / 'after.txt').read_text().split(';')
+                self.assertEqual(after_sources, [name for name in before_sources if name != 'ggml-webgpu.cpp'] +
+                                 [str(build / 'webgpu-source-overlay/ggml-webgpu.cpp'), str(canonical)])
                 loaders = [entry for entry in entries if Path(entry['file']).name == 'llama-model-loader.cpp']
                 self.assertEqual(len(loaders), 1)
                 self.assertEqual(Path(loaders[0]['file']), build / 'webgpu-source-overlay/llama-model-loader.cpp')

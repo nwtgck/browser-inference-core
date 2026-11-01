@@ -16,12 +16,13 @@ from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
 from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256
 
 
 def prepare(upstream: Path, output: Path) -> None:
     source.prepare(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) != source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'] or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
+    if copy.digest(header) != source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'] or copy.digest(output / q8.HEADER_NAME) != embedding_sha256(output, q8.HEADER_NAME, q8.HEADER_SHA256):
         raise ValueError('Unexpected integrated Q8 subgroup output')
 
 
@@ -32,7 +33,7 @@ def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
     dispatch_end = backend.index('    } else {', dispatch_start)
     dispatch = backend[dispatch_start + len('    if (use_mat_vec) {\n'):dispatch_end]
     chunks = [
-        (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(),
+        canonical_prefix((ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(), prepared),
         '#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include <array>\n#include <limits>\n#define CEIL_DIV(a,b) (((a)+(b)-1)/(b))',
         function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
         function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',

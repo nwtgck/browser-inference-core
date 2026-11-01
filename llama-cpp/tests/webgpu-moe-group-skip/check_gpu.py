@@ -47,7 +47,7 @@ def main() -> int:
         'upstreamCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=upstream, text=True).strip(),
         'patchSha256': group.PATCH_SHA256,
         'preparedHeaderSha256': hashlib.sha256((prepared / 'ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(),
-        'matrixEmbeddingSha256': group.HEADER_SHA256,
+        'matrixEmbeddingSha256': hashlib.sha256((prepared / group.HEADER_NAME).read_bytes()).hexdigest(),
         'gatherPatchSha256': gather.PATCH_SHA256,
         'gatherEmbeddingSha256': gather.HEADER_SHA256,
         'gatherReviewedInputs': gather.CONTRACT_INPUTS,

@@ -13,6 +13,7 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition as function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from webgpu_embedding_test_support import canonical_prefix
 
 
 def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path, *, cases_path: Path | None = None,
@@ -20,7 +21,7 @@ def build_host(upstream: Path, baseline: Path, prepared: Path, output: Path, *, 
     old = explicit_layout_argument((baseline / 'ggml-webgpu-shader-lib.hpp').read_text())
     new = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     backend = (prepared / 'ggml-webgpu.cpp').read_text()
-    prefix = (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text()
+    prefix = canonical_prefix((ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(), prepared)
     prefix = prefix[:prefix.index('extern "C" const ggml_type_traits * ggml_get_type_traits(')]
     traits = (upstream / 'ggml/src/ggml.c').read_text()
     table = traits[traits.index('static const struct ggml_type_traits type_traits['):]

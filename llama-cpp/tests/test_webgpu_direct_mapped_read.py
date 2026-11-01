@@ -13,6 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import prepare_webgpu_direct_mapped_read as direct
 from test_webgpu_ordered_readback import function
 
@@ -22,6 +23,9 @@ sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 class DirectMappedRead(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='direct-mapped-read-')
         cls.addClassCleanup(cls.temp.cleanup)

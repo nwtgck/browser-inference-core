@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_iq3s_field_loads as fields
 import prepare_webgpu_iq3s_row_split as rows
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import prepare_webgpu_tensor_copy as copy
 
 spec = importlib.util.spec_from_file_location('iq3_rows_factory', ROOT / 'tests/webgpu-iq3s-subgroup/emit_factory.py')
@@ -36,6 +37,9 @@ def block(text, marker):
 class Iq3sRowSplit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temporary = tempfile.TemporaryDirectory(prefix='iq3s-row-split-')
         cls.addClassCleanup(cls.temporary.cleanup)

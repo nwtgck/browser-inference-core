@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-f32-matvec-epilogue'
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import prepare_webgpu_f32_matvec_epilogue as post
 from test_webgpu_bind_group_cache import definition
 spec = importlib.util.spec_from_file_location('f32_post_emitter', HERE / 'emit_host.py')
@@ -26,6 +27,9 @@ sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 class F32MatvecEpilogue(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='f32-matvec-epilogue-')
         cls.addClassCleanup(cls.temp.cleanup)

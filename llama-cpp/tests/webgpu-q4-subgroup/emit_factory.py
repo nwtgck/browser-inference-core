@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'tests'))
 from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix
 
 
 def definition(text, marker):
@@ -22,7 +23,7 @@ def definition(text, marker):
 
 def build(upstream, before, after, output, *, profile):
     output.mkdir(parents=True)
-    prefix = (ROOT / 'tests/webgpu-q4-short/host-prefix.cpp').read_text()
+    prefix = canonical_prefix((ROOT / 'tests/webgpu-q4-short/host-prefix.cpp').read_text(), after)
     prefix = prefix[:prefix.index('extern "C" const ggml_type_traits * ggml_get_type_traits(')]
     if profile:
         prefix = '#include <array>\n#include "ggml-webgpu-q8-diagnostic-sha256.hpp"\n' + prefix.replace(

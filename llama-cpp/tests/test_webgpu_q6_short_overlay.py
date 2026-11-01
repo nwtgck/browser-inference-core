@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_q6_short as q6
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 
 spec = importlib.util.spec_from_file_location('q6_short_factory', ROOT / 'tests/webgpu-q6-short/emit_factory.py')
 factory = importlib.util.module_from_spec(spec)
@@ -26,6 +27,9 @@ sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 class Q6ShortOverlay(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='q6-short-')
         cls.addClassCleanup(cls.temp.cleanup)

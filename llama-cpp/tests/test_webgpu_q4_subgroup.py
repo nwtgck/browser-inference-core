@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_q4_subgroup as q4
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import test_webgpu_quant_half_pairs as pair_tests
 from matvec_subgroup_test_support import q4_subgroup_helpers
 from test_webgpu_bind_group_cache import definition
@@ -30,6 +31,9 @@ sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 class Q4Subgroup(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temp = tempfile.TemporaryDirectory(prefix='q4-subgroup-')
         cls.addClassCleanup(cls.temp.cleanup)
@@ -112,7 +116,7 @@ class Q4Subgroup(unittest.TestCase):
 
     def test_final_recipe_idempotence_and_historical_extraction_seam(self):
         self.assertEqual(q4.INPUTS, source.quant_wide_m.OUTPUTS)
-        self.assertEqual(q4.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual(q4.OUTPUTS, source.aligned_word_load.INPUTS)
         self.assertEqual(q4.CONTRACT_INPUTS, source.q8_subgroup.CONTRACT_INPUTS)
         self.assertEqual(q4.EMBEDDED_HEADER_SHA256, source.q8_subgroup.HEADER_SHA256)
         self.assertEqual(sha(ROOT / source.PATCH_DIRECTORY / q4.PATCH_NAME), q4.PATCH_SHA256)
