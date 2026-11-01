@@ -493,6 +493,25 @@ int main(int argc, char ** argv) {
                     "Q6 requested changed arithmetic");
             write(output / "q6_K-requested.wgsl", requested.pipeline.Get()->code);
             const auto requested_key = candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(c, false, false);
+            for (unsigned sg : {16u, 32u}) {
+                f.a.ne[0] = f.x.ne[0] = 2048;
+                auto fixed_context = f.context<candidate::ggml_webgpu_shader_lib_context>(sg, sg, true);
+                const auto previous = patched.get_mul_mat_vec_pipeline(fixed_context, false, false);
+                for (int64_t k : {1536, 1792}) {
+                    f.a.ne[0] = f.x.ne[0] = k;
+                    const auto smaller = patched.get_mul_mat_vec_pipeline(fixed_context, false, false);
+                    require(smaller.pipeline.Get() == previous.pipeline.Get() &&
+                                decisions(smaller).logical_subgroup_size == sg &&
+                                production_dispatch(smaller, &f.dst, 65535) ==
+                                    std::array<uint32_t, 2>{2048u / (4u * (128u / sg)), 1},
+                            "Q6 lower-K fixed source/cache/grid reuse");
+                    require(
+                        patched.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == requested.pipeline.Get() &&
+                            candidate::ggml_webgpu_shader_lib::make_mul_mat_vec_key(c, false, false) == requested_key,
+                        "Q6 lower-K requested source/cache reuse");
+                }
+            }
+            f.a.ne[0] = f.x.ne[0] = 2048;
             candidate::ggml_webgpu_shader_lib rejected(device, instance, state);
             inject = WGPUErrorType_Validation;
             const auto first = rejected.get_mul_mat_vec_pipeline(c, false, false);
@@ -514,17 +533,21 @@ int main(int argc, char ** argv) {
             const auto old_long = original.get_mul_mat_vec_pipeline(
                 f.context<baseline::ggml_webgpu_shader_lib_context>(8, 32, false), false, false);
             require(longer.pipeline.Get()->code == old_long.pipeline.Get()->code, "Q6 long fallback bytes");
+            f.a.ne[0] = f.x.ne[0] = 1536;
+            require(rejected.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == first.pipeline.Get() &&
+                        pushes == saved_push && waits == saved_wait,
+                    "Q6 lower-K failed request must reuse canonical short pipeline without retry");
             f.a.ne[0] = f.x.ne[0] = 2048;
             require(rejected.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == first.pipeline.Get(),
                     "Q6 fallback restore");
             require(production_dispatch(requested, &f.dst, 65535) == std::array<uint32_t, 2>{64, 1} &&
                         production_dispatch(first, &f.dst, 65535) == std::array<uint32_t, 2>{512, 1},
                     "Q6 actual host grid");
-            for (int64_t k : {1792, 2047, 2048, 2049, 2560, 10751, 10752, 11008})
+            for (int64_t k : {1280, 1535, 1536, 1537, 1792, 2047, 2048, 2049, 2560, 10751, 10752, 11008})
                 for (int64_t m : {2047, 2048, 2049, 65536}) {
                     f.a.ne[0] = f.x.ne[0] = k;
                     f.a.ne[1] = f.dst.ne[0] = m;
-                    const bool yes = (k >= 2048 && k <= 10752 && k % 256 == 0 && m >= 2048);
+                    const bool yes = (k >= 1536 && k <= 10752 && k % 256 == 0 && m >= 2048);
                     require(candidate::ggml_webgpu_q6_matvec_subgroup_eligible(c, false, false) == yes,
                             "Q6 K/M boundary");
                     require(candidate::ggml_webgpu_q6_requested_subgroup_size(c, false, false) == (yes ? 16u : 0u),

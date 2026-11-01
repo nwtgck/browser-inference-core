@@ -14,7 +14,7 @@
 +    if (!a || !x || !dst || context.src2 || use_mmvq || src_overlap || context.max_wg_size < 128 ||
 +        context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
 +        a->type != GGML_TYPE_Q6_K || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
-+        a->ne[0] < 2048 || a->ne[0] > 10752 || a->ne[0] % 256 != 0 ||
++        a->ne[0] < 1536 || a->ne[0] > 10752 || a->ne[0] % 256 != 0 ||
 +        a->ne[1] < 2048 || a->ne[1] > UINT32_MAX - 127u ||
 +        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
 +        return false;
