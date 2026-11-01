@@ -756,7 +756,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_webgpu_aligned_word_load.py', 'scripts/prepare_webgpu_source.py',
                                  'cmake/WebgpuSourceOverlay.cmake']},
-            'behavior': 'For load_u32_at_src and load_u32_at_src0, return the containing word before reading the following word when byte_offset is four-byte aligned. Keep nonaligned two-word joining and all other shader, selector, binding, grid and ABI bytes. Explicitly include a renamed canonical embedding and update only the inventoried dedicated helper bodies after historical stages. This does not validate incomplete four-byte spans, partial-field overreads, all dtype bounds, or target-device behavior.',
+            'behavior': 'For load_u32_at_src and load_u32_at_src0, select the containing word as the hi source for four-byte-aligned offsets, otherwise select the following word. Join with a masked left shift so aligned loads return lo|lo without a control-flow branch. Keep complete nonaligned joining and all other shader, selector, binding, grid and ABI bytes. Explicitly include a renamed canonical embedding and update only the inventoried dedicated helper bodies after historical stages. This does not validate incomplete four-byte spans, partial-field overreads, all dtype bounds, or target-device behavior.',
         }, {
             'id': 'webgpu-subgroup-size-control-matvec',
             'kind': 'build-tree-source-overlay',

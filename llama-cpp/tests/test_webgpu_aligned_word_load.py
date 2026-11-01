@@ -124,11 +124,16 @@ class AlignedWordLoad(unittest.TestCase):
                     previous, old_reads = execute_helper(old, data, offset, True)
                     self.assertEqual(value, expected)
                     self.assertEqual(previous, value)
-                    self.assertEqual(reads, [offset // 4] if offset % 4 == 0 else [offset // 4, offset // 4 + 1])
+                    self.assertEqual(reads, [offset // 4, offset // 4 + (offset % 4 != 0)])
                     if offset % 4:
                         self.assertEqual(old_reads, reads)
+            for residue in range(4):
+                for bit in range(64):
+                    data = (1 << bit).to_bytes(8, 'little')
+                    expected = int.from_bytes(data[residue:residue + 4], 'little')
+                    self.assertEqual(execute_helper(new, data, residue)[0], expected)
             for value in (0, 1, 0x01234567, 0x80000000, 0x89abcdef, 0xffffffff):
-                self.assertEqual(execute_helper(new, struct.pack('<I', value), 0), (value, [0]))
+                self.assertEqual(execute_helper(new, struct.pack('<I', value), 0), (value, [0, 0]))
                 self.assertEqual(execute_helper(old, struct.pack('<I', value), 0, True)[1], [0, 1])
             with self.assertRaises(IndexError):
                 execute_helper(new, b'\x12\x34\x56\x78', 2)  # Incomplete span stays out of scope.
@@ -137,7 +142,7 @@ class AlignedWordLoad(unittest.TestCase):
                 qword = end - 18 + 2 + 3 * 4
                 self.assertEqual((qword, qword % 4), (end - 4, 0))
                 # Translate the final word to a four-byte local view, without allocating the payload.
-                self.assertEqual(execute_helper(new, b'\x12\x34\x56\x78', 0)[1], [0])
+                self.assertEqual(execute_helper(new, b'\x12\x34\x56\x78', 0)[1], [0, 0])
 
     def test_fail_closed_and_atomic_idempotent_publication(self):
         for field in ('TEMPLATE_INPUT_SHA256', 'PATCH_SHA256', 'HEADER_SHA256'):

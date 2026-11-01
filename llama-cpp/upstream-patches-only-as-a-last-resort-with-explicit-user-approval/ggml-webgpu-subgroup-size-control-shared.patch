@@ -369,49 +369,45 @@
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-q8-subgroup-shaders.hpp
 @@ -2,6 +2,9 @@
  #include <string>
- 
+
  static const char wgsl_q8_subgroup_matvec_part0[] = R"wgsl(enable subgroups;
 +#ifdef REQUESTED_SUBGROUP_SIZE
 +enable subgroup_size_control;
 +#endif
  enable f16;
- 
+
  // WG_SIZE is the checked fixed subgroup width for the unchanged accumulator.
-@@ -805,9 +808,9 @@
+@@ -799,9 +802,9 @@
      0x0b01090f, 0x0b010b05, 0x0b010d0d, 0x0b010f09, 0x0b030103, 0x0b030107, 0x0b03010b, 0x0b030305,
      0x0b030503, 0x0b030705, 0x0b030f05, 0x0b050101, 0x0b050303, 0x0b050507, 0x0b050701, 0x0b05070d,
      0x0b050b07, 0x0b070105, 0x0b07010f, 0x0b070301, 0x0b07050f, 0x0b070909, 0x0b070b03, 0x0b070d0b,
 -    0x0b070f07, 0x0b090103, 0x0b090109, 0x0b090501, 0x0b090705, 0x0b09090)wgsl";
 -
 -static const char wgsl_q8_subgroup_matvec_part1[] = R"wgsl(d, 0x0b0b0305, 0x0b0b050d,
-+    0x0b070f0)wgsl";
++    0x0b070f07, 0x0b090103, 0x0b090109, 0x0)wgsl";
 +
-+static const char wgsl_q8_subgroup_matvec_part1[] = R"wgsl(7, 0x0b090103, 0x0b090109, 0x0b090501, 0x0b090705, 0x0b09090d, 0x0b0b0305, 0x0b0b050d,
++static const char wgsl_q8_subgroup_matvec_part1[] = R"wgsl(b090501, 0x0b090705, 0x0b09090d, 0x0b0b0305, 0x0b0b050d,
      0x0b0b0b03, 0x0b0b0b07, 0x0b0d0905, 0x0b0f0105, 0x0b0f0109, 0x0b0f0505, 0x0d010303, 0x0d010307,
      0x0d01030b, 0x0d010703, 0x0d010707, 0x0d010d01, 0x0d030101, 0x0d030501, 0x0d03050f, 0x0d030d09,
      0x0d050305, 0x0d050709, 0x0d050905, 0x0d050b0b, 0x0d050d05, 0x0d050f01, 0x0d070101, 0x0d070309,
-@@ -1979,14 +1982,14 @@
-         }
-     }
- 
--    return acc;
-+   )wgsl";
-+
-+static const char wgsl_q8_subgroup_matvec_part2[] = R"wgsl( return acc;
+@@ -1977,10 +1980,10 @@
  }
  #endif
- 
- #ifdef MUL_ACC_IQ1_M
+
+-#ifdef MUL_ACC_IQ1_M
 -#define BLOCK_SI)wgsl";
 -
 -static const char wgsl_q8_subgroup_matvec_part2[] = R"wgsl(ZE 256
++#ifdef )wgsl";
++
++static const char wgsl_q8_subgroup_matvec_part2[] = R"wgsl(MUL_ACC_IQ1_M
 +#define BLOCK_SIZE 256
  #define BLOCK_SIZE_BYTES 56
  #define THREADS_PER_BLOCK 16
  fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
-@@ -2625,6 +2628,9 @@
+@@ -2619,6 +2622,9 @@
  @group(0) @binding(3) var<uniform> params: MulMatParams;
- 
+
  @compute @workgroup_size(Q8_SUBGROUP_WORKGROUP_SIZE)
 +#ifdef REQUESTED_SUBGROUP_SIZE
 +@subgroup_size(REQUESTED_SUBGROUP_SIZE)
@@ -419,12 +415,12 @@
  fn main(
      @builtin(workgroup_id) wg_id: vec3<u32>,
      @builtin(num_workgroups) num_wg: vec3<u32>,
-@@ -2688,7 +2694,7 @@
+@@ -2682,7 +2688,7 @@
  static const std::string& wgsl_q8_subgroup_matvec_str() {
      static const std::string s = []{
          std::string tmp;
 -        tmp.reserve(152515);
-+        tmp.reserve(152653);
++        tmp.reserve(152623);
          tmp.append(wgsl_q8_subgroup_matvec_part0);
          tmp.append(wgsl_q8_subgroup_matvec_part1);
          tmp.append(wgsl_q8_subgroup_matvec_part2);

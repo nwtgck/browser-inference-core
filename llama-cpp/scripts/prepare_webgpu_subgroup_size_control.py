@@ -13,7 +13,7 @@ PATCHES = {False: ('ggml-webgpu-subgroup-size-control.patch',
  True: ('ggml-webgpu-subgroup-size-control-profile.patch',
         '79c6cad72257e05ae1c00bbdfaebbb678eee9057a932dc3b2db76b640b2fa85b')}
 SHARED_PATCH = ('ggml-webgpu-subgroup-size-control-shared.patch',
- 'b0fd7285e83f2e8cb3e8c85fbb9b69f3ee43228649f8ec3f3c6b4b1a0b8d0c92')
+ 'bceb8c48605ffd4a9da75536fffffb1595d9314e0330edecf5aaabaf09663bdb')
 INPUTS = {False: {'ggml-webgpu.cpp': '57d577c17ef1b87c088005defa103906ec124ce93b2429ace86e88028b638cbf',
          'ggml-webgpu-shader-lib.hpp': '87e20119da7064dda8210c6130b1e43a4aaf83c644ae5e58a691009f709405a8'},
  True: {'ggml-webgpu.cpp': 'e3bce48df987e216db5094bfb9eaf56f53fdaabb75f06cb9ad2cabbda24e000d',
@@ -22,10 +22,10 @@ OUTPUTS = {False: {'ggml-webgpu.cpp': '708de1eb3c267527d65cdb097a06d2ae71437f2ce
          'ggml-webgpu-shader-lib.hpp': '39abf727d68b02a6d7cb13ab2825cfb3766703f0b2ac069610c9a72c32925037'},
  True: {'ggml-webgpu.cpp': '0d7f1dcb2ad06124a83fa6c33f2b388418268ba0d26d6d12262ccb299b860445',
         'ggml-webgpu-shader-lib.hpp': '2887340563216cc371d6fd3433c668e476db05e4ebb4da91e22dc15c44a09f56'}}
-SHARED_INPUTS = {'ggml-webgpu-q8-subgroup-shaders.hpp': '817879bfab6c93bfe1b05032119a789e40553720e4eec29462a0398a5f582430',
+SHARED_INPUTS = {'ggml-webgpu-q8-subgroup-shaders.hpp': 'b1b86048fbb6b9a58834a4b5ee5552ac2704641cbf4db3c996c1a85674ea302b',
  'ggml-webgpu-batch-readback.hpp': '62a542146fb2e57cb1b9539d4fd0cde2a3f73c00ca7893600fbc6401430bf24a'}
 GENERATED_OUTPUTS = {'ggml-webgpu-optional-pipeline.hpp': 'f2645457e2dc70b592a34b5d35262c26a60d3f8b0c7d2e3570eb1ee53a201f5e',
- 'ggml-webgpu-q8-subgroup-shaders.hpp': '4fccc290ebfb23139128cebb31fa7d0ce206b8f16fcc7f17cfcbf3d25992b0ed',
+ 'ggml-webgpu-q8-subgroup-shaders.hpp': '3db91d6d9aeef1df96cb9d55e8109001eb585c172b94d80d7556baaeae395a40',
  'ggml-webgpu-batch-readback.hpp': 'a2e07803f52f53f935f7ac33337e59abbe970d991babbe026b0ea00fd3cc0e1a'}
 HELPER_NAME = 'ggml-webgpu-optional-pipeline.hpp'
 EMBEDDED_HEADER_NAME = q8_subgroup.HEADER_NAME

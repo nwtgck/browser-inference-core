@@ -8,13 +8,13 @@ import prepare_webgpu_tensor_copy as tensor_copy
 
 BASE = Path('ggml/src/ggml-webgpu')
 PATCH_NAME = 'ggml-webgpu-aligned-word-load.patch'
-PATCH_SHA256 = '1e97e837d7fdcf6ad7e7b9b147ab144d30f968cb5e6e3c9e6084652486dab7bb'
+PATCH_SHA256 = '33283e68a5bdffeb616597a5c19d973c03528bea8ac85d36f8e6259c705686bb'
 SOURCE_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl'
 TEMPLATE_INPUT_SHA256 = '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555'
-TEMPLATE_OUTPUT_SHA256 = '6c2e26e487b50440a04930c1a3558772ecbf9129bf0d0eb181fa1c7cf917d9f3'
+TEMPLATE_OUTPUT_SHA256 = 'cf3d4d411353796bfb1b100ccb9822839f070c705e0f4430ebd78a9c7db6d85e'
 HEADER_NAME = 'ggml-webgpu-aligned-word-load-shaders.hpp'
 CANONICAL_INPUT_SHA256 = 'fc870a2d2b5a14a7614859b00f3d2b97de2780ae37b183951b543c85ad77c8e7'
-HEADER_SHA256 = '0da31db607eac6d963ae768b5896db1bfb2f283df494aafce4a31ed6c18b899f'
+HEADER_SHA256 = '6074e74ee8dde4dcb0d6738d4a18568aaa015bdd788889df643d0a6fe000cb93'
 CONTRACT_INPUTS = {'ggml/src/ggml-webgpu/wgsl-shaders/add_id.wgsl': 'c7947fbbd1b63985a34d006d40d55a57eb62e66b5f1bbc32764e537bffb2c13c',
  'ggml/src/ggml-webgpu/wgsl-shaders/argmax.wgsl': '6d23941f4d12015bd7c0b08217109673b39b431bb0d29de25aa4121eb33eb472',
  'ggml/src/ggml-webgpu/wgsl-shaders/argsort.wgsl': 'c95cf77d2f466a7c013c933cc07395a6869f1c73ff24476d3097c19336d98e2a',
@@ -79,13 +79,13 @@ EMBEDDING_INPUTS = {'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': 'aa35891dcf4f
  'ggml-webgpu-mul-mat-id-group-shaders.hpp': '8b3dabdd9356b5a5e020d84c354faa68a70b8634c81793060d53fb58bd55bc10',
  'ggml-webgpu-q8-subgroup-shaders.hpp': '7d151de06e9a3cb5366b29e043052b3b949c4c1948e7b3c2e80e99a944b95cab',
  'ggml-webgpu-quant-half-pairs-shaders.hpp': '693ede233b36b81d0360bfc212a5ecb6c31cf10aae06afa6788682fbf317e19a'}
-EMBEDDING_OUTPUTS = {'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': '7b0febf49785bf121c977f00f917c1af9cb4e89b1827fdf5869f9db2f18c5071',
- 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': '8c458484391408acc9dbf61425b8e00c4ae08f51071b3b416e9d9b9be0c7c9cc',
- 'ggml-webgpu-mul-mat-id-group-shaders.hpp': 'b58a458fc743a55b13031c98d929daf5736147e3033a047b6afc5568f623f2b1',
- 'ggml-webgpu-q8-subgroup-shaders.hpp': '817879bfab6c93bfe1b05032119a789e40553720e4eec29462a0398a5f582430',
- 'ggml-webgpu-quant-half-pairs-shaders.hpp': '1b572c4da5a8c4c77f3c6de6cbc52f3d61e8705c9f93ec5913ed73cfc66e42c8'}
+EMBEDDING_OUTPUTS = {'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': '352b801deed74bce60bf88b5455a2663eaaa0f71fd6a778bbfbf434627b6ad31',
+ 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': '9df296bb9d18cb3377ff161143a1d34678342c2c5de6ea962f6e19f185636de3',
+ 'ggml-webgpu-mul-mat-id-group-shaders.hpp': '16b9db3c2287111de4f073eb0f62d8377ff00368b3b9a3897b6fca3209405877',
+ 'ggml-webgpu-q8-subgroup-shaders.hpp': 'b1b86048fbb6b9a58834a4b5ee5552ac2704641cbf4db3c996c1a85674ea302b',
+ 'ggml-webgpu-quant-half-pairs-shaders.hpp': '8bd7b49bb141aded20c0c5ea1277376825e16a46d71f88f2372e954589b6f676'}
 HELPERS = ('load_u32_at_src', 'load_u32_at_src0')
-TEMPLATE_OUTPUT_BYTES = 74336
+TEMPLATE_OUTPUT_BYTES = 74306
 CANONICAL_INPUT_IDENTITY = {'bytes': 1471238, 'sha256': 'fc870a2d2b5a14a7614859b00f3d2b97de2780ae37b183951b543c85ad77c8e7'}
 CONSUMER_INPUT_IDENTITIES = {False: {'ggml-webgpu-aligned-word-load-shaders.hpp': {'bytes': 1471238,
                                                        'sha256': 'fc870a2d2b5a14a7614859b00f3d2b97de2780ae37b183951b543c85ad77c8e7'},
