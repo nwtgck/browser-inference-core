@@ -88,6 +88,12 @@ class Q6Subgroup(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('c++'), 'native compiler required')
     def test_complete_normal_profile_factories_cache_source_and_grid(self):
+        configured = os.environ.get('LCB_TEST_DAWN_PACKAGE')
+        dawn = Path(configured) if configured is not None else ROOT.parent / '.tools/emdawnwebgpu_pkg'
+        # Host-only CI does not provision Dawn. Explicit paths, or an existing
+        # default package, still require the recorder's pinned-header validation.
+        if configured is None and not dawn.exists() and not dawn.is_symlink():
+            self.skipTest('Set LCB_TEST_DAWN_PACKAGE for the pinned Dawn package')
         # Exercise the current full header with the existing pinned SDK/C API
         # recorder, including Q6 rejection memo context changes and Q4/Q8 controls.
         result = subprocess.run([sys.executable, str(ROOT / 'tests/webgpu-subgroup-size-control/run_contracts.py'),
