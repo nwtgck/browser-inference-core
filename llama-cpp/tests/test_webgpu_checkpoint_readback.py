@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_checkpoint_readback as checkpoint
 import prepare_webgpu_source as source
 sys.path.insert(0, str(ROOT / 'tests'))
-from webgpu_prefix_context import without_checkpoint_readback
+from webgpu_prefix_context import without_checkpoint_readback, without_subgroup_size_control
 
 
 def digest(path):
@@ -33,7 +33,8 @@ class CheckpointReadback(unittest.TestCase):
         for profile in (False, True):
             with without_checkpoint_readback(source):
                 cls.before[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
+            with without_subgroup_size_control(source):
+                cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
 
     def seed(self, work, profile):
         target = work / checkpoint.BASE
@@ -108,7 +109,7 @@ class CheckpointReadback(unittest.TestCase):
 
     def test_final_identities_dependencies_and_idempotence(self):
         self.assertEqual(checkpoint.INPUTS, source.aligned_word_load.OUTPUTS)
-        self.assertEqual(checkpoint.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual(checkpoint.OUTPUTS, source.subgroup_size_control.INPUTS)
         self.assertEqual(digest(ROOT / source.PATCH_DIRECTORY / checkpoint.PATCH_NAME), checkpoint.PATCH_SHA256)
         self.assertEqual(checkpoint.REVIEWED_DAWN_HEADERS, source.tensor_copy.DAWN_HEADERS)
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
@@ -117,7 +118,8 @@ class CheckpointReadback(unittest.TestCase):
         self.assertIn(checkpoint.PATCH_NAME, cmake)
         for profile in (False, True):
             final = self.final[profile]; stamps = {p.name: p.stat().st_mtime_ns for p in final.iterdir()}
-            source.prepare(self.upstream, final, gpu_profile=profile)
+            with without_subgroup_size_control(source):
+                source.prepare(self.upstream, final, gpu_profile=profile)
             self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in final.iterdir()})
 
     @unittest.skipUnless(shutil.which('cmake'), 'CMake required; no compiler is used')

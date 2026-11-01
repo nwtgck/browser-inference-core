@@ -35,7 +35,9 @@ class WebgpuSourceOverlay(unittest.TestCase):
             self.assertEqual(copy.digest(result.parent / 'ggml-backend.cpp'), source.host_input_snapshot.BACKEND_OUTPUT_SHA256)
             self.assertEqual(copy.digest(result.parent / 'ggml-backend-host-snapshot.h'), source.host_input_snapshot.HEADER_OUTPUT_SHA256)
             for module in (source.scale_unary, source.q8_subgroup, source.rms_scale, source.iq3s_row_split, source.ssm_conv_silu, source.moe_group_skip):
-                self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), source.aligned_word_load.EMBEDDING_OUTPUTS.get(module.HEADER_NAME, module.HEADER_SHA256))
+                expected = source.subgroup_size_control.GENERATED_OUTPUTS.get(module.HEADER_NAME,
+                    source.aligned_word_load.EMBEDDING_OUTPUTS.get(module.HEADER_NAME, module.HEADER_SHA256))
+                self.assertEqual(copy.digest(result.parent / module.HEADER_NAME), expected)
             header_stamp = (result.parent / 'ggml-webgpu-shader-lib.hpp').stat().st_mtime_ns
             stamp = result.stat().st_mtime_ns
             loader_stamp = (result.parent / 'llama-model-loader.cpp').stat().st_mtime_ns

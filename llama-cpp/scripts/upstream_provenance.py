@@ -26,6 +26,7 @@ import prepare_webgpu_q6_short as q6_short
 import prepare_webgpu_quant_half_pairs as quant_half_pairs
 import prepare_webgpu_direct_mapped_read as direct_mapped_read
 import prepare_webgpu_checkpoint_readback as checkpoint_readback
+import prepare_webgpu_subgroup_size_control as subgroup_size_control
 import prepare_webgpu_quant_wide_m as quant_wide_m
 import prepare_webgpu_q4_subgroup as q4_subgroup
 import prepare_webgpu_aligned_word_load as aligned_word_load
@@ -332,6 +333,11 @@ def collect(root: Path, manifest: dict) -> dict:
                        for variant in copy_enabled}
         word_copies.update({variant: {name: diagnostic_files[name] for name in word_names}
                             for variant in diagnostic_enabled})
+        optional_names = [*subgroup_size_control.OUTPUTS[False], *subgroup_size_control.GENERATED_OUTPUTS]
+        optional_copies = {variant: {name: file_identity(prepared.parent / name) for name in optional_names}
+                           for variant in copy_enabled}
+        optional_copies.update({variant: {name: diagnostic_files[name] for name in optional_names}
+                                for variant in diagnostic_enabled})
 
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
@@ -752,6 +758,31 @@ def collect(root: Path, manifest: dict) -> dict:
                                  'cmake/WebgpuSourceOverlay.cmake']},
             'behavior': 'For load_u32_at_src and load_u32_at_src0, return the containing word before reading the following word when byte_offset is four-byte aligned. Keep nonaligned two-word joining and all other shader, selector, binding, grid and ABI bytes. Explicitly include a renamed canonical embedding and update only the inventoried dedicated helper bodies after historical stages. This does not validate incomplete four-byte spans, partial-field overreads, all dtype bounds, or target-device behavior.',
         }, {
+            'id': 'webgpu-subgroup-size-control-matvec',
+            'kind': 'build-tree-source-overlay',
+            'patch': {'path': f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[False][0]}',
+                      **file_identity(root / PATCH_DIRECTORY / subgroup_size_control.PATCHES[False][0])},
+            'profilePatch': {'path': f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[True][0]}',
+                             **file_identity(root / PATCH_DIRECTORY / subgroup_size_control.PATCHES[True][0])},
+            'sharedPatch': {'path': f'{PATCH_DIRECTORY}/{subgroup_size_control.SHARED_PATCH[0]}',
+                            **file_identity(root / PATCH_DIRECTORY / subgroup_size_control.SHARED_PATCH[0])},
+            'compiledCopies': (next(iter(optional_copies.values())) if optional_copies else None),
+            'compiledCopiesByProfileVariant': optional_copies,
+            'reviewedInputs': subgroup_size_control.CONTRACT_INPUTS,
+            'reviewedDawn': {'release': tensor_copy.DAWN_RELEASE, 'headers': subgroup_size_control.REVIEWED_DAWN_HEADERS},
+            'prefixInputs': {('profile' if profile else 'normal'): values
+                             for profile, values in subgroup_size_control.INPUTS.items()},
+            'sharedPrefixInputs': subgroup_size_control.SHARED_INPUTS,
+            'finalOutputs': {('profile' if profile else 'normal'): {**values, **subgroup_size_control.GENERATED_OUTPUTS}
+                             for profile, values in subgroup_size_control.OUTPUTS.items()},
+            'application': {'preparationScript': 'scripts/prepare_webgpu_subgroup_size_control.py',
+                            'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                            'option': 'LCB_WEBGPU', 'enabledProfileVariants': sorted(optional_copies)},
+            'supportingFiles': {path: file_identity(root / path) for path in
+                                ['scripts/prepare_webgpu_subgroup_size_control.py', 'scripts/prepare_webgpu_source.py',
+                                 'cmake/WebgpuSourceOverlay.cmake']},
+            'behavior': 'Keep fixed-width AUTO unchanged. For guarded ordinary Q8_0 or Q4_0/Q4_K matvecs on variable advertised ranges containing16, request the real subgroup-size-control device feature and S16. Preserve shader arithmetic, input types and advertised capabilities. Cache requested keys separately; healthy typed pipeline errors return whole canonical pipelines, while loss/unknown/timeout terminate the generation before cache or encode reuse. Scope callbacks retain pure CPU data across SDK waits; checkpoint reads check the same generation before GPU APIs and after waits. Profile AUTO requestedS16 reports codegen revision2 without changing diagnostic ABI. No variable-adapter or target-model speed is established.',
+        }, {
             'id': 'webgpu-q4-fixed-subgroup-matvec',
             'kind': 'build-tree-source-overlay',
             'patch': {'path': f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}',
@@ -1111,7 +1142,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.SHARED_PATCH[0]}', f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',

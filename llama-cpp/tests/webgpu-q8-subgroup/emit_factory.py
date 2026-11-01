@@ -16,7 +16,7 @@ from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
 from matvec_subgroup_test_support import q4_subgroup_helpers
-from webgpu_embedding_test_support import canonical_prefix, embedding_sha256
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256, legacy_fixed_sources
 
 
 def prepare(upstream: Path, output: Path) -> None:
@@ -27,8 +27,9 @@ def prepare(upstream: Path, output: Path) -> None:
 
 
 def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
-    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
-    backend = (prepared / 'ggml-webgpu.cpp').read_text()
+    legacy = legacy_fixed_sources(prepared)
+    text = explicit_layout_argument(legacy['ggml-webgpu-shader-lib.hpp'])
+    backend = legacy['ggml-webgpu.cpp']
     dispatch_start = backend.index('    if (use_mat_vec) {', backend.index('    // Calculate workgroup dimensions', backend.index('static webgpu_encoded_op ggml_webgpu_mul_mat(')))
     dispatch_end = backend.index('    } else {', dispatch_start)
     dispatch = backend[dispatch_start + len('    if (use_mat_vec) {\n'):dispatch_end]

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'tests'))
 from matvec_subgroup_test_support import q4_subgroup_helpers
-from webgpu_embedding_test_support import canonical_prefix
+from webgpu_embedding_test_support import canonical_prefix, legacy_fixed_sources
 
 
 def definition(text, marker):
@@ -47,7 +47,7 @@ extern "C" const ggml_type_traits * ggml_get_type_traits(ggml_type type) {
 '''
     chunks = [prefix]
     for namespace, directory in [('baseline', before), ('candidate', after)]:
-        text = (directory / 'ggml-webgpu-shader-lib.hpp').read_text()
+        text = legacy_fixed_sources(directory)['ggml-webgpu-shader-lib.hpp']
         chunks += ['namespace ' + namespace + ' {',
                    definition(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
                    definition(text, 'struct ggml_webgpu_shader_lib_context {') + ';']
@@ -67,7 +67,7 @@ public:
         marker = '    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(' if profile else '    webgpu_pipeline get_mul_mat_vec_pipeline('
         start = text.index(marker)
         chunks += [text[start:text.index('    webgpu_pipeline get_mul_mat_fast_pipeline(', start)], '};', '}']
-    backend = (after / 'ggml-webgpu.cpp').read_text()
+    backend = legacy_fixed_sources(after)['ggml-webgpu.cpp']
     caller = ('static webgpu_encoded_op ggml_webgpu_mul_mat_impl(' if profile else
               'static webgpu_encoded_op ggml_webgpu_mul_mat(')
     start = backend.index('    if (use_mat_vec) {', backend.index('    // Calculate workgroup dimensions', backend.index(caller)))

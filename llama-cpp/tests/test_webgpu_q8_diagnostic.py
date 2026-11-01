@@ -1,4 +1,7 @@
-"""Profile-only Q8 diagnostic: actual native factories, ABI and submission source."""
+"""Legacy diagnostic recording after the checked optional-stage inverse.
+
+Complete current factories and SDK behavior have separate source-bound contracts.
+"""
 import hashlib
 import json
 import os
@@ -19,7 +22,7 @@ import generate_webgpu_q8_diagnostic as extension
 
 from matmul_vec4_test_support import explicit_layout_argument
 from matvec_subgroup_test_support import q4_subgroup_helpers
-from webgpu_embedding_test_support import canonical_prefix, embedding_sha256
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256, legacy_fixed_sources
 
 
 def normalized_base_generation(outputs, upstream):
@@ -62,7 +65,7 @@ def function(text, marker):
 
 
 def factory_code(prepared, *, provider=False):
-    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
+    text = explicit_layout_argument(legacy_fixed_sources(prepared)['ggml-webgpu-shader-lib.hpp'])
     prefix = canonical_prefix((ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(), prepared)
     prefix = prefix.replace('#include <vector>', '#include <vector>\n#include <array>\n#include <optional>\n#include <set>\n#include <functional>\n#include "ggml-webgpu-q8-diagnostic-sha256.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"')
     prefix = prefix.replace('    std::string wgsl;', '    std::string wgsl;\n    std::array<uint8_t,32> diagnostic_sha256{};\n    unsigned pipeline=0;')
@@ -113,7 +116,7 @@ class Q8Diagnostic(unittest.TestCase):
         return exe
 
     def test_actual_factory_cache_auto_and_processed_wgsl_digest(self):
-        normal = explicit_layout_argument((self.normal / 'ggml-webgpu-shader-lib.hpp').read_text())
+        normal = explicit_layout_argument(legacy_fixed_sources(self.normal)['ggml-webgpu-shader-lib.hpp'])
         reference = ('class ReferenceLibrary { int device=0; pre_wgsl::Preprocessor preprocessor; '
                      'std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key,webgpu_pipeline,ggml_webgpu_mul_mat_vec_pipeline_key_hash> mul_mat_vec_pipelines; public: '
                      + function(normal, '    webgpu_pipeline get_mul_mat_vec_pipeline(') + '};')
@@ -126,8 +129,9 @@ class Q8Diagnostic(unittest.TestCase):
             self.assertEqual(hashlib.sha256(shader.read_bytes()).hexdigest(), shader.with_suffix('.sha256').read_text())
 
     def test_actual_provider_params_submission_and_suspension_lifetime(self):
-        backend = (self.profile / 'ggml-webgpu.cpp').read_text()
-        library = explicit_layout_argument((self.profile / 'ggml-webgpu-shader-lib.hpp').read_text())
+        legacy = legacy_fixed_sources(self.profile)
+        backend = legacy['ggml-webgpu.cpp']
+        library = explicit_layout_argument(legacy['ggml-webgpu-shader-lib.hpp'])
         code = factory_code(self.profile, provider=True).replace(
             'extern "C" const ggml_type_traits * ggml_get_type_traits(',
             'extern "C" __attribute__((weak)) const ggml_type_traits * ggml_get_type_traits(')
@@ -177,7 +181,7 @@ class Q8Diagnostic(unittest.TestCase):
                             '-DGGML_NATIVE=OFF', '-DGGML_OPENMP=OFF', '-DGGML_CCACHE=OFF', '-DLLAMA_BUILD_TESTS=OFF',
                             '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_BUILD_TOOLS=OFF', '-DLLAMA_BUILD_COMMON=OFF'],
                            check=True, capture_output=True)
-            subprocess.run(['cmake', '--build', str(build), '--target', 'ggml-base', '-j', '2'], check=True, capture_output=True)
+            subprocess.run(['cmake', '--build', str(build), '--target', 'ggml-base', '-j', '1'], check=True, capture_output=True)
             library_path = str(build / 'ggml/src/libggml-base.a')
         executable = self.compile(code, 'provider', ['-DGGML_WEBGPU_GPU_PROFILE=1', '-DGGML_WEBGPU_BATCH_PARAM_UPLOADS',
                                   '-Wno-unused-function', library_path, '-pthread', '-ldl', '-lm'])

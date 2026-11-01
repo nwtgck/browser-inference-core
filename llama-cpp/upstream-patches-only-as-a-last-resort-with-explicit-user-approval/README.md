@@ -12,6 +12,33 @@ specified below. The current reference pin is
 `8642541b255bfb5dc39cd351a178be09013a55d6`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
+## Portable explicit subgroup matvec selection
+
+- **Patches:** `ggml-webgpu-subgroup-size-control.patch`,
+  `ggml-webgpu-subgroup-size-control-profile.patch`, and
+  `ggml-webgpu-subgroup-size-control-shared.patch`.
+- **Accepted scope:** the owner's performance work authorizes requesting real
+  subgroup-size-control and S16 for existing guarded ordinary Q8_0/Q4_0/Q4_K
+  matvecs when a variable advertised range contains16. Existing fixed AUTO,
+  shape/layout guards, accumulators, indexed paths, bindings and ABI remain.
+- **Integration:** append a checked final stage after shared byte loaders and
+  checkpoint reads. Keep actual advertised capabilities. Typed healthy optional
+  pipeline errors return canonical pipeline/decisions; other errors stop the
+  device generation. Requested keys, callback lifetimes and device ownership are
+  explicit, and warm hits add no optional scope/wait. Checkpoint GPU APIs and
+  post-wait copies observe the same terminal state; empty reads remain no-ops.
+- **Coupling:** pinned WebGPU SDK future/callback/error-scope APIs, private
+  shader-library keys, device initialization and host launch decisions. Profile
+  AUTO requested S16 uses codegen revision2 in the unchanged diagnostic v1 ABI.
+- **No-patch alternative:** preserve existing fixed-width or cooperative kernels
+  and omit explicit subgroup requests. No public force flag or artifact variant
+  is added.
+- **Validation and limits:** source/CPU contracts, SDK callback controls and small
+  software-GPU numeric checks do not establish real variable-adapter, browser,
+  target-model or target-device performance. Partial subgroups remain legal.
+- **Removal:** upstream supplies portable explicit-width selection and safe
+  optional-pipeline fallback, or the owner withdraws this performance requirement.
+
 See [the current upstream review](../docs/llama-v0.8.0-review.md) for reviewed
 contracts and validation boundaries. The [338fce review](../docs/llama-338fce-review.md)
 and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
