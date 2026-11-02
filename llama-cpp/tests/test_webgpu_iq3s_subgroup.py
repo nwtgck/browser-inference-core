@@ -18,6 +18,7 @@ HERE = ROOT / 'tests/webgpu-iq3s-subgroup'
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_iq3s_subgroup as iq3
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_tensor_copy as copy
 
@@ -29,6 +30,9 @@ spec.loader.exec_module(factory)
 class Iq3sSubgroup(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         if not (cls.upstream / iq3.BASE / 'ggml-webgpu-shader-lib.hpp').is_file():
             raise unittest.SkipTest('Set LCB_TEST_LLAMA_SOURCE')

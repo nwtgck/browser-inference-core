@@ -10,6 +10,7 @@ import prepare_webgpu_moe_group_skip as group
 import prepare_webgpu_moe_gather_logical32 as gather
 
 from matmul_vec4_test_support import explicit_layout_argument
+from webgpu_embedding_test_support import canonical_prefix
 
 
 def function(text: str, marker: str) -> str:
@@ -34,7 +35,7 @@ def build(upstream: Path, prepared: Path, output: Path, *, profile: bool = False
     fields = [function(final, marker) + ';' for marker in
               ('struct ggml_webgpu_shader_lib_context {', 'struct ggml_webgpu_generic_shader_decisions {',
                'struct ggml_webgpu_mul_mat_shader_decisions {')]
-    prefix = (HERE / 'factory-prefix.cpp').read_text()
+    prefix = canonical_prefix((HERE / 'factory-prefix.cpp').read_text(), prepared)
     if (prepared / gather.HEADER_NAME).is_file():
         prefix += '#include "' + gather.HEADER_NAME + '"\n#define TEST_LOGICAL32_GATHER\n'
     chunks = [prefix, constants,

@@ -1,0 +1,66 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -319,6 +319,53 @@
+     const uint64_t y = (total + maximum - 1) / maximum;
+     const uint64_t width = (total + y - 1) / y;
+     return y <= maximum && width <= maximum ? sg : 0;
++}
++
++// Tensor-shape admission is independent of the subgroup-width policy.
++// A later explicit-width caller must establish the same capability contract.
++inline bool ggml_webgpu_q4_matvec_subgroup_eligible(const ggml_webgpu_shader_lib_context & context,
++                                                  bool use_mmvq, bool src_overlap) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    if (!a || !x || !dst || context.src2 || use_mmvq || src_overlap || context.max_wg_size < 128 ||
++        context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
++        (a->type != GGML_TYPE_Q4_0 && a->type != GGML_TYPE_Q4_K) ||
++        x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] < 1024 || a->ne[0] > 17408 ||
++        a->ne[0] % (a->type == GGML_TYPE_Q4_0 ? 32 : 256) != 0 ||
++        a->ne[1] < (a->ne[0] <= 4096 ? 4096 : 2560) || a->ne[1] > UINT32_MAX - 127u ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
++        return false;
++    }
++    // Keep the established short-input broadcast contract unchanged.
++    if (a->ne[0] > 4096) {
++        for (int axis = 2; axis < 4; ++axis) {
++            if (a->ne[axis] != 1 || x->ne[axis] != 1 || dst->ne[axis] != 1) { return false; }
++        }
++    }
++    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
++    for (int axis = 2; axis < 4; ++axis) {
++        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
++            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
++            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
++            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
++            return false;
++        }
++        output_elements *= static_cast<uint64_t>(x->ne[axis]);
++    }
++    return true;
++}
++
++// Reuse four-row independent subgroups only for a fixed advertised width.
++// The unchanged accumulator requires at least sixteen lanes for Q4_K blocks.
++inline uint32_t ggml_webgpu_q4_matvec_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                  bool use_mmvq, bool src_overlap) {
++    const uint32_t sg = context.min_subgroup_size;
++    if (!context.supports_subgroups || sg != context.max_subgroup_size || (sg != 16 && sg != 32)) {
++        return 0;
++    }
++    return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
+ }
+ 
+ struct webgpu_pipeline {
+@@ -2359,6 +2406,9 @@
+         key.src_overlap = src_overlap;
+         key.epilogue = context.matvec_epilogue;
+         key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
++        if (!key.subgroup_size) {
++            key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
++        }
+         key.workgroup_size = key.subgroup_size ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);

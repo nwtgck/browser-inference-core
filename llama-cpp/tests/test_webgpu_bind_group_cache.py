@@ -18,6 +18,7 @@ import prepare_webgpu_source as source
 from webgpu_prefix_context import without_final_matvec_stages
 import prepare_webgpu_bind_group_cache as cache
 import prepare_webgpu_tensor_copy as tensor_copy
+from webgpu_embedding_test_support import legacy_fixed_sources
 
 
 def definition(text, declaration, offset=0):
@@ -155,7 +156,10 @@ class BindGroupCache(unittest.TestCase):
     def test_actual_cache_build_graph_free_and_queue_ownership(self):
         with tempfile.TemporaryDirectory(prefix='bind-group-cache-native-') as temporary:
             root = Path(temporary)
-            actual = self.prepare(root / 'overlay').read_text()
+            # This SDK-free cache fixture records fixed-path graph/queue helpers.
+            # The complete current SDK and device-health paths have separate tests.
+            prepared = self.prepare(root / 'overlay').parent
+            actual = legacy_fixed_sources(prepared)['ggml-webgpu.cpp']
             code = (HERE / 'mock-harness.cpp').read_text()
             functions = {
                 'ACTUAL_CREATE_BUFFER': 'ggml_webgpu_create_buffer',

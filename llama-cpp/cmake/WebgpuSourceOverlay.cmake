@@ -29,6 +29,31 @@ list(APPEND LCB_SOURCE_SOURCES "${LCB_SOURCE_OVERLAY}/ggml-webgpu.cpp")
 set_property(TARGET ggml-webgpu PROPERTY SOURCES "${LCB_SOURCE_SOURCES}")
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 
+# The provider is Emdawn-only. Native builds retain the original host writer.
+if(EMSCRIPTEN)
+    get_target_property(LCB_CHECKPOINT_SOURCES llama SOURCES)
+    set(LCB_CHECKPOINT_MATCHES 0)
+    set(LCB_CHECKPOINT_REPLACED "")
+    foreach(LCB_CHECKPOINT_SOURCE IN LISTS LCB_CHECKPOINT_SOURCES)
+        if(LCB_CHECKPOINT_SOURCE STREQUAL "llama-context.cpp")
+            math(EXPR LCB_CHECKPOINT_MATCHES "${LCB_CHECKPOINT_MATCHES} + 1")
+            list(APPEND LCB_CHECKPOINT_REPLACED "${LCB_SOURCE_OVERLAY}/llama-context.cpp")
+        else()
+            list(APPEND LCB_CHECKPOINT_REPLACED "${LCB_CHECKPOINT_SOURCE}")
+        endif()
+    endforeach()
+    if(NOT LCB_CHECKPOINT_MATCHES EQUAL 1)
+        message(FATAL_ERROR "Upstream context source layout changed; review checkpoint readback overlay")
+    endif()
+    set_property(TARGET llama PROPERTY SOURCES "${LCB_CHECKPOINT_REPLACED}")
+    set_source_files_properties("${LCB_SOURCE_OVERLAY}/llama-context.cpp"
+        TARGET_DIRECTORY llama PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+    # Moving this TU must not expose it to a target-wide model include override.
+    # Clang's quoted-only search preserves the original source-directory order.
+    set_property(SOURCE "${LCB_SOURCE_OVERLAY}/llama-context.cpp" TARGET_DIRECTORY llama
+        APPEND PROPERTY COMPILE_OPTIONS "-iquote" "${LCB_LLAMA_SOURCE}/src")
+endif()
+
 # The optional snapshot contract also changes the scheduler in ggml-base.
 # Preserve every other source and its order, and fail on upstream layout drift.
 get_target_property(LCB_BACKEND_SOURCES ggml-base SOURCES)
@@ -49,12 +74,19 @@ set_property(TARGET ggml-base PROPERTY SOURCES "${LCB_BACKEND_REPLACED}")
 set_source_files_properties("${LCB_SOURCE_OVERLAY}/ggml-backend.cpp"
     TARGET_DIRECTORY ggml-base PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 target_include_directories(ggml-base PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src" "${LCB_SOURCE_OVERLAY}")
-# The prepared shader-library header is a sibling of the source above; its
-# embedded WGSL include resolves through upstream's generated header. v0.7.0
-# already implements direct selected-slot MoE dispatch; no direct-slot shader replacement remains.
+# The prepared shader-library explicitly includes the checked shared-word
+# canonical embedding under a distinct name. Do not include upstream's old
+# canonical symbols in that translation unit as well. v0.7.0 already implements
+# direct selected-slot MoE dispatch; no direct-slot replacement remains.
 # The accepted matrix-only group skip uses its own embedded header.
 # Keep sibling headers available after relocating the translation unit.
 target_include_directories(ggml-webgpu PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
+set(LCB_WORD_LOAD_CANONICAL
+    "${LCB_SOURCE_OVERLAY}/ggml-webgpu-aligned-word-load-shaders.hpp")
+if(NOT EXISTS "${LCB_WORD_LOAD_CANONICAL}")
+    message(FATAL_ERROR "Checked shared word-loader canonical embedding is missing")
+endif()
+target_sources(ggml-webgpu PRIVATE "${LCB_WORD_LOAD_CANONICAL}")
 # Replace the model loader and sampler on the existing llama target. Independent
 # model and mtmd overlays retain their original target ownership.
 get_target_property(LCB_LOADER_SOURCES llama SOURCES)
@@ -338,3 +370,69 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_f32_matvec_epilogue.py"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-f32-matvec-epilogue.patch"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-f32-matvec-epilogue-profile.patch")
+
+# Reuse existing short workgroups for ordinary Q6_K without changing shaders.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q6_short.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q6-short-workgroup.patch")
+
+# Paired-half shared storage uses an isolated embedding and the canonical ABI.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_quant_half_pairs.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-quant-half-pairs.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/quant_inner_loops.tmpl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py")
+
+# Emdawn can copy an aligned mapped range into the final caller destination.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_direct_mapped_read.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-direct-mapped-read.patch")
+
+# Keep the paired embedding and select only the guarded wider-M geometry.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_quant_wide_m.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-quant-wide-m.patch"
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q6_subgroup.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q6-subgroup-matvec.patch"
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_q4_subgroup.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-subgroup-matvec.patch")
+
+# Rebuild the explicitly renamed canonical embedding and checked dedicated copies.
+file(GLOB LCB_WORD_LOAD_SHADER_INPUTS CONFIGURE_DEPENDS
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/*.wgsl"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/*.tmpl")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_aligned_word_load.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-aligned-word-load.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py"
+    ${LCB_WORD_LOAD_SHADER_INPUTS})
+
+# The host checkpoint writer and provider share one versioned registry contract.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_checkpoint_readback.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-checkpoint-batch-readback.patch"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-context.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-io.h"
+    "${LCB_LLAMA_SOURCE}/src/CMakeLists.txt"
+    "${LCB_LLAMA_SOURCE}/include/llama.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
+    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-backend.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-reg.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-backend-impl.h"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-alloc.c"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/ggml-webgpu.cpp"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/CMakeLists.txt"
+)
+
+# Optional explicit subgroup pipelines preserve canonical keys and device lifetime.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_subgroup_size_control.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control-profile.patch"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control-shared.patch")

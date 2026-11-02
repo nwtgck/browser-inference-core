@@ -12,6 +12,33 @@ specified below. The current reference pin is
 `8642541b255bfb5dc39cd351a178be09013a55d6`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
+## Portable explicit subgroup matvec selection
+
+- **Patches:** `ggml-webgpu-subgroup-size-control.patch`,
+  `ggml-webgpu-subgroup-size-control-profile.patch`, and
+  `ggml-webgpu-subgroup-size-control-shared.patch`.
+- **Accepted scope:** the owner's performance work authorizes requesting real
+  subgroup-size-control and S16 for existing guarded ordinary Q8_0/Q4_0/Q4_K
+  matvecs when a variable advertised range contains16. Existing fixed AUTO,
+  shape/layout guards, accumulators, indexed paths, bindings and ABI remain.
+- **Integration:** append a checked final stage after shared byte loaders and
+  checkpoint reads. Keep actual advertised capabilities. Typed healthy optional
+  pipeline errors return canonical pipeline/decisions; other errors stop the
+  device generation. Requested keys, callback lifetimes and device ownership are
+  explicit, and warm hits add no optional scope/wait. Checkpoint GPU APIs and
+  post-wait copies observe the same terminal state; empty reads remain no-ops.
+- **Coupling:** pinned WebGPU SDK future/callback/error-scope APIs, private
+  shader-library keys, device initialization and host launch decisions. Profile
+  AUTO requested S16 uses codegen revision2 in the unchanged diagnostic v1 ABI.
+- **No-patch alternative:** preserve existing fixed-width or cooperative kernels
+  and omit explicit subgroup requests. No public force flag or artifact variant
+  is added.
+- **Validation and limits:** source/CPU contracts, SDK callback controls and small
+  software-GPU numeric checks do not establish real variable-adapter, browser,
+  target-model or target-device performance. Partial subgroups remain legal.
+- **Removal:** upstream supplies portable explicit-width selection and safe
+  optional-pipeline fallback, or the owner withdraws this performance requirement.
+
 See [the current upstream review](../docs/llama-v0.8.0-review.md) for reviewed
 contracts and validation boundaries. The [338fce review](../docs/llama-338fce-review.md)
 and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
@@ -599,3 +626,111 @@ not establish target-device speed.
 - **Integration:** append a checked normal/profile source stage after the existing final stages, with a dedicated embedded main and canonical accumulator/declarations. Keep historical pins, vendor sources, other dtype shaders and the generated public ABI unchanged. Profile diagnostics keep the default-none path.
 - **Validation and limits:** source-bound graph/gallocr, physical range, factory/cache, params and full translation-unit tests cover admission and fallback. Private software comparisons informed this candidate; they do not establish model, target-device or cold-start improvement. Actual runtime correctness and performance remain separate gates.
 - **Removal:** remove the stage and its provenance/build/tests when upstream supplies the equivalent fusion or the owner drops the specialization. Re-review graph fusion, allocator reuse, binding rebasing, parameter staging, factory keys and canonical shader arithmetic after upstream updates.
+
+
+## Ordinary short-K Q6_K workgroups
+
+- **Patch:** `ggml-webgpu-q6-short-workgroup.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow selector extension. Reuse the existing short-workgroup helper for ordinary Q6_K x F32 single-column matvecs with complete 256-element blocks through K4096. Indexed Q6_K keeps its existing workgroup. The shared helper retains all shape, subgroup-range, device-limit, MMVQ and overlap guards.
+- **Integration:** `scripts/prepare_webgpu_q6_short.py` appends a checked header-only stage after the F32 matvec epilogue. Keep historical patch identities and prefix pins; provenance records the final normal/profile headers separately. Existing cache keys already include workgroup width.
+- **Numerics and limits:** preserve the upstream decoder, dot order, reduction source, four-row tiling, parameters and dispatch grid. A different workgroup may change subgroup reduction topology, so source identity alone does not guarantee bit equality. Authored finite standalone checks use an independent upstream-dequantized Float64 oracle, full-output and input/guard validation, and separate same-workgroup controls. Software Vulkan measurements do not establish Windows, macOS, model-quality or end-to-end speed gains.
+- **No-patch alternative:** retain the upstream 256-lane workgroup, including its idle lanes for these short inputs, or wait for upstream tuning.
+- **Removal:** remove this stage and its metadata/tests when upstream supplies the required generic short-input selection, or when the owner withdraws it. Reassess at every upstream pin change.
+
+## Paired-half shared storage for Q4 prefill
+
+- **Patch:** `ggml-webgpu-quant-half-pairs.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow agent-selected specialization. Only ordinary Q4_0/Q4_K x F32 to F32 matrices with N>=5, complete quantization blocks, no source overlap and no subgroup-matrix path are eligible. Keep the reviewed TK32, 4x4 register tiles and 8x8 workgroup geometry; other geometry, dtype, indexed and matvec paths retain canonical shaders.
+- **Contract:** store adjacent half values as whole shared-memory pairs, load them into private pairs, and accumulate the two products in ascending K order. Preserve global scalar activation loads, packed weight decoders and half expressions, output stores, two barriers per K tile, 4096-byte shared memory, bindings, sixteen uniform words and host dispatch. A typed mode selected before lookup participates in cache equality/hash and profile labels; no shape-sized cache key or runtime probe is added.
+- **Integration:** append a checked shader-library stage after the Q6 selector, copy the pinned templates into an isolated preparation tree and generate a dedicated embedding with the canonical emitter. Keep vendor and canonical embeddings unchanged, retain historical prefix pins and report actual normal/profile compiled copies separately.
+- **No-patch alternative:** retain canonical scalar shared storage or wait for an upstream equivalent. No supported runtime setting provides this code-generation choice.
+- **Validation and limits:** inverse/source ownership, actual factory/cache/fallback/grid and pinned-header translation-unit checks establish the narrow source contract. Finite authored GPU checks and software measurements are separate evidence; they do not establish physical peak memory, cold-start cost, model quality or Windows/macOS speed. Preserving source arithmetic is not a universal compiler bit-equivalence guarantee.
+- **Removal:** remove this stage, embedding and associated build/provenance/tests when upstream supplies an equivalent or the owner drops it. Re-review half expressions, pair ownership, geometry, keys and emitter/preprocessor contracts on upstream changes.
+
+## Direct aligned mapped reads in Emdawn
+
+- **Patch:** `ggml-webgpu-direct-mapped-read.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow readback optimization. Under `__EMSCRIPTEN__`, mapped tensor reads with zero local byte offset and four-byte size alignment use the pinned Emdawn `ReadMappedRange` API to copy directly into the final caller destination. Native builds and unaligned ranges retain pointer mapping plus memcpy.
+- **Contract:** preserve source range rounding, staging allocation, mutex, command submission, map completion wait and successful Unmap. The destination is not retained asynchronously. Direct-copy failure unmaps then aborts without retrying through the old path. No shader, binding, uniform, dispatch, public ABI or checkpoint policy changes.
+- **Integration:** append a checked normal/profile CPP-only stage after paired-half preparation. Preserve historical prefix pins and report actual final compiled copies; the existing preparation CLI and CMake dependencies retain the pinned Dawn-header contract. Keep the upstream checkout untouched.
+- **No-patch alternative:** retain Emdawn's pointer-returning mapping API and its temporary Wasm allocation/copy, or wait for an upstream equivalent.
+- **Validation and limits:** exact inverse/source checks, both preprocessor arms in the actual-getter queue model, all byte offsets/tails, guarded destinations, ordering and error cleanup cover the source contract. Pinned SDK checks and small Wasm proofs are separate from full-runtime/browser validation. Removing a temporary does not shrink an already-grown Wasm linear memory; no physical-peak, TTFT or target-device speed guarantee is made.
+- **Removal:** remove this stage and its build/provenance/tests when upstream or the pinned SDK provides equivalent direct behavior, or the owner drops it. Re-review mapped-range alignment, status/Unmap semantics and SDK implementation on updates.
+
+## Wider-M paired-half Q4 prefill tiles
+
+- **Patch:** `ggml-webgpu-quant-wide-m.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow geometry specialization. Within every existing paired-half Q4_0/Q4_K x F32 prefill guard, select TM8/TN4 only when M>=64, M is a multiple of 64 and N>=32; otherwise retain TM4/TN4. Q6_K reuses C8 only for complete K256 blocks with the same base/type exclusions, positive output batch axes and total C8 grid `(M/64)*ceil(N/32)*batch2*batch3>=8`; a saturating predicate avoids overflow. Other Q6 cases retain scalar, with no Q6 C4 admission. Preserve complete quantization blocks and all dtype, overlap, subgroup-matrix and base-geometry exclusions. No model, OS or GPU-vendor condition is added.
+- **Contract:** a third typed shared mode uniquely identifies the wider geometry before cache lookup and participates in existing equality/hash. Derive shader selection, TILE_M, profile label and decisions from that same mode. The existing host grid helper consumes those decisions for 64x32 output tiles. Reuse the paired embedding, ascending K arithmetic, decoders/global access expressions, TK32, WG64, two barriers and sixteen-word uniform ABI. Shared storage is 6144 bytes and each invocation has 32 scalar accumulators; no parameter, weight or readback buffer is added.
+- **Integration:** append a checked header-only stage after direct mapped read. Preserve canonical, four-row, indexed, matvec, F32 small-M and other quantized fallbacks and all historical pins. Report actual final normal/profile compiled copies and the reused embedding identity.
+- **No-patch alternative:** retain the four-row geometry or wait for upstream tuning.
+- **Validation and limits:** actual normal/profile factory/cache/grid/source equivalence, ownership and pinned-header syntax are source/native gates. Finite authored software checks are separate from full runtime/model/hardware validation. Small-K and small-grid speed, cold compilation cost, physical peak and Windows/macOS improvements remain unmeasured; no additional K threshold is inferred from untested cases.
+- **Removal:** retire this stage and its build/provenance/tests when upstream provides equivalent generic selection or the owner drops it. Recheck geometry, memory limits, per-row arithmetic, pair ownership and key/grid coupling on updates.
+
+## Ordinary fixed-subgroup Q4 matvecs
+
+- **Patch:** `ggml-webgpu-q4-subgroup-matvec.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits this narrow generic selector extension. Only ordinary Q4_0/Q4_K x F32 to F32 matvecs with N1, complete blocks K1024..4096, M>=4096 and checked broadcast/u32 bounds are eligible. Additionally admit 4096<K<=17408 and M>=2560 only when all six weight/input/output batch axes equal one. This is tensor-shape admission; actual strides and physical binding ranges remain caller contracts. Exclude indexed inputs, MMVQ, source overlap and epilogues. Only fixed advertised subgroup widths16/32 select the path; no vendor, OS or model condition is added.
+- **Contract:** reuse the existing independent-subgroup main and unchanged canonical accumulator/declarations. Each subgroup owns four rows in WG128; partial active subgroups retain the existing virtual-lane completion and non-owner collective participation. Existing subgroup-size/type keys and shader decisions define cache identity and output grid. Do not change Q8 selection, other dtypes, bindings, sixteen uniform words or host buffer-allocation/queue implementation. Pipeline cache variants and cold compilation still follow the existing ownership rules. Partitioning blocks among lanes changes floating-point addition/reduction order, so cross-path bit equality is not required.
+- **Integration:** append a checked normal/profile header-only stage after wide-M prefill selection. Keep shape/range eligibility separate from the fixed-width policy, preserve historical prefix pins and report actual compiled copies. Reuse the existing embedding without new shader files, profiles or public ABI.
+- **No-patch alternative:** retain cooperative workgroup reduction or wait for equivalent upstream tuning. Upstream settings do not expose this per-type subgroup mapping.
+- **Validation and limits:** source/native factory/cache/geometry and rejection checks cover the guarded selector; finite authored numerical comparisons use the same original-F32 dot bound and preserve guards/inputs. Software hot-buffer timing is separate from target-device/model performance. Variable subgroup ranges, unmeasured shapes, cold compilation and actual browser throughput require separate validation; a separate topology probe does not establish the main shader's packing.
+- **Removal:** remove the stage and associated build/provenance/tests when upstream supplies equivalent selection or the owner withdraws it. Re-review block lane stride, partial subgroup completion, shape arithmetic, factory keys and host grid coupling on updates.
+
+
+## Aligned shared byte-to-word loaders
+
+- **Patch:** `ggml-webgpu-aligned-word-load.patch`.
+- **Approval and scope:** the owner approved this separate shared-loader correction after the Q4 selector change. In `load_u32_at_src` and `load_u32_at_src0`, select the containing word for both reads at a four-byte-aligned offset and the following word for the hi read otherwise. A masked left shift returns lo|lo at alignment without a control-flow branch. The previous eager following-word read is unnecessary and reaches the binding end for a complete Q4_0 final word with a minimal binding. No observed GPU failure is claimed.
+- **Contract:** keep the nonaligned two-word join, all other declarations, arithmetic, selectors, bindings, grids and ABI bytes. This correction does not establish all-dtype bounds safety or repair a nonaligned call without a complete four-byte span, including separate partial-field overreads. It adds no runtime allocation, conversion, callback or probe.
+- **Integration:** append a checked preparation stage after the Q4 selector on upstream `8642541b255bfb5dc39cd351a178be09013a55d6`. Preserve the checkout and every historical prefix pin. Regenerate the pinned upstream canonical embedding, change only the two helper bodies within its existing raw-string chunks, and include it explicitly under `ggml-webgpu-aligned-word-load-shaders.hpp`; never include both canonical symbol sets in one translation unit. Apply the same body-only correction to exactly five inventoried dedicated embeddings. Keep original safe reserve capacities and chunk boundaries. Fail on template, emitter, consumer inventory, input or output identity drift. Provenance links original/patch/prepared-template identities and consumer before/after identities to actual normal/profile compiled copies.
+- **No-patch alternative:** retain the accepted early-return correction or wait for the equivalent upstream correction. Supported runtime settings do not change these helper statements.
+- **Validation and limits:** inverse checks preserve all nonhelper bytes; bounded scalar byte oracles cover all four offset residues, complete nonaligned spans and minimal aligned bindings. Source range traces cover the Q4_0 final word and GET_ROWS consumer. Native translation-unit/include tests and finite GPU checks remain distinct from full runtime, model-quality, performance and target-device validation.
+- **Removal:** remove this patch, final preparation stage, renamed embedding and associated build/provenance/tests when upstream supplies the same behavior or the owner drops it. Re-review all generated consumers, chunk ownership and actual include composition at each upstream update.
+
+## Bounded WebGPU host checkpoint readback
+
+- **Patch:** `ggml-webgpu-checkpoint-batch-readback.patch`.
+- **Accepted scope:** the owner's inference-performance work permits batching
+  existing host checkpoint reads while preserving the host snapshot format,
+  synchronization, caller ownership and normal large-read memory policy.
+- **Integration:** every browser WebGPU profile prepares one checked context TU
+  and the WebGPU provider plus a shared versioned registry-contract header.
+  CMake replaces the context only under Emscripten and preserves its original
+  quoted-header lookup on that one source. CPU-only and native context sources,
+  ON_DEVICE and file writers, public ABI/schema, shaders and model graphs stay
+  upstream. Pristine vendor source is never changed.
+- **Contract:** group only consecutive small requests on the same device, at
+  most 256 entries and 4 MiB of staging per batch. A request is never split.
+  Single requests and large requests keep the scalar getter. The optional
+  callback may decline only before enqueue, map or destination write; failures
+  after work begins are terminal. Request order, including destination aliases,
+  is preserved. An explicit one-shot flush is inside existing state API error
+  handling; destructors do no readback or retry. Caller memory remains owned
+  until the blocking call returns.
+- **Coupling:** pinned context writer/callers, tensor/view buffer conventions,
+  registry and WebGPU staging/map helpers. Normal/profile composition, shared
+  headers, patch, source contracts and final copies are recorded. Reassess these
+  boundaries when upstream changes rather than widening a hash allowlist.
+- **Evidence and limits:** CPU packing/writer controls and a tiny authored model
+  on normal Wasm64 verify exact checkpoint/restore/logit/token results, fewer
+  maps for multi-read snapshots, unchanged single-read behavior and bounded
+  destination lifetime on a copy failure. These do not establish browser,
+  real-model performance, app cancellation, device-loss recovery or large-model
+  memory peaks. No target-device speedup is claimed.
+- **No-patch alternative:** keep upstream's per-tensor blocking getters or wait
+  for a corresponding upstream batched state writer/backend contract.
+- **Removal:** equivalent upstream support or withdrawal of this optimization;
+  remove the checked patch, optional header/proc, context source replacement,
+  preparation, tests and provenance together, preserving published artifacts.
+
+
+## Ordinary Q6 independent and requested subgroup matvecs
+
+- **Patch:** `ggml-webgpu-q6-subgroup-matvec.patch`.
+- **Approval and scope:** the owner's session-wide performance authorization permits ordinary Q6_K x F32 to F32, N1, complete K256 blocks K1536..10752 and M>=2048, preserving tensor-shape/broadcast/u32 checks and excluding indexed inputs, MMVQ, overlap and epilogues. No model, vendor or OS branch is added. Physical strides and binding capacity remain existing caller/device contracts, with no artificial M cap from software hardware.
+- **Contract:** reuse the unchanged Q6 accumulator/210-byte signed-scale decoder and existing full/partial independent main at WG128 with four rows per subgroup. Fixed advertised S16/S32 share pure eligibility with requested S16 through the existing real-feature/range policy. Resolve the existing dtype/mode/requested-width key before lookup. Rejected optional keys rebuild complete canonical decisions from the current context, retaining the existing short-K WG128 and longer-K WG256 fallback; no silent recovery from terminal/device-lost failures is added.
+- **Integration:** append a checked normal/profile header-only stage after subgroup-size control. Preserve all CPP, generated shader embeddings, optional SDK helper, ABI, sixteen uniform words, host grid, allocation and queue bytes. Report the actual final compiled composition, not an intermediate prefix.
+- **No-patch alternative:** retain cooperative reduction or await equivalent upstream selection.
+- **Validation and limits:** finite authored numerical bounds, source/factory/cache/grid and physical-range checks are separate gates. Floating-point partition and reduction may differ, so cross-path bit identity is diagnostic. Direct software hot evidence covers a down projection, two bounded heads and one larger resident test, not full vocabulary, all intermediate shapes, actual model quality or Windows/macOS speed. No new preload, dequantization copy, probe, clock or GPU wait is introduced.
+- **Removal:** retire this stage and its build/provenance/tests when upstream supplies equivalent selection or the owner drops it. Re-review lane stride, partial-subgroup ownership, shape/u32 checks, typed keys, current-context fallback and device feature/limit contracts on updates.

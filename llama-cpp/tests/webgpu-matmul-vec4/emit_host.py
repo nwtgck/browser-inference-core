@@ -8,11 +8,13 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition
+from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import legacy_fixed_sources
 
 
 def build(upstream: Path, baseline: Path, candidate: Path, output: Path, *, profile: bool) -> Path:
     output.mkdir(parents=True, exist_ok=True)
-    header = (candidate / 'ggml-webgpu-shader-lib.hpp').read_text()
+    header = legacy_fixed_sources(candidate)['ggml-webgpu-shader-lib.hpp']
     chunks = [(HERE / 'prefix.cpp').read_text()]
     chunks += ['\n'.join(re.findall(r'^#define WEBGPU_MUL_MAT_.*$', header, re.M))]
     for marker in ['template <typename T> inline void ggml_webgpu_hash_combine(',
@@ -25,10 +27,12 @@ def build(upstream: Path, baseline: Path, candidate: Path, output: Path, *, prof
                    'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size(',
                    'inline bool ggml_webgpu_can_use_mmvq(']:
         chunks.append(definition(header, marker) + (';' if marker.startswith('struct ') else ''))
+    chunks.append(q4_subgroup_helpers(header))
     chunks.append(header[header.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):header.index('/** Cpy **/')])
     for name, prepared in [('baseline', baseline), ('candidate', candidate)]:
-        hpp = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
-        cpp = (prepared / 'ggml-webgpu.cpp').read_text()
+        legacy = legacy_fixed_sources(prepared)
+        hpp = legacy['ggml-webgpu-shader-lib.hpp']
+        cpp = legacy['ggml-webgpu.cpp']
         chunks += ['namespace ' + name + ' {', '''class RecordingLibrary {
 int device=0; pre_wgsl::Preprocessor preprocessor;
 std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key,webgpu_pipeline,ggml_webgpu_mul_mat_vec_pipeline_key_hash> mul_mat_vec_pipelines;

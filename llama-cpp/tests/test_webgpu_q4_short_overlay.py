@@ -18,6 +18,8 @@ import prepare_webgpu_q4_short as q4
 from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix, legacy_fixed_sources
 
 
 def prepare(upstream, output):
@@ -25,15 +27,18 @@ def prepare(upstream, output):
 
 
 def build_host(upstream, prepared, output):
-    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
+    # Preserve fixed/forced recording without modeling optional SDK creation.
+    fixed = legacy_fixed_sources(prepared)
+    text = explicit_layout_argument(fixed['ggml-webgpu-shader-lib.hpp'])
     original = explicit_layout_argument((upstream / q4.HEADER_PATH).read_text())
     here = ROOT / 'tests/webgpu-q4-short'
-    chunks = [(here / 'host-prefix.cpp').read_text(), '#include "ggml-webgpu-f32-matvec-epilogue.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
+    chunks = [canonical_prefix((here / 'host-prefix.cpp').read_text(), prepared), '#include "ggml-webgpu-f32-matvec-epilogue.hpp"\n#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"',
               function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
               function(text, 'struct ggml_webgpu_shader_lib_context {') + ';']
     for name in ('q8', 'expert', 'q4'):
         chunks.append(function(text, 'inline uint32_t ggml_webgpu_' + name + '_short_workgroup('))
     chunks.append(function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('))
+    chunks.append(q4_subgroup_helpers(text))
     chunks.append(function(text, 'inline uint32_t ggml_webgpu_iq3s_id_subgroup_size('))
     chunks += [text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
                text[text.index('struct ggml_webgpu_mul_mat_id_pipeline_key {'):text.index('/** Cpy **/')],
@@ -52,7 +57,7 @@ def build_host(upstream, prepared, output):
                            ('    webgpu_pipeline get_mul_mat_id_vec_pipeline(', '    webgpu_pipeline get_unary_pipeline(')]:
             chunks.append(body[body.index(start):body.index(end)])
         chunks += ['webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context &, bool, bool) {throw std::runtime_error("unexpected matrix path");}', '};']
-    cpp = (prepared / 'ggml-webgpu.cpp').read_text()
+    cpp = fixed['ggml-webgpu.cpp']
     chunks += [(here / 'dispatch-prefix.cpp').read_text(),
                function(cpp, 'static inline uint32_t ggml_webgpu_u32_from_f32('),
                function(cpp, 'static inline void compute_2d_workgroups('),

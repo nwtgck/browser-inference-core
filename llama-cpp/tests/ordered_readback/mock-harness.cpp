@@ -24,6 +24,7 @@ enum class CallbackMode { AllowSpontaneous };
 enum class WaitStatus { Success, TimedOut, Error };
 enum class MapAsyncStatus { Success, Error, Aborted, CallbackCancelled };
 enum class QueueWorkDoneStatus { Success, Error, CallbackCancelled };
+enum class Status { Success, Error };
 using StringView = std::string;
 struct Future {
     std::function<void()> complete;
@@ -34,7 +35,8 @@ struct runtime {
     std::vector<std::function<void()>> pending;
     std::vector<std::string> trace;
     int submissions = 0, queue_waits = 0, map_waits = 0, allocations = 0, destroys = 0;
-    int mapped_reads = 0, unmaps = 0;
+    int mapped_reads = 0, unmaps = 0, pointer_reads = 0, direct_reads = 0;
+    wgpu::Status read_status = wgpu::Status::Success;
     wgpu::WaitStatus wait_status = wgpu::WaitStatus::Success;
     wgpu::MapAsyncStatus map_status = wgpu::MapAsyncStatus::Success;
     wgpu::QueueWorkDoneStatus queue_status = wgpu::QueueWorkDoneStatus::Success;
@@ -95,8 +97,20 @@ struct Buffer {
     const void * GetConstMappedRange(size_t offset, size_t size) const {
         assert(p->mapped && !p->map_pending && !p->destroyed && offset + size <= p->bytes.size());
         ++p->r->mapped_reads;
+        ++p->r->pointer_reads;
         p->r->trace.push_back("mapped-range");
         return p->bytes.data() + offset;
+    }
+    Status ReadMappedRange(size_t offset, void * data, size_t size) const {
+        assert(p->mapped && !p->map_pending && !p->destroyed && offset + size <= p->bytes.size());
+        assert(offset % 8 == 0 && size % 4 == 0);
+        ++p->r->mapped_reads;
+        ++p->r->direct_reads;
+        p->r->trace.push_back("mapped-range");
+        if (p->r->read_status != Status::Success)
+            return p->r->read_status;
+        std::memcpy(data, p->bytes.data() + offset, size);
+        return Status::Success;
     }
     void Unmap() {
         assert(p->mapped);
@@ -225,7 +239,10 @@ static size_t ggml_nbytes(const ggml_tensor * tensor) {
 }
 template <class... Args> [[noreturn]] static void mock_abort(const char * format, Args... args) {
     char message[512];
-    std::snprintf(message, sizeof(message), format, args...);
+    if constexpr (sizeof...(Args) == 0)
+        std::snprintf(message, sizeof(message), "%s", format);
+    else
+        std::snprintf(message, sizeof(message), format, args...);
     throw std::runtime_error(message);
 }
 #define GGML_ASSERT(condition)                                                                                         \
@@ -346,6 +363,12 @@ int main() {
                     assert(output[i] == (i >= 2 && i < size + 2 ? uint8_t(8 + tensor_offset + offset + i - 2) : 0xcc));
                 }
                 assert(f.g->r.queue_waits == 0 && f.g->r.map_waits == 1);
+#ifdef __EMSCRIPTEN__
+                const bool direct = (tensor_offset + offset) % 4 == 0 && size % 4 == 0;
+#else
+                const bool direct = false;
+#endif
+                assert(f.g->r.direct_reads == int(direct) && f.g->r.pointer_reads == int(!direct));
             }
         }
     }
@@ -444,6 +467,23 @@ int main() {
         expect_runtime_failure([&] { f.get(output, 0, 4); }, "Queue work failed with status");
         assert(output[0] == 1 && output[3] == 4 && f.g->r.map_waits == 0);
     }
+#ifdef __EMSCRIPTEN__
+    // Harness-only abort interception observes cleanup; production does not
+    // recover, silently retry through the pointer API, or retain the output.
+    {
+        fixture f;
+        f.g->r.read_status = wgpu::Status::Error;
+        uint8_t output[6] = {1, 2, 3, 4, 5, 6};
+        expect_runtime_failure([&] { f.get(output + 1, 0, 4); }, "reading mapped tensor data failed");
+        assert(output[0] == 1 && output[1] == 2 && output[4] == 5 && output[5] == 6);
+        assert(f.g->r.direct_reads == 1 && f.g->r.pointer_reads == 0 && f.g->r.unmaps == 1);
+        assert(!f.g->get_tensor_staging_buf.p->mapped && f.g->r.pending.empty());
+        f.g->r.read_status = wgpu::Status::Success;
+        f.get(output + 1, 0, 4);
+        assert(output[0] == 1 && output[1] == 8 && output[4] == 11 && output[5] == 6);
+        assert(f.g->r.direct_reads == 2 && f.g->r.pointer_reads == 0 && f.g->r.unmaps == 2);
+    }
+#endif
     std::cout
         << "PASS: actual ordered_readback hook, generic entry, staging getter and wait/map helpers (CPU model only)\n";
 }

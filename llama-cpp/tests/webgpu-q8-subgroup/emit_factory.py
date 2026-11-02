@@ -15,29 +15,33 @@ import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from matvec_subgroup_test_support import q4_subgroup_helpers
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256, legacy_fixed_sources
 
 
 def prepare(upstream: Path, output: Path) -> None:
     source.prepare(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) != source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'] or copy.digest(output / q8.HEADER_NAME) != q8.HEADER_SHA256:
+    if copy.digest(header) != source.FINAL_OUTPUTS[False]['ggml-webgpu-shader-lib.hpp'] or copy.digest(output / q8.HEADER_NAME) != embedding_sha256(output, q8.HEADER_NAME, q8.HEADER_SHA256):
         raise ValueError('Unexpected integrated Q8 subgroup output')
 
 
 def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
-    text = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
-    backend = (prepared / 'ggml-webgpu.cpp').read_text()
+    legacy = legacy_fixed_sources(prepared)
+    text = explicit_layout_argument(legacy['ggml-webgpu-shader-lib.hpp'])
+    backend = legacy['ggml-webgpu.cpp']
     dispatch_start = backend.index('    if (use_mat_vec) {', backend.index('    // Calculate workgroup dimensions', backend.index('static webgpu_encoded_op ggml_webgpu_mul_mat(')))
     dispatch_end = backend.index('    } else {', dispatch_start)
     dispatch = backend[dispatch_start + len('    if (use_mat_vec) {\n'):dispatch_end]
     chunks = [
-        (ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(),
+        canonical_prefix((ROOT / 'tests/webgpu-q8-short/host-prefix.cpp').read_text(), prepared),
         '#include "ggml-webgpu-q8-subgroup-shaders.hpp"\n#include <array>\n#include <limits>\n#define CEIL_DIV(a,b) (((a)+(b)-1)/(b))',
         function(text, 'template <typename T> inline void ggml_webgpu_hash_combine('),
         function(text, 'struct ggml_webgpu_shader_lib_context {') + ';',
         function(text, 'inline uint32_t ggml_webgpu_q8_short_workgroup('),
         function(text, 'inline uint32_t ggml_webgpu_q4_short_workgroup('),
         function(text, 'inline uint32_t ggml_webgpu_q8_matvec_subgroup_size('),
+        q4_subgroup_helpers(text),
         text[text.index('struct ggml_webgpu_mul_mat_vec_pipeline_key {'):
              text.index('struct ggml_webgpu_quantize_q8_pipeline_key {')],
         function(text, 'inline bool ggml_webgpu_can_use_mmvq('),

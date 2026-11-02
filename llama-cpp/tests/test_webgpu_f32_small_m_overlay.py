@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
-from webgpu_prefix_context import without_final_matvec_stages
+from webgpu_prefix_context import without_final_matvec_stages, without_shared_word_load
 import prepare_webgpu_f32_small_m as small
 import prepare_webgpu_tensor_copy as copy
 
@@ -38,6 +38,10 @@ class F32SmallMOverlay(unittest.TestCase):
             cls.f32_stage = source.prepare(cls.upstream, cls.directory / 'f32-stage').parent
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
+        # Inspect the geometry stage before the later quantized specialization.
+        with without_shared_word_load(source), patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_wide_m, 'prepare'):
+            cls.matrix_normal = source.prepare(cls.upstream, cls.directory / 'matrix-normal').parent
+            cls.matrix_profile = source.prepare(cls.upstream, cls.directory / 'matrix-profile', gpu_profile=True).parent
 
     def test_only_the_shared_library_changes_and_all_canonical_inputs_remain_exact(self):
         self.assertEqual(copy.digest(self.baseline / small.HEADER_NAME), small.INPUT_SHA256)
@@ -98,7 +102,7 @@ class F32SmallMOverlay(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('c++'), 'native compiler required')
     def test_actual_factory_guard_geometry_cache_both_orders_and_dispatch(self):
-        executable = factory.build_host(self.upstream, self.baseline, self.normal, self.directory / 'host-normal')
+        executable = factory.build_host(self.upstream, self.baseline, self.matrix_normal, self.directory / 'host-normal')
         result = json.loads(subprocess.check_output([str(executable)], text=True))
         self.assertGreaterEqual(result['casesPerOrder'], 250)
         self.assertEqual(result['orders'], 2)
@@ -106,8 +110,8 @@ class F32SmallMOverlay(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('c++'), 'native compiler required')
     def test_profile_uses_identical_actual_factory_shaders_and_decisions(self):
-        normal = factory.build_host(self.upstream, self.baseline, self.normal, self.directory / 'host-normal-identity')
-        profiled = factory.build_host(self.upstream, self.baseline, self.profile, self.directory / 'host-profile')
+        normal = factory.build_host(self.upstream, self.baseline, self.matrix_normal, self.directory / 'host-normal-identity')
+        profiled = factory.build_host(self.upstream, self.baseline, self.matrix_profile, self.directory / 'host-profile')
         normal_shaders = self.directory / 'normal-shaders'
         profile_shaders = self.directory / 'profile-shaders'
         subprocess.run([str(normal), str(normal_shaders)], check=True, capture_output=True)

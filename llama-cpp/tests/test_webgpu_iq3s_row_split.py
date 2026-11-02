@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_iq3s_field_loads as fields
 import prepare_webgpu_iq3s_row_split as rows
 import prepare_webgpu_source as source
+from webgpu_prefix_context import without_shared_word_load
 import prepare_webgpu_tensor_copy as copy
 
 spec = importlib.util.spec_from_file_location('iq3_rows_factory', ROOT / 'tests/webgpu-iq3s-subgroup/emit_factory.py')
@@ -36,11 +37,29 @@ def block(text, marker):
 class Iq3sRowSplit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         cls.temporary = tempfile.TemporaryDirectory(prefix='iq3s-row-split-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
+        q4_tail = patch.object(source.q4_subgroup, 'prepare')
+        q4_tail.start()
+        cls.addClassCleanup(q4_tail.stop)
+        wide = patch.object(source.quant_wide_m, 'prepare')
+        wide.start()
+        cls.addClassCleanup(wide.stop)
+        direct = patch.object(source.direct_mapped_read, 'prepare')
+        direct.start()
+        cls.addClassCleanup(direct.stop)
+        tail = patch.object(source.quant_half_pairs, 'prepare', return_value={})
+        tail.start()
+        cls.addClassCleanup(tail.stop)
         cls.before, cls.final, cls.stage_inputs = {}, {}, {}
+        prefix = patch.object(source.q6_short, 'prepare')
+        prefix.start()
+        cls.addClassCleanup(prefix.stop)
         for profile in (False, True):
             captured = cls.directory / f'inputs-{profile}'
             def capture(work, source, patch_root, env, headers, *, gpu_profile):

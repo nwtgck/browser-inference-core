@@ -46,7 +46,7 @@ def main() -> int:
         'upstreamCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=upstream, text=True).strip(),
         'patchSha256': q8.PATCH_SHA256,
         'preparedHeaderSha256': hashlib.sha256((work / 'prepared/ggml-webgpu-shader-lib.hpp').read_bytes()).hexdigest(),
-        'embeddedShaderHeaderSha256': q8.HEADER_SHA256,
+        'embeddedShaderHeaderSha256': hashlib.sha256((work / 'prepared' / q8.HEADER_NAME).read_bytes()).hexdigest(),
         'shaderSha256': {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(shaders.glob('*.wgsl'))},
         'scope': 'Actual prepared selector/cache/factory, production dispatch calculation, pinned emitter/preprocessor; standalone numerical checks only',
         'fixtures': 'Deterministic synthetic Q8_0 and Float32 data, full Float64 reference for every output',

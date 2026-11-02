@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / 'tests/webgpu-moe-group-skip'
 sys.path[:0] = [str(ROOT / 'scripts'), str(HERE)]
 import prepare_webgpu_source as source
-from webgpu_prefix_context import without_final_matvec_stages
+from webgpu_prefix_context import without_final_matvec_stages, without_shared_word_load
 import prepare_webgpu_moe_group_skip as group
 import emit_factory
 
@@ -24,6 +24,9 @@ import emit_factory
 class MoeGroupSkip(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shared_word_prefix = without_shared_word_load(source)
+        shared_word_prefix.__enter__()
+        cls.addClassCleanup(shared_word_prefix.__exit__, None, None, None)
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
         if not (cls.upstream / source.SOURCE_PATH).exists():
             raise unittest.SkipTest('Initialize upstream or set LCB_TEST_LLAMA_SOURCE')

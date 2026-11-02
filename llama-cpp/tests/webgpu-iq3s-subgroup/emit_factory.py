@@ -16,6 +16,7 @@ import prepare_webgpu_tensor_copy as copy
 from test_webgpu_q8_short_overlay import function
 
 from matmul_vec4_test_support import explicit_layout_argument
+from webgpu_embedding_test_support import canonical_prefix, embedding_sha256
 
 
 def prepare_base(upstream: Path, output: Path) -> None:
@@ -35,7 +36,7 @@ def prepare(upstream: Path, output: Path) -> None:
         raise ValueError('Current IQ3_S numerical checks require the final embedding; historical prefixes are native-test-only')
     prepare_base(upstream, output)
     header = output / 'ggml-webgpu-shader-lib.hpp'
-    if copy.digest(header) != source.FINAL_OUTPUTS[False][header.name] or copy.digest(output / iq3.HEADER_NAME) != rows.HEADER_SHA256:
+    if copy.digest(header) != source.FINAL_OUTPUTS[False][header.name] or copy.digest(output / iq3.HEADER_NAME) != embedding_sha256(output, iq3.HEADER_NAME, rows.HEADER_SHA256):
         raise ValueError('Unexpected final IQ3_S embedding')
 
 
@@ -63,7 +64,7 @@ def prepare_historical_prefix(upstream: Path, output: Path) -> None:
 def build_host(upstream: Path, prepared: Path, output: Path) -> Path:
     header = explicit_layout_argument((prepared / 'ggml-webgpu-shader-lib.hpp').read_text())
     cpp = (prepared / 'ggml-webgpu.cpp').read_text()
-    prefix = (ROOT / 'tests/webgpu-expert-short/host-prefix.cpp').read_text()
+    prefix = canonical_prefix((ROOT / 'tests/webgpu-expert-short/host-prefix.cpp').read_text(), prepared)
     prefix = prefix.replace('    throw std::runtime_error("Unexpected recording type");',
         '    static const auto iq3 = [] { ggml_type_traits t{}; t.type_name="iq3_s"; return t; }();\n'
         '    if(type==GGML_TYPE_IQ3_S)return &iq3;\n    throw std::runtime_error("Unexpected recording type");')
