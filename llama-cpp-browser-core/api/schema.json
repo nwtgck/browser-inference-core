@@ -2323,6 +2323,29 @@
       ]
     },
     {
+      "name": "ggml_backend_tensor_copy_n",
+      "export": "_lcb_ggml_backend_tensor_copy_n",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "srcs",
+          "cType": "const struct ggml_tensor *const *",
+          "kind": "pointer"
+        },
+        {
+          "name": "dsts",
+          "cType": "struct ggml_tensor *const *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_tensors",
+          "cType": "size_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
       "name": "ggml_backend_tensor_get",
       "export": "_lcb_ggml_backend_tensor_get",
       "returnType": "void",
@@ -2469,6 +2492,44 @@
         },
         {
           "name": "size",
+          "cType": "size_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "ggml_backend_tensor_get_n",
+      "export": "_lcb_ggml_backend_tensor_get_n",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "tensors",
+          "cType": "const struct ggml_tensor *const *",
+          "kind": "pointer"
+        },
+        {
+          "name": "data",
+          "cType": "void *",
+          "kind": "pointer"
+        },
+        {
+          "name": "offsets",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "sizes",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "data_offsets",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_tensors",
           "cType": "size_t",
           "kind": "u64"
         }
@@ -2649,6 +2710,44 @@
         },
         {
           "name": "size",
+          "cType": "size_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "ggml_backend_tensor_set_n",
+      "export": "_lcb_ggml_backend_tensor_set_n",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "tensors",
+          "cType": "struct ggml_tensor *const *",
+          "kind": "pointer"
+        },
+        {
+          "name": "data",
+          "cType": "const void *",
+          "kind": "pointer"
+        },
+        {
+          "name": "offsets",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "sizes",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "data_offsets",
+          "cType": "const size_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_tensors",
           "cType": "size_t",
           "kind": "u64"
         }
@@ -5004,6 +5103,59 @@
           "name": "a",
           "cType": "const struct ggml_tensor *",
           "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "ggml_flash_attn_ext_rows",
+      "export": "_lcb_ggml_flash_attn_ext_rows",
+      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *, struct ggml_tensor *, float, float, float)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct ggml_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "q",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "k",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "v",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "mask",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "kv_rows",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer"
+        },
+        {
+          "name": "scale",
+          "cType": "float",
+          "kind": "float"
+        },
+        {
+          "name": "max_bias",
+          "cType": "float",
+          "kind": "float"
+        },
+        {
+          "name": "logit_softcap",
+          "cType": "float",
+          "kind": "float"
         }
       ]
     },
@@ -18474,6 +18626,19 @@
       ]
     },
     {
+      "name": "mtmd_bitmap_is_voice",
+      "export": "_lcb_mtmd_bitmap_is_voice",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "bitmap",
+          "cType": "const mtmd_bitmap *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "mtmd_bitmap_set_id",
       "export": "_lcb_mtmd_bitmap_set_id",
       "returnType": "void",
@@ -18630,6 +18795,24 @@
       ]
     },
     {
+      "name": "mtmd_gen_audio_get_voice",
+      "export": "_lcb_mtmd_gen_audio_get_voice",
+      "returnType": "mtmd_bitmap *(const mtmd_context *, const char *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "name",
+          "cType": "const char *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "mtmd_gen_audio_process",
       "export": "_lcb_mtmd_gen_audio_process",
       "returnType": "int32_t",
@@ -18654,6 +18837,24 @@
           "name": "out",
           "cType": "struct mtmd_gen_out *",
           "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_gen_audio_voice_name",
+      "export": "_lcb_mtmd_gen_audio_voice_name",
+      "returnType": "const char *(const mtmd_context *, int32_t)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
         }
       ]
     },
@@ -21649,6 +21850,12 @@
           "cType": "const char *",
           "kind": "pointer",
           "id": 2
+        },
+        {
+          "name": "n_voices",
+          "cType": "int32_t",
+          "kind": "signed",
+          "id": 3
         }
       ],
       "id": 41
@@ -21970,34 +22177,28 @@
           "id": 7
         },
         {
-          "name": "voice",
-          "cType": "const char *",
-          "kind": "pointer",
-          "id": 8
-        },
-        {
           "name": "top_k",
           "cType": "int32_t",
           "kind": "signed",
-          "id": 9
+          "id": 8
         },
         {
           "name": "top_p",
           "cType": "float",
           "kind": "float",
-          "id": 10
+          "id": 9
         },
         {
           "name": "seed",
           "cType": "uint32_t",
           "kind": "unsigned",
-          "id": 11
+          "id": 10
         },
         {
           "name": "out_type",
           "cType": "enum mtmd_helper_gen_audio_outtype",
           "kind": "signed",
-          "id": 12
+          "id": 11
         }
       ],
       "id": 48
@@ -22197,6 +22398,7 @@
     "GGML_FTYPE_ALL_F32",
     "GGML_FTYPE_MOSTLY_BF16",
     "GGML_FTYPE_MOSTLY_F16",
+    "GGML_FTYPE_MOSTLY_F8_E4M3",
     "GGML_FTYPE_MOSTLY_IQ1_M",
     "GGML_FTYPE_MOSTLY_IQ1_S",
     "GGML_FTYPE_MOSTLY_IQ2_S",
@@ -22418,6 +22620,7 @@
     "GGML_TYPE_F16",
     "GGML_TYPE_F32",
     "GGML_TYPE_F64",
+    "GGML_TYPE_F8_E4M3",
     "GGML_TYPE_I16",
     "GGML_TYPE_I32",
     "GGML_TYPE_I64",
@@ -22505,6 +22708,7 @@
     "LLAMA_FTYPE_GUESSED",
     "LLAMA_FTYPE_MOSTLY_BF16",
     "LLAMA_FTYPE_MOSTLY_F16",
+    "LLAMA_FTYPE_MOSTLY_F8_E4M3",
     "LLAMA_FTYPE_MOSTLY_IQ1_M",
     "LLAMA_FTYPE_MOSTLY_IQ1_S",
     "LLAMA_FTYPE_MOSTLY_IQ2_M",

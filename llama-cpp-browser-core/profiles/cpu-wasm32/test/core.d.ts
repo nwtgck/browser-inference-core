@@ -564,6 +564,8 @@ interface WasmModule {
   _ggml_backend_tensor_copy(_0: number, _1: number): void;
   _lcb_ggml_backend_tensor_copy_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): void;
   _ggml_backend_tensor_copy_async(_0: number, _1: number, _2: number, _3: number): void;
+  _lcb_ggml_backend_tensor_copy_n(_0: BigInt, _1: BigInt, _2: BigInt): void;
+  _ggml_backend_tensor_copy_n(_0: number, _1: number, _2: number): void;
   _lcb_ggml_backend_tensor_get(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): void;
   _ggml_backend_tensor_get(_0: number, _1: number, _2: number, _3: number): void;
   _lcb_ggml_backend_tensor_get_2d(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: BigInt): void;
@@ -572,6 +574,8 @@ interface WasmModule {
   _ggml_backend_tensor_get_2d_async(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number): void;
   _lcb_ggml_backend_tensor_get_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): void;
   _ggml_backend_tensor_get_async(_0: number, _1: number, _2: number, _3: number, _4: number): void;
+  _lcb_ggml_backend_tensor_get_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): void;
+  _ggml_backend_tensor_get_n(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): void;
   _lcb_ggml_backend_tensor_memset(_0: BigInt, _1: number, _2: BigInt, _3: BigInt): void;
   _ggml_backend_tensor_memset(_0: number, _1: number, _2: number, _3: number): void;
   _lcb_ggml_backend_tensor_set(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): void;
@@ -582,6 +586,8 @@ interface WasmModule {
   _ggml_backend_tensor_set_2d_async(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number): void;
   _lcb_ggml_backend_tensor_set_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): void;
   _ggml_backend_tensor_set_async(_0: number, _1: number, _2: number, _3: number, _4: number): void;
+  _lcb_ggml_backend_tensor_set_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): void;
+  _ggml_backend_tensor_set_n(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): void;
   _lcb_ggml_backend_unload(_0: BigInt): void;
   _ggml_backend_unload(_0: number): void;
   _lcb_ggml_backend_view_init(_0: BigInt): number;
@@ -802,6 +808,8 @@ interface WasmModule {
   _ggml_flash_attn_ext_add_sinks(_0: number, _1: number): void;
   _lcb_ggml_flash_attn_ext_get_prec(_0: BigInt): number;
   _ggml_flash_attn_ext_get_prec(_0: number): number;
+  _lcb_ggml_flash_attn_ext_rows(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: number, _7: number, _8: number): BigInt;
+  _ggml_flash_attn_ext_rows(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number): number;
   _lcb_ggml_flash_attn_ext_set_n_kv_max(_0: BigInt, _1: number): void;
   _ggml_flash_attn_ext_set_n_kv_max(_0: number, _1: number): void;
   _lcb_ggml_floor(_0: BigInt, _1: BigInt): BigInt;
@@ -2109,6 +2117,8 @@ interface WasmModule {
   _mtmd_bitmap_init_lazy(_0: number, _1: number, _2: number, _3: number): number;
   _lcb_mtmd_bitmap_is_audio(_0: BigInt): number;
   _mtmd_bitmap_is_audio(_0: number): number;
+  _lcb_mtmd_bitmap_is_voice(_0: BigInt): number;
+  _mtmd_bitmap_is_voice(_0: number): number;
   _lcb_mtmd_bitmap_set_id(_0: BigInt, _1: BigInt): void;
   _mtmd_bitmap_set_id(_0: number, _1: number): void;
   _lcb_mtmd_bitmap_set_is_video(_0: BigInt, _1: number): void;
@@ -2131,8 +2141,12 @@ interface WasmModule {
   _mtmd_free(_0: number): void;
   _lcb_mtmd_gen_audio_get_info(_0: BigInt, _1: BigInt): void;
   _mtmd_gen_audio_get_info(_0: number, _1: number): void;
+  _lcb_mtmd_gen_audio_get_voice(_0: BigInt, _1: BigInt): BigInt;
+  _mtmd_gen_audio_get_voice(_0: number, _1: number): number;
   _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): number;
   _mtmd_gen_audio_process(_0: number, _1: number, _2: number, _3: number): number;
+  _lcb_mtmd_gen_audio_voice_name(_0: BigInt, _1: number): BigInt;
+  _mtmd_gen_audio_voice_name(_0: number, _1: number): number;
   _lcb_mtmd_gen_inp_default(_0: BigInt, _1: BigInt): void;
   _mtmd_gen_inp_default(_0: number, _1: number): void;
   _lcb_mtmd_gen_state_free(_0: BigInt): void;

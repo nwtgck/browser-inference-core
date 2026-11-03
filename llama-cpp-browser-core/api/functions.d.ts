@@ -134,15 +134,18 @@ export interface LowLevelFunctions {
   ggml_backend_tensor_alloc(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   ggml_backend_tensor_copy(arg0: bigint, arg1: bigint): Promise<void>;
   ggml_backend_tensor_copy_async(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<void>;
+  ggml_backend_tensor_copy_n(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_backend_tensor_get(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<void>;
   ggml_backend_tensor_get_2d(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint): Promise<void>;
   ggml_backend_tensor_get_2d_async(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: bigint): Promise<void>;
   ggml_backend_tensor_get_async(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<void>;
+  ggml_backend_tensor_get_n(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<void>;
   ggml_backend_tensor_memset(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint): Promise<void>;
   ggml_backend_tensor_set(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<void>;
   ggml_backend_tensor_set_2d(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint): Promise<void>;
   ggml_backend_tensor_set_2d_async(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: bigint): Promise<void>;
   ggml_backend_tensor_set_async(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<void>;
+  ggml_backend_tensor_set_n(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<void>;
   ggml_backend_unload(arg0: bigint): Promise<void>;
   ggml_backend_view_init(arg0: bigint): Promise<number>;
   ggml_bf16_to_fp32(arg0: bigint): Promise<number>;
@@ -253,6 +256,7 @@ export interface LowLevelFunctions {
   ggml_flash_attn_ext(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: number, arg6: number, arg7: number): Promise<bigint>;
   ggml_flash_attn_ext_add_sinks(arg0: bigint, arg1: bigint): Promise<void>;
   ggml_flash_attn_ext_get_prec(arg0: bigint): Promise<number>;
+  ggml_flash_attn_ext_rows(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: number, arg7: number, arg8: number): Promise<bigint>;
   ggml_flash_attn_ext_set_n_kv_max(arg0: bigint, arg1: number): Promise<void>;
   ggml_floor(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_floor_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
@@ -906,6 +910,7 @@ export interface LowLevelFunctions {
   mtmd_bitmap_init_from_audio(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_bitmap_init_lazy(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<bigint>;
   mtmd_bitmap_is_audio(arg0: bigint): Promise<number>;
+  mtmd_bitmap_is_voice(arg0: bigint): Promise<number>;
   mtmd_bitmap_set_id(arg0: bigint, arg1: bigint): Promise<void>;
   mtmd_bitmap_set_is_video(arg0: bigint, arg1: number): Promise<void>;
   mtmd_bitmap_set_mergeable(arg0: bigint, arg1: number): Promise<void>;
@@ -917,7 +922,9 @@ export interface LowLevelFunctions {
   mtmd_encode_chunk(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_free(arg0: bigint): Promise<void>;
   mtmd_gen_audio_get_info(out: bigint, arg0: bigint): Promise<void>;
+  mtmd_gen_audio_get_voice(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_audio_process(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
+  mtmd_gen_audio_voice_name(arg0: bigint, arg1: number): Promise<bigint>;
   mtmd_gen_inp_default(out: bigint, arg0: bigint): Promise<void>;
   mtmd_gen_state_free(arg0: bigint): Promise<void>;
   mtmd_gen_state_init(arg0: bigint, arg1: bigint): Promise<bigint>;

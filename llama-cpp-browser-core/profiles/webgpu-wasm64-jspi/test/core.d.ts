@@ -564,6 +564,8 @@ interface WasmModule {
   _ggml_backend_tensor_copy(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_copy_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<void>;
   _ggml_backend_tensor_copy_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<void>;
+  _lcb_ggml_backend_tensor_copy_n(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
+  _ggml_backend_tensor_copy_n(_0: BigInt, _1: BigInt, _2: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_get(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<void>;
   _ggml_backend_tensor_get(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_get_2d(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: BigInt): Promise<void>;
@@ -572,6 +574,8 @@ interface WasmModule {
   _ggml_backend_tensor_get_2d_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: BigInt, _7: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_get_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<void>;
   _ggml_backend_tensor_get_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<void>;
+  _lcb_ggml_backend_tensor_get_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<void>;
+  _ggml_backend_tensor_get_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_memset(_0: BigInt, _1: number, _2: BigInt, _3: BigInt): Promise<void>;
   _ggml_backend_tensor_memset(_0: BigInt, _1: number, _2: BigInt, _3: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_set(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<void>;
@@ -582,6 +586,8 @@ interface WasmModule {
   _ggml_backend_tensor_set_2d_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: BigInt, _7: BigInt): Promise<void>;
   _lcb_ggml_backend_tensor_set_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<void>;
   _ggml_backend_tensor_set_async(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt): Promise<void>;
+  _lcb_ggml_backend_tensor_set_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<void>;
+  _ggml_backend_tensor_set_n(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt): Promise<void>;
   _lcb_ggml_backend_unload(_0: BigInt): Promise<void>;
   _ggml_backend_unload(_0: BigInt): Promise<void>;
   _lcb_ggml_backend_view_init(_0: BigInt): Promise<number>;
@@ -802,6 +808,8 @@ interface WasmModule {
   _ggml_flash_attn_ext_add_sinks(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_ggml_flash_attn_ext_get_prec(_0: BigInt): Promise<number>;
   _ggml_flash_attn_ext_get_prec(_0: BigInt): Promise<number>;
+  _lcb_ggml_flash_attn_ext_rows(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: number, _7: number, _8: number): Promise<BigInt>;
+  _ggml_flash_attn_ext_rows(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt, _4: BigInt, _5: BigInt, _6: number, _7: number, _8: number): Promise<BigInt>;
   _lcb_ggml_flash_attn_ext_set_n_kv_max(_0: BigInt, _1: number): Promise<void>;
   _ggml_flash_attn_ext_set_n_kv_max(_0: BigInt, _1: number): Promise<void>;
   _lcb_ggml_floor(_0: BigInt, _1: BigInt): Promise<BigInt>;
@@ -2109,6 +2117,8 @@ interface WasmModule {
   _mtmd_bitmap_init_lazy(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<BigInt>;
   _lcb_mtmd_bitmap_is_audio(_0: BigInt): Promise<number>;
   _mtmd_bitmap_is_audio(_0: BigInt): Promise<number>;
+  _lcb_mtmd_bitmap_is_voice(_0: BigInt): Promise<number>;
+  _mtmd_bitmap_is_voice(_0: BigInt): Promise<number>;
   _lcb_mtmd_bitmap_set_id(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_bitmap_set_id(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_mtmd_bitmap_set_is_video(_0: BigInt, _1: number): Promise<void>;
@@ -2131,8 +2141,12 @@ interface WasmModule {
   _mtmd_free(_0: BigInt): Promise<void>;
   _lcb_mtmd_gen_audio_get_info(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_gen_audio_get_info(_0: BigInt, _1: BigInt): Promise<void>;
+  _lcb_mtmd_gen_audio_get_voice(_0: BigInt, _1: BigInt): Promise<BigInt>;
+  _mtmd_gen_audio_get_voice(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
   _mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
+  _lcb_mtmd_gen_audio_voice_name(_0: BigInt, _1: number): Promise<BigInt>;
+  _mtmd_gen_audio_voice_name(_0: BigInt, _1: number): Promise<BigInt>;
   _lcb_mtmd_gen_inp_default(_0: BigInt, _1: BigInt): Promise<void>;
   _mtmd_gen_inp_default(_0: BigInt, _1: BigInt): Promise<void>;
   _lcb_mtmd_gen_state_free(_0: BigInt): Promise<void>;
