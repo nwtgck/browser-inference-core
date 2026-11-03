@@ -106,6 +106,23 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 self.assertNotIn(key, env)
                 self.assertEqual(os.environ[key], context[key])
 
+    def test_new_upstream_kernels_and_scratch_contract_survive_composition(self):
+        for profile in (False, True):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
+                result = source.prepare(self.upstream, Path(tmp), gpu_profile=profile)
+                text = result.read_text()
+                library = (result.parent / 'ggml-webgpu-shader-lib.hpp').read_text()
+                allocation = text[text.index('static size_t ggml_backend_webgpu_buffer_type_get_alloc_size('):]
+                self.assertIn('const int64_t n_rows   = std::min<int64_t>(src1->ne[1], GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS);', allocation)
+                self.assertIn('src0, src1, n_rows, ctx->webgpu_global_ctx->capabilities.supports_dot_product,', allocation)
+                self.assertNotIn('src0, src1, src1->ne[1], n_rows,', text)
+                self.assertIn('src1->ne[1]', library[library.index('ggml_webgpu_can_use_mmvq(context.src0'):])
+                self.assertIn('wgsl_arange', library)
+                self.assertIn('wgsl_arange', (result.parent / source.aligned_word_load.HEADER_NAME).read_text())
+                self.assertIn('ggml/src/ggml-webgpu/wgsl-shaders/arange.wgsl', source.aligned_word_load.CONTRACT_INPUTS)
+                for hook in ('set_tensor_n', 'get_tensor_n', 'cpy_tensor_n'):
+                    self.assertIn('/* .' + hook, text)
+
     def test_patch_result_and_overlap_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); patches = root / 'patches'; patches.mkdir()

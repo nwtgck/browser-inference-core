@@ -1,11 +1,10 @@
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-index 5ba89e9..62821cf 100644
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -97,6 +97,32 @@ struct ggml_webgpu_shader_lib_context {
+@@ -97,6 +97,32 @@
+     bool        supports_dot_product     = false;
      std::string vendor;
  };
- 
++
 +// Keep the upstream Q8_0 arithmetic, output tiling and lane-to-block mapping.
 +// For K <= 1024, each useful lane visits exactly one block in both sizes;
 +// the smaller power-of-two workgroup removes only lanes with no input work.
@@ -31,11 +30,10 @@ index 5ba89e9..62821cf 100644
 +    }
 +    return workgroup <= context.max_wg_size ? workgroup : fallback;
 +}
-+
+ 
  struct webgpu_pipeline {
      wgpu::ComputePipeline pipeline;
-     std::string           name;
-@@ -965,12 +991,14 @@ struct ggml_webgpu_mul_mat_vec_pipeline_key {
+@@ -966,12 +992,14 @@
      ggml_type src1_type;
      int       vectorized;
      uint32_t  num_cols;
@@ -51,7 +49,7 @@ index 5ba89e9..62821cf 100644
      }
  };
  
-@@ -981,6 +1009,7 @@ struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
+@@ -982,6 +1010,7 @@
          ggml_webgpu_hash_combine(seed, key.src1_type);
          ggml_webgpu_hash_combine(seed, key.vectorized);
          ggml_webgpu_hash_combine(seed, key.num_cols);
@@ -59,15 +57,15 @@ index 5ba89e9..62821cf 100644
          ggml_webgpu_hash_combine(seed, key.use_mmvq);
          ggml_webgpu_hash_combine(seed, key.src_overlap);
          return seed;
-@@ -2038,6 +2067,7 @@ class ggml_webgpu_shader_lib {
-         key.use_mmvq =
-             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.supports_dot_product, context.vendor);
+@@ -2060,6 +2089,7 @@
+         key.use_mmvq    = ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.src1->ne[1],
+                                                    context.supports_dot_product, context.vendor);
          key.src_overlap = src_overlap;
 +        key.workgroup_size = ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
  
          auto it = mul_mat_vec_pipelines.find(key);
          if (it != mul_mat_vec_pipelines.end()) {
-@@ -2148,7 +2178,7 @@ class ggml_webgpu_shader_lib {
+@@ -2170,7 +2200,7 @@
          // VEC/SCALAR controls
          defines.push_back(key.vectorized ? "VEC" : "SCALAR");
  
@@ -76,7 +74,7 @@ index 5ba89e9..62821cf 100644
          uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
  
          if (key.src0_type == GGML_TYPE_Q1_0) {
-@@ -2173,6 +2203,9 @@ class ggml_webgpu_shader_lib {
+@@ -2195,6 +2225,9 @@
          defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
          defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
          variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";

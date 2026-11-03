@@ -57,7 +57,7 @@ class MoeGatherLogical32(unittest.TestCase):
             self.assertEqual(logical.count(operation), original.count(operation))
         self.assertEqual(hashlib.sha256(header.encode()).hexdigest(), gather.HEADER_SHA256)
         for directory, expected in ((self.normal, gather.INPUT_SHA256),
-                                    (self.profile, '8c9a5092a2fa08b400c6e153e6fb6ce5889041af34310242b25431fd1377f009')):
+                                    (self.profile, 'f59541b8d12a5fee35337e9eb4746e75420164a86f3ad488f2d402c128a8eb8e')):
             text = (directory / 'ggml-webgpu-shader-lib.hpp').read_text()
             before = text.replace('#include "' + gather.HEADER_NAME + '"\n', '').replace(
                 'preprocessor.preprocess(wgsl_mul_mat_id_gather_logical32, defines)',

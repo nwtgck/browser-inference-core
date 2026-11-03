@@ -60,7 +60,9 @@ class F32SmallMOverlay(unittest.TestCase):
         # This exact existing CPP controls N<=4 matvec/MMVQ, offsets, all sixteen
         # parameters, physical bindings and the production grid calculation.
         backend = (self.normal / 'ggml-webgpu.cpp').read_text()
-        self.assertIn('bool use_mat_vec = (dst->ne[1] <= 4);', backend)
+        self.assertIn('bool use_mat_vec = (dst->ne[1] <= GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS);', backend)
+        self.assertIn('#define GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS             4',
+                      (self.normal / small.HEADER_NAME).read_text())
 
     def test_upstream_contract_input_patch_and_output_drift_fail_closed(self):
         for name in small.CONTRACT_INPUTS:

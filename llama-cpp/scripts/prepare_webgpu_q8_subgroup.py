@@ -11,23 +11,23 @@ import sys
 import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-q8-subgroup-matvec.patch'
-PATCH_SHA256 = 'dba97f95c2f5c6fd2a7cf48b7063ea672bab1225ef147722e6444141f90a1dc7'
+PATCH_SHA256 = '76dcc681e6de7d647001716de4316657589015676206f725450c6cfba3350b48'
 BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-q8-subgroup-shaders.hpp'
 SHADER_NAME = 'q8_subgroup_matvec.wgsl'
 INPUTS = {
-    'ggml-webgpu.cpp': 'afb7f066d73ce1c742296502087a2881dad9454957e19f90d5b822982e208274',
-    'ggml-webgpu-shader-lib.hpp': '84912f50de5cd9489c76228bd06de74bc87208bec89bc8b3a3a5a7510aed756e',
+    'ggml-webgpu.cpp': 'd7363c0026d0dec265679d3cb1dddeafcf3f5049d5846eca124ec2c70615d17a',
+    'ggml-webgpu-shader-lib.hpp': '24fd12bea29e2bd0590ea80984cfb8c73553df1a4a9b7810edb5d191f0931ab3',
 }
 OUTPUTS = {
     'ggml-webgpu.cpp': INPUTS['ggml-webgpu.cpp'],
-    'ggml-webgpu-shader-lib.hpp': 'a301a9c08cf0c3d92849286e1066d81b17ff7b1b7deb058da0b6870d13456304',
+    'ggml-webgpu-shader-lib.hpp': 'f286785f19fe280a4d2a8ab3873bf5f39d7af6a1b45be892537e8cb657e103f6',
     'wgsl-shaders/q8_subgroup_matvec.wgsl': '503e7785159426aefa700f4edd8625a59a88997c4beee995328744e06cd8f25c',
 }
 HEADER_SHA256 = '7d151de06e9a3cb5366b29e043052b3b949c4c1948e7b3c2e80e99a944b95cab'
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl': '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',
     'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',

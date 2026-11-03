@@ -11,18 +11,18 @@ BASE = Path('ggml/src/ggml-webgpu')
 SHADER_NAME = 'mul_mat_id_group.wgsl'
 HEADER_NAME = 'ggml-webgpu-mul-mat-id-group-shaders.hpp'
 INPUTS = {
-    'ggml-webgpu.cpp': 'd9c3f73f0a430f3ee2fa0e88749cbe56f755eae4f9f6dfa102fc19c6570178ab',
-    'ggml-webgpu-shader-lib.hpp': '0ae3bace9bd2bb4390c561c2f528a442906ac9db1565078f4d85196f74ca4cf4',
+    'ggml-webgpu.cpp': '972928fc0755daad4e24b2da548d2e62329d5ef474ab5ab7e5214365e88d48cf',
+    'ggml-webgpu-shader-lib.hpp': 'a242d104ea3841d3041641fdd33561fbcb9157784a6198d6696a0bb6cee93700',
 }
 OUTPUTS = {
     'ggml-webgpu.cpp': INPUTS['ggml-webgpu.cpp'],
-    'ggml-webgpu-shader-lib.hpp': 'a6080cd1f69b12c4514436b7114f81750327e472c52ba502d691f406307f4856',
+    'ggml-webgpu-shader-lib.hpp': '7c5b913454691966279c65cab8953ecb19348cfd4653df94202ca60349d3e48d',
     'wgsl-shaders/' + SHADER_NAME: 'daa6fd66e380b4c0277f531c07928b6ae5a35ab2c307bcd44f554498e56e962b',
 }
 HEADER_SHA256 = '8b3dabdd9356b5a5e020d84c354faa68a70b8634c81793060d53fb58bd55bc10'
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl': '667d3a0f8c0e8a8b033d1b3cf861b69d299dee276e76caddaa0ecccbe885a683',

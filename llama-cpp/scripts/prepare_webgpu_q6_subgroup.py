@@ -10,14 +10,14 @@ PATCH_SHA256 = '9e8355c7cd862acb5bfe2c3e45909916141b1c0f4e57ad9aafd0d9de011f772a
 CONTRACT_INPUTS = dict(q8_subgroup.CONTRACT_INPUTS)
 EMBEDDED_HEADER_NAME = q8_subgroup.HEADER_NAME
 EMBEDDED_HEADER_SHA256 = '3db91d6d9aeef1df96cb9d55e8109001eb585c172b94d80d7556baaeae395a40'
-INPUTS = {False: {'ggml-webgpu.cpp': '708de1eb3c267527d65cdb097a06d2ae71437f2ce4880071de42acbe098ffc55',
-         'ggml-webgpu-shader-lib.hpp': '4947500704450e61424926a34ea69346b70900944896f5e7495eeed0b4d69725'},
- True: {'ggml-webgpu.cpp': '0d7f1dcb2ad06124a83fa6c33f2b388418268ba0d26d6d12262ccb299b860445',
-        'ggml-webgpu-shader-lib.hpp': '91eb008a1ca86b10143027e5080b4ca0469512d3625d4028984e11e89e3cf716'}}
-OUTPUTS = {False: {'ggml-webgpu.cpp': '708de1eb3c267527d65cdb097a06d2ae71437f2ce4880071de42acbe098ffc55',
-         'ggml-webgpu-shader-lib.hpp': 'b7147b1dae241d8fe965969aa2d27b3de8049ec0f34768c485d1a54439ea64e9'},
- True: {'ggml-webgpu.cpp': '0d7f1dcb2ad06124a83fa6c33f2b388418268ba0d26d6d12262ccb299b860445',
-        'ggml-webgpu-shader-lib.hpp': '50a8c1a9c293180954c19d31f9948925776ddd97d553cf21b24bbb9d0e9440b8'}}
+INPUTS = {False: {'ggml-webgpu.cpp': 'ea4f876b27b7a1664364312374b41acf637cf16ba5267b651cfa7cde93665b57',
+         'ggml-webgpu-shader-lib.hpp': 'cc2447023811811fd492d99e9a90b9e83c3a974a2e604a644b77e9ea30177a6c'},
+ True: {'ggml-webgpu.cpp': 'ae59490ebba9058d3000e5a9bd57854b0319f3d453e499ddbdd2adcbd9080ad9',
+        'ggml-webgpu-shader-lib.hpp': 'f5a07a04ad663e748e25cfa5dde4a97b298609ce08b07b4ceaacd60618f0490e'}}
+OUTPUTS = {False: {'ggml-webgpu.cpp': 'ea4f876b27b7a1664364312374b41acf637cf16ba5267b651cfa7cde93665b57',
+         'ggml-webgpu-shader-lib.hpp': 'd0aceb8f9fb8f27697b659da7b83d982b572039d224cae249ab42168c549cd0c'},
+ True: {'ggml-webgpu.cpp': 'ae59490ebba9058d3000e5a9bd57854b0319f3d453e499ddbdd2adcbd9080ad9',
+        'ggml-webgpu-shader-lib.hpp': '44cf27c9d6770e2485417168ae3ef8e5b59b86eed64937492ffdad2ff8513973'}}
 
 
 def prepare(work: Path, source: Path, patch_root: Path, env: dict[str, str], *, gpu_profile: bool) -> None:

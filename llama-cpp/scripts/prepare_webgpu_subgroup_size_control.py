@@ -14,14 +14,14 @@ PATCHES = {False: ('ggml-webgpu-subgroup-size-control.patch',
         '79c6cad72257e05ae1c00bbdfaebbb678eee9057a932dc3b2db76b640b2fa85b')}
 SHARED_PATCH = ('ggml-webgpu-subgroup-size-control-shared.patch',
  'bceb8c48605ffd4a9da75536fffffb1595d9314e0330edecf5aaabaf09663bdb')
-INPUTS = {False: {'ggml-webgpu.cpp': '57d577c17ef1b87c088005defa103906ec124ce93b2429ace86e88028b638cbf',
-         'ggml-webgpu-shader-lib.hpp': 'e0b874393679689e988471b83d7dff7926b9b28e68a3dc71c46d06df178fe1b9'},
- True: {'ggml-webgpu.cpp': 'e3bce48df987e216db5094bfb9eaf56f53fdaabb75f06cb9ad2cabbda24e000d',
-        'ggml-webgpu-shader-lib.hpp': 'f83bd98f1a0b31caa5b6bb1fdbb46d44dc44066e98d367306feaf3005ee01b23'}}
-OUTPUTS = {False: {'ggml-webgpu.cpp': '708de1eb3c267527d65cdb097a06d2ae71437f2ce4880071de42acbe098ffc55',
-         'ggml-webgpu-shader-lib.hpp': '4947500704450e61424926a34ea69346b70900944896f5e7495eeed0b4d69725'},
- True: {'ggml-webgpu.cpp': '0d7f1dcb2ad06124a83fa6c33f2b388418268ba0d26d6d12262ccb299b860445',
-        'ggml-webgpu-shader-lib.hpp': '91eb008a1ca86b10143027e5080b4ca0469512d3625d4028984e11e89e3cf716'}}
+INPUTS = {False: {'ggml-webgpu.cpp': '296f4068e349aaa2fae83bc64a2357497ffe83e62b919a7416469c0cfaa4684a',
+         'ggml-webgpu-shader-lib.hpp': 'e90bac8b868cd3674c69903cc9bf5bac1327a236fb8984d50c340f2c6d73a67d'},
+ True: {'ggml-webgpu.cpp': 'b08dffb6fe1450aaf7cec68203a7ca22f082380a6488ab9195ee26ed407b9f6c',
+        'ggml-webgpu-shader-lib.hpp': '9959ab22cb286927cbc3c289914cbfc0c81047324d5a7d17f37cb3c9114e9371'}}
+OUTPUTS = {False: {'ggml-webgpu.cpp': 'ea4f876b27b7a1664364312374b41acf637cf16ba5267b651cfa7cde93665b57',
+         'ggml-webgpu-shader-lib.hpp': 'cc2447023811811fd492d99e9a90b9e83c3a974a2e604a644b77e9ea30177a6c'},
+ True: {'ggml-webgpu.cpp': 'ae59490ebba9058d3000e5a9bd57854b0319f3d453e499ddbdd2adcbd9080ad9',
+        'ggml-webgpu-shader-lib.hpp': 'f5a07a04ad663e748e25cfa5dde4a97b298609ce08b07b4ceaacd60618f0490e'}}
 SHARED_INPUTS = {'ggml-webgpu-q8-subgroup-shaders.hpp': 'b1b86048fbb6b9a58834a4b5ee5552ac2704641cbf4db3c996c1a85674ea302b',
  'ggml-webgpu-batch-readback.hpp': '62a542146fb2e57cb1b9539d4fd0cde2a3f73c00ca7893600fbc6401430bf24a'}
 GENERATED_OUTPUTS = {'ggml-webgpu-optional-pipeline.hpp': 'f2645457e2dc70b592a34b5d35262c26a60d3f8b0c7d2e3570eb1ee53a201f5e',

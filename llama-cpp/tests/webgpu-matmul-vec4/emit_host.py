@@ -9,13 +9,13 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition
 from matvec_subgroup_test_support import q4_subgroup_helpers
-from webgpu_embedding_test_support import legacy_fixed_sources
+from webgpu_embedding_test_support import legacy_fixed_sources, matvec_constants
 
 
 def build(upstream: Path, baseline: Path, candidate: Path, output: Path, *, profile: bool) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     header = legacy_fixed_sources(candidate)['ggml-webgpu-shader-lib.hpp']
-    chunks = [(HERE / 'prefix.cpp').read_text()]
+    chunks = [matvec_constants(header), (HERE / 'prefix.cpp').read_text()]
     chunks += ['\n'.join(re.findall(r'^#define WEBGPU_MUL_MAT_.*$', header, re.M))]
     for marker in ['template <typename T> inline void ggml_webgpu_hash_combine(',
                    'struct ggml_webgpu_shader_lib_context {',

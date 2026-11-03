@@ -50,14 +50,14 @@ SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = 'd5228a8a36613fa8ae7341bb96eee04f318aed5ccd73aa85e57164d118a70a2b'
+OUTPUT_SHA256 = '67940a20bba8d06205ad2f6cf1e909450c4fbb6805b5eba59f574c3576d69779'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
 # Historical name retained for consumers of the final shared shader library.
-SSM_HEADER_OUTPUT_SHA256 = 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2'
+SSM_HEADER_OUTPUT_SHA256 = '7756a6ef0fb1521dd896fbb1a34b7431dac71ef52db93003c0db70527dff3536'
 # OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
 # Later stages keep their own contracts; these identities describe compiled files.
 FINAL_OUTPUTS = {profile: {name: q6_subgroup.OUTPUTS[profile][name]
@@ -69,15 +69,15 @@ FINAL_OUTPUTS = {profile: {name: q6_subgroup.OUTPUTS[profile][name]
 # browser transport thresholds are version-specific, not this loader's contract.
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
-LOADER_PATCH_SHA256 = 'e83cc330b66ad4683799b4e9a52ed2bc862195cf0a025729a80cc20452b3561a'
-LOADER_OUTPUT_SHA256 = '121845c207be9a409ea6a3d39692603d91576911feb7b30fe1be00f64b946617'
+LOADER_PATCH_SHA256 = '6b1edd9a6a14e1b70d8cc79e548484b75db47d20c68d3a87a73c5a2be757eb2b'
+LOADER_OUTPUT_SHA256 = '6bbfef6f691c432101e4eb1df6cea489c489c89940767c39b191ab955c8053af'
 LOADER_INPUTS = {
-    "src/llama-model-loader.cpp": "fc7ab08ffda8f94ff2a1ae6ddff034b9a90d2eb1d532309bd14a388e1bfa83e3",
+    "src/llama-model-loader.cpp": "b856b513340e9e86ab81e2d8d110fedd07b60f508e0e4f8513690150f8efd7e1",
     "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
     "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
     "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",
     "src/llama-model-loader.h": "4eb5318f7b70333015386d612738f507153770e4e5635895b2c1d8355ff22103",
-    "ggml/src/ggml-quants.c": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab"
+    "ggml/src/ggml-quants.c": "bcda33625707fdfcb1367cdd2bb1a2f017430162ec9623abc84ad17459698f73"
 }
 
 

@@ -10,14 +10,14 @@ PATCH_NAME = 'ggml-webgpu-moe-gather-logical32.patch'
 PATCH_SHA256 = '784ac621b98de1689f30c240c7e8099560dc839445616df75c051e9ad4555a67'
 SHADER_NAME = 'mul_mat_id_gather_logical32.wgsl'
 HEADER_NAME = 'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp'
-INPUT_SHA256 = '8aa99e74bcef275d0da27f014373c61e2279239af83c48019faa3e37d2038c80'
-OUTPUT_SHA256 = 'a302e654b7afd4ed1ba39a2031596c1d8cb1ca3ba19533be4f5b40f28e1281e2'
+INPUT_SHA256 = '9857f40b073d83198354a21bbd956162f66a8e9875647ddd4a7adc4e04622181'
+OUTPUT_SHA256 = '7756a6ef0fb1521dd896fbb1a34b7431dac71ef52db93003c0db70527dff3536'
 SHADER_SHA256 = '57d91d28f0a2a8528bc55ed1d95b08f0464bde4a02efc0fd797275202edfd221'
 HEADER_SHA256 = '2fd73d87ebf9cebc13c50a444f627cbfc9440d0f03adfa7c906b68ee7228783c'
 CONTRACT_INPUTS = {
-    'ggml/include/ggml.h': '2b4dd92fa992cb4ef484917a6c62fef5097698744160ccc09214fd0c459c92c7',
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '67e0c1b6ffeec0d943eb63aced20c00951d565cf2bbb964e90a99265259dca8e',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '52d39024d24f723dc1b88dc8bf8b4ed18f1e50846010c35065cebc364a789e2d',
+    'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather.wgsl': '433c7b72fb9382e6e452004bdb602d7be8f2654543de680a28d31d8a263298e7',
