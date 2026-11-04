@@ -1,6 +1,6 @@
 --- a/mtmd-audio.cpp
 +++ b/mtmd-audio.cpp
-@@ -459,6 +459,13 @@
+@@ -486,6 +486,13 @@
      }
      out.data.resize(total_size);
  
@@ -14,7 +14,7 @@
      {
          std::vector<std::thread> workers(n_threads - 1);
          for (int iw = 0; iw < n_threads - 1; ++iw) {
-@@ -474,6 +481,7 @@
+@@ -501,6 +508,7 @@
              workers[iw].join();
          }
      }
@@ -22,7 +22,7 @@
  
      const int64_t effective_n_len = n_samples_in / frame_step;
      if (params.norm_per_feature) {
-@@ -1307,6 +1315,11 @@
+@@ -1422,6 +1430,11 @@
      out_full.n_len_org = out_full.n_len;
      out_full.data.resize(out_full.n_mel * out_full.n_len);
  
@@ -34,11 +34,11 @@
      const int n_threads = 4;
      std::vector<std::thread> workers(n_threads - 1);
      for (int iw = 0; iw < n_threads - 1; ++iw) {
-@@ -1340,6 +1353,7 @@
+@@ -1455,6 +1468,7 @@
      for (int iw = 0; iw < n_threads - 1; ++iw) {
          workers[iw].join();
      }
 +#endif
+ }
  
-     // Per-feature normalization (only on valid frames)
-     {
+ bool mtmd_audio_preprocessor_parakeet::preprocess(const float * samples,

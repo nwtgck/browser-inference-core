@@ -6,14 +6,33 @@
  
  #include "ggml.h"
  #include "llama-arch.h"
-@@ -2928,14 +2929,60 @@
+@@ -3099,32 +3100,60 @@
      llama_io_write_host(
-             uint8_t * p, size_t len) : ptr(p), buf_size(len) {}
+             uint8_t * p, size_t len) : ptr(p), base_ptr(p), buf_size(len) {}
  
 -    ~llama_io_write_host() {
--        // TODO: add backend support to batch tensor_get? or some other way to speed this up
+-        if (winfos.empty()) {
+-            return;
+-        }
+-
+-        std::vector<ggml_tensor *> tensors;
+-        std::vector<size_t> offsets;
+-        std::vector<size_t> sizes;
+-        std::vector<size_t> data_offsets;
+-        tensors.reserve(winfos.size());
+-        offsets.reserve(winfos.size());
+-        sizes.reserve(winfos.size());
+-        data_offsets.reserve(winfos.size());
+-
 -        for (const auto & winfo : winfos) {
--            ggml_backend_tensor_get(winfo.tensor, winfo.ptr, winfo.offset, winfo.size);
+-            tensors.push_back(winfo.tensor);
+-            offsets.push_back(winfo.offset);
+-            sizes.push_back(winfo.size);
+-            data_offsets.push_back(winfo.data_offset);
+-        }
+-
+-        std::vector<const ggml_tensor *> const_tensors(tensors.begin(), tensors.end());
+-        ggml_backend_tensor_get_n(const_tensors.data(), base_ptr, offsets.data(), sizes.data(), data_offsets.data(), winfos.size());
 +    // Consume queued reads explicitly inside the public caller's try block.
 +    // No destructor performs I/O, including after a partially completed flush.
 +    void flush() {
@@ -27,7 +46,7 @@
 +        for (size_t first = 0; first < pending.size();) {
 +            const auto & head = pending[first];
 +            if (!batch_size_eligible(head.size)) {
-+                ggml_backend_tensor_get(head.tensor, head.ptr, head.offset, head.size);
++                ggml_backend_tensor_get(head.tensor, base_ptr + head.data_offset, head.offset, head.size);
 +                ++first;
 +                continue;
 +            }
@@ -48,7 +67,7 @@
 +                    ggml_backend_tensor_get_request_v1 requests[GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS];
 +                    for (size_t i = first; i < last; ++i) {
 +                        const auto & w = pending[i];
-+                        requests[i - first] = {w.tensor, w.ptr, w.offset, w.size};
++                        requests[i - first] = {w.tensor, base_ptr + w.data_offset, w.offset, w.size};
 +                    }
 +                    if (get_batch(requests, last - first)) {
 +                        first = last;
@@ -59,9 +78,9 @@
 +            // Unsupported means no work began. Preserve the original order.
 +            for (; first < last; ++first) {
 +                const auto & w = pending[first];
-+                ggml_backend_tensor_get(w.tensor, w.ptr, w.offset, w.size);
++                ggml_backend_tensor_get(w.tensor, base_ptr + w.data_offset, w.offset, w.size);
 +            }
-         }
++        }
      }
  
      void write(const void * src, size_t size) override {
@@ -71,7 +90,7 @@
          if (size > buf_size) {
              throw std::runtime_error("unexpectedly reached end of buffer");
          }
-@@ -2946,11 +2993,14 @@
+@@ -3135,11 +3164,14 @@
      }
  
      void write_tensor(ggml_tensor * tensor, size_t offset, size_t size) override {
@@ -84,10 +103,10 @@
  
 -        // save the write for later during destruction
 +        // Save the write for the explicit, one-shot flush.
-         winfos.push_back({tensor, ptr, size, offset});
+         winfos.push_back({tensor, (size_t) (ptr - base_ptr), size, offset});
  
          ptr += size;
-@@ -2974,6 +3024,28 @@
+@@ -3164,6 +3196,28 @@
          size_t offset;
      };
      std::vector<write_info> winfos;
@@ -116,7 +135,7 @@
  };
  
  class llama_io_read_host : public llama_io_read_i {
-@@ -3402,7 +3474,9 @@
+@@ -3618,7 +3672,9 @@
  size_t llama_context::state_get_data(uint8_t * dst, size_t size) {
      llama_io_write_host io(dst, size);
      try {
@@ -127,7 +146,7 @@
      } catch (const std::exception & err) {
          LLAMA_LOG_ERROR("%s: error saving state: %s\n", __func__, err.what());
          return 0;
-@@ -3437,17 +3511,24 @@
+@@ -3653,17 +3709,24 @@
  
  size_t llama_context::state_seq_get_data(llama_seq_id seq_id, uint8_t * dst, size_t size, llama_state_seq_flags flags) {
      std::unique_ptr<llama_io_write_i> io;

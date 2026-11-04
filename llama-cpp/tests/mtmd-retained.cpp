@@ -362,6 +362,25 @@ static void test_rejections() {
 }
 
 static void test_roles() {
+    for (projector_type kind : {PROJECTOR_TYPE_CHATTERBOX, PROJECTOR_TYPE_CHATTERBOX_SPKENC}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = kind;
+        m.cbx.input_embedding_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "projector roles");
+    }
+    for (bool query : {false, true}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = PROJECTOR_TYPE_MLP;
+        m.layers.resize(1);
+        auto * bias = ggml_new_tensor_1d(f.weights, GGML_TYPE_BF16, 16);
+        if (query)
+            m.layers[0].q_norm_b = bias;
+        else
+            m.layers[0].k_norm_b = bias;
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
+    }
     for (projector_type kind : {PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_MLP_NORM, PROJECTOR_TYPE_QWEN2VL,
                                 PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2,
                                 PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3, PROJECTOR_TYPE_GEMMA4V}) {

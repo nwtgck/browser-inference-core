@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <unordered_set>
 
-// Deliberately coupled to the reviewed v0.8.0 model roles. Do not infer roles
+// Deliberately coupled to the reviewed vision model roles. Do not infer roles
 // from filename suffixes or accept every rank-2 tensor: a position table may be
 // interpolated, and Gemma 3's input projection is transposed/CONT'ed. Reject such
 // custom BF16 files BEFORE their graph builders can assert on an invalid type.

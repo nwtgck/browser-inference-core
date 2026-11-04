@@ -1,5 +1,6 @@
 """Keep extracted factories on the prepared composition's canonical symbols."""
 import hashlib
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -29,12 +30,21 @@ def final_canonical(prepared: Path) -> bool:
 
 
 def canonical_prefix(prefix: str, prepared: Path) -> str:
+    library = (prepared / 'ggml-webgpu-shader-lib.hpp').read_text()
+    prefix = matvec_constants(library) + '\n' + prefix
     if not final_canonical(prepared):
         return prefix
     old = '#include "ggml-wgsl-shaders.hpp"'
     if prefix.count(old) != 1:
         raise ValueError('Recording prefix canonical include changed')
     return prefix.replace(old, '#include "' + word.HEADER_NAME + '"')
+
+
+def matvec_constants(library: str) -> str:
+    constants = re.findall(r'^#define GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS\s+\d+\s*$', library, re.MULTILINE)
+    if len(constants) != 1:
+        raise ValueError('Matvec row-limit definition changed')
+    return constants[0]
 
 
 def embedding_sha256(prepared: Path, name: str, historical: str) -> str:

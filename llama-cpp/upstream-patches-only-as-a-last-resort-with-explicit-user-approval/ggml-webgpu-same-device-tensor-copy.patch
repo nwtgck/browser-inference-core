@@ -1,6 +1,6 @@
 --- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-@@ -3867,6 +3867,47 @@
+@@ -3947,6 +3947,47 @@
      WEBGPU_CPU_PROFILE_TOTAL_END(get_tensor, buf_ctx->global_ctx);
  }
  
@@ -48,7 +48,7 @@
  static void ggml_backend_webgpu_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
      WEBGPU_LOG_DEBUG("ggml_backend_webgpu_buffer_clear(" << buffer << ", " << (uint32_t) value << ")");
      WEBGPU_CPU_PROFILE_TOTAL_START(clear);
-@@ -3884,7 +3925,7 @@
+@@ -3964,7 +4005,7 @@
      /* .get_tensor      = */ ggml_backend_webgpu_buffer_get_tensor,
      /* .set_tensor_2d   = */ NULL,
      /* .get_tensor_2d   = */ NULL,
@@ -56,4 +56,4 @@
 +    /* .cpy_tensor      = */ ggml_backend_webgpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_webgpu_buffer_clear,
      /* .reset           = */ NULL,  // TODO: optional, think it coordinates with
-                                     // .init_tensor
+     /* .set_tensor_n    = */ NULL,

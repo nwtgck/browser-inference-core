@@ -9,7 +9,7 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`8642541b255bfb5dc39cd351a178be09013a55d6`. Re-evaluate compatibility at each pin
+`cd959bae99ff4bed22bef2604f45241c09bbb8c8`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
 ## Portable explicit subgroup matvec selection
@@ -39,7 +39,7 @@ update rather than treating that revision or these workarounds as permanent.
 - **Removal:** upstream supplies portable explicit-width selection and safe
   optional-pipeline fallback, or the owner withdraws this performance requirement.
 
-See [the current upstream review](../docs/llama-v0.8.0-review.md) for reviewed
+See [the v0.8.0 reference review](../docs/llama-v0.8.0-review.md) for previously reviewed
 contracts and validation boundaries. The [338fce review](../docs/llama-338fce-review.md)
 and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 

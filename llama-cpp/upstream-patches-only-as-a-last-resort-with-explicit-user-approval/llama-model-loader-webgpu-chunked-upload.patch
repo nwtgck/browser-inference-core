@@ -1,7 +1,6 @@
-diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
 --- a/src/llama-model-loader.cpp
 +++ b/src/llama-model-loader.cpp
-@@ -1559,6 +1559,120 @@
+@@ -1562,6 +1562,120 @@
      return data;
  }
  
@@ -122,59 +121,93 @@ diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
  bool llama_model_loader::load_all_data(
          struct ggml_context * ctx,
          std::vector<ggml_backend_buffer_t> & bufs,
-@@ -1689,6 +1803,8 @@
-             return staged_a && ggml_nbytes(a) > ggml_nbytes(b);
-         });
-     }
-+
-+    llama_webgpu_load_uploads webgpu_uploads;
+@@ -1695,6 +1809,8 @@
  
+     // staging buffer for non-host buffers without async uploads, reused because a fresh allocation per tensor page faults on every load
+     std::vector<no_init<uint8_t>> read_buf;
++    llama_webgpu_load_uploads webgpu_uploads;
++
      for (struct ggml_tensor * cur : tensors) {
          const auto * weight = get_weight(ggml_get_name(cur));
-@@ -1809,13 +1925,35 @@
+         if (weight == nullptr) {
+@@ -1814,27 +1930,55 @@
                          buffer_idx %= n_buffers;
                      }
                  } else {
--                    // scoped to one tensor so only one staging buffer is alive at a time
--                    std::vector<no_init<uint8_t>> read_buf(n_size);
--                    file->seek(weight->offs, SEEK_SET);
--                    file->read_raw(read_buf.data(), n_size);
--                    ggml_backend_tensor_set(cur, read_buf.data(), 0, n_size);
--                    if (check_tensors && !ggml_validate_row_data(cur->type, read_buf.data(), n_size)) {
+-                    // with direct IO read the aligned range around the tensor and use the data inside it, so no bounce buffer is needed
+-                    const size_t align          = file->read_alignment();
+-                    const size_t aligned_offset = weight->offs & ~(align - 1);
+-                    const size_t pad            = weight->offs - aligned_offset;
+-                    const size_t read_size      = (pad + n_size + align - 1) & ~(align - 1);
+-                    const size_t buf_size       = read_size + align - 1;
+-
+-                    // tensors come biggest-first: shrink the buffer when it gets too large, so peak memory stays close to one tensor
+-                    if (read_buf.size() < buf_size || read_buf.size() > 2*buf_size) {
+-                        // free the old buffer first, `read_buf = {}` would keep its capacity
+-                        read_buf = std::vector<no_init<uint8_t>>();
+-                        read_buf.resize(buf_size);
+-                    }
+-                    uint8_t * read_dst = (uint8_t *) GGML_PAD((uintptr_t) read_buf.data(), align);
+-                    file->seek(aligned_offset, SEEK_SET);
+-                    file->read_raw_unsafe(read_dst, read_size);
+-
+-                    const uint8_t * data = read_dst + pad;
+-                    ggml_backend_tensor_set(cur, data, 0, n_size);
+-                    if (check_tensors && !ggml_validate_row_data(cur->type, data, n_size)) {
 -                        throw std::runtime_error(format("tensor '%s' has invalid data", ggml_get_name(cur)));
 +                    auto * buft = ggml_backend_buffer_get_type(cur->buffer);
 +                    auto * dev = ggml_backend_buft_get_device(buft);
 +                    auto * reg = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
 +                    const bool chunked = reg && strcmp(ggml_backend_reg_name(reg), "WebGPU") == 0 &&
 +                                         buft == ggml_backend_dev_buffer_type(dev);
-+                    size_t chunk_size = n_size;
 +                    if (chunked) {
 +                        // Keep complete quantization blocks and four-byte upload boundaries.
 +                        const size_t chunk_alignment = 4 * ggml_type_size(cur->type);
-+                        chunk_size = webgpu_uploads.chunk_size_for(dev, n_size, chunk_alignment);
++                        const size_t chunk_size = webgpu_uploads.chunk_size_for(dev, n_size, chunk_alignment);
 +                        if (weight->offs > file->size() || n_size > file->size() - weight->offs) {
 +                            throw std::runtime_error(format("tensor '%s' extends beyond the file", ggml_get_name(cur)));
 +                        }
-+                    }
-+                    // Some non-host backends require a complete tensor in one call.
-+                    std::vector<no_init<uint8_t>> read_buf(chunk_size);
-+                    for (size_t offset = 0; offset < n_size; ) {
-+                        const size_t read_size = std::min(chunk_size, n_size - offset);
-+                        // Direct I/O reads can advance past the requested data to an aligned boundary.
-+                        file->seek(weight->offs + offset, SEEK_SET);
-+                        file->read_raw(read_buf.data(), read_size);
-+                        if (chunked) {
++                        // Bound the temporary read storage independently of the tensor size.
++                        std::vector<no_init<uint8_t>> read_buf(chunk_size);
++                        for (size_t offset = 0; offset < n_size; ) {
++                            const size_t read_size = std::min(chunk_size, n_size - offset);
++                            // Direct I/O reads can advance past the requested data to an aligned boundary.
++                            file->seek(weight->offs + offset, SEEK_SET);
++                            file->read_raw(read_buf.data(), read_size);
 +                            webgpu_uploads.reserve(dev, read_size);
++                            ggml_backend_tensor_set(cur, read_buf.data(), offset, read_size);
++                            if (check_tensors && !ggml_validate_row_data(cur->type, read_buf.data(), read_size)) {
++                                throw std::runtime_error(format("tensor '%s' has invalid data", ggml_get_name(cur)));
++                            }
++                            offset += read_size;
 +                        }
-+                        ggml_backend_tensor_set(cur, read_buf.data(), offset, read_size);
-+                        if (check_tensors && !ggml_validate_row_data(cur->type, read_buf.data(), read_size)) {
++                    } else {
++                        // with direct IO read the aligned range around the tensor and use the data inside it, so no bounce buffer is needed
++                        const size_t align          = file->read_alignment();
++                        const size_t aligned_offset = weight->offs & ~(align - 1);
++                        const size_t pad            = weight->offs - aligned_offset;
++                        const size_t read_size      = (pad + n_size + align - 1) & ~(align - 1);
++                        const size_t buf_size       = read_size + align - 1;
++
++                        // tensors come biggest-first: shrink the buffer when it gets too large, so peak memory stays close to one tensor
++                        if (read_buf.size() < buf_size || read_buf.size() > 2*buf_size) {
++                            // free the old buffer first, `read_buf = {}` would keep its capacity
++                            read_buf = std::vector<no_init<uint8_t>>();
++                            read_buf.resize(buf_size);
++                        }
++                        uint8_t * read_dst = (uint8_t *) GGML_PAD((uintptr_t) read_buf.data(), align);
++                        file->seek(aligned_offset, SEEK_SET);
++                        file->read_raw_unsafe(read_dst, read_size);
++
++                        const uint8_t * data = read_dst + pad;
++                        ggml_backend_tensor_set(cur, data, 0, n_size);
++                        if (check_tensors && !ggml_validate_row_data(cur->type, data, n_size)) {
 +                            throw std::runtime_error(format("tensor '%s' has invalid data", ggml_get_name(cur)));
 +                        }
-+                        offset += read_size;
                      }
                  }
              }
-@@ -1823,6 +1961,8 @@
+@@ -1842,6 +1986,8 @@
  
          size_done += n_size;
      }

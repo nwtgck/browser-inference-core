@@ -8,12 +8,15 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from test_webgpu_bind_group_cache import definition
+from webgpu_embedding_test_support import matvec_constants
 
 
 def build(upstream: Path, baseline: Path, candidate: Path, output: Path, library: Path, *, profile: bool) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     header = (candidate / 'ggml-webgpu-shader-lib.hpp').read_text()
-    chunks = [(HERE / 'prefix.cpp').read_text(), '\n'.join(re.findall(r'^#define WEBGPU_MUL_MAT_.*$', header, re.M))]
+    chunks = [(HERE / 'prefix.cpp').read_text(), matvec_constants(header),
+              '\n'.join(re.findall(r'^#define WEBGPU_MUL_MAT_.*$', header, re.M))]
+    chunks.append(re.search(r'^#define GGML_WEBGPU_FLASH_ATTN_VEC_MAX_SEQ_LEN\s+\d+u$', header, re.M)[0])
     # This source constant is used only by compiled-but-unexecuted flash branches.
     chunks.append(re.search(r'^inline constexpr uint32_t GGML_WEBGPU_FLASH_ATTN_TILE_KV_VEC_WIDTH = .*$', header, re.M)[0])
     common = ['static size_t ggml_webgpu_tensor_offset(',

@@ -26,6 +26,27 @@ def function(name, result, *parameters, variadic=False):
 
 
 class GgmlBindings(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('clang'), 'Clang is required for public header generation')
+    def test_pinned_upstream_batch_and_audio_metadata(self):
+        with tempfile.TemporaryDirectory(prefix='lcb-upstream-api-') as temp:
+            output = Path(temp)
+            schema = generate_bindings.generate(ROOT / 'vendor/llama.cpp', output, 'clang')
+            functions = {entry['name'] for entry in schema['functions']}
+            added = {'ggml_backend_tensor_copy_n', 'ggml_backend_tensor_get_n', 'ggml_backend_tensor_set_n',
+                     'ggml_flash_attn_ext_rows', 'mtmd_bitmap_is_voice', 'mtmd_gen_audio_get_voice',
+                     'mtmd_gen_audio_voice_name', 'mtmd_gen_audio_read_tensor', 'mtmd_gen_state_set_ref'}
+            self.assertTrue(added <= functions)
+            records = {entry['name']: {field['name'] for field in entry['fields']} for entry in schema['records']}
+            self.assertIn('n_voices', records['mtmd_gen_audio_info'])
+            self.assertIn('speaker_ref', records['mtmd_helper_gen_audio_inp'])
+            self.assertNotIn('voice', records['mtmd_helper_gen_audio_inp'])
+            for name in added:
+                self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
+                self.assertIn('lcb_' + name, json.loads((output / 'jspi-exports.json').read_text()))
+            for name in ('GGML_TYPE_F8_E4M3', 'GGML_FTYPE_MOSTLY_F8_E4M3', 'LLAMA_FTYPE_MOSTLY_F8_E4M3',
+                         'MTMD_VIDEO_TEMPLATE_QWEN3VL', 'MTMD_GEN_AUDIO_TYPE_CHATTERBOX'):
+                self.assertIn(name, schema['constants'])
+
     def test_existing_mtmd_capability_queries_survive_upstream_deprecation(self):
         existing = {
             'mtmd_helper_support_video': ('const struct mtmd_context *',),

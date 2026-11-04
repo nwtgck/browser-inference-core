@@ -31,10 +31,15 @@ class WebgpuModelUploadBudget(unittest.TestCase):
         self.assertEqual(function.count('llama_webgpu_load_uploads webgpu_uploads;'), 1)
         self.assertLess(function.index('llama_webgpu_load_uploads webgpu_uploads;'),
                         function.index('for (struct ggml_tensor * cur : tensors)'))
-        self.assertIn('''if (chunked) {
-                            webgpu_uploads.reserve(dev, read_size);
-                        }
-                        ggml_backend_tensor_set(cur, read_buf.data(), offset, read_size);''', function)
+        self.assertIn('''webgpu_uploads.reserve(dev, read_size);
+                            ggml_backend_tensor_set(cur, read_buf.data(), offset, read_size);''', function)
+        bounded = function[function.index('if (chunked) {'):function.index('} else {', function.index('if (chunked) {'))]
+        self.assertIn('std::vector<no_init<uint8_t>> read_buf(chunk_size);', bounded)
+        self.assertNotIn('read_raw_unsafe', bounded)
+        fallback = function[function.index('} else {', function.index('if (chunked) {')):]
+        self.assertIn('file->read_raw_unsafe(read_dst, read_size);', fallback)
+        self.assertIn('const uint8_t * data = read_dst + pad;', fallback)
+        self.assertNotIn('webgpu_uploads.reserve(', fallback)
         self.assertIn('auto * dev = ggml_backend_buft_get_device(buft);', function)
         self.assertIn('buft == ggml_backend_dev_buffer_type(dev)', function)
         self.assertIn('strcmp(ggml_backend_reg_name(reg), "WebGPU") == 0', function)

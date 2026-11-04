@@ -10,10 +10,10 @@ import subprocess
 import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-q8-short-workgroup.patch'
-PATCH_SHA256 = '50cc0c34c23665f39994e2e84ecd3fda77df6bd577bc6f0947ce3e60424e7808'
+PATCH_SHA256 = '1212b47abfd8b0a9c042268d53885db4ad8ca380b0e943dbb1abe7ad1db5b7a9'
 HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
-INPUT_SHA256 = '98c7e85c43b24906d73a9f5657ab8a834d2ce15e09a12383bf01e93234c939e3'
-OUTPUT_SHA256 = '384a912faea21f33a81931594a30c031556c3e9cf9ce1e8f8727cf9cb1a88010'
+INPUT_SHA256 = 'ecef7ea446d9e0d4d5d4ecb1feee6484a3ce478c180c53e2ee56786b1ba79e87'
+OUTPUT_SHA256 = '91c87ef905e69fe7ce3b7d53be9bb16ce6530237b9c938552ea0d06da3bd0903'
 CONTRACT_INPUTS = {
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl': '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',

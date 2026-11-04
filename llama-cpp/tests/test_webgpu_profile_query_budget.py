@@ -19,7 +19,7 @@ import prepare_webgpu_q8_diagnostic as diagnostic
 from test_webgpu_host_encode_assembly import extracted_model, replace_cpp_fragment_once
 
 HERE = ROOT / 'tests/webgpu-profile-query-budget'
-BASELINE_PROFILE_SHA256 = 'eb38bb6fba491b03ef3cfc685f05982ad580c4a587082c0f288b88efa1558aac'
+BASELINE_PROFILE_SHA256 = 'c11239c705d920377e038197083d2be42ceea4e4903cca51818c07f0637ddce8'
 CAPACITY_ASSERT = 'GGML_ASSERT(webgpu_ctx->param_arena.slot_count <= WEBGPU_MAX_PROFILE_QUERY_COUNT / 2);'
 PREFIX = '''#include <array>
 #include <cstdint>

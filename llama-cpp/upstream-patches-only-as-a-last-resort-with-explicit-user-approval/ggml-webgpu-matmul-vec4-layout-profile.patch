@@ -1,6 +1,6 @@
 --- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-@@ -1800,6 +1800,21 @@
+@@ -1826,6 +1826,21 @@
      });
  }
  
@@ -22,7 +22,7 @@
  static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context(webgpu_context & ctx,
                                                                 ggml_tensor * src0, ggml_tensor * src1,
                                                                 ggml_tensor * dst) {
-@@ -1842,17 +1857,6 @@
+@@ -1868,17 +1883,6 @@
      std::vector<webgpu_dispatch_desc> dispatches;
      const bool src_overlap = ggml_webgpu_tensor_binding_overlap(ctx->global_ctx, src0, src1) && !use_mmvq;
  
@@ -40,7 +40,7 @@
      uint32_t offset_src0   = (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type));
      uint32_t offset_src1   = (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type));
      size_t   merged_offset = 0;
-@@ -1866,10 +1870,26 @@
+@@ -1892,10 +1896,26 @@
          offset_src1   = ggml_webgpu_tensor_merged_element_offset(src1, merged_range);
      }
  
@@ -68,7 +68,7 @@
                                       (uint32_t) dst->ne[0],
                                       (uint32_t) dst->ne[1],
                                       (uint32_t) src0->ne[0],
-@@ -2012,7 +2032,9 @@
+@@ -2038,7 +2058,9 @@
              shader_lib_ctx.indexed_buffer_remaining[i] = entry.offset <= physical ? physical - entry.offset : 0;
          }
      }
@@ -79,7 +79,7 @@
  
      uint32_t wg_x = 1;
      uint32_t wg_y = 1;
-@@ -2063,8 +2085,16 @@
+@@ -2089,8 +2111,16 @@
  
      std::vector<webgpu_dispatch_desc> dispatches;
  
@@ -97,7 +97,7 @@
  
      const uint32_t param_n_expert      = (uint32_t) src0->ne[2];
      const uint32_t param_n_expert_used = (uint32_t) dst->ne[1];
-@@ -2073,7 +2103,7 @@
+@@ -2099,7 +2129,7 @@
      // params for mul_mat_id_gather.wgsl
      std::vector<uint32_t> gather_params = {
          (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src2) / ggml_type_size(src2->type)),
@@ -106,7 +106,7 @@
          param_n_expert,
          param_n_expert_used,
          param_n_tokens,
-@@ -2110,9 +2140,9 @@
+@@ -2136,9 +2166,9 @@
  
      // params for mul_mat_id.wgsl
      std::vector<uint32_t> main_params = {
@@ -119,7 +119,7 @@
          (uint32_t) src0->ne[0],
          (uint32_t) src0->ne[1],
          param_n_expert,
-@@ -5788,7 +5818,8 @@
+@@ -5830,7 +5860,8 @@
               !(a.offset <= b.offset ? a.size <= b.offset - a.offset : b.size <= a.offset - b.offset))) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
      }
      const auto context = ggml_webgpu_mat_context(ctx, tensors[0], tensors[1], dst);
@@ -131,7 +131,7 @@
          key.use_mmvq = false;
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -2327,11 +2327,11 @@
+@@ -2348,17 +2348,17 @@
          return quantize_q8_pipelines[key];
      }
  
@@ -140,12 +140,24 @@
          ggml_webgpu_mul_mat_vec_pipeline_key key = {};
          key.src0_type                            = context.src0->type;
          key.src1_type                            = context.src1->type;
--        key.vectorized = (context.src0->ne[0] % 4 == 0 &&
+-        key.vectorized  = (context.src0->ne[0] % 4 == 0 &&
+-                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+-                              1 :
+-                              0;
+-        key.num_cols    = context.dst->ne[1];
+-        key.use_mmvq    = ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.src1->ne[1],
+-                                                   context.supports_dot_product, context.vendor);
 +        key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
-                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
-                              1 :
-                              0;
-@@ -2351,8 +2351,8 @@
++                          (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
++                             1 :
++                             0;
++        key.num_cols   = context.dst->ne[1];
++        key.use_mmvq =
++            ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.src1->ne[1], context.supports_dot_product, context.vendor);
+         key.src_overlap = src_overlap;
+         key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
+@@ -2372,8 +2372,8 @@
      std::unordered_map<ggml_webgpu_mul_mat_vec_pipeline_key, webgpu_pipeline,
                         ggml_webgpu_mul_mat_vec_pipeline_key_hash> q8_diagnostic_pipelines;
  
@@ -156,7 +168,7 @@
      }
  
      webgpu_pipeline prepare_q8_diagnostic_pipeline(const ggml_webgpu_shader_lib_context & context,
-@@ -2542,11 +2542,11 @@
+@@ -2563,11 +2563,11 @@
          return mul_mat_vec_pipelines[key];
      }
  
@@ -170,7 +182,7 @@
                                     (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
                                        1 :
                                        0;
-@@ -2754,12 +2754,12 @@
+@@ -2775,12 +2775,12 @@
          return pipeline;
      }
  
@@ -185,7 +197,7 @@
                            (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
                               1 :
                               0;
-@@ -2887,12 +2887,12 @@
+@@ -2908,12 +2908,12 @@
          return mul_mat_id_pipelines[key];
      }
  

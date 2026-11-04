@@ -66,7 +66,7 @@
  #include "ggml-webgpu-q8-subgroup-shaders.hpp"
  #include "ggml-webgpu-q8-diagnostic-sha256.hpp"
  #include <array>
-@@ -87,6 +88,7 @@
+@@ -88,6 +89,7 @@
  }
  
  struct ggml_webgpu_shader_lib_context {
@@ -74,7 +74,7 @@
      ggml_tensor * src0;
      ggml_tensor * src1;
      ggml_tensor * src2;
-@@ -113,6 +115,7 @@
+@@ -114,6 +116,7 @@
      uint32_t    max_subgroup_size        = 0;
      bool        supports_dot_product     = false;
      std::string vendor;
@@ -82,7 +82,7 @@
  };
  
  // Keep the upstream Q8_0 arithmetic, output tiling and lane-to-block mapping.
-@@ -1186,6 +1189,7 @@
+@@ -1187,6 +1190,7 @@
  /** Matrix Multiplication **/
  
  struct ggml_webgpu_mul_mat_vec_pipeline_key {
@@ -90,7 +90,7 @@
      ggml_type src0_type;
      ggml_type src1_type;
      int       vectorized;
-@@ -1198,7 +1202,7 @@
+@@ -1199,7 +1203,7 @@
      bool      subgroup_reduction = false;
  
      bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
@@ -99,7 +99,7 @@
                 num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
                 subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap &&
                 q8_rows_per_tile == other.q8_rows_per_tile && subgroup_reduction == other.subgroup_reduction;
-@@ -1208,6 +1212,7 @@
+@@ -1209,6 +1213,7 @@
  struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
      size_t operator()(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
          size_t seed = 0;
@@ -107,7 +107,7 @@
          ggml_webgpu_hash_combine(seed, key.src0_type);
          ggml_webgpu_hash_combine(seed, key.src1_type);
          ggml_webgpu_hash_combine(seed, key.vectorized);
-@@ -1228,6 +1233,22 @@
+@@ -1229,6 +1234,22 @@
      uint32_t vec_size;
      bool     src_overlap = false;
  };
@@ -130,15 +130,15 @@
  
  struct ggml_webgpu_quantize_q8_pipeline_key {
      ggml_type src0_type;
-@@ -2339,6 +2360,7 @@
+@@ -2360,6 +2381,7 @@
          key.use_mmvq =
-             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.supports_dot_product, context.vendor);
+             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.src1->ne[1], context.supports_dot_product, context.vendor);
          key.src_overlap = src_overlap;
 +        key.epilogue = context.matvec_epilogue;
          key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
          key.workgroup_size = key.subgroup_size ? 128 : context.src0->type == GGML_TYPE_Q4_K ?
                                   ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
-@@ -2352,6 +2374,7 @@
+@@ -2373,6 +2395,7 @@
                         ggml_webgpu_mul_mat_vec_pipeline_key_hash> q8_diagnostic_pipelines;
  
      webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
@@ -146,7 +146,7 @@
          return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap, vec4_aligned));
      }
  
-@@ -2370,6 +2393,11 @@
+@@ -2391,6 +2414,11 @@
  
      webgpu_pipeline prepare_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context,
                                                    const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
@@ -158,7 +158,7 @@
          auto it = mul_mat_vec_pipelines.find(key);
          if (it != mul_mat_vec_pipelines.end()) {
              return it->second;
-@@ -2377,7 +2405,8 @@
+@@ -2398,7 +2426,8 @@
  
          std::vector<std::string> defines;
          std::string              variant    = "mul_mat_vec";
@@ -168,7 +168,7 @@
  
          // src0 type (matrix row)
          switch (context.src0->type) {
-@@ -2524,6 +2553,7 @@
+@@ -2545,6 +2574,7 @@
          }
          defines.push_back(std::string("NUM_COLS=") + std::to_string(key.num_cols));
  
@@ -186,7 +186,7 @@
  #include "ggml-webgpu-rms-scale.hpp"
  #include "ggml-webgpu-ssm-conv-silu.hpp"
  #include "ggml-webgpu-q8-diagnostic.h"
-@@ -1842,7 +1843,11 @@
+@@ -1868,7 +1869,11 @@
                                               ggml_tensor *    src0,
                                               ggml_tensor *    src1,
                                               ggml_tensor *    dst,
@@ -199,7 +199,7 @@
      // Determine if this is a mat-vec operation
      bool use_mat_vec = (dst->ne[1] <= 4);
  
-@@ -1851,6 +1856,9 @@
+@@ -1877,6 +1882,9 @@
                                               ctx->global_ctx->vendor);
  
      auto shader_lib_ctx = ggml_webgpu_mat_context(ctx, src0, src1, dst);
@@ -209,7 +209,7 @@
  
      // Get or create pipeline
      webgpu_pipeline                   pipeline;
-@@ -1886,8 +1894,12 @@
+@@ -1912,8 +1920,12 @@
                                                               vec4_aligned && offset_dst % 4 == 0);
      }
  
@@ -223,7 +223,7 @@
                                       offset_src1,
                                       offset_dst,
                                       (uint32_t) dst->ne[0],
-@@ -1902,7 +1914,13 @@
+@@ -1928,7 +1940,13 @@
                                       (uint32_t) src0->ne[2],
                                       (uint32_t) src0->ne[3],
                                       (uint32_t) (src1->ne[2] / src0->ne[2]),
@@ -238,7 +238,7 @@
  
      // Build bind group entries
      std::vector<wgpu::BindGroupEntry> entries = {};
-@@ -1965,8 +1983,10 @@
+@@ -1991,8 +2009,10 @@
  }
  
  static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
@@ -251,7 +251,7 @@
  }
  
  static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
-@@ -3898,6 +3918,86 @@
+@@ -3925,6 +3945,86 @@
      return encoded;
  }
  
@@ -338,7 +338,7 @@
  static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
      if (!ggml_can_fuse(cgraph, node_idx, { GGML_OP_RMS_NORM, GGML_OP_MUL })) {
          return false;
-@@ -4072,6 +4172,7 @@
+@@ -4099,6 +4199,7 @@
              if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
              return ggml_webgpu_get_rows(ctx, src0, src1, node);
          case GGML_OP_MUL_MAT:

@@ -137,14 +137,25 @@ int main() {
 static int allocated = 0;
 static int weight_loads = 0;
 static int classifications = 0;
+static int schedulers = 0;
+static int callback_sets = 0;
+static void * callback_data = nullptr;
 enum projector_type { PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_GEMMA3NV,
-                      PROJECTOR_TYPE_LFM3A_GEN, PROJECTOR_TYPE_SOPRANO };
+                      PROJECTOR_TYPE_LFM3A_GEN, PROJECTOR_TYPE_SOPRANO, PROJECTOR_TYPE_CHATTERBOX };
 struct fixture_model { projector_type proj_type = PROJECTOR_TYPE_MLP; };
+struct scheduler_owner {
+    ggml_backend_sched_t value = nullptr;
+    void reset(ggml_backend_sched_t next) { value = next; }
+    ggml_backend_sched_t get() const { return value; }
+};
 struct clip_ctx {
     const mtmd_vision_bf16_storage vision_bf16_storage;
     fixture_model model;
     clip_flash_attn_type flash_attn_type = CLIP_FLASH_ATTN_TYPE_AUTO;
     std::vector<uint8_t> buf_compute_meta;
+    std::vector<ggml_backend_t> backend_ptrs;
+    std::vector<ggml_backend_buffer_type_t> backend_buft;
+    scheduler_owner sched;
     int max_nodes = 1;
     clip_ctx(clip_context_params &, mtmd_vision_bf16_storage mode = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
         vision_bf16_storage(mode) { ++allocated; }
@@ -152,16 +163,28 @@ struct clip_ctx {
 };
 projector_type clip_get_projector_type(const clip_ctx * ctx) { return ctx->model.proj_type; }
 extern "C" size_t ggml_tensor_overhead(void) { return 1; }
-extern "C" size_t ggml_graph_overhead(void) { return 1; }
+extern "C" size_t ggml_graph_overhead_custom(size_t nodes, bool) { return nodes; }
+extern "C" ggml_backend_sched_t ggml_backend_sched_new(ggml_backend_t *, ggml_backend_buffer_type_t *,
+                                                        int, size_t nodes, bool parallel, bool offload) {
+    assert(nodes == 65536 && !parallel && offload); ++schedulers;
+    return reinterpret_cast<ggml_backend_sched_t>(uintptr_t(1));
+}
+extern "C" void ggml_backend_sched_set_eval_callback(ggml_backend_sched_t sched,
+                                                       ggml_backend_sched_eval_callback callback, void * data) {
+    assert(sched && callback && data == callback_data); ++callback_sets;
+}
 struct clip_model_loader {
     bool has_vision;
     bool has_audio;
-    bool has_gen_audio = false;
+    bool has_gen_audio;
     clip_model_loader(const char * path, bool, mtmd_progress_callback, void *) :
-        has_vision(std::string(path) == "vision"), has_audio(std::string(path) == "audio") {
+        has_vision(std::string(path) == "vision"), has_audio(std::string(path) == "audio"),
+        has_gen_audio(std::string(path) == "gen") {
         ++classifications;
     }
-    void load_hparams(fixture_model &, clip_modality) {}
+    void load_hparams(fixture_model & model, clip_modality) {
+        if (has_gen_audio) model.proj_type = PROJECTOR_TYPE_CHATTERBOX;
+    }
     void load_tensors(clip_ctx &) { ++weight_loads; }
     void init_ctx(clip_ctx &) {}
     void warmup(clip_ctx &) {}
@@ -185,6 +208,14 @@ int main() {
     assert(cpu.ctx_v && cpu.ctx_v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
     delete cpu.ctx_v;
     assert(allocated == 0 && weight_loads == 3 && classifications == 4);
+    params.cb_eval = [](ggml_tensor *, bool, void *) { return false; };
+    params.cb_eval_user_data = callback_data = &params;
+    auto gen = lcb_clip_init_with_vision_bf16_storage("gen", params, MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
+    assert(gen.ctx_gen_a && !gen.ctx_v && !gen.ctx_a && gen.ctx_gen_a->max_nodes == 65536);
+    assert(gen.ctx_gen_a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
+    assert(schedulers == 1 && callback_sets == 1 && gen.ctx_gen_a->buf_compute_meta.size() == 131072);
+    delete gen.ctx_gen_a;
+    assert(allocated == 0 && weight_loads == 4 && classifications == 5);
 }
 ''')
         binary = self.work / 'modality'

@@ -122,6 +122,24 @@ class CheckpointReadback(unittest.TestCase):
                 source.prepare(self.upstream, final, gpu_profile=profile)
             self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in final.iterdir()})
 
+    @unittest.skipUnless(shutil.which('c++'), 'C++ compiler required')
+    def test_actual_host_writer_offsets_fallback_and_failure_lifetime(self):
+        text = (self.final[False] / 'llama-context.cpp').read_text()
+        start = text.index('class llama_io_write_host :')
+        writer = text[start:text.index('class llama_io_read_host :', start)]
+        fixture = (ROOT / 'tests/webgpu-checkpoint-readback/host-writer.cpp').read_text()
+        self.assertEqual(fixture.count('// PRODUCTION_WRITER'), 1)
+        code = self.directory / 'host-writer.cpp'
+        code.write_text(fixture.replace('// PRODUCTION_WRITER', writer))
+        binary = self.directory / 'host-writer'
+        command = ['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                   '-I' + str(self.final[False]), '-I' + str(self.upstream / 'src'),
+                   '-I' + str(self.upstream / 'ggml/include'),
+                   '-I' + str(self.upstream / 'include'), str(code), '-o', str(binary)]
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        subprocess.run([str(binary)], check=True, capture_output=True)
+
     @unittest.skipUnless(shutil.which('cmake'), 'CMake required; no compiler is used')
     def test_context_routing_preserves_order_and_is_emscripten_only(self):
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()

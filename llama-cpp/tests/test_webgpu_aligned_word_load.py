@@ -165,7 +165,7 @@ class AlignedWordLoad(unittest.TestCase):
             word.replace_embedding(changed, self.original, self.candidate, count=12)
 
     def test_current_standalone_preparation_uses_final_embeddings_and_canonical(self):
-        from webgpu_embedding_test_support import canonical_prefix
+        from webgpu_embedding_test_support import canonical_prefix, matvec_constants
         prepared = self.final[False]
         for directory in ('webgpu-q8-subgroup', 'webgpu-iq3s-subgroup'):
             spec = importlib.util.spec_from_file_location(directory, ROOT / 'tests' / directory / 'emit_factory.py')
@@ -173,8 +173,9 @@ class AlignedWordLoad(unittest.TestCase):
             spec.loader.exec_module(factory)
             factory.prepare(self.upstream, prepared)
         prefix = '#include "ggml-wgsl-shaders.hpp"\n'
-        self.assertEqual(canonical_prefix(prefix, prepared), '#include "' + word.HEADER_NAME + '"\n')
-        self.assertEqual(canonical_prefix(prefix, self.before[False]), prefix)
+        constants = matvec_constants((prepared / 'ggml-webgpu-shader-lib.hpp').read_text()) + '\n'
+        self.assertEqual(canonical_prefix(prefix, prepared), constants + '#include "' + word.HEADER_NAME + '"\n')
+        self.assertEqual(canonical_prefix(prefix, self.before[False]), constants + prefix)
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp)
             (bad / 'ggml-webgpu-shader-lib.hpp').write_bytes((prepared / 'ggml-webgpu-shader-lib.hpp').read_bytes())

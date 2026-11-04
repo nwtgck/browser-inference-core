@@ -9,14 +9,14 @@ PATCH_NAME = 'ggml-webgpu-q6-short-workgroup.patch'
 PATCH_SHA256 = '511182db3d0d0f64d49ec53188e815c34ed9da62bdc2aebbd862853f26f5095d'
 # Pin the shared Q4/Q6 decoder, canonical main, preprocessor and host contracts.
 CONTRACT_INPUTS = dict(q4_short.CONTRACT_INPUTS)
-INPUTS = {False: {'ggml-webgpu.cpp': 'b16a18a3d544577fbfbc3279475743a5c4cd8c4074f7325d7e337f69cd616708',
-         'ggml-webgpu-shader-lib.hpp': '2fddc2634df24710adb36a8a159d706a7da83468c306df96d6a287b3c6703b46'},
- True: {'ggml-webgpu.cpp': 'a9b0c18384ba901fc38b73652772f608b7ef221edd9d9f908116097255404e5b',
-        'ggml-webgpu-shader-lib.hpp': 'e70e89859a4a853670155218adbaf8c7f946b5e07795859ec240b559f4ee5158'}}
-OUTPUTS = {False: {'ggml-webgpu.cpp': 'b16a18a3d544577fbfbc3279475743a5c4cd8c4074f7325d7e337f69cd616708',
-         'ggml-webgpu-shader-lib.hpp': '6c46dd6288d4a505ccfd5fd8aeb7c1c0880623e2a75919bfba8f08c58a6a72de'},
- True: {'ggml-webgpu.cpp': 'a9b0c18384ba901fc38b73652772f608b7ef221edd9d9f908116097255404e5b',
-        'ggml-webgpu-shader-lib.hpp': '595d1f2aa85e5e46cfe23b72d39b613ba3254b9003e0adb7990ad1f1d4efde84'}}
+INPUTS = {False: {'ggml-webgpu.cpp': '6a99af824c58601ccc633e84c266f2efc7091f3616d2552cfe0cf91c312c9318',
+         'ggml-webgpu-shader-lib.hpp': 'f6e586c2bcfc312dcc1cd953e3f0244e4f7cd8696f399e3dfb600cd3c492a5b8'},
+ True: {'ggml-webgpu.cpp': 'e55179d4198ebd17d3ab0ec20d0736211a823649be2959e63934f6e3670ed451',
+        'ggml-webgpu-shader-lib.hpp': 'a1e963e47e7c424783c955ac75b13f6757c8a574797fb0da0cec2a7601019ef3'}}
+OUTPUTS = {False: {'ggml-webgpu.cpp': '6a99af824c58601ccc633e84c266f2efc7091f3616d2552cfe0cf91c312c9318',
+         'ggml-webgpu-shader-lib.hpp': 'ec4986b146e05a354eaca1af8f354e66fe5a6907973feb2f2fde2906e842efe7'},
+ True: {'ggml-webgpu.cpp': 'e55179d4198ebd17d3ab0ec20d0736211a823649be2959e63934f6e3670ed451',
+        'ggml-webgpu-shader-lib.hpp': 'd0e1e291969325c74a9c90fc5d1d57780bcddc188c9c471e5a5f59f8caed5faf'}}
 
 
 def prepare(work: Path, source: Path, patch_root: Path, env: dict[str, str], *, gpu_profile: bool) -> None:
