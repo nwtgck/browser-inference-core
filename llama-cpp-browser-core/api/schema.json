@@ -18841,6 +18841,34 @@
       ]
     },
     {
+      "name": "mtmd_gen_audio_read_tensor",
+      "export": "_lcb_mtmd_gen_audio_read_tensor",
+      "returnType": "size_t",
+      "returnKind": "u64",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "name",
+          "cType": "const char *",
+          "kind": "pointer"
+        },
+        {
+          "name": "out",
+          "cType": "float *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_max",
+          "cType": "size_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
       "name": "mtmd_gen_audio_voice_name",
       "export": "_lcb_mtmd_gen_audio_voice_name",
       "returnType": "const char *(const mtmd_context *, int32_t)",
@@ -18915,6 +18943,24 @@
       "returnType": "void",
       "returnKind": "void",
       "parameters": [
+        {
+          "name": "state",
+          "cType": "mtmd_gen_state *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_gen_state_set_ref",
+      "export": "_lcb_mtmd_gen_state_set_ref",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_context *",
+          "kind": "pointer"
+        },
         {
           "name": "state",
           "cType": "mtmd_gen_state *",
@@ -22827,6 +22873,7 @@
     "LLAMA_VOCAB_TYPE_TEST",
     "LLAMA_VOCAB_TYPE_UGM",
     "LLAMA_VOCAB_TYPE_WPM",
+    "MTMD_GEN_AUDIO_TYPE_CHATTERBOX",
     "MTMD_GEN_AUDIO_TYPE_LFM3A",
     "MTMD_GEN_AUDIO_TYPE_NONE",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS",
@@ -22847,6 +22894,7 @@
     "MTMD_VIDEO_TEMPLATE_DEFAULT",
     "MTMD_VIDEO_TEMPLATE_LFM3",
     "MTMD_VIDEO_TEMPLATE_LFM3_OMNI",
+    "MTMD_VIDEO_TEMPLATE_QWEN3VL",
     "MTMD_VISION_BF16_STORAGE_INVALID",
     "MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND",
     "MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED",

@@ -2145,6 +2145,8 @@ interface WasmModule {
   _mtmd_gen_audio_get_voice(_0: BigInt, _1: BigInt): Promise<BigInt>;
   _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
   _mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<number>;
+  _lcb_mtmd_gen_audio_read_tensor(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<BigInt>;
+  _mtmd_gen_audio_read_tensor(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): Promise<BigInt>;
   _lcb_mtmd_gen_audio_voice_name(_0: BigInt, _1: number): Promise<BigInt>;
   _mtmd_gen_audio_voice_name(_0: BigInt, _1: number): Promise<BigInt>;
   _lcb_mtmd_gen_inp_default(_0: BigInt, _1: BigInt): Promise<void>;
@@ -2157,6 +2159,8 @@ interface WasmModule {
   _mtmd_gen_state_params_default(): Promise<number>;
   _lcb_mtmd_gen_state_reset(_0: BigInt): Promise<void>;
   _mtmd_gen_state_reset(_0: BigInt): Promise<void>;
+  _lcb_mtmd_gen_state_set_ref(_0: BigInt, _1: BigInt): Promise<number>;
+  _mtmd_gen_state_set_ref(_0: BigInt, _1: BigInt): Promise<number>;
   _lcb_mtmd_get_audio_sample_rate(_0: BigInt): Promise<number>;
   _mtmd_get_audio_sample_rate(_0: BigInt): Promise<number>;
   _lcb_mtmd_get_cap_from_file(_0: BigInt, _1: BigInt): Promise<void>;

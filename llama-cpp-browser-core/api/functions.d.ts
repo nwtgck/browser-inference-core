@@ -924,12 +924,14 @@ export interface LowLevelFunctions {
   mtmd_gen_audio_get_info(out: bigint, arg0: bigint): Promise<void>;
   mtmd_gen_audio_get_voice(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_audio_process(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
+  mtmd_gen_audio_read_tensor(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<bigint>;
   mtmd_gen_audio_voice_name(arg0: bigint, arg1: number): Promise<bigint>;
   mtmd_gen_inp_default(out: bigint, arg0: bigint): Promise<void>;
   mtmd_gen_state_free(arg0: bigint): Promise<void>;
   mtmd_gen_state_init(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_state_params_default(out: bigint): Promise<void>;
   mtmd_gen_state_reset(arg0: bigint): Promise<void>;
+  mtmd_gen_state_set_ref(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_get_audio_sample_rate(arg0: bigint): Promise<number>;
   mtmd_get_cap_from_file(out: bigint, arg0: bigint): Promise<void>;
   mtmd_get_marker(arg0: bigint): Promise<bigint>;

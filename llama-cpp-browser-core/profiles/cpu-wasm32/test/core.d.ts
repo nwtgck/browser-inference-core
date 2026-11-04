@@ -2145,6 +2145,8 @@ interface WasmModule {
   _mtmd_gen_audio_get_voice(_0: number, _1: number): number;
   _lcb_mtmd_gen_audio_process(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): number;
   _mtmd_gen_audio_process(_0: number, _1: number, _2: number, _3: number): number;
+  _lcb_mtmd_gen_audio_read_tensor(_0: BigInt, _1: BigInt, _2: BigInt, _3: BigInt): BigInt;
+  _mtmd_gen_audio_read_tensor(_0: number, _1: number, _2: number, _3: number): number;
   _lcb_mtmd_gen_audio_voice_name(_0: BigInt, _1: number): BigInt;
   _mtmd_gen_audio_voice_name(_0: number, _1: number): number;
   _lcb_mtmd_gen_inp_default(_0: BigInt, _1: BigInt): void;
@@ -2157,6 +2159,8 @@ interface WasmModule {
   _mtmd_gen_state_params_default(): number;
   _lcb_mtmd_gen_state_reset(_0: BigInt): void;
   _mtmd_gen_state_reset(_0: number): void;
+  _lcb_mtmd_gen_state_set_ref(_0: BigInt, _1: BigInt): number;
+  _mtmd_gen_state_set_ref(_0: number, _1: number): number;
   _lcb_mtmd_get_audio_sample_rate(_0: BigInt): number;
   _mtmd_get_audio_sample_rate(_0: number): number;
   _lcb_mtmd_get_cap_from_file(_0: BigInt, _1: BigInt): void;
