@@ -83,7 +83,7 @@ runs:
     - name: Empty the single download restore target
       shell: bash
       run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" clear-dawn
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v6.1.0
       id: dawn
       if: inputs.mode != 'cold'
       continue-on-error: true
@@ -115,7 +115,7 @@ runs:
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" park-em --requested "$REQUESTED"
         python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" clear-cc --path "$CC_PATH"
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v6.1.0
       id: em
       if: inputs.mode != 'cold'
       continue-on-error: true
@@ -136,7 +136,7 @@ runs:
         python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" finish --kind em
         --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT"
         --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v6.1.0
       id: cc
       if: inputs.mode != 'cold'
       continue-on-error: true

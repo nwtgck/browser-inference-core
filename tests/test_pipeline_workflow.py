@@ -40,7 +40,7 @@ class PipelineWorkflow(unittest.TestCase):
             self.assertNotIn('record_browser_validation.py', block)
             final = f'python3 ../scripts/validate_runtime_package.py --runtime {runtime} --package dist/package'
             self.assertIn(final, block)
-            before_upload = block[:block.index('- uses: actions/upload-artifact@v4')]
+            before_upload = block[:re.search(r'- uses: actions/upload-artifact@v\d+\.\d+\.\d+', block).start()]
             self.assertTrue(before_upload.endswith(final + '\n      '))
             final_step = before_upload.split('- name: Test and finalize the same runtime snapshot', 1)[1]
             self.assertNotIn('continue-on-error', final_step)

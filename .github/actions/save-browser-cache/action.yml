@@ -58,7 +58,7 @@ runs:
       env:
         CACHE_PATH: ${{ inputs.dawn-path }}
       run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind dawn --path "$CACHE_PATH"
-    - uses: actions/cache/save@v4
+    - uses: actions/cache/save@v6.1.0
       id: save-dawn
       if: >-
         github.event_name == 'push' &&
@@ -80,7 +80,7 @@ runs:
       env:
         CACHE_PATH: ${{ inputs.em-path }}
       run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind em --path "$CACHE_PATH"
-    - uses: actions/cache/save@v4
+    - uses: actions/cache/save@v6.1.0
       id: save-em
       if: >-
         github.event_name == 'push' &&
@@ -102,7 +102,7 @@ runs:
       env:
         CACHE_PATH: ${{ inputs.cc-path }}
       run: python3 "$GITHUB_WORKSPACE/scripts/cache_admission.py" check-save --kind cc --path "$CACHE_PATH"
-    - uses: actions/cache/save@v4
+    - uses: actions/cache/save@v6.1.0
       id: save-cc
       if: >-
         github.event_name == 'push' &&

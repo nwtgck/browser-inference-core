@@ -61,7 +61,7 @@ class ParallelWorkflow(unittest.TestCase):
         self.assertIn('"$VARIANT" == "browser"', graph['image-compile'])
 
     def test_cache_restore_does_not_skip_verification_or_configuration(self):
-        self.assertEqual(RESTORE.count('uses: actions/cache/restore@v4'), 3)
+        self.assertEqual(len(re.findall(r'uses: actions/cache/restore@v\d+\.\d+\.\d+', RESTORE)), 3)
         self.assertEqual(RESTORE.count('restore-keys:'), 1)
         self.assertIn('restore-keys: ${{ steps.plan.outputs.cc-prefix }}', RESTORE)
         self.assertNotIn('cache-hit ==', RESTORE)
@@ -72,7 +72,7 @@ class ParallelWorkflow(unittest.TestCase):
 
     def test_only_trusted_default_branch_pushes_invoke_and_save_caches(self):
         conditions = ["github.event_name == 'push'", "github.event.repository.default_branch", "github.actor != 'dependabot[bot]'"]
-        self.assertEqual(SAVE.count('uses: actions/cache/save@v4'), 3)
+        self.assertEqual(len(re.findall(r'uses: actions/cache/save@v\d+\.\d+\.\d+', SAVE)), 3)
         # Each of three save steps AND its live-data preflight is trust-gated.
         for condition in conditions: self.assertEqual(SAVE.count(condition), 6)
         for name in ('compile','image-compile'):

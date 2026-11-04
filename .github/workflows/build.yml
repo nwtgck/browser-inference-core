@@ -51,7 +51,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: llama-cpp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -59,7 +59,7 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
       - name: Verify the checked-out source identity
@@ -82,7 +82,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-test
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -99,7 +99,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: llama-cpp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -113,7 +113,7 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase native.qsa_regression -- python3 tests/qsa-selection/run.py --source "$PWD/vendor/llama.cpp" --work "$PWD/build/qsa-regression" --jobs 2
       - name: Upload native comparison traces and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: qsa-native-${{ github.run_attempt }}
           path: llama-cpp/build/qsa-regression/qsa-results/
@@ -127,7 +127,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-qsa-native
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -160,7 +160,7 @@ jobs:
       BIC_METRICS_PROFILE: ${{ matrix.profile }}
       BIC_METRICS_VARIANT: ${{ matrix.variant }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -168,7 +168,7 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
       - name: Install build prerequisites
@@ -177,7 +177,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.install -- sudo apt-get install -y ninja-build clang cmake ccache
       - name: Prepare shared toolchain and isolated caches
         id: cache
-        uses: ./.github/actions/restore-browser-cache
+        uses: $/.github/actions/restore-browser-cache
         with:
           mode: ${{ env.BIC_CACHE_MODE }}
           runtime: llama-cpp
@@ -206,7 +206,7 @@ jobs:
             extra+=(--include-toolchain-notices)
           fi
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.stage_upload -- python3 scripts/stage_ci_build.py --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: profile-build-${{ matrix.profile }}-${{ matrix.variant }}
           path: llama-cpp/build/ci-upload/
@@ -223,7 +223,7 @@ jobs:
           success() && github.event_name == 'push' && env.BIC_CACHE_MODE != 'cold' &&
           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
           github.actor != 'dependabot[bot]'
-        uses: ./.github/actions/save-browser-cache
+        uses: $/.github/actions/save-browser-cache
         with:
           mode: ${{ env.BIC_CACHE_MODE }}
           dawn-save-allowed: ${{ steps.cache.outputs.dawn-save-allowed }}
@@ -259,7 +259,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -274,7 +274,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: llama-cpp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -282,10 +282,10 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: profile-build-*
           path: llama-cpp/build/
@@ -305,7 +305,7 @@ jobs:
         # Includes all existing Node/Chromium checks, clean-source verification,
         # complete payload hashes and exactly one final npm pack (also on fork PRs).
         run: python3 ../scripts/validate_runtime_package.py --runtime llama-cpp --package dist/package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: llama-runtime-package
           path: llama-cpp/dist/package/
@@ -326,7 +326,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-build
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -345,7 +345,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -353,7 +353,7 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
       - name: Test exact patch preparation and host code
@@ -377,7 +377,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-image-native
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -409,7 +409,7 @@ jobs:
       BIC_METRICS_PROFILE: ${{ matrix.profile }}
       BIC_METRICS_VARIANT: ${{ matrix.variant }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -417,7 +417,7 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
       - name: Install build prerequisites
@@ -426,7 +426,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase system_packages.install -- sudo apt-get install -y ninja-build clang cmake ccache
       - name: Prepare shared toolchain and isolated caches
         id: cache
-        uses: ./.github/actions/restore-browser-cache
+        uses: $/.github/actions/restore-browser-cache
         with:
           mode: ${{ env.BIC_CACHE_MODE }}
           runtime: stable-diffusion-cpp
@@ -448,7 +448,7 @@ jobs:
             extra+=(--include-toolchain-notices)
           fi
           python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase build.total -- python3 scripts/build.py --fresh --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: image-build-${{ matrix.profile }}-${{ matrix.variant }}
           path: stable-diffusion-cpp/build/ci-upload/
@@ -464,7 +464,7 @@ jobs:
           success() && github.event_name == 'push' && env.BIC_CACHE_MODE != 'cold' &&
           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
           github.actor != 'dependabot[bot]'
-        uses: ./.github/actions/save-browser-cache
+        uses: $/.github/actions/save-browser-cache
         with:
           mode: ${{ env.BIC_CACHE_MODE }}
           dawn-save-allowed: ${{ steps.cache.outputs.dawn-save-allowed }}
@@ -493,7 +493,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-image-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -511,7 +511,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -519,10 +519,10 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --recursive --depth=1 -- stable-diffusion-cpp/vendor/stable-diffusion.cpp stable-diffusion-cpp/vendor/ggml-webgpu-source
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: image-build-*
           path: stable-diffusion-cpp/build/
@@ -540,7 +540,7 @@ jobs:
         # Includes all existing Node/Chromium checks, clean-source verification,
         # complete payload hashes and exactly one final npm pack (also on fork PRs).
         run: python3 ../scripts/validate_runtime_package.py --runtime stable-diffusion-cpp --package dist/package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: image-runtime-package
           path: stable-diffusion-cpp/dist/package/
@@ -554,7 +554,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-image-build
           path: ${{ runner.temp }}/bic-pipeline-metrics/
@@ -578,7 +578,7 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: root
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           # Only the llama source overlay is read by consumer provenance.
@@ -586,14 +586,14 @@ jobs:
           persist-credentials: false
       - name: Check out the upstream needed for consumer provenance
         run: python3 "$GITHUB_WORKSPACE/scripts/pipeline_metrics.py" run --phase checkout.upstreams -- git submodule update --init --checkout --depth=1 -- llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: llama-runtime-package
           path: build/package-inputs/llama-cpp/
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: image-runtime-package
           path: build/package-inputs/stable-diffusion-cpp/
@@ -622,7 +622,7 @@ jobs:
         run: >-
           python3 scripts/consumer_metadata.py --package dist/package --commit "$ARTIFACT_COMMIT"
           --published-manifest-sha256 "$PUBLISHED_MANIFEST_SHA256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: consumer-update-${{ github.run_attempt }}
           path: build/consumer-update/
@@ -641,7 +641,7 @@ jobs:
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-publish
           path: ${{ runner.temp }}/bic-pipeline-metrics/
