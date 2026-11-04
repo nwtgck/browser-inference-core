@@ -1,9 +1,9 @@
 {
-  "llamaCommit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
+  "llamaCommit": "cd959bae99ff4bed22bef2604f45241c09bbb8c8",
   "files": {
-    "tools/mtmd/clip.cpp": "13c9a497c552a130ed61206208738280c120f41f14f35d42d1fcc8319b19bf08",
-    "tools/mtmd/clip-model.h": "5373f1a9544df7287dccd59eb264355e041062e837e4de2556a0ba5532527de4",
-    "tools/mtmd/clip-impl.h": "4858d4d3b6d3ae0d200da88b9ebbab176ced4a4e122e79169edbe36e2325b551",
+    "tools/mtmd/clip.cpp": "96f734e7d3787b5a72edf59e90241b6574537821217a2a2804d5682bfb4e3e45",
+    "tools/mtmd/clip-model.h": "7c656363547e669ae86aca93ab77e8d788c711f838de2f2e33c741f4069d1393",
+    "tools/mtmd/clip-impl.h": "efa4e9100b3596c3827bf933fc1c4d1c8007caf097b45a0285f199b162bb622d",
     "tools/mtmd/clip-graph.h": "cbb70fe4e5d6a364b463b6d22e2619f6f61036cd8262b9ec99ee7935035e1446",
     "tools/mtmd/models/llava.cpp": "b150542a0adf4945c90b21cfca317edc975941c0a7b5cb7cc3139fc9a5d55cf0",
     "tools/mtmd/models/siglip.cpp": "5b7c773c3730626d42b7a24ad7bca9c0c937c8b28ceb7253163fb6d582015015",
@@ -21,12 +21,12 @@
     "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl": "c461aa2108b752504f47338e41b14ee6570abdd831cd83652e052147c89d69ef",
     "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl": "2d1cb611caf10b72d20b021772806ca4b3ea4f40c9d7a93941e135dacf859f81",
     "ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl": "1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555",
-    "ggml/src/ggml.c": "4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c",
+    "ggml/src/ggml.c": "c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49",
     "ggml/include/ggml.h": "1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101",
     "ggml/include/ggml-backend.h": "34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a",
     "ggml/include/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
-    "tools/mtmd/clip.h": "8be310c76b7a0bdef64c0d213b80a1e3ce3f34d9e7f52924fdda93cb1e7d6348",
-    "tools/mtmd/mtmd.cpp": "60e50c09a9756850d9b7558bac42e3f24e2df9df974e6e784f4fe69c01641f27",
-    "tools/mtmd/mtmd.h": "f98ef8f0df89c136f1c246ab372e3a45a3ac9de838fee98bcde1e1deeefbf973"
+    "tools/mtmd/clip.h": "cf0c9bf02324dac15d5459a32c64047902e657d89117ff46db9d257bc8fdbe79",
+    "tools/mtmd/mtmd.cpp": "3d531a45ed17044ef33430189a7851a94bfe7448d492f7f77bdcd0833970ce03",
+    "tools/mtmd/mtmd.h": "e53fe94a6b0c4af3649b821a47acfdb434caf7a16675761884e99f5518c7d2a1"
   }
 }

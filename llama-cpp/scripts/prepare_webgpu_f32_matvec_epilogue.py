@@ -27,7 +27,7 @@ OUTPUTS = {False: {'ggml-webgpu-shader-lib.hpp': 'f6e586c2bcfc312dcc1cd953e3f024
         'wgsl-shaders/mul_mat_vec_f32_epilogue.wgsl': 'b6a0d9fb8a193bfe9c716e3bd191c0af176af839a722bf1b0e4fe0ccb214ddb8'}}
 HEADER_SHA256 = 'aa35891dcf4f46072e4501bd58f54b3e931444fbb3b1872bf45fba3dd7c982c0'
 CONTRACT_INPUTS = {'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
- 'ggml/src/ggml.c': '4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c',
+ 'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
  'ggml/src/ggml-impl.h': 'c84c8f9e3c246504602f5cd388ba54e36691e46bf150e4d70ae857bb823c985f',
  'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39',
  'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',

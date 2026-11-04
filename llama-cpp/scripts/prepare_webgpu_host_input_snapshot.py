@@ -19,9 +19,9 @@ CONTRACT_INPUTS = {
     'ggml/include/ggml-backend.h': '34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a',
     'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
     'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39',
-    'ggml/src/ggml.c': '4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c',
+    'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
     'ggml/src/CMakeLists.txt': 'bae77e31bc3498973b435e29681c74e8a28857e84383698ef3b88ca2fb6b900a',
-    'src/llama-context.cpp': '5c7b8268b5d63d329f5b27a05bf3e8a685726b40fad45d9b94e306cf5a1336f6',
+    'src/llama-context.cpp': '4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822',
 }
 
 

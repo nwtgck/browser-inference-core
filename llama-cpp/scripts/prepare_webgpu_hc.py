@@ -19,15 +19,15 @@ OUTPUTS = {'ggml-webgpu-hc.hpp': '24abc54f87a00ff2113d74480268b9f15a9bd5c2fbe01a
  'wgsl-shaders/hc_pre.wgsl': '18c8b9b4a4a0c0b7c6a86f0b2672eb05db8393ccbf295f611c204afd4bf3740b'}
 CONTRACT_INPUTS = {'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
  'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39',
- 'ggml/src/ggml-cpu/ops.cpp': 'b97635adb201e30e6ea2d74e9abf94f9b824047ea4e18f5f88435a55c7cbccc8',
+ 'ggml/src/ggml-cpu/ops.cpp': '464f9cdeca02db036c23df4786c54acc73cf97c6eb3c54e808f96d6902cea8e8',
  'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
  'ggml/src/ggml-webgpu/wgsl-shaders/binary.wgsl': 'ec26216dfd3881e6ee118103cf9bc8b2f16c22310dbd8d451442f93e7d70d726',
  'ggml/src/ggml-webgpu/wgsl-shaders/cpy.wgsl': '8ecd80450f0bee89e2673fa0a0594cc4646c888d68010db74121bb3da9e2f0f3',
  'ggml/src/ggml-webgpu/wgsl-shaders/repeat.wgsl': '909b8c274feeb4f1b4fcf907325b9ba025d956c20ba2078dc7b37b452344fd6f',
  'ggml/src/ggml-webgpu/wgsl-shaders/scale.wgsl': 'cee80d0720353f4ad24c8845db54000e6f9b1dd1d1c3585acce3f99b693b7a45',
  'ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl': '7d4d66e2b954b5d1067447bb24082cf19f5fba7e021d7101193e3edc73cefbc1',
- 'ggml/src/ggml.c': '4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c',
- 'src/llama-context.cpp': '5c7b8268b5d63d329f5b27a05bf3e8a685726b40fad45d9b94e306cf5a1336f6',
+ 'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
+ 'src/llama-context.cpp': '4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822',
  'src/models/qwen4exp.cpp': 'f452b911490ddbb0e640406a558f9ea0848fa2afc1cec0d441f4d9ff1ec5b063'}
 HEADER_SHA256 = 'e6cbf0800041206f1ba27aac5ad23b2a02701753b5869060a4c3d66c5288e8c2'
 EMBEDDER_SHA256 = '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea'

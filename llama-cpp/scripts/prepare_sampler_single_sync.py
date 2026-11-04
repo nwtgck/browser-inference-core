@@ -15,7 +15,7 @@ OUTPUT_SHA256 = '3fcfceade964ab4cad60621acca0f69f3eb54272cb2ca6d17f7d8b92c51ee41
 CONTRACT_INPUTS = {
     SOURCE_PATH: INPUT_SHA256,
     'src/llama-sampler.h': 'd39c6bfd6c966acde7bfaeb55f08c176b3d9078bc5e8e8de2eee504fc66c258b',
-    'src/llama-context.cpp': '5c7b8268b5d63d329f5b27a05bf3e8a685726b40fad45d9b94e306cf5a1336f6',
+    'src/llama-context.cpp': '4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822',
     'src/llama-context.h': 'c0ed1f0e8b47d2f001a4a8ba61d01f05b16c2972d693780ac1cc09a6d9a05d88',
     'src/llama-vocab.h': 'b201040378716d004b2ded39165f92c1cffc129a361d8c6a42d8b4a1a2fd65f4',
     'src/llama-model.cpp': '4a05742afc09dc89873e40c8b47a97826f95c4cb90fb32ba48271b4d8f4a14de',

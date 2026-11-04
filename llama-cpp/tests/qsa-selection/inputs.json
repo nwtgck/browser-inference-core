@@ -3,10 +3,10 @@
     "src/models/qwen4exp.cpp": "f452b911490ddbb0e640406a558f9ea0848fa2afc1cec0d441f4d9ff1ec5b063",
     "src/llama-memory-hybrid-idx.cpp": "08cbd47bcac5e481ef66c586c27510b210f34d76042dbafa6d51d9dbc489831a",
     "src/llama-memory-hybrid-idx.h": "cfd2ef37aed10a95f9eebe032d2e2279eb9e0c6174fab569d137115a04d0e7a7",
-    "ggml/src/ggml.c": "4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c",
-    "ggml/src/ggml-cpu/ops.cpp": "b97635adb201e30e6ea2d74e9abf94f9b824047ea4e18f5f88435a55c7cbccc8",
+    "ggml/src/ggml.c": "c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49",
+    "ggml/src/ggml-cpu/ops.cpp": "464f9cdeca02db036c23df4786c54acc73cf97c6eb3c54e808f96d6902cea8e8",
     "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
-    "src/llama-context.cpp": "5c7b8268b5d63d329f5b27a05bf3e8a685726b40fad45d9b94e306cf5a1336f6",
+    "src/llama-context.cpp": "4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822",
     "src/llama-graph.cpp": "de456d5ff7b60d6404205e3451b4c804229f7fb46023ff20e996f0ad71b752d1",
     "src/llama-cparams.h": "7184ff61f6509bd9a217eda0b1953006bc42441cf820be5e12f15844152cf0e5",
     "ggml/include/ggml.h": "1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101"

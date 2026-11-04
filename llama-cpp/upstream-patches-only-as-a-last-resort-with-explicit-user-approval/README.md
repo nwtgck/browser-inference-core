@@ -9,7 +9,7 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`9309bf1bcfe8d52b0fb7ef906474db94041a5e0c`. Re-evaluate compatibility at each pin
+`cd959bae99ff4bed22bef2604f45241c09bbb8c8`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
 ## Portable explicit subgroup matvec selection

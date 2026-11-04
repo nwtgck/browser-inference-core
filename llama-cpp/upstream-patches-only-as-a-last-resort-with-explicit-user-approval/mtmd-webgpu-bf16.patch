@@ -1,6 +1,6 @@
 --- a/clip.cpp
 +++ b/clip.cpp
-@@ -8,6 +8,14 @@
+@@ -9,6 +9,14 @@
  #include "ggml-cpp.h"
  #include "ggml-alloc.h"
  #include "ggml-backend.h"
@@ -15,7 +15,7 @@
  #include "gguf.h"
  
  #include <algorithm>
-@@ -145,6 +153,7 @@
+@@ -146,6 +154,7 @@
  
  
  struct clip_ctx {
@@ -23,7 +23,7 @@
      clip_model model;
  
      gguf_context_ptr ctx_gguf;
-@@ -174,7 +183,9 @@
+@@ -175,7 +184,9 @@
  
      bool support_batch = false;
  
@@ -34,7 +34,7 @@
          flash_attn_type = ctx_params.flash_attn_type;
          no_alloc = ctx_params.no_alloc;
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
-@@ -2480,6 +2491,17 @@
+@@ -2538,6 +2549,17 @@
          auto & hparams = model.hparams;
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
@@ -52,7 +52,7 @@
  
          auto fin = open_ifstream_binary(fname);
          if (!fin) {
-@@ -2494,7 +2516,8 @@
+@@ -2552,7 +2574,8 @@
          // get offsets
          for (int64_t i = 0; i < gguf_get_n_tensors(ctx_gguf.get()); ++i) {
              const char * name = gguf_get_tensor_name(ctx_gguf.get(), i);
@@ -62,7 +62,7 @@
          }
  
          // create data context
-@@ -2521,7 +2544,24 @@
+@@ -2579,7 +2602,24 @@
              }
              if (cur) {
                  tensors_to_load.push_back(cur);
@@ -88,7 +88,7 @@
                  ggml_set_name(data_tensor, cur->name);
                  loaded_tensor_names.insert(name);
                  cur = data_tensor;
-@@ -4193,24 +4233,38 @@
+@@ -4678,24 +4718,38 @@
                  GGML_ASSERT(false && "unknown projector type");
          }
  
@@ -129,7 +129,7 @@
              ggml_backend_buffer_set_usage(ctx_clip.buf.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
              // read the weight from file
              if (!ctx_clip.no_alloc) {
-@@ -4221,27 +4275,79 @@
+@@ -4706,27 +4760,79 @@
                      auto it_off = tensor_offset.find(t->name);
                      GGML_ASSERT(it_off != tensor_offset.end() && "no offset for tensor");
                      const size_t offset = it_off->second;
@@ -213,7 +213,7 @@
                  }
                  LOG_DBG("%s: loaded %zu tensors from %s\n", __func__, tensors_to_load.size(), fname.c_str());
              } else {
-@@ -4374,7 +4480,15 @@
+@@ -4859,7 +4965,15 @@
      // only initialize backend buffers, but do not allocate them yet
      static support_info_graph reserve_compute_meta(clip_ctx & ctx_clip, const clip_image_f32_batch & batch) {
          ggml_cgraph * gf = clip_get_graph_builder(&ctx_clip, batch)->build();
@@ -230,7 +230,7 @@
  
          ctx_clip.mem_compute.clear();
          for (size_t i = 0; i < ctx_clip.backend_ptrs.size(); ++i) {
-@@ -4567,6 +4681,12 @@
+@@ -5052,6 +5166,12 @@
  };
  
  struct clip_init_result clip_init(const char * fname, struct clip_context_params ctx_params) {
@@ -243,7 +243,7 @@
      clip_ctx * ctx_vision = nullptr;
      clip_ctx * ctx_audio = nullptr;
      clip_ctx * ctx_gen_audio = nullptr;
-@@ -4579,8 +4699,11 @@
+@@ -5064,8 +5184,11 @@
          bool skip_audio = false;
  
          if (loader.has_vision) {
@@ -256,7 +256,7 @@
              loader.load_tensors(*ctx_vision);
              loader.init_ctx(*ctx_vision);
              if (ctx_params.warmup) {
-@@ -5227,7 +5350,17 @@
+@@ -5762,7 +5885,17 @@
  
      // if buffers are not allocated, we need to do a warmup run to allocate them
      if (!ctx->is_allocated) {
@@ -274,8 +274,8 @@
 +        }
      }
  
-     if (params->gen_process != CLIP_GEN_PROCESS_GEN_UNKNOWN && params->gen_state == nullptr) {
-@@ -5243,9 +5376,60 @@
+     const bool needs_gen_state = params->gen_process == CLIP_GEN_PROCESS_GEN_CODE ||
+@@ -5781,9 +5914,60 @@
      // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)
      ggml_tensor * embeddings = params->out_embd ? ggml_graph_node(gf, -1) : nullptr;
  

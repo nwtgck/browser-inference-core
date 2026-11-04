@@ -362,6 +362,13 @@ static void test_rejections() {
 }
 
 static void test_roles() {
+    for (projector_type kind : {PROJECTOR_TYPE_CHATTERBOX, PROJECTOR_TYPE_CHATTERBOX_SPKENC}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = kind;
+        m.cbx.input_embedding_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "projector roles");
+    }
     for (bool query : {false, true}) {
         fixture f;
         clip_model m{};

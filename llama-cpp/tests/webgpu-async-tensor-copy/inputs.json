@@ -1,7 +1,7 @@
 {
-  "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
+  "upstream_commit": "cd959bae99ff4bed22bef2604f45241c09bbb8c8",
   "upstream_sha256": {
-    "ggml/src/ggml.c": "4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c",
+    "ggml/src/ggml.c": "c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49",
     "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
     "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
     "ggml/src/ggml-backend-impl.h": "7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3",

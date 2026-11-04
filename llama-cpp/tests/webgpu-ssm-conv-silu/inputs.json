@@ -6,5 +6,5 @@
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
-  "module_sha256": "0261bc2abc15c88d04101cf71a1f89a9ad528aa1f7fa5ae98ac3dd97eafeadee"
+  "module_sha256": "58a096224ecc3ab9c57472219396621476f29f96f5d8d792a5ef88fcd05e8bf5"
 }

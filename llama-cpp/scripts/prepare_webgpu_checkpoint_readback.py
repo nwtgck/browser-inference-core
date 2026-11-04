@@ -16,10 +16,10 @@ CONTRACT_INPUTS = {'ggml/include/ggml-backend.h': '34464da4b46314c710cd634626578
  'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',
  'ggml/src/ggml-webgpu/CMakeLists.txt': 'aa19125326050c3e0ae768f31f43a61b8150805a4b330853662b955e8ef34b2a',
  'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
- 'ggml/src/ggml.c': '4b141cb8e781090b9a4c453781a31c9436052cced6018b080774650b7b57ed4c',
+ 'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
  'include/llama.h': 'f07ffbabd3fbe9ef21d97b4d4ce8328d9c2a123ccbf5266f04a3146d70ce4f91',
  'src/CMakeLists.txt': '802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d',
- 'src/llama-context.cpp': '5c7b8268b5d63d329f5b27a05bf3e8a685726b40fad45d9b94e306cf5a1336f6',
+ 'src/llama-context.cpp': '4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822',
  'src/llama-context.h': 'c0ed1f0e8b47d2f001a4a8ba61d01f05b16c2972d693780ac1cc09a6d9a05d88',
  'src/llama-io.h': 'cc5bd88ceeb9c859384d1cece26fce2ed73bcf16eb6a5fa4b571dfa2c06613fe'}
 REVIEWED_DAWN_HEADERS = dict(tensor_copy.DAWN_HEADERS)
@@ -34,7 +34,7 @@ OUTPUTS = {False: {'ggml-webgpu-shader-lib.hpp': 'e90bac8b868cd3674c69903cc9bf5b
 GENERATED_OUTPUTS = {'ggml/src/ggml-backend-tensor-get-batch.h': '01c4b471ade51ddb6fd91e1d474e00943813f2d598e0192ab7d8caf571c3978a',
  'ggml/src/ggml-webgpu/ggml-webgpu-batch-readback-geometry.hpp': 'f6e9cd0d46a7c32a112f870a705c735be070224f586ae97a2d513a20e75e7f0a',
  'ggml/src/ggml-webgpu/ggml-webgpu-batch-readback.hpp': '62a542146fb2e57cb1b9539d4fd0cde2a3f73c00ca7893600fbc6401430bf24a',
- 'src/llama-context.cpp': 'b369798cddcdebb485ddfb87da1d0f4f362d92bf79cd6fd70110ce7cbe42c93b'}
+ 'src/llama-context.cpp': '6dd7a06d3eb939618d08d50054c6963e7c4806828e7c686bf4ab3daa43ccbd2c'}
 GENERATED_NAMES = tuple(Path(name).name for name in GENERATED_OUTPUTS)
 
 
