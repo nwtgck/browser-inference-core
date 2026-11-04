@@ -1,0 +1,64 @@
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+
+struct controlled_limits {
+    uint64_t maxBufferSize;
+};
+struct controlled_global {
+    struct {
+        controlled_limits limits;
+    } capabilities;
+};
+struct ggml_backend_webgpu_device_context {
+    controlled_global * webgpu_global_ctx;
+};
+struct controlled_device {
+    void * context;
+};
+struct controlled_buffer_type {
+    controlled_device * device;
+};
+using ggml_backend_buffer_type_t = controlled_buffer_type *;
+
+@GETTER@
+
+int main() {
+#ifdef LCB_EXPECT_POINTER_BYTES
+    static_assert(sizeof(size_t) == LCB_EXPECT_POINTER_BYTES);
+#endif
+    static_assert(sizeof(size_t) == 4 || sizeof(size_t) == 8);
+    controlled_global global{};
+    ggml_backend_webgpu_device_context context{&global};
+    controlled_device device{&context};
+    controlled_buffer_type buft{&device};
+    struct test_case {
+        uint64_t reported;
+        uint64_t expected32;
+    };
+    const test_case cases[] = {
+        {0, 0},
+        {1, 1},
+        {UINT64_C(134217728), UINT64_C(134217728)},
+        {UINT64_C(2147483646), UINT64_C(2147483646)},
+        {UINT64_C(2147483647), UINT64_C(2147483647)},
+        {UINT64_C(2147483648), UINT64_C(2147483647)},
+        {UINT64_C(2147483649), UINT64_C(2147483647)},
+        {UINT64_C(4294967295), UINT64_C(2147483647)},
+        {UINT64_C(4294967296), UINT64_C(2147483647)},
+        {UINT64_C(4563402752), UINT64_C(2147483647)},
+        {UINT64_MAX, UINT64_C(2147483647)},
+    };
+    for (const auto & item : cases) {
+        global.capabilities.limits.maxBufferSize = item.reported;
+        const uint64_t actual = ggml_backend_webgpu_buffer_type_get_max_size(&buft);
+        assert(actual == (sizeof(size_t) == 4 ? item.expected32 : item.reported));
+    }
+    const uint64_t four_gib = UINT64_C(4294967296);
+    const uint64_t old_conversion = static_cast<size_t>(four_gib);
+    assert(old_conversion == (sizeof(size_t) == 4 ? 0 : four_gib));
+    std::printf("{\"pointerBytes\":%zu,\"cases\":11,\"oldFourGiBConversion\":%llu,\"passed\":true}\n",
+                sizeof(size_t), static_cast<unsigned long long>(old_conversion));
+}

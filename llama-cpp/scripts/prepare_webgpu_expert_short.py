@@ -11,11 +11,11 @@ import prepare_webgpu_tensor_copy as tensor_copy
 PATCH_NAME = 'ggml-webgpu-expert-short-workgroup.patch'
 PATCH_SHA256 = '6f15368df5aaab2a4c0408e0e71d02f7c017de89971f8373ceec31f1ee9d77b8'
 COMPOSITION_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '917095a77677f014f42c4967ba5011cf3c72b44bcc5bf074dc5c97e57ca59550',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': 'e36af73eb9c4b7823bbcf1ff0e54f820930c0911856acd552c3a000c2af0ceb7',
     'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'f03dc8d390d4e68fa10b2aed66740c33b1217e1e0f4348b034ff27baed328bca',
 }
 COMPOSITION_OUTPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '9a1d8759a0aedba59d86bb56adc3ce449f1b42363a3265ccd68c3eab1dfb00cf',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '6047e0c2bb7e9936bbf5aa5b734bbd50ace1130a1d0dbc6289a683ac1862b526',
     'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'e0d7172cf03f148a0ef6cad9e2047d4534ef0c01eec516e91ecb36e62cafa25d',
 }
 CONTRACT_INPUTS = {

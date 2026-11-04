@@ -10,11 +10,11 @@ PATCH_SHA256 = '57ca1a2707c6dbb52893af084043599c01a9427d46fbd7fa0b82dfeded89e0f4
 BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-ssm-conv-silu-shaders.hpp'
 INPUTS = {
-    'ggml-webgpu.cpp': 'be9fffb8fb8eb1c85aef121a07ffad0a1182eaa7bed2829ba6c9cb7242b1b506',
+    'ggml-webgpu.cpp': '7414a455f3124cc0b09bc1588800f9c2fbf194be55205e6e41de8905b7cd5fe1',
     'ggml-webgpu-shader-lib.hpp': 'ade9f9485964536aa1ca390bbc768f10a9a54178ebb69bb7e002ba712d3a61cc',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': '972928fc0755daad4e24b2da548d2e62329d5ef474ab5ab7e5214365e88d48cf',
+    'ggml-webgpu.cpp': '9b47f67854b6708c6c01e642d2e1efc5a664710241952e413908f0d27de35e39',
     'ggml-webgpu-shader-lib.hpp': 'a242d104ea3841d3041641fdd33561fbcb9157784a6198d6696a0bb6cee93700',
     'ggml-webgpu-ssm-conv-silu.hpp': 'b4fff88ccabe30bd75ba0dfe310fa2cf83cb8b361678e5f94ccc10cce0acd3dd',
     'wgsl-shaders/ssm_conv_silu.wgsl': 'b2bf3909f6991312675a7dfa662ce7c68c4c158a32328c5ca5ac1d80d28ac35b',

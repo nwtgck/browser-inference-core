@@ -6,7 +6,7 @@
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
-  "module_sha256": "134cd3c6ee46e68685fb66bde1f2db0589ca42cf7a8529194f5f2734a08c937c",
+  "module_sha256": "62fb7771a885e2c224291a790c75ff1f6e5d87bcb37f99f99aa2cdd0043e0d2d",
   "oracle_inputs_sha256": {
     "ggml/src/ggml-quants.c": "bcda33625707fdfcb1367cdd2bb1a2f017430162ec9623abc84ad17459698f73",
     "ggml/src/ggml-common.h": "0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c",

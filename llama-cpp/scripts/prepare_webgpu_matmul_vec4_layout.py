@@ -13,27 +13,27 @@ PATCHES = {
 }
 INPUTS = {
     False: {
-        'ggml-webgpu.cpp': '67940a20bba8d06205ad2f6cf1e909450c4fbb6805b5eba59f574c3576d69779',
+        'ggml-webgpu.cpp': 'f4b7d396cede67ae3511dbda62bfe22f51f6c235b3e9bb12942db9f99a06e96f',
         'ggml-webgpu-shader-lib.hpp': '7756a6ef0fb1521dd896fbb1a34b7431dac71ef52db93003c0db70527dff3536',
     },
     True: {
-        'ggml-webgpu.cpp': '5e70b3abb85758df2a1a01ff1ae3640d274c2ff5fc7ad28e94a22c30617051d8',
+        'ggml-webgpu.cpp': '1518bd49d2361c9ee618cd79fbbbed2730ec35c59ea061895d908c2b7602f827',
         'ggml-webgpu-shader-lib.hpp': '46a0ac117e6df47308580043e6fbf40987dee6476ef2bd1ed588bd8c99840059',
     },
 }
 OUTPUTS = {
     False: {
-        'ggml-webgpu.cpp': '3bebf87dd28e65ff400d3d5be87956e27a6ca298550c83bb4437b0ea6f675f96',
+        'ggml-webgpu.cpp': '5628f36ae648da50afd418c744edcc076a19849e7ac9414aa450f01bd3e99322',
         'ggml-webgpu-shader-lib.hpp': 'f8bb0bd001ff26226393d6118ebc5666978e0247a266427a967050d89e9f7399',
     },
     True: {
-        'ggml-webgpu.cpp': '1dcb3dd11010c4c9c24f2e81df68226ea57700ef1c979e7205dfda05da275cfd',
+        'ggml-webgpu.cpp': 'cc00a64403944092716c319b33a59a2016364eb36141a053e3907bbc97f257c7',
         'ggml-webgpu-shader-lib.hpp': 'e5a3811a965acf9b681efc6af3f06183ec9c9a90c0d6abb48a743dd3493d74a3',
     },
 }
 CONTRACT_INPUTS = {
     'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201',
     'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl': '4fdbbaf3b3d3b7c965786b62a58b6b35ceb6d2f80b29e53f4a027904d3243f18',
     'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl': '9421bdb7ac569e03e8483365653c28b95e659702f8ff849310b2c077ee64290f',

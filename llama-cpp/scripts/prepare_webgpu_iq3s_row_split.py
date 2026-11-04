@@ -19,9 +19,9 @@ ACCUMULATOR_INPUT_SHA256 = '23ebdf701a4ed2aff8b101acee31496b3bbad75c1ff0f32924cf
 ACCUMULATOR_OUTPUT_SHA256 = '6f37bd58a3f66b8e2e09b3c6fba91c5609b8d770e8ac984e30830bd6d5c2f5f1'
 ROWS_PER_SUBGROUP = 4
 INPUTS = {
-    False: {'ggml-webgpu.cpp': '8e5058d5729d74d4fa6b871b7e5bdbb5abfbeef51234df157064059561b5039a',
+    False: {'ggml-webgpu.cpp': '84bc328d54db3cb715e3a48d7c200c3ea1aa9bc93714fbfd52fb02d16857ee9e',
             'ggml-webgpu-shader-lib.hpp': 'f8bb0bd001ff26226393d6118ebc5666978e0247a266427a967050d89e9f7399'},
-    True: {'ggml-webgpu.cpp': '9f60948e2e9cf75ea538f9907a389a00a7d1ee100559daae3e1465108d9971e0',
+    True: {'ggml-webgpu.cpp': 'bffa81f88c0660562164a90a0fa12594470835d453696cbb782ac2cad41ce781',
            'ggml-webgpu-shader-lib.hpp': 'e5a3811a965acf9b681efc6af3f06183ec9c9a90c0d6abb48a743dd3493d74a3'},
 }
 CONTRACT_INPUTS = {

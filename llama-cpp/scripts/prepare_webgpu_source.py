@@ -44,13 +44,14 @@ import prepare_webgpu_subgroup_size_control as subgroup_size_control
 import prepare_webgpu_q4_subgroup as q4_subgroup
 import prepare_webgpu_q6_subgroup as q6_subgroup
 import prepare_webgpu_aligned_word_load as aligned_word_load
+import prepare_webgpu_buffer_limit as buffer_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '67940a20bba8d06205ad2f6cf1e909450c4fbb6805b5eba59f574c3576d69779'
+OUTPUT_SHA256 = 'f4b7d396cede67ae3511dbda62bfe22f51f6c235b3e9bb12942db9f99a06e96f'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
@@ -60,8 +61,7 @@ SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d94751198193
 SSM_HEADER_OUTPUT_SHA256 = '7756a6ef0fb1521dd896fbb1a34b7431dac71ef52db93003c0db70527dff3536'
 # OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
 # Later stages keep their own contracts; these identities describe compiled files.
-FINAL_OUTPUTS = {profile: {name: q6_subgroup.OUTPUTS[profile][name]
-                           for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp')}
+FINAL_OUTPUTS = {profile: {**q6_subgroup.OUTPUTS[profile], **buffer_limit.OUTPUTS[profile]}
                  for profile in (False, True)}
 
 # Why: bound read staging and queued model-load work across tensors.
@@ -191,6 +191,7 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(subgroup_size_control.prepare(work, source, patch_root, env,
                                                        gpu_profile=gpu_profile, headers=hc_headers))
         q6_subgroup.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        buffer_limit.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)

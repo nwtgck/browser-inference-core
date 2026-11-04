@@ -10,9 +10,9 @@ PATCH_SHA256 = '55da9404bb6812184ddcbb42447610ca2d78a77d73f5083ef4a6f58700d8e9de
 BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-router-tail-shaders.hpp'
 HEADER_SHA256 = 'a2b8efd2a9617c5685ae5e91e4f61570c519b3f787f51395e4d38e809eb62c52'
-INPUTS = {'ggml-webgpu.cpp': '972928fc0755daad4e24b2da548d2e62329d5ef474ab5ab7e5214365e88d48cf',
+INPUTS = {'ggml-webgpu.cpp': '9b47f67854b6708c6c01e642d2e1efc5a664710241952e413908f0d27de35e39',
  'ggml-webgpu-shader-lib.hpp': '7c5b913454691966279c65cab8953ecb19348cfd4653df94202ca60349d3e48d'}
-OUTPUTS = {'ggml-webgpu.cpp': '823653ae0049fcce555213fa95ab2efa311af5d23771391fc712feb8ed45366d',
+OUTPUTS = {'ggml-webgpu.cpp': 'ca2f94d35fdddd1af686da72808960d790c4d13fbf5e69aea95547196128b0ca',
  'ggml-webgpu-shader-lib.hpp': 'd71825ab9ee4f7d37d1aa492c6ed2f8c01c3f35e0aa0bb8abe740c7824d3bc3d',
  'ggml-webgpu-router-tail.hpp': '9fc65ad3bf41dd4c44ad77ffcdbd3cf242144fbb4588912351c855e360aab8ed',
  'wgsl-shaders/router_tail.wgsl': '020e4829bed8e5867739a74f891ff82cd110e55fb216e6d13445d296ae8b268e',

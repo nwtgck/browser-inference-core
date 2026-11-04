@@ -15,11 +15,11 @@ BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-rms-scale-shaders.hpp'
 INPUTS = {
     'ggml-webgpu-scale-unary.hpp': '78efb6f8ff9b31813cad1da78d5d97e3d38f2e44ba63dc7165d01aebdebe2898',
-    'ggml-webgpu.cpp': 'd7363c0026d0dec265679d3cb1dddeafcf3f5049d5846eca124ec2c70615d17a',
+    'ggml-webgpu.cpp': '7556fc064825ca207851483f16c8f5f1e2c34b5cf17934c1bbc7a317f1781554',
     'ggml-webgpu-shader-lib.hpp': 'f286785f19fe280a4d2a8ab3873bf5f39d7af6a1b45be892537e8cb657e103f6',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': '9d4295d16c8f988e109d13f6d8bdbea9b8a4fb7aa644dc5ac4cc20b86d9bf78f',
+    'ggml-webgpu.cpp': '753829f410cd68a2dc5a83f6c5be055e30a32aae8fed1f45e70703589f2b1a40',
     'ggml-webgpu-shader-lib.hpp': 'e200d33142efa3e639802f3a62e25df24e7c3a3b635a4c397bd4e167d8046a7f',
     'ggml-webgpu-rms-scale.hpp': 'e6335ce145c2863d1bcaf3fe4f0d99c4324840a89496156df229e7d34015f9d4',
     'wgsl-shaders/row_norm.wgsl': 'dff02ee996b5e02074ea7cb913ca0b389b2d6fc91ec0f01449b6087946063521',

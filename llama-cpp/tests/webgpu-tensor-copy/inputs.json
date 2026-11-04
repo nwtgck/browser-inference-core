@@ -1,7 +1,7 @@
 {
   "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
   "source": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
-  "sha256": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
+  "sha256": "617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201",
   "test_backend_source": "ggml/src/ggml-backend.cpp",
   "test_backend_sha256": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
   "dawn_release": "v20260908.214631",

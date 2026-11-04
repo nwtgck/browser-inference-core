@@ -1,7 +1,7 @@
 {
   "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
   "source": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
-  "sha256": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
+  "sha256": "617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201",
   "dawn_release": "v20260908.214631",
   "dawn_revision": "94c3c9cc0d5fb2e85aebb370fa8d37b71aa34655",
   "dawn_archive_sha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",

@@ -8,12 +8,12 @@ import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-ordered-readback.patch'
 PATCH_SHA256 = 'f46b9c9b55ee13a02c1a68d682cfe3f5cff6fbf39680e88891590c3f72431325'
-INPUT_SHA256 = '9a1d8759a0aedba59d86bb56adc3ce449f1b42363a3265ccd68c3eab1dfb00cf'
-OUTPUT_SHA256 = '8d4d6ae43ad7b946fe182fdb22014664158e92d1ee68e4c357c08770f6a35dd2'
+INPUT_SHA256 = '6047e0c2bb7e9936bbf5aa5b734bbd50ace1130a1d0dbc6289a683ac1862b526'
+OUTPUT_SHA256 = 'f4af0348fd16804ddfa1d2b0c12c85a4b554a5e4d12a337ce75cf2c3a6c422da'
 # The generic get/get_async/synchronize contracts and backend interface are
 # part of this hook's correctness, not just context for applying the patch.
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201',
     'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',
     'ggml/src/ggml-backend-impl.h': '7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3',
     'ggml/include/ggml-backend.h': '34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a',

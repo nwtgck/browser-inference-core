@@ -9,7 +9,7 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`cd959bae99ff4bed22bef2604f45241c09bbb8c8`. Re-evaluate compatibility at each pin
+`5851a8e505f4d5fbb183f2847698eb6155d176b7`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
 ## Portable explicit subgroup matvec selection
@@ -768,3 +768,25 @@ not establish target-device speed.
 - **Removal:** retire the overlay and adapters when upstream exposes independent
   vocabulary/chat initialization, or when this experiment is removed. Do not
   widen accepted hashes without reviewing the semantic changes.
+
+## Representable WebGPU allocation limit
+
+- **Patch:** `ggml-webgpu-buffer-size-limit.patch`.
+- **Accepted scope:** preserve upstream's `maxBufferSize` allocation limit while
+  preventing its uint64-to-size_t conversion from wrapping on 32-bit hosts.
+  Clamp the uint64 value to the graph allocator's existing `SIZE_MAX / 2` chunk
+  limit before narrowing, only when size_t is narrower than uint64_t. A 64-bit
+  host returns the full reported value, including the uint64 maximum.
+- **Integration:** one checked final stage in the shared WebGPU build-tree source
+  for existing normal and diagnostic profiles. Storage binding limits, upstream
+  chunked memset, queue ordering, allocator and public ABI are unchanged.
+- **Coupling:** the private buffer-type getter, device limit field and graph
+  allocator width contract, pinned separately from tensor-copy exceptions.
+- **No-patch alternative:** keep upstream conversion, which returns zero for a
+  reported 4 GiB allocation limit on a 32-bit host, or defer this upstream pin.
+- **Validation and limits:** source-bound getter checks at actual 32/64-bit widths
+  use controlled limits without allocating huge buffers. They do not establish
+  which adapters report such limits or browser behavior at those sizes.
+- **Removal:** upstream preserves the representable allocation limit before
+  narrowing, or supported profiles no longer include 32-bit WebGPU hosts. Remove
+  this patch, preparation, provenance and independent tests together.

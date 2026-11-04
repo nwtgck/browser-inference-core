@@ -13,8 +13,8 @@ PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-app
 PATCH_NAME = 'ggml-webgpu-same-device-tensor-copy.patch'
 SOURCE_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'
 REVIEWED_REVISIONS = {
-    "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c": {
-        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
+    "5851a8e505f4d5fbb183f2847698eb6155d176b7": {
+        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201",
         "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
         "ggml/include/ggml.h": "1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101",
         "ggml/include/ggml-backend.h": "34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a",

@@ -5,11 +5,11 @@ import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-async-tensor-copy.patch'
 PATCH_SHA256 = '7643f09e513bfaa9aca614644466b5d05ae4419f9edcb3f920c480644d247022'
-INPUT_SHA256 = '9d4295d16c8f988e109d13f6d8bdbea9b8a4fb7aa644dc5ac4cc20b86d9bf78f'
-OUTPUT_SHA256 = 'c549daa613064cc778060ba8ea899b3dcae1d2ddee2c006c2137d13ae753ec67'
+INPUT_SHA256 = '753829f410cd68a2dc5a83f6c5be055e30a32aae8fed1f45e70703589f2b1a40'
+OUTPUT_SHA256 = '57007fb929f38738bf6ba6d1aa76d8772822d9c2aa30410ca83f4d7e9c0d1d39'
 CONTRACT_INPUTS = {
     'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201',
     'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',
     'ggml/src/ggml-backend-impl.h': '7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3',
     'ggml/include/ggml-backend.h': '34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a',

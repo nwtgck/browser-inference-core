@@ -11,10 +11,10 @@ BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-hc-shaders.hpp'
 PATCH_SHA256 = '97d142652b31d41836f6046e0fcaa1ea922583bbcd161f5c6903495c2a5afd3a'
 INPUTS = {'ggml-webgpu-shader-lib.hpp': 'da6dd6973b326195fb0091374c8789040b86978059156b468ef6a414c729ddc4',
- 'ggml-webgpu.cpp': 'c4534b7c44abba4be2045f594de4556ce5314c78c88bbe4bc8a7512645630071'}
+ 'ggml-webgpu.cpp': '788283447e19b7ff3e3e3f7976942008acd3e0ec13a0d6851e8236e1b750c0d7'}
 OUTPUTS = {'ggml-webgpu-hc.hpp': '24abc54f87a00ff2113d74480268b9f15a9bd5c2fbe01ac88eee3ea5f36351cc',
  'ggml-webgpu-shader-lib.hpp': 'ecef7ea446d9e0d4d5d4ecb1feee6484a3ce478c180c53e2ee56786b1ba79e87',
- 'ggml-webgpu.cpp': '3d56e968f4e779ec796250a55da33ff650d3010555ead7a231b1ee237b9313de',
+ 'ggml-webgpu.cpp': '60d0ccc9b1dceb40fd7aca23462ac1f456588e05248a3d3c34b78cbe7e3da2c6',
  'wgsl-shaders/hc_post.wgsl': '6170c98f654bcb6230b2f5512865b175fcb2c7dfa60715b4eaf161579c1c1a9d',
  'wgsl-shaders/hc_pre.wgsl': '18c8b9b4a4a0c0b7c6a86f0b2672eb05db8393ccbf295f611c204afd4bf3740b'}
 CONTRACT_INPUTS = {'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',

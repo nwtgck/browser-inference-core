@@ -11,15 +11,15 @@
  #include "ggml-webgpu-router-tail.hpp"
  
  #include "ggml-backend-impl.h"
-@@ -405,6 +409,7 @@
+@@ -404,6 +408,7 @@
      wgpu::CommandEncoder     active_command_encoder;
      wgpu::ComputePassEncoder active_compute_pass;
      bool                     batch_compute_passes = true;
 +    bool                     operation_in_progress = false;
  
-     size_t memset_bytes_per_thread;
- 
-@@ -1821,17 +1826,9 @@
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+     // Profiling: per-shader GPU time in ms
+@@ -1834,17 +1839,9 @@
      });
  }
  
@@ -40,7 +40,7 @@
      ggml_webgpu_shader_lib_context shader_lib_ctx = {};
  
      shader_lib_ctx.src0                     = src0;
-@@ -1848,12 +1845,32 @@
+@@ -1861,12 +1858,32 @@
      shader_lib_ctx.supports_dot_product     = ctx->global_ctx->capabilities.supports_dot_product;
      shader_lib_ctx.vendor                   = ctx->global_ctx->vendor;
  
@@ -74,7 +74,7 @@
          if (use_mmvq) {
              ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
          }
-@@ -1951,6 +1968,11 @@
+@@ -1964,6 +1981,11 @@
      });
  
      return ggml_backend_webgpu_build_multi(ctx, dispatches);
@@ -86,7 +86,7 @@
  }
  
  static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
-@@ -4202,7 +4224,17 @@
+@@ -4215,7 +4237,17 @@
  #endif
  }
  
@@ -105,7 +105,7 @@
      WEBGPU_LOG_DEBUG("ggml_backend_webgpu_graph_compute(" << cgraph->n_nodes << " nodes)");
  
      ggml_backend_webgpu_context * backend_ctx = (ggml_backend_webgpu_context *) backend->context;
-@@ -4233,7 +4265,7 @@
+@@ -4246,7 +4278,7 @@
          if (cgraph->nodes[node_idx]->op == GGML_OP_SET_ROWS) {
              contains_set_rows = true;
          }
@@ -114,7 +114,7 @@
              commands.push_back(*cmd);
              num_batched_kernels += cmd.value().num_kernels;
  #ifdef GGML_WEBGPU_GPU_PROFILE
-@@ -4303,6 +4335,13 @@
+@@ -4316,6 +4348,13 @@
      ctx->bind_group_cache.end_graph();
      WEBGPU_CPU_PROFILE_TOTAL_END(graph_compute, ctx->global_ctx);
      return GGML_STATUS_SUCCESS;
@@ -128,7 +128,7 @@
  }
  
  struct ggml_backend_webgpu_event_context {
-@@ -5701,12 +5740,154 @@
+@@ -5704,12 +5743,154 @@
      return &device;
  }
  

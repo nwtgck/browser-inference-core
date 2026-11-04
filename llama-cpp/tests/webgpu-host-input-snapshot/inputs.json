@@ -1,10 +1,10 @@
 {
   "scope": "Synthetic CPU model; actual registry/scheduler/provider bodies; no GPU or throughput evidence",
-  "module_sha256": "1208fba4943c15743fbf789e2fda92a344d3089527db5b8a202dc035be45846f",
+  "module_sha256": "8b5ca17ca6c4f6e525b609384e34127e34b1601e154eba8e20541db14e6a8ba3",
   "inherited_harness_sha256": "caf596f427177d84049f61835059222a3223b0db4325452a82d9e4f3f4da78c5",
   "patch_sha256": "c652f72f19affbe2b274e6715c248e757ce40eabc93452f407777dd2bbba806a",
-  "input_sha256": "328d722b4d7612d2ff1dc26f31b343fa3ec3290ba33cb2dc5d960a035d0dc7b8",
-  "output_sha256": "be9fffb8fb8eb1c85aef121a07ffad0a1182eaa7bed2829ba6c9cb7242b1b506",
+  "input_sha256": "4975b36e1d6a8dab34f2a0fb91c0865ad66bc67b37ab2b165583a69871b0b6e0",
+  "output_sha256": "7414a455f3124cc0b09bc1588800f9c2fbf194be55205e6e41de8905b7cd5fe1",
   "backend_output_sha256": "b9d0104d658d4e79642b9594665663dcbb39d97c1cc82c49f086ad71d60ace8e",
   "header_output_sha256": "f1133ed5459fb8cfa8f714cb855109f199a33df50ad5fafb4db04839bfc352a9",
   "contract_inputs": {

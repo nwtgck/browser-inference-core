@@ -6,8 +6,8 @@ import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-host-input-snapshot.patch'
 PATCH_SHA256 = 'c652f72f19affbe2b274e6715c248e757ce40eabc93452f407777dd2bbba806a'
-INPUT_SHA256 = '328d722b4d7612d2ff1dc26f31b343fa3ec3290ba33cb2dc5d960a035d0dc7b8'
-OUTPUT_SHA256 = 'be9fffb8fb8eb1c85aef121a07ffad0a1182eaa7bed2829ba6c9cb7242b1b506'
+INPUT_SHA256 = '4975b36e1d6a8dab34f2a0fb91c0865ad66bc67b37ab2b165583a69871b0b6e0'
+OUTPUT_SHA256 = '7414a455f3124cc0b09bc1588800f9c2fbf194be55205e6e41de8905b7cd5fe1'
 BACKEND_SOURCE_PATH = 'ggml/src/ggml-backend.cpp'
 BACKEND_OUTPUT_SHA256 = 'b9d0104d658d4e79642b9594665663dcbb39d97c1cc82c49f086ad71d60ace8e'
 HEADER_PATH = 'ggml/src/ggml-backend-host-snapshot.h'

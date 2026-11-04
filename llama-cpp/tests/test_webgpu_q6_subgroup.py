@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 import prepare_webgpu_source as source
 import prepare_webgpu_q6_subgroup as q6
-from webgpu_prefix_context import without_q6_subgroup
+from webgpu_prefix_context import without_q6_subgroup, without_buffer_limit
 import test_webgpu_quant_half_pairs as pairs
 
 
@@ -28,7 +28,8 @@ class Q6Subgroup(unittest.TestCase):
         for profile in (False, True):
             with without_q6_subgroup(source):
                 cls.before[profile] = source.prepare(cls.upstream, cls.directory / f'before-{profile}', gpu_profile=profile).parent
-            cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
+            with without_buffer_limit(source):
+                cls.final[profile] = source.prepare(cls.upstream, cls.directory / f'final-{profile}', gpu_profile=profile).parent
 
     def seed(self, work, profile, directory):
         target = work / q6.BASE
@@ -52,10 +53,14 @@ class Q6Subgroup(unittest.TestCase):
                 self.assertEqual((work / q6.BASE / 'ggml-webgpu-shader-lib.hpp').read_bytes(),
                                  (before / 'ggml-webgpu-shader-lib.hpp').read_bytes())
             stamps = {p.name: p.stat().st_mtime_ns for p in final.iterdir()}
-            source.prepare(self.upstream, final, gpu_profile=profile)
+            with without_buffer_limit(source):
+                source.prepare(self.upstream, final, gpu_profile=profile)
             self.assertEqual(stamps, {p.name: p.stat().st_mtime_ns for p in final.iterdir()})
         self.assertEqual(q6.INPUTS, source.subgroup_size_control.OUTPUTS)
-        self.assertEqual(q6.OUTPUTS, source.FINAL_OUTPUTS)
+        self.assertEqual({p: {'ggml-webgpu.cpp': values['ggml-webgpu.cpp']}
+                          for p, values in q6.OUTPUTS.items()}, source.buffer_limit.INPUTS)
+        self.assertEqual({p: {**q6.OUTPUTS[p], **source.buffer_limit.OUTPUTS[p]}
+                          for p in (False, True)}, source.FINAL_OUTPUTS)
         self.assertEqual(q6.EMBEDDED_HEADER_SHA256, source.subgroup_size_control.GENERATED_OUTPUTS[q6.EMBEDDED_HEADER_NAME])
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()
         self.assertIn('scripts/prepare_webgpu_q6_subgroup.py', cmake)

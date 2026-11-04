@@ -44,7 +44,7 @@ class GgmlBindings(unittest.TestCase):
                 self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
                 self.assertIn('lcb_' + name, json.loads((output / 'jspi-exports.json').read_text()))
             for name in ('GGML_TYPE_F8_E4M3', 'GGML_FTYPE_MOSTLY_F8_E4M3', 'LLAMA_FTYPE_MOSTLY_F8_E4M3',
-                         'MTMD_VIDEO_TEMPLATE_QWEN3VL', 'MTMD_GEN_AUDIO_TYPE_CHATTERBOX'):
+                         'MTMD_VIDEO_TEMPLATE_QWEN3VL', 'MTMD_GEN_AUDIO_TYPE_CHATTERBOX', 'MTMD_GEN_AUDIO_TYPE_DRAMA3'):
                 self.assertIn(name, schema['constants'])
 
     def test_existing_mtmd_capability_queries_survive_upstream_deprecation(self):
