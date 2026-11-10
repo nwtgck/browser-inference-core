@@ -237,7 +237,9 @@ extern "C" int sdc_test_bf16_weights(const char * backend_name) {
         return -41;
 
     std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend(
-        ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+        std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                              : ggml_backend_init_by_name(backend_name, nullptr),
+        ggml_backend_free);
     if (!backend)
         return -1;
     if (ggml_backend_is_cpu(backend.get()))

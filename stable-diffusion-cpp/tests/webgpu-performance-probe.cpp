@@ -7,6 +7,7 @@
 #include "model/diffusion/qwen_image_2_1.hpp"
 #include "ggml-backend-impl.h"
 #include <cstdio>
+#include <cstring>
 #ifdef __EMSCRIPTEN__
 #include "ggml-webgpu.h"
 #endif
@@ -338,7 +339,9 @@ std::vector<float> run_large_rows(ggml_backend_t backend, int kind, bool inplace
 
 extern "C" int sdc_test_webgpu_performance(const char * backend_name) {
     try {
-        Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+        Backend backend(std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                                              : ggml_backend_init_by_name(backend_name, nullptr),
+                        ggml_backend_free);
         if (!backend)
             return -1;
         if (ggml_backend_is_cpu(backend.get()))

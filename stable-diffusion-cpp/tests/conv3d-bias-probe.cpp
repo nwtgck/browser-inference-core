@@ -229,7 +229,9 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
 
 extern "C" int sdc_test_conv3d_bias(const char * backend_name) {
     using Backend = std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)>;
-    Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+    Backend backend(std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                                          : ggml_backend_init_by_name(backend_name, nullptr),
+                    ggml_backend_free);
     if (!backend)
         return -1;
     if (ggml_backend_is_cpu(backend.get()))

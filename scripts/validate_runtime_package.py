@@ -24,7 +24,7 @@ TEST_INPUTS = {
                   'vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja'),
     'stable-diffusion-cpp': ('tests/browser-smoke.mjs', 'tests/gguf-fixture.mjs',
                              'tests/model-io-fixtures.mjs', 'tests/browser-smoke-contract.mjs',
-                             'tests/browser-smoke-contract.json'),
+                             'tests/browser-smoke-contract.json', 'tests/arithmetic-probes.mjs'),
 }
 
 

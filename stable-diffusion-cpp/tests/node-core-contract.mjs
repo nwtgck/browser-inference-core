@@ -1,20 +1,31 @@
-// Small real-Wasm ABI checks for Node; no device queries, model contexts or compute.
+// Real-Wasm ABI checks, with optional test-variant CPU synthetic arithmetic.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { attachCore } from '../examples/runtime/bindings.mjs';
+import { runArithmeticProbes } from './arithmetic-probes.mjs';
 
 const [directory, suspension, pointerWidth, ...extra] = process.argv.slice(2);
+const arithmeticEnabled = extra.length === 1 && extra[0] === '--arithmetic';
 if (!directory || !['direct', 'asyncify'].includes(suspension) ||
-    !['4', '8'].includes(pointerWidth) || extra.length) {
-  throw new TypeError('Usage: node node-core-contract.mjs <build-directory> <direct|asyncify> <4|8>');
+    !['4', '8'].includes(pointerWidth) || (extra.length && !arithmeticEnabled)) {
+  throw new TypeError('Usage: node node-core-contract.mjs <build-directory> <direct|asyncify> <4|8> [--arithmetic]');
+}
+if (arithmeticEnabled) {
+  // A direct CPU probe must never discover or initialize a WebGPU device.
+  const navigator = globalThis.navigator ?? {};
+  Object.defineProperty(navigator, 'gpu', {
+    get() { throw Error('Node CPU contracts must not access the GPU API'); },
+  });
+  if (!globalThis.navigator) Object.defineProperty(globalThis, 'navigator', { value: navigator });
 }
 const build = path.resolve(directory);
 const { default: schema } = await import(pathToFileURL(path.join(build, 'generated/schema.mjs')).href);
 const { default: createCore } = await import(pathToFileURL(path.join(build, 'runtime/core.mjs')).href);
 const wasmBinary = new Uint8Array(await readFile(path.join(build, 'runtime/core.wasm')));
-const module = await createCore({ wasmBinary });
+const module = await createCore({ wasmBinary, print: line => console.error(line) });
 assert.equal(schema.abiVersion, 2);
 assert.match(schema.schemaSha256, /^[0-9a-f]{64}$/);
 assert.equal(module._sdc_abi_version(), 2);
@@ -108,11 +119,19 @@ assert.equal(core.constant('SD_RUNTIME_INFO_VERSION'), 1);
 assert.equal(core.constant('SD_MEMORY_INFO_VERSION'), 1);
 checks.push('snapshot null-context failure leaves caller output unchanged');
 
+const arithmetic = arithmeticEnabled
+  ? await runArithmeticProbes({ module, core, backendNames: ['CPU'] }) : undefined;
+if (arithmeticEnabled) checks.push('shared smoke runner: graph walk, Qwen timestep, all six BF16 weight cases, convolution bias and bounded graph/cache arithmetic');
+
 console.log(JSON.stringify({
   passed: true,
   suspension,
   pointerBytes: core.pointerBytes,
   schemaSha256: schema.schemaSha256,
+  wasmSha256: createHash('sha256').update(wasmBinary).digest('hex'),
   checks,
-  scope: 'Node real-Wasm CPU-only ABI and record contracts; no device queries, model contexts, compute or trained-model inference',
+  arithmetic,
+  scope: arithmeticEnabled
+    ? 'Node real-Wasm CPU-only ABI, record and synthetic arithmetic/file/ownership contracts; no browser, GPU API access or trained-model inference'
+    : 'Node real-Wasm CPU-only ABI and record contracts; no device queries, model contexts, compute or trained-model inference',
 }, null, 2));
