@@ -1,18 +1,22 @@
 /** Generated from the pinned headers. Pointer and size arguments use bigint. */
 export interface LowLevelFunctions {
-  adetail_image(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint): Promise<number>;
+  adetail_image(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<number>;
   convert(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: bigint, arg5: number): Promise<number>;
-  convert_with_components(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: number, arg8: bigint, arg9: number, arg10: number): Promise<number>;
+  convert_with_components(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: number, arg8: bigint, arg9: number, arg10: number, arg11: bigint, arg12: number): Promise<number>;
   disable_imatrix_collection(): Promise<void>;
   enable_imatrix_collection(): Promise<void>;
   free_adetailer_ctx(arg0: bigint): Promise<void>;
   free_sd_audio(arg0: bigint): Promise<void>;
   free_sd_ctx(arg0: bigint): Promise<void>;
+  free_sd_image_generation_result(arg0: bigint): Promise<void>;
   free_sd_images(arg0: bigint, arg1: number): Promise<void>;
+  free_sd_video_generation_result(arg0: bigint): Promise<void>;
   free_upscaler_ctx(arg0: bigint): Promise<void>;
-  generate_image(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
-  generate_video(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<number>;
+  free_video_upscaler_ctx(arg0: bigint): Promise<void>;
+  generate_image(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
+  generate_video(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   get_upscale_factor(arg0: bigint): Promise<number>;
+  get_upscaler_model_scale(arg0: bigint): Promise<number>;
   ggml_abs(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_abs_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_acc(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint): Promise<bigint>;
@@ -632,11 +636,14 @@ export interface LowLevelFunctions {
   new_adetailer_ctx(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint): Promise<bigint>;
   new_sd_ctx(arg0: bigint): Promise<bigint>;
   new_upscaler_ctx(arg0: bigint, arg1: number, arg2: number, arg3: number, arg4: bigint, arg5: bigint): Promise<bigint>;
+  new_video_upscaler_ctx(arg0: bigint): Promise<bigint>;
   preprocess_canny(arg0: bigint, arg1: number, arg2: number, arg3: number, arg4: number, arg5: number): Promise<number>;
   save_imatrix(arg0: bigint): Promise<void>;
+  sd_add_rpc_servers(arg0: bigint): Promise<number>;
   sd_cache_params_init(arg0: bigint): Promise<void>;
   sd_cancel_generation(arg0: bigint, arg1: number): Promise<void>;
   sd_commit(): Promise<bigint>;
+  sd_control_type_name(arg0: number): Promise<bigint>;
   sd_ctx_get_memory_info(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   sd_ctx_get_params(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   sd_ctx_get_runtime_info(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
@@ -651,6 +658,7 @@ export interface LowLevelFunctions {
   sd_get_default_scheduler(arg0: bigint, arg1: number): Promise<number>;
   sd_get_model_version_name(arg0: bigint): Promise<bigint>;
   sd_get_num_physical_cores(): Promise<number>;
+  sd_get_preview_info(out: bigint): Promise<void>;
   sd_get_system_info(): Promise<bigint>;
   sd_hires_params_init(arg0: bigint): Promise<void>;
   sd_hires_upscaler_name(arg0: number): Promise<bigint>;
@@ -666,6 +674,7 @@ export interface LowLevelFunctions {
   sd_sample_params_to_str(arg0: bigint): Promise<bigint>;
   sd_scheduler_name(arg0: number): Promise<bigint>;
   sd_set_backend_eval_callback(arg0: bigint, arg1: bigint): Promise<void>;
+  sd_set_generation_progress_callback(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   sd_set_graph_diagnostics(arg0: number): Promise<void>;
   sd_set_log_callback(arg0: bigint, arg1: bigint): Promise<void>;
   sd_set_preview_callback(arg0: bigint, arg1: number, arg2: number, arg3: number, arg4: number, arg5: bigint): Promise<void>;
@@ -673,13 +682,17 @@ export interface LowLevelFunctions {
   sd_type_name(arg0: number): Promise<bigint>;
   sd_version(): Promise<bigint>;
   sd_vid_gen_params_init(arg0: bigint): Promise<void>;
+  sd_video_upscale_params_init(arg0: bigint): Promise<void>;
+  sd_video_upscaler_ctx_params_init(arg0: bigint): Promise<void>;
   str_to_lora_apply_mode(arg0: bigint): Promise<number>;
   str_to_prediction(arg0: bigint): Promise<number>;
   str_to_preview(arg0: bigint): Promise<number>;
   str_to_rng_type(arg0: bigint): Promise<number>;
   str_to_sample_method(arg0: bigint): Promise<number>;
   str_to_scheduler(arg0: bigint): Promise<number>;
+  str_to_sd_control_type(arg0: bigint): Promise<number>;
   str_to_sd_hires_upscaler(arg0: bigint): Promise<number>;
   str_to_sd_type(arg0: bigint): Promise<number>;
-  upscale(arg0: bigint, arg1: bigint, arg2: number, arg3: bigint, arg4: bigint): Promise<number>;
+  upscale(arg0: bigint, arg1: bigint, arg2: number, arg3: bigint): Promise<number>;
+  upscale_video(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
 }

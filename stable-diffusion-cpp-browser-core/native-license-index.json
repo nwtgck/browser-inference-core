@@ -700,17 +700,6 @@
       ]
     },
     {
-      "id": "ggml/sageattention",
-      "name": "SageAttention (ggml)",
-      "version": null,
-      "license": null,
-      "notices": [
-        {
-          "path": "licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE"
-        }
-      ]
-    },
-    {
       "id": "nlohmann-json",
       "name": "nlohmann/json",
       "version": null,
@@ -763,6 +752,31 @@
       "notices": [
         {
           "path": "licenses/stable-diffusion/ggml/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/sageattention",
+      "name": "SageAttention (stable-diffusion.cpp)",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/src/core/cuda/sageattention/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stable-diffusion.cpp/thirdparty/cutlass",
+      "name": "cutlass",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/stable-diffusion/thirdparty/cutlass/LICENSE.txt"
+        },
+        {
+          "path": "licenses/stable-diffusion/thirdparty/cutlass/python/LICENSE.txt"
         }
       ]
     },

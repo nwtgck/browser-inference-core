@@ -34,13 +34,8 @@
           "kind": "pointer"
         },
         {
-          "name": "images_out",
-          "cType": "sd_image_t **",
-          "kind": "pointer"
-        },
-        {
-          "name": "num_images_out",
-          "cType": "int *",
+          "name": "result_out",
+          "cType": "sd_image_generation_result_t **",
           "kind": "pointer"
         }
       ]
@@ -143,6 +138,16 @@
           "name": "n_threads",
           "cType": "int",
           "kind": "signed"
+        },
+        {
+          "name": "loras",
+          "cType": "const sd_lora_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "lora_count",
+          "cType": "int",
+          "kind": "signed"
         }
       ]
     },
@@ -200,6 +205,19 @@
       ]
     },
     {
+      "name": "free_sd_image_generation_result",
+      "export": "_sdc_free_sd_image_generation_result",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "result",
+          "cType": "sd_image_generation_result_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "free_sd_images",
       "export": "_sdc_free_sd_images",
       "returnType": "void",
@@ -218,6 +236,19 @@
       ]
     },
     {
+      "name": "free_sd_video_generation_result",
+      "export": "_sdc_free_sd_video_generation_result",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "result",
+          "cType": "sd_video_generation_result_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "free_upscaler_ctx",
       "export": "_sdc_free_upscaler_ctx",
       "returnType": "void",
@@ -226,6 +257,19 @@
         {
           "name": "upscaler_ctx",
           "cType": "upscaler_ctx_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "free_video_upscaler_ctx",
+      "export": "_sdc_free_video_upscaler_ctx",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "video_upscaler_ctx_t *",
           "kind": "pointer"
         }
       ]
@@ -247,13 +291,8 @@
           "kind": "pointer"
         },
         {
-          "name": "images_out",
-          "cType": "sd_image_t **",
-          "kind": "pointer"
-        },
-        {
-          "name": "num_images_out",
-          "cType": "int *",
+          "name": "result_out",
+          "cType": "sd_image_generation_result_t **",
           "kind": "pointer"
         }
       ]
@@ -275,23 +314,8 @@
           "kind": "pointer"
         },
         {
-          "name": "frames_out",
-          "cType": "sd_image_t **",
-          "kind": "pointer"
-        },
-        {
-          "name": "num_frames_out",
-          "cType": "int *",
-          "kind": "pointer"
-        },
-        {
-          "name": "audio_out",
-          "cType": "sd_audio_t **",
-          "kind": "pointer"
-        },
-        {
-          "name": "fps_out",
-          "cType": "int *",
+          "name": "result_out",
+          "cType": "sd_video_generation_result_t **",
           "kind": "pointer"
         }
       ]
@@ -305,6 +329,19 @@
         {
           "name": "upscaler_ctx",
           "cType": "upscaler_ctx_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "get_upscaler_model_scale",
+      "export": "_sdc_get_upscaler_model_scale",
+      "returnType": "int",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "model_path",
+          "cType": "const char *",
           "kind": "pointer"
         }
       ]
@@ -13604,6 +13641,19 @@
       ]
     },
     {
+      "name": "new_video_upscaler_ctx",
+      "export": "_sdc_new_video_upscaler_ctx",
+      "returnType": "video_upscaler_ctx_t *",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "params",
+          "cType": "const sd_video_upscaler_ctx_params_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "preprocess_canny",
       "export": "_sdc_preprocess_canny",
       "returnType": "bool",
@@ -13655,6 +13705,19 @@
       ]
     },
     {
+      "name": "sd_add_rpc_servers",
+      "export": "_sdc_sd_add_rpc_servers",
+      "returnType": "bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "servers",
+          "cType": "const char *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "sd_cache_params_init",
       "export": "_sdc_sd_cache_params_init",
       "returnType": "void",
@@ -13691,6 +13754,19 @@
       "returnType": "const char *",
       "returnKind": "pointer",
       "parameters": []
+    },
+    {
+      "name": "sd_control_type_name",
+      "export": "_sdc_sd_control_type_name",
+      "returnType": "const char *",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "control_type",
+          "cType": "enum sd_control_type_t",
+          "kind": "signed"
+        }
+      ]
     },
     {
       "name": "sd_ctx_get_memory_info",
@@ -13909,6 +13985,13 @@
       "parameters": []
     },
     {
+      "name": "sd_get_preview_info",
+      "export": "_sdc_sd_get_preview_info",
+      "returnType": "sd_preview_info_t",
+      "returnKind": "record",
+      "parameters": []
+    },
+    {
       "name": "sd_get_system_info",
       "export": "_sdc_sd_get_system_info",
       "returnType": "const char *",
@@ -14108,6 +14191,29 @@
       ]
     },
     {
+      "name": "sd_set_generation_progress_callback",
+      "export": "_sdc_sd_set_generation_progress_callback",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "sd_ctx_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "cb",
+          "cType": "sd_generation_progress_cb_t",
+          "kind": "pointer"
+        },
+        {
+          "name": "data",
+          "cType": "void *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "sd_set_graph_diagnostics",
       "export": "_sdc_sd_set_graph_diagnostics",
       "returnType": "void",
@@ -14228,6 +14334,32 @@
       ]
     },
     {
+      "name": "sd_video_upscale_params_init",
+      "export": "_sdc_sd_video_upscale_params_init",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "params",
+          "cType": "sd_video_upscale_params_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "sd_video_upscaler_ctx_params_init",
+      "export": "_sdc_sd_video_upscaler_ctx_params_init",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "params",
+          "cType": "sd_video_upscaler_ctx_params_t *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "str_to_lora_apply_mode",
       "export": "_sdc_str_to_lora_apply_mode",
       "returnType": "enum lora_apply_mode_t",
@@ -14306,6 +14438,19 @@
       ]
     },
     {
+      "name": "str_to_sd_control_type",
+      "export": "_sdc_str_to_sd_control_type",
+      "returnType": "enum sd_control_type_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "str",
+          "cType": "const char *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "str_to_sd_hires_upscaler",
       "export": "_sdc_str_to_sd_hires_upscaler",
       "returnType": "enum sd_hires_upscaler_t",
@@ -14353,13 +14498,31 @@
           "kind": "unsigned"
         },
         {
-          "name": "images_out",
-          "cType": "sd_image_t **",
+          "name": "result_out",
+          "cType": "sd_image_generation_result_t **",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "upscale_video",
+      "export": "_sdc_upscale_video",
+      "returnType": "bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "video_upscaler_ctx_t *",
           "kind": "pointer"
         },
         {
-          "name": "num_images_out",
-          "cType": "int *",
+          "name": "params",
+          "cType": "const sd_video_upscale_params_t *",
+          "kind": "pointer"
+        },
+        {
+          "name": "result_out",
+          "cType": "sd_video_generation_result_t **",
           "kind": "pointer"
         }
       ]
@@ -15378,40 +15541,58 @@
           "id": 46
         },
         {
-          "name": "linear_scale",
-          "cType": "float",
-          "kind": "float",
+          "name": "batched_cfg",
+          "cType": "bool",
+          "kind": "boolean",
           "id": 47
         },
         {
-          "name": "attn_scale",
+          "name": "linear_scale",
           "cType": "float",
           "kind": "float",
           "id": 48
         },
         {
+          "name": "attn_scale",
+          "cType": "float",
+          "kind": "float",
+          "id": 49
+        },
+        {
           "name": "tokenizer",
           "cType": "const char *",
           "kind": "pointer",
-          "id": 49
+          "id": 50
         },
         {
           "name": "sage_attn",
           "cType": "bool",
           "kind": "boolean",
-          "id": 50
+          "id": 51
         },
         {
           "name": "conditioning_cache_size",
           "cType": "int",
           "kind": "signed",
-          "id": 51
+          "id": 52
+        },
+        {
+          "name": "flash_attn_mode",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 53
+        },
+        {
+          "name": "conv_direct_mode",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 54
         },
         {
           "name": "webgpu_bf16_type",
           "cType": "enum sd_type_t",
           "kind": "signed",
-          "id": 52
+          "id": 55
         }
       ],
       "id": 17
@@ -15434,6 +15615,49 @@
         }
       ],
       "id": 18
+    },
+    {
+      "name": "sd_generation_progress_t",
+      "cType": "sd_generation_progress_t",
+      "fields": [
+        {
+          "name": "stage",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "detail",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 1
+        },
+        {
+          "name": "unit",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 2
+        },
+        {
+          "name": "sample_pass",
+          "cType": "int",
+          "kind": "signed",
+          "id": 3
+        },
+        {
+          "name": "completed",
+          "cType": "int64_t",
+          "kind": "i64",
+          "id": 4
+        },
+        {
+          "name": "total",
+          "cType": "int64_t",
+          "kind": "i64",
+          "id": 5
+        }
+      ],
+      "id": 19
     },
     {
       "name": "sd_guidance_params_t",
@@ -15464,7 +15688,7 @@
           "id": 3
         }
       ],
-      "id": 19
+      "id": 20
     },
     {
       "name": "sd_hires_params_t",
@@ -15537,7 +15761,26 @@
           "id": 10
         }
       ],
-      "id": 20
+      "id": 21
+    },
+    {
+      "name": "sd_image_generation_result_t",
+      "cType": "sd_image_generation_result_t",
+      "fields": [
+        {
+          "name": "items",
+          "cType": "sd_image_result_t *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "count",
+          "cType": "int",
+          "kind": "signed",
+          "id": 1
+        }
+      ],
+      "id": 22
     },
     {
       "name": "sd_image_preprocess_params_t",
@@ -15550,7 +15793,26 @@
           "id": 0
         }
       ],
-      "id": 21
+      "id": 23
+    },
+    {
+      "name": "sd_image_result_t",
+      "cType": "sd_image_result_t",
+      "fields": [
+        {
+          "name": "image",
+          "cType": "sd_image_t",
+          "kind": "record",
+          "id": 0
+        },
+        {
+          "name": "generation_info",
+          "cType": "char *",
+          "kind": "pointer",
+          "id": 1
+        }
+      ],
+      "id": 24
     },
     {
       "name": "sd_image_t",
@@ -15581,7 +15843,7 @@
           "id": 3
         }
       ],
-      "id": 22
+      "id": 25
     },
     {
       "name": "sd_img_gen_params_t",
@@ -15760,9 +16022,15 @@
           "cType": "sd_image_preprocess_params_t",
           "kind": "record",
           "id": 28
+        },
+        {
+          "name": "control_type",
+          "cType": "enum sd_control_type_t",
+          "kind": "signed",
+          "id": 29
         }
       ],
-      "id": 23
+      "id": 26
     },
     {
       "name": "sd_lora_t",
@@ -15787,7 +16055,7 @@
           "id": 2
         }
       ],
-      "id": 24
+      "id": 27
     },
     {
       "name": "sd_memory_info_t",
@@ -15866,7 +16134,7 @@
           "id": 11
         }
       ],
-      "id": 25
+      "id": 28
     },
     {
       "name": "sd_pm_params_t",
@@ -15897,7 +16165,26 @@
           "id": 3
         }
       ],
-      "id": 26
+      "id": 29
+    },
+    {
+      "name": "sd_preview_info_t",
+      "cType": "sd_preview_info_t",
+      "fields": [
+        {
+          "name": "sample_pass",
+          "cType": "int",
+          "kind": "signed",
+          "id": 0
+        },
+        {
+          "name": "total_steps",
+          "cType": "int",
+          "kind": "signed",
+          "id": 1
+        }
+      ],
+      "id": 30
     },
     {
       "name": "sd_pulid_params_t",
@@ -15916,7 +16203,7 @@
           "id": 1
         }
       ],
-      "id": 27
+      "id": 31
     },
     {
       "name": "sd_ref_video_t",
@@ -15947,7 +16234,7 @@
           "id": 3
         }
       ],
-      "id": 28
+      "id": 32
     },
     {
       "name": "sd_runtime_info_t",
@@ -16008,7 +16295,7 @@
           "id": 8
         }
       ],
-      "id": 29
+      "id": 33
     },
     {
       "name": "sd_sample_params_t",
@@ -16075,7 +16362,7 @@
           "id": 9
         }
       ],
-      "id": 30
+      "id": 34
     },
     {
       "name": "sd_slg_params_t",
@@ -16112,7 +16399,7 @@
           "id": 4
         }
       ],
-      "id": 31
+      "id": 35
     },
     {
       "name": "sd_tiling_params_t",
@@ -16131,13 +16418,13 @@
           "id": 1
         },
         {
-          "name": "tile_size_x",
+          "name": "tile_size_w",
           "cType": "int",
           "kind": "signed",
           "id": 2
         },
         {
-          "name": "tile_size_y",
+          "name": "tile_size_h",
           "cType": "int",
           "kind": "signed",
           "id": 3
@@ -16149,13 +16436,13 @@
           "id": 4
         },
         {
-          "name": "rel_size_x",
+          "name": "rel_size_w",
           "cType": "float",
           "kind": "float",
           "id": 5
         },
         {
-          "name": "rel_size_y",
+          "name": "rel_size_h",
           "cType": "float",
           "kind": "float",
           "id": 6
@@ -16167,7 +16454,7 @@
           "id": 7
         }
       ],
-      "id": 32
+      "id": 36
     },
     {
       "name": "sd_vid_gen_params_t",
@@ -16358,9 +16645,150 @@
           "cType": "sd_image_preprocess_params_t",
           "kind": "record",
           "id": 30
+        },
+        {
+          "name": "ref_image_args",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 31
         }
       ],
-      "id": 33
+      "id": 37
+    },
+    {
+      "name": "sd_video_generation_result_t",
+      "cType": "sd_video_generation_result_t",
+      "fields": [
+        {
+          "name": "frames",
+          "cType": "sd_image_t *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "frame_count",
+          "cType": "int",
+          "kind": "signed",
+          "id": 1
+        },
+        {
+          "name": "audio",
+          "cType": "sd_audio_t *",
+          "kind": "pointer",
+          "id": 2
+        },
+        {
+          "name": "fps",
+          "cType": "int",
+          "kind": "signed",
+          "id": 3
+        },
+        {
+          "name": "generation_info",
+          "cType": "char *",
+          "kind": "pointer",
+          "id": 4
+        }
+      ],
+      "id": 38
+    },
+    {
+      "name": "sd_video_upscale_params_t",
+      "cType": "sd_video_upscale_params_t",
+      "fields": [
+        {
+          "name": "frames",
+          "cType": "const sd_image_t *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "frame_count",
+          "cType": "int",
+          "kind": "signed",
+          "id": 1
+        },
+        {
+          "name": "fps",
+          "cType": "int",
+          "kind": "signed",
+          "id": 2
+        },
+        {
+          "name": "seed",
+          "cType": "int64_t",
+          "kind": "i64",
+          "id": 3
+        },
+        {
+          "name": "window_size",
+          "cType": "int",
+          "kind": "signed",
+          "id": 4
+        },
+        {
+          "name": "temporal_chunk_size",
+          "cType": "int",
+          "kind": "signed",
+          "id": 5
+        }
+      ],
+      "id": 39
+    },
+    {
+      "name": "sd_video_upscaler_ctx_params_t",
+      "cType": "sd_video_upscaler_ctx_params_t",
+      "fields": [
+        {
+          "name": "diffusion_model_path",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 0
+        },
+        {
+          "name": "vae_path",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 1
+        },
+        {
+          "name": "upscale_factor",
+          "cType": "int",
+          "kind": "signed",
+          "id": 2
+        },
+        {
+          "name": "n_threads",
+          "cType": "int",
+          "kind": "signed",
+          "id": 3
+        },
+        {
+          "name": "backend",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 4
+        },
+        {
+          "name": "params_backend",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 5
+        },
+        {
+          "name": "flash_attn_mode",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 6
+        },
+        {
+          "name": "conv_direct_mode",
+          "cType": "const char *",
+          "kind": "pointer",
+          "id": 7
+        }
+      ],
+      "id": 40
     }
   ],
   "constants": [
@@ -16393,6 +16821,7 @@
     "EXPONENTIAL_SCHEDULER",
     "FLOW_PRED",
     "FLUX2_SCHEDULER",
+    "FLUX3_FLOW_PRED",
     "FLUX_FLOW_PRED",
     "FLUX_SCHEDULER",
     "GGML_BACKEND_BUFFER_USAGE_ANY",
@@ -16683,6 +17112,7 @@
     "GGUF_TYPE_UINT8",
     "GGUF_VERSION",
     "GITS_SCHEDULER",
+    "H3_AV_FLOW_PRED",
     "HEUN_SAMPLE_METHOD",
     "IPNDM_SAMPLE_METHOD",
     "IPNDM_V_SAMPLE_METHOD",
@@ -16698,6 +17128,7 @@
     "LORA_APPLY_IMMEDIATELY",
     "LORA_APPLY_MODE_COUNT",
     "LTX2_SCHEDULER",
+    "MING_IMAGE_FLOW_PRED",
     "MINIT2I_FLOW_PRED",
     "PREDICTION_COUNT",
     "PREVIEW_COUNT",
@@ -16720,6 +17151,16 @@
     "SD_CANCEL_ALL",
     "SD_CANCEL_NEW_LATENTS",
     "SD_CANCEL_RESET",
+    "SD_CONTROL_TYPE_CANNY",
+    "SD_CONTROL_TYPE_COUNT",
+    "SD_CONTROL_TYPE_DEPTH",
+    "SD_CONTROL_TYPE_NONE",
+    "SD_CONTROL_TYPE_NORMAL",
+    "SD_CONTROL_TYPE_OPENPOSE",
+    "SD_CONTROL_TYPE_REPAINT",
+    "SD_CONTROL_TYPE_SCRIBBLE",
+    "SD_CONTROL_TYPE_SEGMENT",
+    "SD_CONTROL_TYPE_TILE",
     "SD_HIRES_UPSCALER_COUNT",
     "SD_HIRES_UPSCALER_LANCZOS",
     "SD_HIRES_UPSCALER_LATENT",
