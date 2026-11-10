@@ -165,6 +165,7 @@ def owner(root: str, relative: str) -> tuple[str, str]:
             'gguf-py/': ('gguf-py', 'gguf-py'),
         },
         'stable-diffusion.cpp': {
+            'src/core/cuda/sageattention/': ('stable-diffusion.cpp/sageattention', 'SageAttention (stable-diffusion.cpp)'),
             'ggml/src/ggml-cuda/sageattention/': ('ggml/sageattention', 'SageAttention (ggml)'),
             'ggml/': ('stable-diffusion.cpp/ggml', 'ggml (stable-diffusion.cpp)'),
             'thirdparty/LICENSE.darts_clone.txt': ('darts-clone', 'Darts-clone'),
