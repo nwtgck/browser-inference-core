@@ -568,6 +568,23 @@
           "afterSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4"
         }
       ]
+    },
+    {
+      "file": "0035-browser-gguf-original-shapes.patch",
+      "target": "stable-diffusion",
+      "reason": "Restore bounded Comfy GGUF original-shape metadata without changing payload, dtype, offsets or tensor elements; reject invalid, duplicate and conflicting shapes rather than bypassing validation through the generic parser. Remove when upstream preserves the same shape and validation contracts.",
+      "files": [
+        {
+          "path": "src/model_io/gguf_reader_ext.h",
+          "beforeSha256": "818e9816526c32bf8b3997f66d7ba0624c55f2600539ea64ba1a4db7cdcaea9f",
+          "afterSha256": "be22573b2b827e498b5bc248e7f1abe26c90df34ba55ed3dfd8f7d12fb78233d"
+        },
+        {
+          "path": "src/model_io/gguf_io.cpp",
+          "beforeSha256": "25e51d3f318c72a9eea6c12f8f2d0606c9fda5c613754c285aad32961346d2bb",
+          "afterSha256": "24fb48cbdbf36042165dec8e1936a205042ed55c059fdcaf4b9effda474e3f6f"
+        }
+      ]
     }
   ]
 }

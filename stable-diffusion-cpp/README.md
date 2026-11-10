@@ -74,10 +74,22 @@ remains unsupported even when its file is readable.
 
 `_sdc_model_io_capabilities()` is an additive ABI 2 capability query. Bit 0
 means 64-bit safetensors file positions with bounded metadata validation; bit 1
-means complete standard GGUF shard-group loading. This build returns `3`. A
+means complete standard GGUF shard-group loading; bit 2 (value `4`) means bounded
+Comfy GGUF original-shape restoration. This build returns `7`. A
 consumer must not infer these capabilities from ABI 2 alone: older ABI 2 builds
 did not contain these loader changes. The image manifest also records
-`safetensorsFileOffsetBits: 64` and `ggufShards: true`.
+`safetensorsFileOffsetBits: 64`, `ggufShards: true`, and `ggufOriginalShapes: true`.
+
+`comfy.gguf.orig_shape.<tensor-name>` stores PyTorch-order integer dimensions.
+The model-loader reader reverses them to ggml order and restores a flattened descriptor only
+when the element count, dtype byte size and quantized row alignment agree.
+Already multidimensional descriptors must match exactly. Dimensions must be
+positive signed-64-bit values; ranks are limited to `GGML_MAX_DIMS`, with at most
+65,536 original-shape entries and 16 MiB of retained names/dimensions per file.
+Invalid types, duplicate keys and conflicting dimensions are rejected. Valid
+entries for tensors in another shard are ignored after validation. Payloads,
+dtypes, file offsets and standard shard ownership remain unchanged. The generic
+native parser cannot silently bypass recognized original-shape validation.
 
 Single safetensors files retain their original bytes, dtype and file size.
 Metadata is bounded at 100 MiB; positions and aggregate payload size use 64-bit

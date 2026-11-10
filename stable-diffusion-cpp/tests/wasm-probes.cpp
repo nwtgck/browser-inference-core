@@ -55,6 +55,9 @@ void sdc_test_callbacks() {
 
 #include "model_io/safetensors_io.h"
 #include "model_loader.h"
+#include "ggml-cpu.h"
+#include <cmath>
+#include <memory>
 extern "C" uint64_t sdc_test_safetensors_offset(const char * path) {
     std::vector<TensorStorage> tensors;
     std::string error;
@@ -80,5 +83,60 @@ extern "C" uint32_t sdc_test_model_tensor_count(const char * path) {
         return static_cast<uint32_t>(loader.get_tensor_storage_map().size());
     } catch (...) {
         return 0;
+    }
+}
+
+extern "C" uint64_t sdc_test_gguf_shape(const char * path, const char * tensor_name, int dimension) {
+    try {
+        if (!path || !tensor_name || dimension < 0 || dimension >= GGML_MAX_DIMS)
+            return UINT64_MAX;
+        ModelLoader loader;
+        if (!loader.init_from_file(path))
+            return UINT64_MAX;
+        const auto & tensors = loader.get_tensor_storage_map();
+        const auto found = tensors.find(tensor_name);
+        return found == tensors.end() ? UINT64_MAX : static_cast<uint64_t>(found->second.ne[dimension]);
+    } catch (...) {
+        return UINT64_MAX;
+    }
+}
+
+// The self-authored fixture is F32 [32,2], with values 1..64. Exercise the
+// production loader and CPU matrix arithmetic, not only a metadata-only probe.
+extern "C" int sdc_test_gguf_original_shape_values(const char * path) {
+    try {
+        ModelLoader loader;
+        loader.set_n_threads(1);
+        if (!loader.init_from_file(path))
+            return -1;
+        const auto & tensors = loader.get_tensor_storage_map();
+        const auto found = tensors.find("weight");
+        if (tensors.size() != 1 || found == tensors.end() || found->second.type != GGML_TYPE_F32 ||
+            found->second.ne[0] != 32 || found->second.ne[1] != 2 || found->second.ne[2] != 1 ||
+            found->second.ne[3] != 1)
+            return -2;
+        std::unique_ptr<ggml_context, decltype(&ggml_free)> ctx(ggml_init({1024 * 1024, nullptr, false}), ggml_free);
+        if (!ctx)
+            return -3;
+        auto weight = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, 32, 2);
+        std::map<std::string, ggml_tensor *> destinations{{"weight", weight}};
+        if (!loader.load_tensors(destinations, {}, false))
+            return -4;
+        const auto values = static_cast<const float *>(weight->data);
+        for (int i = 0; i < 64; ++i)
+            if (values[i] != float(i + 1))
+                return -5;
+        auto input = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, 32);
+        ggml_set_f32(input, 1.f);
+        auto output = ggml_mul_mat(ctx.get(), weight, input);
+        auto graph = ggml_new_graph(ctx.get());
+        ggml_build_forward_expand(graph, output);
+        if (ggml_graph_compute_with_ctx(ctx.get(), graph, 1) != GGML_STATUS_SUCCESS)
+            return -6;
+        const auto actual = static_cast<const float *>(output->data);
+        return std::isfinite(actual[0]) && std::isfinite(actual[1]) && actual[0] == 528.f && actual[1] == 1552.f ? 1
+                                                                                                                 : -7;
+    } catch (...) {
+        return -8;
     }
 }

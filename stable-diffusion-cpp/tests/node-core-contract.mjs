@@ -6,6 +6,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { attachCore } from '../examples/runtime/bindings.mjs';
 import { runArithmeticProbes } from './arithmetic-probes.mjs';
+import { mountReadOnlyFile } from '../examples/runtime/read-only-file.mjs';
+import { makeModelIoFixtures } from './model-io-fixtures.mjs';
 
 const [directory, suspension, pointerWidth, ...extra] = process.argv.slice(2);
 const arithmeticEnabled = extra.length === 1 && extra[0] === '--arithmetic';
@@ -29,7 +31,7 @@ const module = await createCore({ wasmBinary, print: line => console.error(line)
 assert.equal(schema.abiVersion, 2);
 assert.match(schema.schemaSha256, /^[0-9a-f]{64}$/);
 assert.equal(module._sdc_abi_version(), 2);
-assert.equal(module._sdc_model_io_capabilities(), 3);
+assert.equal(module._sdc_model_io_capabilities(), 7);
 const core = attachCore(module, schema, { suspension });
 assert.equal(core.pointerBytes, Number(pointerWidth));
 const checks = ['ABI, schema fingerprint and pointer width'];
@@ -118,6 +120,23 @@ for (const [record, getter] of [
 assert.equal(core.constant('SD_RUNTIME_INFO_VERSION'), 1);
 assert.equal(core.constant('SD_MEMORY_INFO_VERSION'), 1);
 checks.push('snapshot null-context failure leaves caller output unchanged');
+
+if (arithmeticEnabled) {
+  module.FS.mkdir('/models');
+  for (const fixture of makeModelIoFixtures(0).originalShapes) {
+    const mounted = mountReadOnlyFile(core, fixture.path, fixture.source, { maxChunkBytes: 65536 });
+    const path = core.utf8(fixture.path), name = core.utf8('weight');
+    const argument = value => core.pointerBytes === 8 ? value : Number(value);
+    try {
+      for (let dimension = 0; dimension < 4; dimension++) {
+        const expected = fixture.expected ? BigInt(fixture.expected[dimension]) : (1n << 64n) - 1n;
+        assert.equal(BigInt.asUintN(64, module._sdc_test_gguf_shape(argument(path), argument(name), dimension)), expected, fixture.path);
+      }
+      if (fixture.numeric) assert.equal(module._sdc_test_gguf_original_shape_values(argument(path)), 1, fixture.path);
+    } finally { core.free(path); core.free(name); mounted.remove(); }
+  }
+  checks.push('GGUF original shapes: production loader dimensions, malformed metadata rejection and CPU matrix arithmetic');
+}
 
 const arithmetic = arithmeticEnabled
   ? await runArithmeticProbes({ module, core, backendNames: ['CPU'] }) : undefined;

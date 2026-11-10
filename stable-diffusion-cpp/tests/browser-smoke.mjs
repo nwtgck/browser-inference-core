@@ -42,7 +42,7 @@ try {
             const module = await create({ wasmBinary: new Uint8Array(await response.arrayBuffer()),
               locateFile(name) { if (name !== 'core.wasm') throw Error('Unexpected side file'); return base + name; },
             });
-            if (module._sdc_abi_version() !== 2 || module._sdc_model_io_capabilities() !== 3 || module._sdb_load !== undefined) throw Error('Wrong public surface');
+            if (module._sdc_abi_version() !== 2 || module._sdc_model_io_capabilities() !== 7 || module._sdb_load !== undefined) throw Error('Wrong public surface');
             const core = attachCore(module, schema, { suspension: profile.endsWith('asyncify') ? 'asyncify' : 'direct' });
             if (core.pointerBytes !== (profile.includes('wasm64') ? 8 : 4)) throw Error('Wrong address width');
             const params = core.allocRecord('sd_img_gen_params_t');
@@ -146,6 +146,19 @@ try {
                   if (module._sdc_test_model_tensor_count(arg(shard)) !== 2) throw Error('Native GGUF shard assembly failed');
                   mounted.pop().remove();
                   if (module._sdc_test_model_tensor_count(arg(shard)) !== 0) throw Error('Incomplete GGUF group was accepted');
+                  for (const file of fixture.originalShapes) {
+                    const mountedShape = mountReadOnlyFile(core, file.path, file.source, { maxChunkBytes: 65536 });
+                    const path = core.utf8(file.path), name = core.utf8('weight');
+                    try {
+                      for (let dimension = 0; dimension < 4; dimension++) {
+                        const expected = file.expected ? BigInt(file.expected[dimension]) : (1n << 64n) - 1n;
+                        if (BigInt.asUintN(64, module._sdc_test_gguf_shape(arg(path), arg(name), dimension)) !== expected)
+                          throw Error('Native GGUF original-shape validation mismatch');
+                      }
+                      if (file.numeric && module._sdc_test_gguf_original_shape_values(arg(path)) !== 1)
+                        throw Error('Native GGUF original-shape CPU arithmetic mismatch');
+                    } finally { core.free(path); core.free(name); mountedShape.remove(); }
+                  }
                 }
                 modelIoReads.push(fixture.safetensors.summary());
               } finally { core.free(pointer); core.free(shard); for (const file of mounted.reverse()) file.remove(); }
@@ -173,7 +186,7 @@ try {
                 const beforeDisabled = stages().length;
                 module._sdc_test_callbacks();
                 if (stages().length !== beforeDisabled) throw Error('Disabled graph diagnostics still emitted');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_gguf_shape !== undefined || module._sdc_test_gguf_original_shape_values !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;

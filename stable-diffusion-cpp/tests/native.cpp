@@ -136,7 +136,7 @@ static void gguf_shard(const char * path, int index, const std::string & name, i
     u32(out, 0x3f800000);
 }
 static void model_io_checks() {
-    check(sdc_model_io_capabilities() == 3, "file capability bits");
+    check(sdc_model_io_capabilities() == 7, "file capability bits include GGUF original shapes");
     for (uint64_t gib : {0ULL, 2ULL, 4ULL, 8ULL, 20ULL}) {
         const char * file = "sparse.safetensors";
         const uint64_t offset = sparse_safetensors(file, gib << 30);

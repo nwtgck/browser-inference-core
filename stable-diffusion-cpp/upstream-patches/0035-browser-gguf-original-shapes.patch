@@ -1,0 +1,156 @@
+--- a/src/model_io/gguf_reader_ext.h
++++ b/src/model_io/gguf_reader_ext.h
+@@ -1,10 +1,12 @@
+ #ifndef __SD_MODEL_IO_GGUF_READER_EXT_H__
+ #define __SD_MODEL_IO_GGUF_READER_EXT_H__
+ 
++#include <algorithm>
+ #include <cstdint>
+ #include <filesystem>
+ #include <fstream>
+ #include <limits>
++#include <map>
+ #include <set>
+ #include <stdexcept>
+ #include <string>
+@@ -24,8 +26,11 @@
+ // The browser build uses this even when individual tensors fit size_t: the
+ // upstream GGUF reader also accumulates ALL tensor bytes in a size_t.
+ class GGUFReader {
++    static constexpr size_t MAX_ORIGINAL_SHAPES = 65536;
++    static constexpr uint64_t MAX_ORIGINAL_SHAPE_BYTES = 16ULL * 1024 * 1024;
+     std::vector<GGUFTensorInfo> tensors_;
+     bool has_wide_tensors_ = false;
++    bool has_original_shapes_ = false;
+     uint64_t data_offset_ = 0;
+     uint64_t file_size_ = 0;
+     // Logical parser position. tellg() may synchronize/discard libc++'s input
+@@ -109,9 +114,35 @@
+             throw std::runtime_error("invalid GGUF array element type");
+         }
+     }
++    std::vector<int64_t> original_shape(std::ifstream& in, uint32_t type) {
++        if (type != 9) throw std::runtime_error("GGUF original shape must be an integer array");
++        const uint32_t element = integer<uint32_t>(in);
++        const uint64_t rank = integer<uint64_t>(in);
++        if ((element > 5 && element != 10 && element != 11) || !rank || rank > GGML_MAX_DIMS)
++            throw std::runtime_error("invalid GGUF original shape array");
++        const uint32_t width = scalar_size(element);
++        if (rank > remaining() / width) throw std::runtime_error("truncated GGUF original shape");
++        const bool is_signed = element == 1 || element == 3 || element == 5 || element == 11;
++        const uint64_t maximum = is_signed && width < 8 ? (uint64_t(1) << (width * 8 - 1)) - 1 : uint64_t(INT64_MAX);
++        std::vector<int64_t> shape;
++        uint64_t elements = 1;
++        for (uint64_t i = 0; i < rank; ++i) {
++            const uint64_t dim = width == 1 ? integer<uint8_t>(in)
++                               : width == 2 ? integer<uint16_t>(in)
++                               : width == 4 ? integer<uint32_t>(in) : integer<uint64_t>(in);
++            if (!dim || dim > maximum || dim > uint64_t(INT64_MAX) / elements)
++                throw std::runtime_error("invalid GGUF original shape dimensions");
++            elements *= dim;
++            shape.push_back(static_cast<int64_t>(dim));
++        }
++        // Comfy stores the PyTorch order; ggml's first axis is contiguous.
++        std::reverse(shape.begin(), shape.end());
++        return shape;
++    }
+ public:
+     bool load(const std::string& path) {
+         has_wide_tensors_ = false;
++        has_original_shapes_ = false;
+         tensors_.clear(); data_offset_ = 0; file_size_ = 0; position_ = 0; alignment_ = 32;
+         split_no_ = 0; split_count_ = 1; split_tensors_ = 0; split_keys_.clear();
+         try {
+@@ -129,8 +160,13 @@
+                 tensors > SIZE_MAX / sizeof(GGUFTensorInfo))
+                 throw std::runtime_error("invalid GGUF counts");
+             bool alignment_seen = false;
++            std::map<std::string, std::vector<int64_t>> original_shapes;
++            uint64_t original_shape_bytes = 0;
++            constexpr char original_shape_prefix[] = "comfy.gguf.orig_shape.";
+             for (uint64_t i = 0; i < metadata; ++i) {
+                 const std::string key = name(in);
++                const bool is_original_shape = key.compare(0, sizeof(original_shape_prefix) - 1, original_shape_prefix) == 0;
++                if (is_original_shape) has_original_shapes_ = true;
+                 const uint32_t type = integer<uint32_t>(in);
+                 if (key == "general.alignment") {
+                     if (type != 4 || alignment_seen) throw std::runtime_error("invalid GGUF alignment metadata");
+@@ -147,6 +183,17 @@
+                     if (key == "split.no") split_no_ = n;
+                     else if (key == "split.count") split_count_ = n;
+                     else split_tensors_ = n;
++                } else if (is_original_shape) {
++                    const std::string tensor_name = key.substr(sizeof(original_shape_prefix) - 1);
++                    if (tensor_name.empty() || original_shapes.size() >= MAX_ORIGINAL_SHAPES)
++                        throw std::runtime_error("invalid or excessive GGUF original shape metadata");
++                    auto shape = original_shape(in, type);
++                    const uint64_t bytes = key.size() + shape.size() * sizeof(int64_t);
++                    if (bytes > MAX_ORIGINAL_SHAPE_BYTES - original_shape_bytes)
++                        throw std::runtime_error("GGUF original shape metadata exceeds its budget");
++                    original_shape_bytes += bytes;
++                    if (!original_shapes.emplace(tensor_name, std::move(shape)).second)
++                        throw std::runtime_error("duplicate GGUF original shape metadata");
+                 } else {
+                     value(in, type);
+                 }
+@@ -179,6 +226,18 @@
+                 if (!block || !width || uint64_t(info.shape[0]) % block || elements / block > uint64_t(INT64_MAX) / width)
+                     throw std::runtime_error("invalid GGUF tensor block size");
+                 const uint64_t bytes = elements / block * width;
++                // Shards may share the full model's metadata. Only a tensor
++                // present in this file consumes its validated original shape.
++                const auto original = original_shapes.find(info.name);
++                if (original != original_shapes.end()) {
++                    const auto& shape = original->second;
++                    uint64_t restored_elements = 1;
++                    for (const auto dim : shape) restored_elements *= static_cast<uint64_t>(dim);
++                    if (restored_elements != elements || uint64_t(shape.front()) % block ||
++                        (rank != 1 && (rank != shape.size() || info.shape != shape)))
++                        throw std::runtime_error("GGUF original shape conflicts with its tensor descriptor");
++                    info.shape = shape;
++                }
+                 // Individual allocations still have the selected Wasm address-width limit.
+                 if (bytes > SIZE_MAX) throw std::runtime_error("single GGUF tensor exceeds the selected address width");
+                 sizes.push_back(bytes);
+@@ -207,6 +266,9 @@
+     }
+     const std::vector<GGUFTensorInfo>& tensors() const { return tensors_; }
+     bool has_tensors_beyond_ggml_limits() const { return has_wide_tensors_; }
++    // Retain recognition on failure so the caller cannot silently ignore a
++    // malformed original shape by falling back to the generic GGUF parser.
++    bool has_original_shapes() const { return has_original_shapes_; }
+     uint64_t data_offset() const { return data_offset_; }
+     uint64_t split_no() const { return split_no_; }
+     uint64_t split_count() const { return split_count_; }
+--- a/src/model_io/gguf_io.cpp
++++ b/src/model_io/gguf_io.cpp
+@@ -50,12 +50,28 @@
+ 
+     GGUFReader gguf_reader;
+     bool probe_ok = gguf_reader.load(file_path);
++    if (!probe_ok && gguf_reader.has_original_shapes()) {
++        set_error(error, "invalid GGUF original shape metadata in '" + file_path + "'");
++        return false;
++    }
+ 
+ #ifndef SD_BROWSER_WEBGPU
+-    if (!probe_ok || !gguf_reader.has_tensors_beyond_ggml_limits()) {
++    if (!probe_ok || (!gguf_reader.has_tensors_beyond_ggml_limits() && !gguf_reader.has_original_shapes())) {
+         ctx_gguf_ = gguf_init_from_file(file_path.c_str(), {true, &ctx_meta_});
+     }
+ #endif
++    if (!probe_ok && ctx_gguf_ != nullptr) {
++        // A generic fallback must not bypass validation when the private parser
++        // failed before reaching a later original-shape metadata entry.
++        for (int64_t i = 0; i < gguf_get_n_kv(ctx_gguf_); ++i) {
++            if (std::string(gguf_get_key(ctx_gguf_, i)).rfind("comfy.gguf.orig_shape.", 0) == 0) {
++                gguf_free(ctx_gguf_);
++                ggml_free(ctx_meta_);
++                set_error(error, "unvalidated GGUF original shape metadata in '" + file_path + "'");
++                return false;
++            }
++        }
++    }
+     // The browser metadata path must not accumulate the entire file in size_t.
+     // Keep tensor file positions 64-bit even with a 32-bit Wasm address space.
+     if (!ctx_gguf_) {

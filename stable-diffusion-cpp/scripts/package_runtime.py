@@ -20,7 +20,7 @@ PROFILES = json.loads((ROOT / 'config/profiles.json').read_text())
 NAME = 'stable-diffusion-cpp-browser-core'
 HELPERS = ('index.mjs', 'index.d.ts', 'bindings.mjs', 'read-only-file.mjs', 'README.md')
 API_FILES = ('schema.json', 'schema.mjs', 'functions.d.ts')
-CAPABILITIES = {'ggufFileOffsetBits': 64, 'callerOwnedRandomAccess': True, 'upstreamApi': True, 'safetensorsFileOffsetBits': 64, 'ggufShards': True}
+CAPABILITIES = {'ggufFileOffsetBits': 64, 'callerOwnedRandomAccess': True, 'upstreamApi': True, 'safetensorsFileOffsetBits': 64, 'ggufShards': True, 'ggufOriginalShapes': True}
 
 def sha(path: Path) -> str:
     with path.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()

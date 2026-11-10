@@ -401,3 +401,16 @@ patch, relax input hashes, or substitute a different upstream revision.
     and late callbacks; optional WebGPU smoke queries the live registry with
     buffers allocated. Remove when the pinned backend has equivalent discovery,
     publication, callback and handle-lifetime guarantees.
+
+35. Comfy GGUF original shapes. Read bounded integer arrays under
+    `comfy.gguf.orig_shape.<tensor-name>`, reverse PyTorch axis order and restore
+    flattened descriptors only when their element count and quantized row layout
+    agree. Existing multidimensional descriptors must match exactly. Reject
+    duplicate, malformed and conflicting metadata; validate but ignore entries
+    for tensors in other shards. Keep payload bytes, dtypes and 64-bit file
+    positions unchanged. Native generic-parser fallback must not bypass these
+    checks. Small self-authored GGUFs exercise production ModelLoader dimensions,
+    numeric CPU loading/matmul, shard metadata and rejection; real-Wasm test
+    variants expose only the corresponding synthetic probes. This is not a
+    trained-model load or image-generation result. Remove when pinned upstream
+    supplies equivalent bounded restoration and parser/fallback contracts.
