@@ -1,6 +1,7 @@
 --- a/include/stable-diffusion.h
 +++ b/include/stable-diffusion.h
-@@ -455,4 +455,38 @@
+@@ -496,6 +496,40 @@
+     const char* ref_image_args;
  } sd_vid_gen_params_t;
  
 +// Passive, on-demand context snapshots. No sampling or instrumentation is enabled.
@@ -39,7 +40,9 @@
 +
  typedef struct sd_ctx_t sd_ctx_t;
  struct ggml_tensor;
-@@ -472,4 +506,22 @@
+ 
+@@ -536,6 +570,24 @@
+ SD_API void sd_set_backend_eval_callback(sd_graph_eval_callback_t cb, void* data);
  SD_API int32_t sd_get_num_physical_cores();
  SD_API const char* sd_get_system_info();
 +// Call only while this context is idle. Null arguments, an undersized output,
@@ -62,90 +65,11 @@
 +SD_API bool sd_ctx_get_params(sd_ctx_t* sd_ctx, sd_ctx_params_t* out, size_t out_size);
  SD_API bool sd_ctx_supports_image_generation(const sd_ctx_t* sd_ctx);
  SD_API bool sd_ctx_supports_video_generation(const sd_ctx_t* sd_ctx);
---- a/src/model_manager.h
-+++ b/src/model_manager.h
-@@ -177,4 +177,19 @@
  
- public:
-+    struct MemoryInfo {
-+        uint64_t registered_tensor_count = 0;
-+        uint64_t registered_tensor_bytes = 0;
-+        uint64_t manager_host_buffer_count = 0;
-+        uint64_t manager_host_buffer_bytes = 0;
-+        uint64_t manager_device_buffer_count = 0;
-+        uint64_t manager_device_buffer_bytes = 0;
-+        uint64_t tracked_runtime_cpu_bytes = 0;
-+        uint64_t tracked_runtime_non_cpu_bytes = 0;
-+        uint64_t tracked_runtime_unknown_bytes = 0;
-+        bool saturated = false;
-+    };
-+    // Caller owns the idle context lock. Does not synchronize or refresh residency.
-+    MemoryInfo memory_info() const;
-+
-     ~ModelManager() override;
- 
---- a/src/model_manager.cpp
-+++ b/src/model_manager.cpp
-@@ -1399,4 +1399,56 @@
- }
- 
-+ModelManager::MemoryInfo ModelManager::memory_info() const {
-+    MemoryInfo result;
-+    auto add = [&](uint64_t& total, uint64_t value) {
-+        if (value > UINT64_MAX - total) {
-+            total = UINT64_MAX;
-+            result.saturated = true;
-+        } else {
-+            total += value;
-+        }
-+    };
-+    std::unordered_set<const ggml_tensor*> tensors;
-+    for (const auto& state : tensor_states_) {
-+        if (state && state->tensor && tensors.insert(state->tensor).second) {
-+            add(result.registered_tensor_count, 1);
-+            add(result.registered_tensor_bytes, ggml_nbytes(state->tensor));
-+        }
-+    }
-+    std::unordered_set<ggml_backend_buffer_t> buffers;
-+    auto add_buffer = [&](ggml_backend_buffer_t buffer) {
-+        if (buffer == nullptr || !buffers.insert(buffer).second) return;
-+        const bool host = ggml_backend_buffer_is_host(buffer);
-+        add(host ? result.manager_host_buffer_count : result.manager_device_buffer_count, 1);
-+        add(host ? result.manager_host_buffer_bytes : result.manager_device_buffer_bytes,
-+            ggml_backend_buffer_get_size(buffer));
-+    };
-+    for (auto buffer : model_loader_.get_device_mmap_buffers()) add_buffer(buffer);
-+    for (const auto& block : params_storage_blocks_) {
-+        if (!block) continue;
-+        add_buffer(block->buffer);
-+        for (const auto& store : block->mmap_tensor_stores) add_buffer(store.mmbuffer.get());
-+    }
-+    for (const auto& block : compute_staging_blocks_) {
-+        if (block) add_buffer(block->buffer);
-+    }
-+    for (const auto& entry : prefetch_blocks_) {
-+        if (!entry.second) continue;
-+        for (const auto& block : entry.second->staging_blocks) {
-+            if (block) add_buffer(block->buffer);
-+        }
-+    }
-+    // Existing runner publications: no runner traversal or forced synchronization.
-+    for (const auto& entry : runtime_residencies_) {
-+        auto backend = entry.second.compute_backend;
-+        auto device = backend ? ggml_backend_get_device(backend) : nullptr;
-+        auto& bytes = device == nullptr ? result.tracked_runtime_unknown_bytes
-+                    : ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_CPU
-+                        ? result.tracked_runtime_cpu_bytes : result.tracked_runtime_non_cpu_bytes;
-+        add(bytes, entry.second.resident_bytes);
-+    }
-+    return result;
-+}
-+
- size_t ModelManager::compute_backend_resident_bytes(ggml_backend_t compute_backend) const {
-     if (compute_backend == nullptr) {
 --- a/src/stable-diffusion.cpp
 +++ b/src/stable-diffusion.cpp
-@@ -682,4 +682,57 @@
+@@ -756,6 +756,59 @@
+     free(audio);
  }
  
 +// Reuse the engine's existing ownership mutex; generation does no extra work.
@@ -203,9 +127,99 @@
 +
  SD_API bool sd_ctx_supports_image_generation(const sd_ctx_t* sd_ctx) {
      if (sd_ctx == nullptr || sd_ctx->sd == nullptr) {
+         return false;
+--- a/src/model_manager.cpp
++++ b/src/model_manager.cpp
+@@ -1539,6 +1539,61 @@
+     return total_size;
+ }
+ 
++ModelManager::MemoryInfo ModelManager::memory_info() const {
++    MemoryInfo result;
++    auto add = [&](uint64_t& total, uint64_t value) {
++        if (value > UINT64_MAX - total) {
++            total = UINT64_MAX;
++            result.saturated = true;
++        } else {
++            total += value;
++        }
++    };
++    std::unordered_set<const ggml_tensor*> tensors;
++    for (const auto& state : tensor_states_) {
++        if (state && state->tensor && tensors.insert(state->tensor).second) {
++            add(result.registered_tensor_count, 1);
++            add(result.registered_tensor_bytes, ggml_nbytes(state->tensor));
++        }
++    }
++    std::unordered_set<ggml_backend_buffer_t> buffers;
++    auto add_buffer = [&](ggml_backend_buffer_t buffer) {
++        if (buffer == nullptr || !buffers.insert(buffer).second) return;
++        const bool host = ggml_backend_buffer_is_host(buffer);
++        add(host ? result.manager_host_buffer_count : result.manager_device_buffer_count, 1);
++        add(host ? result.manager_host_buffer_bytes : result.manager_device_buffer_bytes,
++            ggml_backend_buffer_get_size(buffer));
++    };
++    for (auto buffer : model_loader_.get_device_mmap_buffers()) add_buffer(buffer);
++    for (const auto& source : model_sources_) {
++        for (auto buffer : source.second.get_device_mmap_buffers()) add_buffer(buffer);
++    }
++    for (const auto& block : params_storage_blocks_) {
++        if (!block) continue;
++        add_buffer(block->buffer);
++        for (const auto& store : block->mmap_tensor_stores) add_buffer(store.mmbuffer.get());
++    }
++    for (const auto& block : compute_staging_blocks_) {
++        if (block) add_buffer(block->buffer);
++    }
++    for (const auto& entry : prefetch_blocks_) {
++        if (!entry.second) continue;
++        for (const auto& block : entry.second->staging_blocks) {
++            if (block) add_buffer(block->buffer);
++        }
++    }
++    // Existing runner publications: no runner traversal or forced synchronization.
++    for (const auto& entry : runtime_residencies_) {
++        auto backend = entry.second.compute_backend;
++        auto device = backend ? ggml_backend_get_device(backend) : nullptr;
++        auto& bytes = device == nullptr ? result.tracked_runtime_unknown_bytes
++                    : ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_CPU
++                        ? result.tracked_runtime_cpu_bytes : result.tracked_runtime_non_cpu_bytes;
++        add(bytes, entry.second.resident_bytes);
++    }
++    return result;
++}
++
+ size_t ModelManager::compute_backend_resident_bytes(ggml_backend_t compute_backend) const {
+     if (compute_backend == nullptr) {
+         return 0;
+--- a/src/model_manager.h
++++ b/src/model_manager.h
+@@ -172,6 +172,21 @@
+                                         ggml_backend_t compute_backend) const;
+ 
+ public:
++    struct MemoryInfo {
++        uint64_t registered_tensor_count = 0;
++        uint64_t registered_tensor_bytes = 0;
++        uint64_t manager_host_buffer_count = 0;
++        uint64_t manager_host_buffer_bytes = 0;
++        uint64_t manager_device_buffer_count = 0;
++        uint64_t manager_device_buffer_bytes = 0;
++        uint64_t tracked_runtime_cpu_bytes = 0;
++        uint64_t tracked_runtime_non_cpu_bytes = 0;
++        uint64_t tracked_runtime_unknown_bytes = 0;
++        bool saturated = false;
++    };
++    // Caller owns the idle context lock. Does not synchronize or refresh residency.
++    MemoryInfo memory_info() const;
++
+     ~ModelManager() override;
+ 
+     const ModelLoader& loader() const { return model_loader_; }
 --- a/src/pipeline/diffusion_engine.h
 +++ b/src/pipeline/diffusion_engine.h
-@@ -135,5 +135,6 @@
+@@ -141,7 +141,8 @@
+                                 &sd_ctx_params_t::tokenizer, &sd_ctx_params_t::flash_attn_mode, &sd_ctx_params_t::conv_direct_mode,
                                  &sd_ctx_params_t::high_noise_diffusion_model_path, &sd_ctx_params_t::uncond_diffusion_model_path,
                                  &sd_ctx_params_t::embeddings_connectors_path, &sd_ctx_params_t::vae_path,
 -                                &sd_ctx_params_t::audio_vae_path, &sd_ctx_params_t::taesd_path,
@@ -213,3 +227,4 @@
 +                                &sd_ctx_params_t::taesd_path,
                                  &sd_ctx_params_t::control_net_path, &sd_ctx_params_t::ip_adapter_path,
                                  &sd_ctx_params_t::motion_module_path, &sd_ctx_params_t::photo_maker_path,
+                                 &sd_ctx_params_t::pulid_weights_path, &sd_ctx_params_t::tensor_type_rules,

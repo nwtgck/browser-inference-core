@@ -1,5 +1,6 @@
 // CPU arithmetic and backend-capability regression; not real H3 inference.
 #include "core/ggml_extend.h"
+#include "core/ggml_runner.h"
 #include "ggml-backend.h"
 #include "ggml-backend-impl.h"
 #include "ggml-cpu.h"
@@ -37,8 +38,10 @@ int check(ggml_type type, int batches, bool bias, bool reject, bool direct, bool
     auto b = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, OC);
     ggml_set_input(x);
     Filter filter(cpu.get(), reject);
-    auto y = ggml_ext_conv_3d(ctx.get(), &filter.backend, x, w, bias ? b : nullptr, IC, 1, 1, 1, 0, 0, 0, 1, 1, 1,
-                              force, direct);
+    GGMLRunnerContext runner;
+    runner.ggml_ctx = ctx.get();
+    runner.backend = &filter.backend;
+    auto y = ggml_ext_conv_3d(&runner, x, w, bias ? b : nullptr, IC, 1, 1, 1, 0, 0, 0, 1, 1, 1, force, direct);
     if (y->ne[0] != W || y->ne[1] != H || y->ne[2] != depth || y->ne[3] != OC * batches)
         return 1;
     auto graph = ggml_new_graph_custom(ctx.get(), 128, false);

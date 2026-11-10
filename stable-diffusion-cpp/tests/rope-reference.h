@@ -13,8 +13,8 @@ __STATIC_INLINE__ ggml_tensor * reference_apply_rope(ggml_context * ctx, ggml_te
         x = ggml_reshape_4d(ctx, x, 2, d_head / 2, L, n_head * N); // [N * n_head, L, d_head/2, 2]
         x = ggml_cont(ctx, ggml_permute(ctx, x, 3, 0, 1, 2));      // [2, N * n_head, L, d_head/2]
     } else {
-        x = ggml_reshape_4d(ctx, x, d_head / 2, 2, L, n_head * N);      // [N * n_head, L, 2, d_head/2]
-        x = ggml_cont(ctx, ggml_ext_torch_permute(ctx, x, 0, 2, 3, 1)); // [2, N * n_head, L, d_head/2]
+        x = ggml_reshape_4d(ctx, x, d_head / 2, 2, L, n_head * N); // [N * n_head, L, 2, d_head/2]
+        x = ggml_cont(ctx, ggml_permute(ctx, x, 0, 3, 1, 2));      // [2, N * n_head, L, d_head/2]
     }
 
     int64_t offset = x->nb[2] * x->ne[2];

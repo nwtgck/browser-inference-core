@@ -71,13 +71,30 @@ class Bindings(unittest.TestCase):
                 generator.generate(root, root/'generated', 'clang')
 
     @unittest.skipUnless(shutil.which('clang') and shutil.which('c++'), 'native compilers required')
-    def test_pinned_public_graph_signatures_and_generated_wire_contract(self):
+    def test_pinned_public_signatures_and_generated_wire_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
             schema = generator.generate(ROOT/'vendor/stable-diffusion.cpp', output, 'clang',
                                         ROOT/'vendor/ggml-webgpu-source/ggml')
             functions = {item['name']: item for item in schema['functions']}
             expected = {
+                'generate_image': ('bool', 'boolean',
+                                   ['sd_ctx_t *', 'const sd_img_gen_params_t *', 'sd_image_generation_result_t **'],
+                                   ['pointer', 'pointer', 'pointer']),
+                'generate_video': ('bool', 'boolean',
+                                   ['sd_ctx_t *', 'const sd_vid_gen_params_t *', 'sd_video_generation_result_t **'],
+                                   ['pointer', 'pointer', 'pointer']),
+                'free_sd_image_generation_result': ('void', 'void',
+                                                     ['sd_image_generation_result_t *'], ['pointer']),
+                'free_sd_video_generation_result': ('void', 'void',
+                                                     ['sd_video_generation_result_t *'], ['pointer']),
+                'sd_get_preview_info': ('sd_preview_info_t', 'record', [], []),
+                'sd_set_generation_progress_callback': ('void', 'void',
+                                                         ['sd_ctx_t *', 'sd_generation_progress_cb_t', 'void *'],
+                                                         ['pointer', 'pointer', 'pointer']),
+                'upscale': ('bool', 'boolean',
+                            ['upscaler_ctx_t *', 'sd_image_t', 'uint32_t', 'sd_image_generation_result_t **'],
+                            ['pointer', 'record', 'unsigned', 'pointer']),
                 'ggml_init': ('struct ggml_context *', 'pointer', ['struct ggml_init_params'], ['record']),
                 'ggml_new_tensor_2d': ('struct ggml_tensor *', 'pointer',
                                      ['struct ggml_context *', 'enum ggml_type', 'int64_t', 'int64_t'],
@@ -106,12 +123,37 @@ class Bindings(unittest.TestCase):
                              ['mem_size', 'mem_buffer', 'no_alloc'])
             self.assertIn('ggml_cplan', records)
             self.assertIn('ggml_tallocr', records)
+            expected_fields = {
+                'sd_image_generation_result_t': [('items', 'pointer'), ('count', 'signed')],
+                'sd_image_result_t': [('image', 'record'), ('generation_info', 'pointer')],
+                'sd_video_generation_result_t': [('frames', 'pointer'), ('frame_count', 'signed'),
+                                                  ('audio', 'pointer'), ('fps', 'signed'),
+                                                  ('generation_info', 'pointer')],
+                'sd_generation_progress_t': [('stage', 'pointer'), ('detail', 'pointer'), ('unit', 'pointer'),
+                                               ('sample_pass', 'signed'), ('completed', 'i64'), ('total', 'i64')],
+                'sd_preview_info_t': [('sample_pass', 'signed'), ('total_steps', 'signed')],
+                'sd_tiling_params_t': [('enabled', 'boolean'), ('temporal_tiling', 'boolean'),
+                                       ('tile_size_w', 'signed'), ('tile_size_h', 'signed'),
+                                       ('target_overlap', 'float'), ('rel_size_w', 'float'),
+                                       ('rel_size_h', 'float'), ('extra_tiling_args', 'pointer')],
+            }
+            for name, fields in expected_fields.items():
+                with self.subTest(record=name):
+                    self.assertEqual([(f['name'], f['kind']) for f in records[name]['fields']], fields)
+            context_fields = {field['name'] for field in records['sd_ctx_params_t']['fields']}
+            self.assertTrue({'batched_cfg', 'flash_attn_mode', 'conv_direct_mode'} <= context_fields)
             cpp = (output/'bindings.cpp').read_text()
+            self.assertIn('int32_t sdc_generate_image(uint64_t a0, uint64_t a1, uint64_t a2)', cpp)
+            self.assertIn('void sdc_sd_get_preview_info(uint64_t out)', cpp)
+            self.assertIn('*((sd_preview_info_t *)sdc_checked_pointer(out)) = sd_get_preview_info();', cpp)
             self.assertIn('uint64_t sdc_ggml_init(uint64_t a0)', cpp)
             self.assertIn('*((const struct ggml_init_params *)sdc_checked_pointer(a0))', cpp)
             self.assertIn('void sdc_ggml_graph_plan(uint64_t out, uint64_t a0, int32_t a1, uint64_t a2)', cpp)
+            declarations = (output/'functions.d.ts').read_text()
+            self.assertIn('generate_image(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>', declarations)
+            self.assertIn('sd_get_preview_info(out: bigint): Promise<void>', declarations)
             self.assertIn('ggml_new_tensor_2d(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint): Promise<bigint>',
-                          (output/'functions.d.ts').read_text())
+                          declarations)
             subprocess.run(['c++', '-std=c++17', '-fsyntax-only',
                             '-I'+str(ROOT/'vendor/stable-diffusion.cpp/include'),
                             '-I'+str(ROOT/'vendor/ggml-webgpu-source/ggml/include'),

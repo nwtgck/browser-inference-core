@@ -8,20 +8,20 @@
       "files": [
         {
           "path": "src/model_loader.cpp",
-          "beforeSha256": "0648fbd54c0df589e1998c51f63218953a975621002fbd791e14f8f8adc1abf2",
-          "afterSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d"
+          "beforeSha256": "6a16321f5653f6d30d1fde8862d39b2faf0f917be3b0ec7da025c96dc673c9f1",
+          "afterSha256": "76f46fdeff0add96ad9d52f2803b94033802c1de6c562bcbfcec69013e801aad"
         }
       ]
     },
     {
       "file": "0002-webgpu-group-normalization.patch",
       "target": "stable-diffusion",
-      "reason": "Lower the two group-normalization entry points to existing NORM where equivalent, with CPU reference tests.",
+      "reason": "Lower supported group-normalization layouts to existing NORM where equivalent, with CPU reference tests.",
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "977e8f21083ac57aafe7e8438f8adaaf040ec0f125f6ca187609e01c3b39a8e2",
-          "afterSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783"
+          "beforeSha256": "a88bc307c23815cb1d827202b0633cf159b941d4d0ee256d3ab31dc1a9461be6",
+          "afterSha256": "e66aab15660f3828171822ce958c49403851b25ae921c150b95948a5570eceb8"
         }
       ]
     },
@@ -43,19 +43,19 @@
       "reason": "Read unsplit GGUF metadata without whole-file size_t accumulation; preserve 64-bit file positions, validate metadata and leave tensor payloads lazy.",
       "files": [
         {
-          "path": "src/model_io/gguf_reader_ext.h",
-          "beforeSha256": "3b36d1ef883f196b5e6847ec817fd20a7146301ee6bd3a86920e86fa72715586",
-          "afterSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a"
+          "path": "src/model_io/gguf_io.cpp",
+          "beforeSha256": "84fb9988f5eda2ee6ac471948e9e0dc6a78b5f6a593a141b9216245a0c1550ec",
+          "afterSha256": "25e51d3f318c72a9eea6c12f8f2d0606c9fda5c613754c285aad32961346d2bb"
         },
         {
-          "path": "src/model_io/gguf_io.cpp",
-          "beforeSha256": "976065ada0e5ab3b3d7d7581e1e853ea2f5653d0226a8e38d85ee80d35f09d55",
-          "afterSha256": "5735b65ddf5d79c2dee028f6987aaa7c346bcb565bc279274d29137fb9ee01a9"
+          "path": "src/model_io/gguf_reader_ext.h",
+          "beforeSha256": "2e384266c7c4daa1a7f706cf54f0d8d35ce72657a1be288953e201fa0f2efb79",
+          "afterSha256": "a65ef4191a1ae3c8dce601ac49237685a70bbb0953668e97b39444fdfdb9306a"
         },
         {
           "path": "src/model_io/tensor_storage.h",
-          "beforeSha256": "fb37fe9c75080e6ec9989fe178ff6c47c2e7238f85bb70d12bd7c8c472327d44",
-          "afterSha256": "f789aef10b7cbb320bc730132643bf9e31d47c8defcbe3382ed73f613a584690"
+          "beforeSha256": "5dabe963245c6759a8b8acae1aa216626a651f08665fdc8a839a5c7a533fd802",
+          "afterSha256": "94e174dbb5a7c7a906966e8b2d1eda0e649a82f2b76bcf154ad925ae364ddf06"
         }
       ]
     },
@@ -66,8 +66,8 @@
       "files": [
         {
           "path": "src/model_io/gguf_reader_ext.h",
-          "beforeSha256": "fb779bfa4749f75b06067b1e5ac0219b8e8b30430d40dd8d7cfa323d8850787a",
-          "afterSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0"
+          "beforeSha256": "a65ef4191a1ae3c8dce601ac49237685a70bbb0953668e97b39444fdfdb9306a",
+          "afterSha256": "580f2d0f097fe8e39e722a66b1265de889eeaf77a6757ae832f1ebc1b767f3c5"
         }
       ]
     },
@@ -77,19 +77,19 @@
       "reason": "Keep safetensors file positions 64-bit, bound/validate metadata and local shard paths, and load complete standard GGUF shard groups without file conversion.",
       "files": [
         {
+          "path": "src/model_loader.cpp",
+          "beforeSha256": "76f46fdeff0add96ad9d52f2803b94033802c1de6c562bcbfcec69013e801aad",
+          "afterSha256": "8e330d612d5f3b02cf2e9487fad1e96a35011d4b1e12c462126247229e3fd0d9"
+        },
+        {
           "path": "src/model_io/gguf_reader_ext.h",
-          "beforeSha256": "d552184e261430fa91a601b41c2befd566ea53aa8880a3ef24a9d116612fbfe0",
-          "afterSha256": "44a13228496d3a8dac3b24807e065ec9479bcb4d23a3442e542101cbc2fc20fb"
+          "beforeSha256": "580f2d0f097fe8e39e722a66b1265de889eeaf77a6757ae832f1ebc1b767f3c5",
+          "afterSha256": "818e9816526c32bf8b3997f66d7ba0624c55f2600539ea64ba1a4db7cdcaea9f"
         },
         {
           "path": "src/model_io/safetensors_io.cpp",
-          "beforeSha256": "4b59c25d2f2f044d947ff06fee3f8be3cdf1158c3578739b5d9ece163eb50626",
-          "afterSha256": "293d3993365f3aa2260f719ae57e5e15a6037525dbc9c20c6aba3b49b3409728"
-        },
-        {
-          "path": "src/model_loader.cpp",
-          "beforeSha256": "eb8db6b06769bffbcf15f16dc7d0e449694a7645a66f945dfdc0e7c67440af8d",
-          "afterSha256": "cc28beef610c2b9e7804e659514515397a7e724c31fcfea52bd6baee5517279a"
+          "beforeSha256": "0a025784fe512a84c246b19ef1f8ff2df209abaf47ada2d7f47a742ec0cfef90",
+          "afterSha256": "d04483744c5649afcce6cd533d2597e3f620b87f56211823774480468dc26416"
         }
       ]
     },
@@ -100,8 +100,8 @@
       "files": [
         {
           "path": "src/model/diffusion/qwen_image.hpp",
-          "beforeSha256": "f0dde13ce1a7f77f843809a3d2e26d7a0b79d458c9dc80a5dc4bc3d1e72b0018",
-          "afterSha256": "142a74a167d82a8852fc7af5cc12276c7efe624f311fdd161264bafdf89756ea"
+          "beforeSha256": "330c904477b8dd82cf1023eb0cf782b92403c51d3d0a6d46b4b4197f338aaf39",
+          "afterSha256": "aca3994b9c6aef7803c006ebcdaa9ae155bdce93008c74156c48896a0cc49c58"
         }
       ]
     },
@@ -112,8 +112,8 @@
       "files": [
         {
           "path": "src/core/compute_workspace.cpp",
-          "beforeSha256": "8b895df5a5e18204bfac1a75e94db1348ae04040ddc4e31b341adc303dea4db3",
-          "afterSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9"
+          "beforeSha256": "69355893a4a7ea48ef714eb0476259b88d01a873f05b653ae618f3993fe2372f",
+          "afterSha256": "50704717669caa0f9352457928f19c755d973567e5a1efcce385a709ff3e0903"
         }
       ]
     },
@@ -124,38 +124,38 @@
       "files": [
         {
           "path": "include/stable-diffusion.h",
-          "beforeSha256": "23c680f5f1747ecd48bcb905af53e7ea7f2be8e2197607f1de6edd78eed9a149",
-          "afterSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573"
+          "beforeSha256": "7e3ac6e0cbc3f98e7577aebea14e20d062f7321cd8b100f68798646243c7900a",
+          "afterSha256": "fc286da6d58d1a511c478615efb09fb200cb7eee6d646cb8557aec236a81defd"
         },
         {
           "path": "src/stable-diffusion.cpp",
-          "beforeSha256": "619b18b76758b8e34c3174b6864c5a65e344c20abc4b327081847691eea2e1bc",
-          "afterSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5"
-        },
-        {
-          "path": "src/pipeline/diffusion_engine.cpp",
-          "beforeSha256": "e98c492bbeeff4b2bda122992284862d085a5a0ee01206a2603987e8854db16e",
-          "afterSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5"
-        },
-        {
-          "path": "src/model_manager.h",
-          "beforeSha256": "1bd4162f5ecd1feab27d80c25f4baa7c7e9ad02c1aedf81522463c673794db48",
-          "afterSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408"
+          "beforeSha256": "ace0af91508008ef21f04ae6f1d2355ef21d6bd40c929b05c71b0bd68c75d43e",
+          "afterSha256": "74859aa953de34058b912a85cbcd9f52129410a13a60da560fd2de4f07c041e1"
         },
         {
           "path": "src/model_manager.cpp",
-          "beforeSha256": "75bfcc6285f691d989374102e89bef19a38dc722d7868650f8be696bdbbad703",
-          "afterSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e"
+          "beforeSha256": "29227c977ba16504510711b2617c640c2264dd46e0a638b0d2472ec66b974880",
+          "afterSha256": "4e1767b5f746b00c551ac53b9491222aa6681100943790fe80801121a4208947"
         },
         {
-          "path": "src/core/backend_fit.h",
-          "beforeSha256": "73077fa8dd1e95620e6f06a3ea6d1a8889c12d82e8df78ae303a35ec354a8ea9",
-          "afterSha256": "931f18f06eb0d4a4953469b4001c300c8855cb99eafa3b2b72a7a3d94ec243c6"
+          "path": "src/model_manager.h",
+          "beforeSha256": "dc5527a18aa48f3cf533f0d7acfdd571d0b06f48cca79d8da4be2a67b8d092bd",
+          "afterSha256": "81923f179485ad3bc4556e288576778c71bb241e1a569e70df33e33f86a0a7f5"
         },
         {
           "path": "src/core/backend_fit.cpp",
-          "beforeSha256": "ed9b68d8a5656fe115f5b8c331756bbc206148768abf9f7f34011c1b1eea38c8",
-          "afterSha256": "61e5e8e11ce95d0668fee1676d7d47bf7945cc23d1e7390263c47d911322135a"
+          "beforeSha256": "361d686a185e8b0aedfc98251e7b868d1d022a91c8a6bd4ae6e967d576fe927b",
+          "afterSha256": "f6c713f43080472f25e251b6058cc292af0477fe70c11b5b40ebe4e88c6b424d"
+        },
+        {
+          "path": "src/core/backend_fit.h",
+          "beforeSha256": "1e0690f3a5a526f7e62f17c6666498870e6e5c704c56ff2259c070523fc00a7b",
+          "afterSha256": "41726e9aba175d1c086bcae8f8f405689ccb551d86ea9135e00c527f0b468a8c"
+        },
+        {
+          "path": "src/pipeline/diffusion_engine.cpp",
+          "beforeSha256": "43ba424f113eb6e3ed25114b7a1a91e3c25eef1f41d581b4bcc0828cb3fa7747",
+          "afterSha256": "29d5eed2a41cfa8c09cf33c23d402a9a3bfaab154da9ef3493619f23141e5aac"
         }
       ]
     },
@@ -178,8 +178,8 @@
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "6c5b78a3ca84f5818e6c84f1970e18ee954e812d47211cd7a82e5271ae1ad783",
-          "afterSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde"
+          "beforeSha256": "e66aab15660f3828171822ce958c49403851b25ae921c150b95948a5570eceb8",
+          "afterSha256": "b779e47fe6ef72381e3cff4245f114b4f24b35b3ecbba61595c7f6a6e5514da1"
         }
       ]
     },
@@ -190,8 +190,8 @@
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "1f69c55f3a5e7decdeef3b65f1a48556de73b7589f5846eccd58d3b7484e5cde",
-          "afterSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022"
+          "beforeSha256": "b779e47fe6ef72381e3cff4245f114b4f24b35b3ecbba61595c7f6a6e5514da1",
+          "afterSha256": "5871ca3ffd683e75efec46481f47c0c0ff53ae4ff26be079d6df0f1fd2a94a80"
         }
       ]
     },
@@ -202,28 +202,28 @@
       "files": [
         {
           "path": "include/stable-diffusion.h",
-          "beforeSha256": "dd1e641818b078dd13411be7261a6bf087481241357614d9b0e8b73092e22573",
-          "afterSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298"
-        },
-        {
-          "path": "src/model_manager.h",
-          "beforeSha256": "f1ba2012deac9996e917df7dffc6099323c431bf1eb554cde2164ac1a57df408",
-          "afterSha256": "f21a71cdd17d1459d140f24c793c6e3d5caac8540267182478a196a8a0138a05"
-        },
-        {
-          "path": "src/model_manager.cpp",
-          "beforeSha256": "7fe336c624f14966e7f54b55d7bdc17f837c3377b002b0df79ea83340233763e",
-          "afterSha256": "d520e1539c3c43b0a7d38d467f79a5870c4300680c38d5358253d1be2941fd60"
+          "beforeSha256": "fc286da6d58d1a511c478615efb09fb200cb7eee6d646cb8557aec236a81defd",
+          "afterSha256": "7e5d00026151f72b853b13418df377a39920cd23d2376e13fb0f51dfd8c5fada"
         },
         {
           "path": "src/stable-diffusion.cpp",
-          "beforeSha256": "35dc342c03b612cd6d1dc32c592be2f88a342645fc366b9c21a730ef610030d5",
-          "afterSha256": "7c94f20270826b501d40986f3b11a819f36799838317b6fd027a0b2228ce6753"
+          "beforeSha256": "74859aa953de34058b912a85cbcd9f52129410a13a60da560fd2de4f07c041e1",
+          "afterSha256": "0dc57372dd7ff4d0504f406e5e0b19fa2a7d4e008a033c8d9fe27391b3df3ac2"
+        },
+        {
+          "path": "src/model_manager.cpp",
+          "beforeSha256": "4e1767b5f746b00c551ac53b9491222aa6681100943790fe80801121a4208947",
+          "afterSha256": "f954c1f17ae134ee4a7d3530d687134d637ffdf6f9ada8c7e5b04bff2031e651"
+        },
+        {
+          "path": "src/model_manager.h",
+          "beforeSha256": "81923f179485ad3bc4556e288576778c71bb241e1a569e70df33e33f86a0a7f5",
+          "afterSha256": "3d0a77f62f96c69ea6bef3523eb2506b8e2ccae1e80792b6a695f2fca4f24732"
         },
         {
           "path": "src/pipeline/diffusion_engine.h",
-          "beforeSha256": "87c20c883a1e32aee0a9e5f87848cad9db60974948a1049c71d51892b96ec522",
-          "afterSha256": "d344e3a918997fdd225d56990997bcff49bae2f4d0a1b593856e617f17ae4278"
+          "beforeSha256": "fd87cc3937000c15152ff5d2da42ed35e18e41e802358a247840aee24c1886d3",
+          "afterSha256": "59ab9018c3954ef711af437a53794f32457011d0675a108c956f2ea3ee99f095"
         }
       ]
     },
@@ -234,38 +234,38 @@
       "files": [
         {
           "path": "include/stable-diffusion.h",
-          "beforeSha256": "7ba9e9b17e7e6b02ab0cc24c336b74236bd05968501c95c3548e9ab296bb6298",
-          "afterSha256": "4b3f4fe5e1bcc11a6bff99f6c0a987917d57b5e5bd65f16a4338ed50ab476c59"
-        },
-        {
-          "path": "src/core/util.h",
-          "beforeSha256": "eb431c09546ce129851e6adddf95ef9dd610f951e555293ffb7d8a52efbb32cb",
-          "afterSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654"
+          "beforeSha256": "7e5d00026151f72b853b13418df377a39920cd23d2376e13fb0f51dfd8c5fada",
+          "afterSha256": "c9fc87ee49cfdf50b2f0b64a9db42ac0964a328ab42686ef041a30eb3d88da58"
         },
         {
           "path": "src/core/util.cpp",
-          "beforeSha256": "5db896ce6832eed6ddd560786611b8f75e838c9444dc341b6aa189b974048625",
-          "afterSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87"
+          "beforeSha256": "d81046103ce6b776eacfc8c617d64f7cfcca3c379af057beab5b61018578b628",
+          "afterSha256": "d6b9e2cf65f04ff32af56730817863e3d16ebb376d66dadaffcc756bacdd0984"
         },
         {
-          "path": "src/core/ggml_runner.h",
-          "beforeSha256": "1c45ca73206036daa696f0458707b572bfb61f9b570c198198e385d5b085bd31",
-          "afterSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75"
-        },
-        {
-          "path": "src/core/ggml_runner.cpp",
-          "beforeSha256": "a2d402cf7be57a29f9787c07a1ea431f4cfab331223a40580f77b41ac2aa222a",
-          "afterSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6"
-        },
-        {
-          "path": "src/core/compute_workspace.h",
-          "beforeSha256": "00d07b36127d4432f6b10c9dee2c54532aa68ec83ea7a2002b7ff9a6cb3c311d",
-          "afterSha256": "444edfd56824b81e9500fdef1d86a9c734c064e030a01f77570c80400c698f27"
+          "path": "src/core/util.h",
+          "beforeSha256": "6e049353328354f25fbdf8140be8529b2ce274ee31b33eebf6c52f4d3e5666ff",
+          "afterSha256": "8e870d485dca28ca75f39136c469ba8dc92ebe92d370f53c811c07d410258331"
         },
         {
           "path": "src/core/compute_workspace.cpp",
-          "beforeSha256": "501f5b77c718efec8000e1ccfe28141545b02852439c820af2b0457b578e35a9",
-          "afterSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f"
+          "beforeSha256": "50704717669caa0f9352457928f19c755d973567e5a1efcce385a709ff3e0903",
+          "afterSha256": "16cc0d66d5a06475faf90560a6f4e0924c304a424e1585f423b0d4e3a4b73377"
+        },
+        {
+          "path": "src/core/compute_workspace.h",
+          "beforeSha256": "8040d2a6263c1958a34c21516407e69bd0e254efaa18e76ddc77e455775bccc9",
+          "afterSha256": "3fc42ab9f97f7b39003edbdb47394709828de7f9c98ec14e2161b9ccf5ab79cf"
+        },
+        {
+          "path": "src/core/execution_engine.cpp",
+          "beforeSha256": "4b328b79895f8838cd6f65c38fcddefe8809efff87892f6b2499bafdc7d0c2eb",
+          "afterSha256": "6181835101d6f11c544496b89e53cafce251234e44c80a5fdceadef269bcb690"
+        },
+        {
+          "path": "src/core/execution_engine.h",
+          "beforeSha256": "ee4a7f695a5f099d65aa43a36a9af924e326f40e54aa2e7979955dc1a90474d4",
+          "afterSha256": "9f308cead416c0105f784ba46fd12008109cd7dcadf07b84a1e905ef9bdce8bd"
         }
       ]
     },
@@ -276,8 +276,8 @@
       "files": [
         {
           "path": "src/core/compute_workspace.cpp",
-          "beforeSha256": "5e266dfb30ae090aa62813b7a6a2a6ead68fd369e64bbbd980e72656212cf70f",
-          "afterSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c"
+          "beforeSha256": "16cc0d66d5a06475faf90560a6f4e0924c304a424e1585f423b0d4e3a4b73377",
+          "afterSha256": "f3aa2b37a64b22416f17f0867898a0bdc1c09fdad1956306d90c8031ea26c095"
         }
       ]
     },
@@ -288,8 +288,8 @@
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "aa0711673fa6990d5399dab1fc0af9a86489c28fb77aeb150ce36cedcd46b022",
-          "afterSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891"
+          "beforeSha256": "5871ca3ffd683e75efec46481f47c0c0ff53ae4ff26be079d6df0f1fd2a94a80",
+          "afterSha256": "c0a931c754b094fc73816668514d0168ffcfd0f85f85e1738d700fd1a002b25d"
         }
       ]
     },
@@ -299,19 +299,19 @@
       "reason": "H3 video output allocation is checked and cancellation-safe; completed frames are published together without an extra float crop, and unused frame outputs are released.",
       "files": [
         {
-          "path": "src/core/util.h",
-          "beforeSha256": "917f8a2f7f3d0f00f9182a75dc284c00a49fd9d1f5cc99b78bd0545faba35654",
-          "afterSha256": "9da74c8cafa014adf398a6d73496352f2276c7d5baf4afc481ec3a2dfb0207e6"
+          "path": "src/core/util.cpp",
+          "beforeSha256": "d6b9e2cf65f04ff32af56730817863e3d16ebb376d66dadaffcc756bacdd0984",
+          "afterSha256": "4044a857c60a4abe81a778df06fc2fa8c00bd37ee84548e45e82badf4ce4d1d6"
         },
         {
-          "path": "src/core/util.cpp",
-          "beforeSha256": "48b83b11de9b047ba1195942b572dc137700a73fe7cfa973335590494e583a87",
-          "afterSha256": "6d2ca449062593c88fcd12d36412d3518ea3e4e9d39f3069cc5c84bc3909370c"
+          "path": "src/core/util.h",
+          "beforeSha256": "8e870d485dca28ca75f39136c469ba8dc92ebe92d370f53c811c07d410258331",
+          "afterSha256": "d6d03529b8ce6acb6dee86e2e51e1cdd65b5836d604cf6a8d7e1cd0a8535967a"
         },
         {
           "path": "src/pipeline/video.cpp",
-          "beforeSha256": "6d8dfba9edffe06c2bc8a5fdf9538514feab1266e39364682d4795c81dda8e03",
-          "afterSha256": "9d99c0af2d49dfae26f3ebcd63cf5dd5b7827dc45a7c0f1cab010d3ad8896734"
+          "beforeSha256": "2d8ec33157607ec087cf9517f48976081abf808322ea4e9fbf0873238f839aa6",
+          "afterSha256": "afd3c449b41a6fd06dcd101203dd04043e0e4505017da5379659ee5eacec8467"
         }
       ]
     },
@@ -346,8 +346,8 @@
       "files": [
         {
           "path": "src/model/vae/wan_vae.hpp",
-          "beforeSha256": "d54c7a77f6703e3f78ea7dc13fb908c23799bc20e71af78bcf79f981fb0990ec",
-          "afterSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816"
+          "beforeSha256": "7892ba047320fefec34e7629d4f8918db0935e0d83aab5cbe9920cb2a805e4de",
+          "afterSha256": "eb4eee3bff13498e85eedc9ca1ded6f3dfbf4bb0c3ed0d0afb55e6cce6d82bf5"
         }
       ]
     },
@@ -357,44 +357,34 @@
       "reason": "Keep structural Anima zero-padding mass with explicit sinks and reuse immutable sampling conditions through RunnerCache; remove when upstream provides equivalent scoped ownership, invalidation and fallback contracts.",
       "files": [
         {
-          "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "84460dc85b79e5a8ce63c6dc4663d909d956f513f4c0a143cd1cabbf764da891",
-          "afterSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03"
-        },
-        {
-          "path": "src/core/ggml_extend.h",
-          "beforeSha256": "fccb95f1bb54fcb9c644b731b9d9e53ab18b4bc900fbd7d80568baf4fb7e57c5",
-          "afterSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9"
-        },
-        {
-          "path": "src/core/ggml_runner.cpp",
-          "beforeSha256": "2037d59b6484c72839f394db1a7991c795bbb2216ca1f12a3df9a00faf7b6ab6",
-          "afterSha256": "430e894b37348183bff073e220169748f3c66d8bae1155f65b2e0e76fa0c01a1"
-        },
-        {
-          "path": "src/core/ggml_runner.h",
-          "beforeSha256": "7183becd4a55cc77a4d585c21a7a26f7a2562c463bbd4359b6e1da4f5e1e5d75",
-          "afterSha256": "30146f2908115f922aae4f6afb66906cd46a24df9a27673098bda670065cd657"
+          "path": "src/pipeline/diffusion_engine.cpp",
+          "beforeSha256": "29d5eed2a41cfa8c09cf33c23d402a9a3bfaab154da9ef3493619f23141e5aac",
+          "afterSha256": "e5713d973f8ec49dd052279b2a4efa79fa45b2caa3aadc4d9e94ca26087c8c0c"
         },
         {
           "path": "src/model/diffusion/anima.hpp",
-          "beforeSha256": "ae3e15dbb28d2a6d2cb78092cad9e1284dc10576831d3dc24a6109644affaeb1",
-          "afterSha256": "68021864952fda1b740737b9ea9bfc502cef5aa536401e076cf9918c450087cf"
+          "beforeSha256": "6ce6add1d642f148d73064f1333c114a9d5c570e3c068c0eba17c1a43fe5115a",
+          "afterSha256": "605f1c48977b249d63667ea47fe8b0f631f9bce505bc9a698e642701b8c8754d"
         },
         {
           "path": "src/model/diffusion/model.hpp",
-          "beforeSha256": "42e3b477fb1774dbb77dbb17c2a0c7eb53dcd759a72cba30827bb43175fd7128",
-          "afterSha256": "3075d6a641a8751a393d1dc79448756b6b294eb4e8792201c1a3325f2a98f93c"
+          "beforeSha256": "ded731f9adc762c3b6860fcb943adfe61de5ec871ef6a5d33807c45ffcfaf49b",
+          "afterSha256": "c26cf063a831d0270351c2d7d314188ba43cb486ec7a603209ec2541b9b5e623"
         },
         {
-          "path": "src/pipeline/diffusion_engine.cpp",
-          "beforeSha256": "b3714f951a892dfaa44f3e187474aec0230f085df4ae90aae49fef27ea4643a5",
-          "afterSha256": "5effdc4320a23912c14a80c31970ffebdd04b01ce35f48f4f7953a908aa6bc16"
+          "path": "src/model/integrations/anima.cpp",
+          "beforeSha256": "6365195b15c612ceb943a710203f73d36a73c5d7bb78c19110e0bb865222cbd0",
+          "afterSha256": "3af88d725ff400db3dcb27017606055eea4b90d0171a9219ff6477228ddb8c60"
         },
         {
-          "path": "src/pipeline/model_builders.cpp",
-          "beforeSha256": "45dd139e5a6f450f8aa362906db003bfeb67cb065bfd8b86df069431e4bf414f",
-          "afterSha256": "3314773566c37f911568de3349740b2da86deee0f4b8ce0f2f4f122034f240af"
+          "path": "src/core/ggml_extend.cpp",
+          "beforeSha256": "c0a931c754b094fc73816668514d0168ffcfd0f85f85e1738d700fd1a002b25d",
+          "afterSha256": "468f8f8eb31d853ab8634a4adcae84390144d3dc2fa36009f3a6b11ea22fbda9"
+        },
+        {
+          "path": "src/core/ggml_extend.h",
+          "beforeSha256": "ae3a0dc786d0424fe8848631739382881d84dadbc4ab1a7aa4acaf526ead996a",
+          "afterSha256": "b24903b9f2bdbbe57cc02f4086b62790d1536008a8f4f7f412d9d40b3f156a94"
         }
       ]
     },
@@ -417,8 +407,8 @@
       "files": [
         {
           "path": "src/core/runner_cache.cpp",
-          "beforeSha256": "b1a950001d7552cbc8e3a4e33189609c99ad528b40cf258a29cc801f27e4de18",
-          "afterSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49"
+          "beforeSha256": "f4b94a4ef81329fcce6c1b065547446eaeca8e7cac6382fe652cf841f91d83f1",
+          "afterSha256": "fcec48bb0461c1f8cae69a6b3cf7e9aef61f0f2939081ceefcae0e941c009fea"
         }
       ]
     },
@@ -429,23 +419,8 @@
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "e34ce2d2f2ba160092079b10794aacb561bedd0900a20b730267878046abec03",
-          "afterSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb"
-        },
-        {
-          "path": "src/core/ggml_extend.h",
-          "beforeSha256": "4cdf3812c14f016fcef48678117ad21bb9fdebf69a43813c6e297badf3db07e9",
-          "afterSha256": "95d1b831c7d35ea9ad08c1171ceb9f3293b132b3c3eb77a6538712d3f3cc6e3d"
-        },
-        {
-          "path": "src/model/common/ggml_block.hpp",
-          "beforeSha256": "f78c489551bde206b0ce2f83347ed59b607ae1501d03b20911e160a18f460eea",
-          "afterSha256": "efff7ab42c6ab462a711f1cc4db1841f50b7f69f96975e31bd0c8af46f152892"
-        },
-        {
-          "path": "src/model/vae/wan_vae.hpp",
-          "beforeSha256": "4e3f1f2c602119fe019d5a57cec457a4f337852b7754fc7b57a53647f183e816",
-          "afterSha256": "7f278b2ec59fa4ad444ffa59785b3c6c409a13c80d94e88e446f2f143c98da53"
+          "beforeSha256": "468f8f8eb31d853ab8634a4adcae84390144d3dc2fa36009f3a6b11ea22fbda9",
+          "afterSha256": "52ba6020d26b0112cc94866b9e5dd50fb124f2d3bc026084d1b13307d3e549da"
         }
       ]
     },
@@ -456,8 +431,8 @@
       "files": [
         {
           "path": "src/core/compute_workspace.cpp",
-          "beforeSha256": "90d402eb7ff54a5f813d913f60a31d5722b2b02237791dcb0c9b6490f651c85c",
-          "afterSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed"
+          "beforeSha256": "f3aa2b37a64b22416f17f0867898a0bdc1c09fdad1956306d90c8031ea26c095",
+          "afterSha256": "ff904c9ed87d8ea52a0ce3d16f6c530a69961be77ae2a8dd0488a2e09ef66042"
         }
       ]
     },
@@ -480,8 +455,8 @@
       "files": [
         {
           "path": "src/core/runner_cache.cpp",
-          "beforeSha256": "a78b4b8aa2883faca06f75e5c4369562ab2c88d22ef84063e38734079063da49",
-          "afterSha256": "7006262d97067c1814ae1909729bb9a296a1a5d4598fa4d8c68cbff6a0dc1ad8"
+          "beforeSha256": "fcec48bb0461c1f8cae69a6b3cf7e9aef61f0f2939081ceefcae0e941c009fea",
+          "afterSha256": "e626384302cda8892e66005469a3f1c8da53f5c1ad618cc9f080b23bf789a8a0"
         }
       ]
     },
@@ -504,8 +479,8 @@
       "files": [
         {
           "path": "src/core/ggml_extend.cpp",
-          "beforeSha256": "f5f3b6e01238c6adf5bec7d92f2644ac9b9665b7952e5f14dddf448a4e0afdcb",
-          "afterSha256": "7a76c37a950fe2cd6923334c483d7439f00045ac4c78715257ea46c293549ab9"
+          "beforeSha256": "52ba6020d26b0112cc94866b9e5dd50fb124f2d3bc026084d1b13307d3e549da",
+          "afterSha256": "7797d514d6e9ed5e960a0b5bc2f105d933425f76d3628b9d78c0bf773b74f387"
         }
       ]
     },
@@ -516,13 +491,13 @@
       "files": [
         {
           "path": "src/model/common/rope.hpp",
-          "beforeSha256": "3de385d4022b1f24ce0f2a99533e2e32fae7e303002a6a888e64f938d26f6fe8",
-          "afterSha256": "45ebfe6980ce2c31071327a9bf2cbd74b48deb5b88318c7ae7dba5835a29a12b"
+          "beforeSha256": "2dbea11b14290f4b3ce077974e2282173e2d2701dc5930bfd3ab2c45c4f63642",
+          "afterSha256": "890d2d50b3ff8b07376819b64dc9ef0c710bb18043558a6444678c6513b75572"
         },
         {
           "path": "src/model/diffusion/qwen_image_2_1.hpp",
-          "beforeSha256": "a0a696d78c0069394c47aee67b91323f75bb08f0b5a5201d261e462f36757b4f",
-          "afterSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516"
+          "beforeSha256": "b0df4290f18d0ff68eb78a1a8af8fda9747d77270cbb16659e74220236e3ae52",
+          "afterSha256": "852cc7a489d7a8703f306fa79ab550fc8d3061be19ad48272b6edbb8f2f088a6"
         }
       ]
     },
@@ -533,8 +508,8 @@
       "files": [
         {
           "path": "src/model/diffusion/qwen_image_2_1.hpp",
-          "beforeSha256": "5fe997cd9655aaf8312b2566aeba257f7b731a26d5370306bae40258bd6ce516",
-          "afterSha256": "b3b623a867688d57c609c07826e532594d42ccac65a2c0f2fad13dbdc4310713"
+          "beforeSha256": "852cc7a489d7a8703f306fa79ab550fc8d3061be19ad48272b6edbb8f2f088a6",
+          "afterSha256": "6b06e8c07be587deb11d7ece120d931ea8cb7ff47e78d311dbd6b9d9c28615e2"
         }
       ]
     },
@@ -545,8 +520,8 @@
       "files": [
         {
           "path": "src/core/compute_workspace.cpp",
-          "beforeSha256": "0673c4069f79cd91006bf3f76ca2a29de6fd7f8c935fcde2080f495b038ef0ed",
-          "afterSha256": "135555e58760caf06bda46bdadc44e3809bf30e3e9b1ab05d94c96e4dbf0e6d1"
+          "beforeSha256": "ff904c9ed87d8ea52a0ce3d16f6c530a69961be77ae2a8dd0488a2e09ef66042",
+          "afterSha256": "c112e15d05f394b72dd775fb854e3244f93a4a9c6214f341c7c348604f55bd99"
         }
       ]
     },

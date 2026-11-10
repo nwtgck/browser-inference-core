@@ -68,6 +68,63 @@ test('calls validate the normalized bigint boundary', async () => {
   await assert.rejects(core.api.llama_echo(-1n), RangeError);
   await assert.rejects(core.api.llama_echo(1n << 64n), RangeError);
 });
+
+test('generation results use the schema signature and native pointer width on both Wasm widths', async () => {
+  for (const pointerBytes of [4, 8]) {
+    const { module, schema } = fixture();
+    const calls = [];
+    const resultSchema = { ...schema, abiVersion: 2, functions: [
+      { name: 'generate_image', export: '_sdc_generate_image',
+        parameters: [{ kind: 'pointer' }, { kind: 'pointer' }, { kind: 'pointer' }], returnKind: 'boolean' },
+      { name: 'free_sd_image_generation_result', export: '_sdc_free_sd_image_generation_result',
+        parameters: [{ kind: 'pointer' }], returnKind: 'void' },
+    ], records: [{ name: 'sd_image_generation_result_t', id: 0, fields: [
+      { name: 'items', id: 0, kind: 'pointer' }, { name: 'count', id: 1, kind: 'signed' },
+    ] }] };
+    module._sdc_abi_version = () => 2;
+    module._sdc_pointer_bytes = () => pointerBytes;
+    module._sdc_sizeof_record = () => BigInt(pointerBytes * 2);
+    module._sdc_alignof_record = () => BigInt(pointerBytes);
+    module._sdc_offsetof_field = (_, id) => id === 0 ? 0n : BigInt(pointerBytes);
+    module._sdc_sizeof_field = (_, id) => id === 0 ? BigInt(pointerBytes) : 4n;
+    module._sdc_generate_image = (...args) => { calls.push(args); return 1; };
+    module._sdc_free_sd_image_generation_result = result => { calls.push([result]); };
+    const core = attachCore(module, resultSchema);
+    await assert.rejects(core.api.generate_image(1n, 2n, 3n, 4n), /expected 3 arguments/);
+    assert.deepEqual(calls, []);
+    assert.equal(await core.api.generate_image(1n, 2n, 3n), 1);
+    assert.deepEqual(calls, [[1n, 2n, 3n]]);
+
+    const result = core.allocRecord('sd_image_generation_result_t');
+    const items = pointerBytes === 4 ? 0xfffffff0n : 0x100000010n;
+    core.setField('sd_image_generation_result_t', result, 'items', items);
+    core.setField('sd_image_generation_result_t', result, 'count', 2);
+    assert.equal(core.getField('sd_image_generation_result_t', result, 'items'), items);
+    assert.equal(core.getField('sd_image_generation_result_t', result, 'count'), 2);
+    await core.api.free_sd_image_generation_result(result);
+    assert.deepEqual(calls.at(-1), [result]);
+  }
+});
+
+test('generation progress counters retain signed 64-bit precision', () => {
+  const { module, schema } = fixture();
+  const progressSchema = { ...schema, records: [{ name: 'sd_generation_progress_t', id: 0, fields: [
+    { name: 'completed', id: 0, kind: 'i64' }, { name: 'total', id: 1, kind: 'i64' },
+  ] }] };
+  module._sdc_sizeof_record = () => 16n;
+  module._sdc_offsetof_field = (_, id) => BigInt(id * 8);
+  module._sdc_sizeof_field = () => 8n;
+  const core = attachCore(module, progressSchema);
+  const progress = core.allocRecord('sd_generation_progress_t');
+  core.setField('sd_generation_progress_t', progress, 'completed', (1n << 53n) + 1n);
+  core.setField('sd_generation_progress_t', progress, 'total', 0n);
+  assert.equal(core.getField('sd_generation_progress_t', progress, 'completed'), (1n << 53n) + 1n);
+  assert.equal(core.getField('sd_generation_progress_t', progress, 'total'), 0n);
+  core.setField('sd_generation_progress_t', progress, 'completed', -1n);
+  assert.equal(core.getField('sd_generation_progress_t', progress, 'completed'), -1n);
+  assert.throws(() => core.setField('sd_generation_progress_t', progress, 'total', 1n << 63n), RangeError);
+});
+
 test('concurrent and reentrant native calls are rejected rather than queued', async () => {
   const { module, core } = fixture(); let finish;
   module._sdc_llama_echo = () => new Promise(resolve => { finish = resolve; });

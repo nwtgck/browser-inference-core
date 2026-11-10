@@ -2,7 +2,7 @@
   "stable-diffusion": {
     "path": "vendor/stable-diffusion.cpp",
     "repository": "leejet/stable-diffusion.cpp",
-    "commit": "88411ef1e0688ff2df1010aeeb5d92b2d8cea2be"
+    "commit": "32d516c0197ed5ca31305b8575e14eb1451fad33"
   },
   "ggml": {
     "path": "vendor/ggml-webgpu-source",

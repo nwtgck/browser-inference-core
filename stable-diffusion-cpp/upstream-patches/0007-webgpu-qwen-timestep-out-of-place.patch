@@ -1,7 +1,8 @@
-diff --git a/src/model/diffusion/qwen_image.hpp b/src/model/diffusion/qwen_image.hpp
 --- a/src/model/diffusion/qwen_image.hpp
 +++ b/src/model/diffusion/qwen_image.hpp
-@@ -88,5 +88,13 @@
+@@ -87,7 +87,15 @@
+             auto linear_2 = std::dynamic_pointer_cast<Linear>(blocks["linear_2"]);
+ 
              sample = linear_1->forward(ctx, sample);
 +#ifdef SD_BROWSER_WEBGPU
 +            // BF16 linear_1 can execute on CPU while SiLU executes on WebGPU.

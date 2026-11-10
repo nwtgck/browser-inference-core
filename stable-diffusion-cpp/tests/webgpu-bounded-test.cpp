@@ -41,10 +41,11 @@ void numerical(ggml_backend_t cpu, int width, int height, int kernel, int stride
     Policy policy({size_t(batch) * 32768, 32768, true, false});
     if (reject)
         policy.reject = GGML_OP_SET;
-    auto expected = ggml_ext_conv_2d(ref.get(), x, w, b, stride, stride, padding, padding, dilation, dilation, false,
-                                     circular_x, circular_y, scale);
-    auto actual = ggml_ext_conv_2d(act.get(), x, w, b, stride, stride, padding, padding, dilation, dilation, false,
-                                   circular_x, circular_y, scale, &policy.backend);
+    auto reference_context = runner(ref.get(), cpu), actual_context = runner(act.get(), &policy.backend);
+    auto expected = ggml_ext_conv_2d(&reference_context, x, w, b, stride, stride, padding, padding, dilation, dilation,
+                                     false, circular_x, circular_y, scale);
+    auto actual = ggml_ext_conv_2d(&actual_context, x, w, b, stride, stride, padding, padding, dilation, dilation,
+                                   false, circular_x, circular_y, scale);
     auto rg = graph(ref.get(), expected), ag = graph(act.get(), actual);
     const bool split = count(ag, GGML_OP_SET) > 0;
     if (reject)
@@ -72,7 +73,8 @@ void shape_budget() {
     for (size_t mib : {128u, 256u, 512u}) {
         auto gc = context();
         Policy p({mib * 1024 * 1024, 32768, true, false});
-        auto out = ggml_ext_conv_2d(gc.get(), x, w, nullptr, 1, 1, 1, 1, 1, 1, false, false, false, 1, &p.backend);
+        auto runner_context = runner(gc.get(), &p.backend);
+        auto out = ggml_ext_conv_2d(&runner_context, x, w, nullptr, 1, 1, 1, 1, 1, 1, false, false, false, 1);
         auto g = graph(gc.get(), out);
         size_t largest = 0;
         int unsupported = 0;
@@ -139,9 +141,9 @@ void attention_numerical(ggml_backend_t cpu, int batch, int mask_mode, bool sink
     Policy policy({size_t(batch) * 32768, 32768, true, false});
     if (reject)
         policy.reject = GGML_OP_SET;
-    auto expected = ggml_ext_attention_ext(ref.get(), cpu, q, k, v, heads, mask, false, false, 1, false, sinks);
-    auto actual =
-        ggml_ext_attention_ext(act.get(), &policy.backend, q, k, v, heads, mask, false, false, 1, false, sinks);
+    auto reference_context = runner(ref.get(), cpu), actual_context = runner(act.get(), &policy.backend);
+    auto expected = ggml_ext_attention_ext(&reference_context, q, k, v, heads, mask, false, false, 1, nullptr, sinks);
+    auto actual = ggml_ext_attention_ext(&actual_context, q, k, v, heads, mask, false, false, 1, nullptr, sinks);
     auto rg = graph(ref.get(), expected), ag = graph(act.get(), actual);
     const bool split = count(ag, GGML_OP_SET) > 0;
     if (reject || (batch == 2 && mask_mode == 3))
@@ -241,9 +243,9 @@ void attention_policies() {
             // mislabel its IM2COL_3D rejection as an application fallback.
             std::map<std::string, ggml_tensor *> weights;
             layer.get_param_tensors(weights);
-            auto padded = ggml_ext_pad_ext(gc.get(), &p.backend, x, 1, 1, 1, 1, 2, 0, 0, 0, false, false);
-            output = ggml_ext_conv_3d(gc.get(), &p.backend, padded, weights.at("weight"), weights.at("bias"), 96, 1, 1,
-                                      1, 0, 0, 0, 1, 1, 1, false, false);
+            auto padded = ggml_ext_pad_ext(&c, x, 1, 1, 1, 1, 2, 0, 0, 0, false, false);
+            output = ggml_ext_conv_3d(&c, padded, weights.at("weight"), weights.at("bias"), 96, 1, 1, 1, 0, 0, 0, 1, 1,
+                                      1, false, false);
         }
         auto g = graph(gc.get(), output);
         audit_graph(g, packed ? "003-causal-packed" : "causal-pre003-webgpu", p.limits, true);

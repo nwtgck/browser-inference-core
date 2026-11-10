@@ -23,16 +23,18 @@ class ReferenceQwenImage21TransformerBlock : public GGMLBlock {
 
     static ggml_tensor * modulate(ggml_context * ctx, ggml_tensor * x, ggml_tensor * params, int64_t prefix_length,
                                   bool gate = false) {
-        auto rows = ggml_ext_chunk(ctx, params, 2, 1);
+        GGMLRunnerContext runner;
+        runner.ggml_ctx = ctx;
+        auto rows = ggml_ext_chunk(&runner, params, 2, 1);
         auto apply = [&](ggml_tensor * part, ggml_tensor * row) {
             row = gate ? ggml_tanh(ctx, row) : ggml_scale_bias(ctx, row, 1.f, 1.f);
             return ggml_mul(ctx, part, row);
         };
-        auto target = apply(ggml_ext_slice(ctx, x, 1, prefix_length, x->ne[1]), rows[0]);
+        auto target = apply(ggml_ext_slice(&runner, x, 1, prefix_length, x->ne[1]), rows[0]);
         if (prefix_length == 0) {
             return target;
         }
-        auto prefix = apply(ggml_ext_slice(ctx, x, 1, 0, prefix_length), rows[1]);
+        auto prefix = apply(ggml_ext_slice(&runner, x, 1, 0, prefix_length), rows[1]);
         return ggml_concat(ctx, prefix, target, 1);
     }
 
@@ -51,7 +53,7 @@ class ReferenceQwenImage21TransformerBlock : public GGMLBlock {
         auto fused = blocks.find("img_mlp.gate_up");
         if (fused != blocks.end()) {
             auto gate_up = std::dynamic_pointer_cast<Linear>(fused->second)->forward(ctx, h);
-            auto parts = ggml_ext_chunk(ctx->ggml_ctx, gate_up, 2, 0);
+            auto parts = ggml_ext_chunk(ctx, gate_up, 2, 0);
             gate = parts[0];
             h = parts[1];
         } else {
@@ -86,28 +88,28 @@ class ReferenceQwenImage21Model : public GGMLBlock {
     ggml_tensor * forward(GGMLRunnerContext * ctx, ggml_tensor * x, ggml_tensor * timestep, ggml_tensor * context,
                           const std::vector<ggml_tensor *> & refs, ggml_tensor * pe, const QwenImage21Layout & layout,
                           const std::vector<ggml_tensor *> & masks, const QwenImage21PrefixCache & cache) {
-        auto time = ggml_concat(ctx->ggml_ctx, timestep, ggml_ext_zeros_like(ctx->ggml_ctx, timestep), 0);
+        auto time = ggml_concat(ctx->ggml_ctx, timestep, ggml_ext_zeros_like(ctx, timestep), 0);
         // Runtime flow timesteps already use the [0, 1000] scale.
-        time = ggml_ext_timestep_embedding(ctx->ggml_ctx, time, 256, 10000, 1.f);
+        time = ggml_ext_timestep_embedding(ctx, time, 256, 10000, 1.f);
         time = std::dynamic_pointer_cast<TimestepEmbedding>(blocks["time_text_embed.timestep_embedder"])
                    ->forward(ctx, time);
         time = ggml_silu(ctx->ggml_ctx, time);
         auto modulation = std::dynamic_pointer_cast<Linear>(blocks["modulation.1"])->forward(ctx, time);
-        auto mod = ggml_ext_chunk(ctx->ggml_ctx, modulation, 4, 0);
+        auto mod = ggml_ext_chunk(ctx, modulation, 4, 0);
         auto img_in = std::dynamic_pointer_cast<Linear>(blocks["img_in"]);
         ggml_tensor * joint = nullptr;
         if (cache.mode == QwenImage21PrefixCache::Mode::REUSE) {
-            joint = img_in->forward(ctx, DiT::patchify(ctx->ggml_ctx, x, 1, 1));
+            joint = img_in->forward(ctx, DiT::patchify(ctx, x, 1, 1));
         } else {
             auto text = std::dynamic_pointer_cast<QwenImage21TextProjection>(blocks["txt_in"])->forward(ctx, context);
             for (const auto & segment : layout.segments) {
                 ggml_tensor * h;
                 if (segment.image_index < 0) {
-                    h = ggml_ext_slice(ctx->ggml_ctx, text, 1, segment.context_start,
+                    h = ggml_ext_slice(ctx, text, 1, segment.context_start,
                                        segment.context_start + segment.end - segment.start);
                 } else {
                     auto image = segment.image_index == static_cast<int>(refs.size()) ? x : refs[segment.image_index];
-                    h = img_in->forward(ctx, DiT::patchify(ctx->ggml_ctx, image, 1, 1));
+                    h = img_in->forward(ctx, DiT::patchify(ctx, image, 1, 1));
                 }
                 joint = joint == nullptr ? h : ggml_concat(ctx->ggml_ctx, joint, h, 1);
             }
@@ -130,14 +132,14 @@ class ReferenceQwenImage21Model : public GGMLBlock {
             sd::ggml_graph_cut::mark_graph_cut(joint, layer_cache.cut_group, "joint");
         }
         if (cache.mode != QwenImage21PrefixCache::Mode::REUSE) {
-            joint = ggml_ext_slice(ctx->ggml_ctx, joint, 1, layout.prefix_length, joint->ne[1]);
+            joint = ggml_ext_slice(ctx, joint, 1, layout.prefix_length, joint->ne[1]);
         }
         auto scale = std::dynamic_pointer_cast<Linear>(blocks["norm_out.linear"])
-                         ->forward(ctx, ggml_ext_chunk(ctx->ggml_ctx, time, 2, 1)[0]);
+                         ->forward(ctx, ggml_ext_chunk(ctx, time, 2, 1)[0]);
         joint = std::dynamic_pointer_cast<LayerNorm>(blocks["norm_out.norm"])->forward(ctx, joint);
         joint = ggml_mul(ctx->ggml_ctx, joint, ggml_scale_bias(ctx->ggml_ctx, scale, 1.f, 1.f));
         joint = std::dynamic_pointer_cast<Linear>(blocks["proj_out"])->forward(ctx, joint);
-        return DiT::unpatchify_and_crop(ctx->ggml_ctx, joint, x->ne[1], x->ne[0], 1, 1);
+        return DiT::unpatchify_and_crop(ctx, joint, x->ne[1], x->ne[0], 1, 1);
     }
 };
 

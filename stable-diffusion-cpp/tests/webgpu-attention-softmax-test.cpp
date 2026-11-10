@@ -52,12 +52,12 @@ void numerical(ggml_backend_t cpu, ggml_type type, int head, int batch, int mask
         write(sinks, std::vector<float>(heads * batch, std::log(435.f)));
     const size_t full_scores = size_t(queries) * keys * heads * batch * sizeof(float);
     Policy policy(cpu, bounded ? full_scores / 2 : SIZE_MAX, reject);
+    auto reference_context = runner(reference.get(), cpu), actual_context = runner(actual.get(), &policy.backend);
     // kv_scale is the Flash K/V overflow control, NOT the softmax temperature.
     // Both manual paths must still scale scores by 1/sqrt(head), after matmul.
     auto expected =
-        ggml_ext_attention_ext(reference.get(), cpu, q, k, v, heads, mask, false, false, .125f, false, sinks);
-    auto result =
-        ggml_ext_attention_ext(actual.get(), &policy.backend, q, k, v, heads, mask, false, false, .125f, false, sinks);
+        ggml_ext_attention_ext(&reference_context, q, k, v, heads, mask, false, false, .125f, nullptr, sinks);
+    auto result = ggml_ext_attention_ext(&actual_context, q, k, v, heads, mask, false, false, .125f, nullptr, sinks);
     auto rg = graph(reference.get(), expected), ag = graph(actual.get(), result);
     const bool fused = mask == nullptr && !reject;
     require(count(rg, GGML_OP_SCALE) > 0, "CPU reference lost its explicit score scale");

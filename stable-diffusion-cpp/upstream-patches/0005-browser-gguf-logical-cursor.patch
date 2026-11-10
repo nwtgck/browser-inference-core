@@ -1,8 +1,7 @@
-diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
 --- a/src/model_io/gguf_reader_ext.h
 +++ b/src/model_io/gguf_reader_ext.h
-@@ -26,6 +26,9 @@
-     std::vector<GGUFTensorInfo> tensors_;
+@@ -28,6 +28,9 @@
+     bool has_wide_tensors_ = false;
      uint64_t data_offset_ = 0;
      uint64_t file_size_ = 0;
 +    // Logical parser position. tellg() may synchronize/discard libc++'s input
@@ -11,7 +10,7 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
      uint32_t alignment_ = 32;
  
      uint64_t tell(std::ifstream& in) const {
-@@ -33,18 +36,18 @@
+@@ -35,18 +38,18 @@
          if (pos < 0) throw std::runtime_error("invalid GGUF file position");
          return static_cast<uint64_t>(pos);
      }
@@ -37,7 +36,7 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
          // GGUF's little-endian representation, independent of host byte order.
          uint8_t bytes[sizeof(T)];
          read(in, reinterpret_cast<char*>(bytes), sizeof(bytes));
-@@ -52,12 +55,22 @@
+@@ -54,12 +57,22 @@
          for (size_t i = 0; i < sizeof(T); ++i) value |= uint64_t(bytes[i]) << (8 * i);
          return static_cast<T>(value);
      }
@@ -64,7 +63,7 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
          const uint64_t count = integer<uint64_t>(in);
          if (count == 0 || count > 4096) throw std::runtime_error("invalid GGUF name length");
          std::string value(static_cast<size_t>(count), '\0');
-@@ -74,7 +87,7 @@
+@@ -76,7 +89,7 @@
              default: return 0;
          }
      }
@@ -73,7 +72,7 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
          const uint32_t width = scalar_size(type);
          if (width) { skip(in, width); return; }
          if (type == 8) { skip(in, integer<uint64_t>(in)); return; }
-@@ -83,10 +96,10 @@
+@@ -85,10 +98,10 @@
          const uint64_t count = integer<uint64_t>(in);
          const uint32_t item_width = scalar_size(element);
          if (item_width) {
@@ -86,15 +85,15 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
              for (uint64_t i = 0; i < count; ++i) skip(in, integer<uint64_t>(in));
          } else {
              throw std::runtime_error("invalid GGUF array element type");
-@@ -94,18 +107,19 @@
-     }
+@@ -97,18 +110,19 @@
  public:
      bool load(const std::string& path) {
+         has_wide_tensors_ = false;
 -        tensors_.clear(); data_offset_ = 0; alignment_ = 32;
 +        tensors_.clear(); data_offset_ = 0; file_size_ = 0; position_ = 0; alignment_ = 32;
          try {
              static_assert(sizeof(std::streamoff) >= 8, "GGUF files require 64-bit stream offsets");
-             std::ifstream in(path, std::ios::binary);
+             std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
              if (!in) throw std::runtime_error("cannot open GGUF file");
              in.seekg(0, std::ios::end); file_size_ = tell(in); in.seekg(0);
 +            if (!in) throw std::runtime_error("cannot seek GGUF metadata");
@@ -108,16 +107,16 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
                  tensors > SIZE_MAX / sizeof(GGUFTensorInfo))
                  throw std::runtime_error("invalid GGUF counts");
              bool alignment_seen = false;
-@@ -128,7 +142,7 @@
+@@ -131,7 +145,7 @@
                  info.name = name(in);
                  if (!names.insert(info.name).second) throw std::runtime_error("duplicate GGUF tensor name");
                  const uint32_t rank = integer<uint32_t>(in);
 -                if (!rank || rank > 64 || rank > remaining(in) / 8) throw std::runtime_error("invalid GGUF tensor rank");
 +                if (!rank || rank > 64 || rank > remaining() / 8) throw std::runtime_error("invalid GGUF tensor rank");
+                 if (rank > GGML_MAX_DIMS) has_wide_tensors_ = true;
                  uint64_t elements = 1;
                  for (uint32_t dim = 0; dim < rank; ++dim) {
-                     const uint64_t n = integer<uint64_t>(in);
-@@ -152,10 +166,10 @@
+@@ -156,10 +170,10 @@
                  if (info.offset % alignment_) throw std::runtime_error("misaligned GGUF tensor offset");
                  tensors_.push_back(std::move(info));
              }
@@ -130,10 +129,10 @@ diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
                  data_offset_ += pad;
              }
              for (size_t i = 0; i < tensors_.size(); ++i) {
-@@ -165,7 +179,7 @@
-             }
+@@ -170,7 +184,7 @@
              return true;
          } catch (const std::exception& error) {
+             has_wide_tensors_ = false;
 -            tensors_.clear(); data_offset_ = 0;
 +            tensors_.clear(); data_offset_ = 0; file_size_ = 0; position_ = 0;
              LOG_ERROR("GGUF metadata: %s", error.what());

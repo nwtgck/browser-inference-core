@@ -1,7 +1,6 @@
-diff --git a/src/core/runner_cache.cpp b/src/core/runner_cache.cpp
 --- a/src/core/runner_cache.cpp
 +++ b/src/core/runner_cache.cpp
-@@ -102,6 +102,11 @@
+@@ -109,6 +109,11 @@
      };
  
      static void copy_cache_batch(ggml_backend_t backend, std::vector<CacheCopy>& copies) {

@@ -1,7 +1,7 @@
-diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
 --- a/src/core/compute_workspace.cpp
 +++ b/src/core/compute_workspace.cpp
-@@ -95,5 +95,7 @@
+@@ -92,7 +92,9 @@
+                 // nodes. No tensor names, tensor reads, eval callbacks or waits.
                  // A rejected predicate is inspected after scheduler rewriting;
                  // it is not a recorded cause or a measurement of transferred bytes.
 -                std::array<size_t, GGML_OP_COUNT> cpu_ops{};
@@ -10,7 +10,9 @@ diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
 +                size_t webgpu_silu = 0, webgpu_tanh = 0, webgpu_swiglu = 0;
                  size_t compute_cpu = 0, compute_webgpu = 0, compute_other = 0;
                  size_t rejected = 0, largest_operand = 0;
-@@ -113,19 +115,34 @@
+                 const bool preferred_webgpu = browser_device_is_webgpu(ggml_backend_get_device(preferred));
+@@ -110,21 +112,36 @@
+                         }
                      } else if (backend != nullptr && browser_device_is_webgpu(ggml_backend_get_device(backend))) {
                          ++compute_webgpu;
 +                        ++webgpu_ops[node->op];
@@ -56,3 +58,4 @@ diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
 +                          webgpu_silu, webgpu_tanh, webgpu_swiglu);
              }
          };
+     }

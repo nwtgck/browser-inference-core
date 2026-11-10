@@ -1,6 +1,8 @@
 #include "ggml.h"
 #include "ggml-cpu.h"
 #include "stable-diffusion.h"
+#include "core/ggml_extend.h"
+#include "core/ggml_runner.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -21,7 +23,8 @@ extern "C" uint32_t sdc_test_model_tensor_count(const char *);
 extern "C" void sdc_sd_ctx_params_init(uint64_t);
 extern "C" void sdc_sd_img_gen_params_init(uint64_t);
 extern "C" void sdc_sd_vid_gen_params_init(uint64_t);
-extern "C" int32_t sdc_generate_video(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+extern "C" int32_t sdc_generate_image(uint64_t, uint64_t, uint64_t);
+extern "C" int32_t sdc_generate_video(uint64_t, uint64_t, uint64_t);
 extern "C" uint64_t sdc_test_gguf_offset(const char *);
 extern "C" uint32_t sdc_test_gguf_value(const char *);
 extern "C" void sdc_test_callbacks();
@@ -42,7 +45,6 @@ static void progress_callback(int step, int steps, float seconds, void * data) {
     if (step == 1 && steps == 4 && seconds == 0.125f && uintptr_t(data) == 19)
         ++progress_seen;
 }
-ggml_tensor * ggml_ext_group_norm_32(ggml_context *, ggml_tensor *);
 static void check(bool value, const char * message) {
     if (!value)
         throw std::runtime_error(message);
@@ -260,20 +262,21 @@ int main() {
             sd_vid_gen_params_init(&reference_video);
             check(video.video_frames == reference_video.video_frames && video.fps == reference_video.fps &&
                       video.seed == reference_video.seed &&
-                      video.vae_tiling_params.rel_size_x == reference_video.vae_tiling_params.rel_size_x &&
+                      video.vae_tiling_params.rel_size_w == reference_video.vae_tiling_params.rel_size_w &&
                       video.sample_params.sample_method == reference_video.sample_params.sample_method,
                   "video bindings preserve native defaults");
-            sd_image_t sentinel_image{};
-            sd_audio_t sentinel_audio{};
-            sd_image_t * frames = &sentinel_image;
-            sd_audio_t * audio = &sentinel_audio;
-            int count = 73, fps = 24;
-            check(sdc_generate_video(0, uint64_t(uintptr_t(&video)), uint64_t(uintptr_t(&frames)),
-                                     uint64_t(uintptr_t(&count)), uint64_t(uintptr_t(&audio)),
-                                     uint64_t(uintptr_t(&fps))) == 0,
+            sd_video_generation_result_t sentinel_video{};
+            sd_video_generation_result_t * video_result = &sentinel_video;
+            check(sdc_generate_video(0, uint64_t(uintptr_t(&video)), uint64_t(uintptr_t(&video_result))) == 0,
                   "null-context video generation fails without inference");
-            check(frames == nullptr && audio == nullptr && count == 0 && fps == 0,
-                  "video failure zeroes all distinct output slots");
+            check(video_result == nullptr, "video failure clears the owned result slot");
+            sd_image_generation_result_t sentinel_image{};
+            sd_image_generation_result_t * image_result = &sentinel_image;
+            check(sdc_generate_image(0, uint64_t(uintptr_t(&image)), uint64_t(uintptr_t(&image_result))) == 0,
+                  "null-context image generation fails without inference");
+            check(image_result == nullptr, "image failure clears the owned result slot");
+            free_sd_image_generation_result(nullptr);
+            free_sd_video_generation_result(nullptr);
         }
         for (uint32_t gib : {0, 2, 4, 8}) {
             const char * path = "large-offset-test.gguf";
@@ -376,7 +379,11 @@ int main() {
             for (int64_t i = 0; i < ggml_nelements(input); ++i)
                 values[i] = std::sin(float(i) * 0.17f);
             auto reference = ggml_group_norm(ctx, input, 32, 1e-6f);
-            auto actual = ggml_ext_group_norm_32(ctx, input);
+            GGMLRunnerContext runner;
+            runner.ggml_ctx = ctx;
+            auto actual = ggml_ext_group_norm(&runner, input, nullptr, nullptr, 32, 1e-6f);
+            check(actual->op == GGML_OP_RESHAPE && actual->src[0]->op == GGML_OP_NORM,
+                  "eligible normalization uses the browser lowering");
             auto graph = ggml_new_graph(ctx);
             ggml_build_forward_expand(graph, reference);
             ggml_build_forward_expand(graph, actual);

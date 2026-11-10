@@ -179,6 +179,8 @@ patch, relax input hashes, or substitute a different upstream revision.
     runner timing or diagnose a trained-model stall. Remove when upstream offers
     equivalent explicitly enabled, bounded preparation/execution diagnostics.
 15. Preserve external tensor address metadata in scheduler measurement clones.
+    Upstream now retains resident addresses, but still synthesizes a buffer-aligned
+    sentinel for unloaded weights. Keep their original null data pointers too.
     The former pointer value `1` was only a marker, but the pinned WebGPU
     `GET_ROWS` support check interprets it as a backend address. Relative to its
     `0x1000` base, the resulting odd offset cannot satisfy F16/F32 alignment;

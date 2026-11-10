@@ -1,11 +1,13 @@
 // Synthetic arithmetic/placement regression, NOT trained-model image inference.
 // Linked only into test variants/native checks.
 #include "core/ggml_extend.h"
+#include "core/ggml_runner.h"
 #include "core/compute_workspace.h"
 #include "ggml-backend.h"
 #include "ggml-backend-impl.h"
 #include "ggml-cpu.h"
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -15,6 +17,7 @@ using Buffer = std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffe
 
 struct ConvolutionCase {
     int depth = 2;
+    int temporal_kernel = 3;
     int stride = 1;
     int padding = 1;
     int dilation = 1;
@@ -23,6 +26,8 @@ struct ConvolutionCase {
     bool emulate_fallback = false;
     bool reject_2d = false;
     bool expect_2d = false;
+    bool allow_conv2d = false;
+    float scale = 1.f;
 };
 
 // Only used while building the graph. CPU CI can select the browser fallback
@@ -55,11 +60,13 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
 
     constexpr int width = 4, height = 3, channels = 2, outputs = 3, kernel = 3;
     const int depth = test.depth;
-    const int output_depth = (depth + 2 * test.padding - test.dilation * (kernel - 1) - 1) / test.stride + 1;
+    const int output_depth =
+        (depth + 2 * test.padding - test.dilation * (test.temporal_kernel - 1) - 1) / test.stride + 1;
     const int volume = width * height * depth;
     const int output_volume = width * height * output_depth;
-    constexpr int kernel_volume = kernel * kernel * kernel;
-    auto weight = ggml_new_tensor_4d(params.get(), test.weight_type, kernel, kernel, kernel, channels * outputs);
+    const int kernel_volume = kernel * kernel * test.temporal_kernel;
+    auto weight =
+        ggml_new_tensor_4d(params.get(), test.weight_type, kernel, kernel, test.temporal_kernel, channels * outputs);
     auto bias = ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, outputs);
     Buffer buffer(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
     if (!buffer)
@@ -85,13 +92,23 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
     ggml_set_input(input);
     CapabilityFilter filter(backend, test.reject_2d);
     const bool filtered = test.emulate_fallback && (ggml_backend_is_cpu(backend) || test.reject_2d);
-    auto output = ggml_ext_conv_3d(graph_ctx.get(), filtered ? &filter.backend : backend, input, weight,
-                                   with_bias ? bias : nullptr, channels, 1, 1, test.stride, 1, 1, test.padding, 1, 1,
-                                   test.dilation, force_prec_f32, direct);
+    GGMLRunnerContext runner;
+    runner.ggml_ctx = graph_ctx.get();
+    runner.backend = filtered ? &filter.backend : backend;
+    runner.conv2d_direct_enabled = test.allow_conv2d;
+    auto output =
+        ggml_ext_conv_3d(&runner, input, weight, with_bias ? bias : nullptr, channels, 1, 1, test.stride, 1, 1,
+                         test.padding, 1, 1, test.dilation, force_prec_f32, direct, test.scale, test.allow_conv2d);
     ggml_set_output(output);
+    auto bias_output = output;
+    if (test.allow_conv2d) {
+        if (output->op != GGML_OP_RESHAPE)
+            return -13;
+        bias_output = output->src[0];
+    }
     // The original in-place bias fails this assertion even in CPU-only CI.
     // A scheduler copy of src[0] cannot relocate the output's CPU view_src.
-    if (with_bias && (output->op != GGML_OP_ADD || output->view_src != nullptr))
+    if (with_bias && (bias_output->op != GGML_OP_ADD || bias_output->view_src != nullptr))
         return -4;
     if (output->type != GGML_TYPE_F32 || output->ne[0] != width || output->ne[1] != height ||
         output->ne[2] != output_depth || output->ne[3] != outputs * test.batches)
@@ -115,7 +132,17 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
     const auto expected_op = test.expect_2d ? GGML_OP_CONV_2D : (expect_direct ? GGML_OP_CONV_3D : GGML_OP_IM2COL_3D);
     if (!convolution || convolution->op != expected_op || convolution->src[0]->type != test.weight_type)
         return -6;
-    if (test.expect_2d && (convolution->src[0]->view_src != weight || convolution->src[1]->view_src != input))
+    auto convolution_input = convolution->src[1];
+    if (test.allow_conv2d && test.scale != 1.f) {
+        if (convolution_input->op != GGML_OP_SCALE)
+            return -14;
+        float input_scale = 0.f;
+        std::memcpy(&input_scale, convolution_input->op_params, sizeof(input_scale));
+        if (input_scale != test.scale)
+            return -14;
+        convolution_input = convolution_input->src[0];
+    }
+    if (test.expect_2d && (convolution->src[0]->view_src != weight || convolution_input->view_src != input))
         return -12;
 
     sd::ComputeWorkspace workspace(backend);
@@ -172,7 +199,7 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
                 for (int x = 0; x < width; ++x) {
                     float expected = with_bias ? biases[oc] : 0.f;
                     for (int ic = 0; ic < channels; ++ic) {
-                        for (int kz = 0; kz < kernel; ++kz) {
+                        for (int kz = 0; kz < test.temporal_kernel; ++kz) {
                             for (int ky = 0; ky < kernel; ++ky) {
                                 for (int kx = 0; kx < kernel; ++kx) {
                                     const int sx = x + kx - 1, sy = y + ky - 1;
@@ -182,7 +209,8 @@ int check_convolution(ggml_backend_t backend, bool direct, bool force_prec_f32, 
                                     const int input_index =
                                         (((batch * channels + ic) * depth + sz) * height + sy) * width + sx;
                                     const int weight_index =
-                                        (((oc * channels + ic) * kernel + kz) * kernel + ky) * kernel + kx;
+                                        (((oc * channels + ic) * test.temporal_kernel + kz) * kernel + ky) * kernel +
+                                        kx;
                                     expected += values[input_index] * weight_values[weight_index];
                                 }
                             }
@@ -213,6 +241,23 @@ extern "C" int sdc_test_conv3d_bias(const char * backend_name) {
             const int result = check_convolution(backend.get(), path == 0, path == 2, with_bias);
             if (result != 1)
                 return result - 100 * (2 * path + int(with_bias));
+        }
+    }
+    // The upstream single-frame branch returns a reshape of a 2D convolution.
+    // Its inner bias must still own storage, including after scale restoration.
+    ConvolutionCase explicit_2d;
+    explicit_2d.depth = explicit_2d.temporal_kernel = 1;
+    explicit_2d.padding = 0;
+    explicit_2d.allow_conv2d = explicit_2d.expect_2d = true;
+    for (auto type : {GGML_TYPE_F16, GGML_TYPE_F32}) {
+        explicit_2d.weight_type = type;
+        for (float scale : {1.f, .5f}) {
+            explicit_2d.scale = scale;
+            for (bool with_bias : {false, true}) {
+                const int result = check_convolution(backend.get(), false, false, with_bias, explicit_2d);
+                if (result != 1)
+                    return result - 3000 - 100 * (2 * int(type == GGML_TYPE_F32) + int(with_bias));
+            }
         }
     }
     ConvolutionCase single_depth;

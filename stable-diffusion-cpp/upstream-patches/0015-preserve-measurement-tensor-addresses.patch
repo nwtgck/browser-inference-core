@@ -1,15 +1,17 @@
-diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
 --- a/src/core/compute_workspace.cpp
 +++ b/src/core/compute_workspace.cpp
-@@ -286,7 +286,10 @@
+@@ -285,8 +285,12 @@
                      ggml_backend_buffer_set_usage(buffer, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
                  }
                  copy->buffer = buffer;
--                copy->data   = reinterpret_cast<void*>(static_cast<uintptr_t>(1));
-+                // Keep the source data/view offsets copied above: backend support
-+                // checks may inspect alignment even though measurement reads no data.
-+                // A non-null external buffer already excludes an unallocated (null
-+                // data) weight from the compute allocator; no pointer sentinel is needed.
-                 copy->extra  = nullptr;
+-                // Capability checks inspect alignment even before weights are resident.
+-                copy->data  = source->data ? source->data : reinterpret_cast<void*>(ggml_backend_get_alignment(external));
++                // Preserve the original data address, including null for unloaded
++                // weights, and the view offsets copied with the tensor metadata.
++                // Backend support checks inspect alignment even though measurement
++                // reads no data. The non-null external buffer already excludes an
++                // unloaded weight from allocation, so no pointer sentinel is needed.
++                copy->data  = source->data;
+                 copy->extra = nullptr;
              }
          }

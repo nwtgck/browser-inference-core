@@ -1,6 +1,6 @@
 --- a/src/model_loader.cpp
 +++ b/src/model_loader.cpp
-@@ -1104,8 +1104,7 @@
+@@ -1193,8 +1193,7 @@
          std::vector<std::thread> workers;
          std::mutex backend_tensor_set_mutex;
  
@@ -10,7 +10,7 @@
                  std::ifstream file;
                  zip_t* zip = nullptr;
                  if (is_zip) {
-@@ -1312,8 +1311,16 @@
+@@ -1401,8 +1400,16 @@
                  if (zip != nullptr) {
                      zip_close(zip);
                  }

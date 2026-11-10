@@ -36,11 +36,16 @@ See [host contract](examples/runtime/README.md).
 
 For example, the caller initializes `sd_ctx_params_t`, fills its chosen file
 paths, calls `new_sd_ctx`, initializes/fills `sd_img_gen_params_t`, then calls
-`generate_image`. Returned image data must be copied before `free_sd_images`.
+`generate_image` with an output pointer for `sd_image_generation_result_t`.
+Copy each item's image data and any needed generation metadata before calling
+`free_sd_image_generation_result`. This pinned upstream replaces the previous
+image-array/count result API; ABI 2 alone does not imply that old calls remain
+compatible. VAE tile dimensions now use `tile_size_w`/`tile_size_h` in image pixels.
 The caller frees the context before releasing its disk-backed file sources.
-Callback registrations are upstream module-global state. Callbacks must not
-throw or re-enter a suspended native operation. The application must unregister
-callbacks before removing their function-table entries.
+Log, legacy progress, and preview registrations are upstream module-global state;
+the generation-progress callback is context-local. Callbacks must not throw or
+re-enter a suspended native operation. The application must unregister callbacks
+before removing their function-table entries.
 
 ## Repository-native model files
 
