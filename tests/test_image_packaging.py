@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import test_multi_runtime as fixtures
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT/'scripts'))
 from package_notices import collect_notices, collect_subtree_notices, stage_toolchain_notices
@@ -15,17 +17,6 @@ from package_notices import collect_notices, collect_subtree_notices, stage_tool
 spec = importlib.util.spec_from_file_location('image_package_regression', ROOT/'stable-diffusion-cpp/scripts/package_runtime.py')
 image = importlib.util.module_from_spec(spec); spec.loader.exec_module(image)
 
-
-def schema_fixture():
-    return {'abiVersion': 2, 'functions': [], 'records': [], 'constants': []}
-
-def schema_hash():
-    return hashlib.sha256(json.dumps(schema_fixture()).encode()).hexdigest()
-
-def schema_file(name):
-    if name == 'schema.json': return json.dumps(schema_fixture())
-    if name == 'schema.mjs': return 'export default ' + json.dumps({**schema_fixture(), 'schemaSha256': schema_hash()}, separators=(',', ':')) + ';\n'
-    return 'fixture declarations'
 
 def put(root, relative, content):
     path = root/relative; path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,14 +50,14 @@ class ImagePackaging(unittest.TestCase):
         for profile, cfg in image.PROFILES.items():
             for variant, vcfg in image.VARIANTS.items():
                 b = self.build/profile/variant
-                for name in image.API_FILES: put(b, 'generated/'+name, schema_file(name))
+                for name in image.API_FILES: put(b, 'generated/'+name, fixtures.schema_file(name))
                 put(b, 'runtime/core.wasm', b'\0asm\1\0\0\0')  # Only a synthetic package fixture.
                 put(b, 'runtime/core.mjs', 'export default function fixtureOnly() {}')
                 put(b, 'runtime/core.d.ts', 'export default function fixtureOnly(): void;')
                 put(b, 'provenance.json', json.dumps({
                     'profile': profile, 'variant': variant, 'configuration': cfg, 'variantConfiguration': vcfg,
                     'sourceCommit': 'a'*40, 'upstreams': {'fixtureOnly': True}, 'sourceDirty': False,
-                    'patches': {'patches': [{'fixtureOnly': True}]},
+                    'patches': fixtures.image_patch_provenance(),
                     'validation': {'compiled': True, 'fixtureOnly': True, 'realModelInference': False}}))
 
     def tearDown(self): self.tmp.cleanup()
