@@ -55,6 +55,44 @@ class Preparation(unittest.TestCase):
         original = self.sources['stable-diffusion'] / 'a.txt'; original.unlink()
         (self.root / 'outside.txt').write_text('before\n'); original.symlink_to(self.root / 'outside.txt')
         with self.assertRaises(ValueError): self.apply()
+
+    def add_new_file_patch(self):
+        (self.patches / 'new.patch').write_text('diff --git a/src/core/fixture.h b/src/core/fixture.h\nnew file mode 100644\n--- /dev/null\n+++ b/src/core/fixture.h\n@@ -0,0 +1 @@\n+fixture\n')
+        self.inventory['patches'].append({'file': 'new.patch', 'target': 'stable-diffusion', 'reason': 'new header fixture', 'files': [{'path': 'src/core/fixture.h', 'beforeSha256': None, 'afterSha256': hashlib.sha256(b'fixture\n').hexdigest()}]})
+        self.write_inventory()
+
+    def test_explicit_new_file_has_no_input_and_exact_output(self):
+        self.add_new_file_patch()
+        result = self.apply()
+        self.assertEqual((self.root / 'prepared/stable-diffusion/src/core/fixture.h').read_text(), 'fixture\n')
+        self.assertFalse((self.sources['stable-diffusion'] / 'src').exists())
+        self.assertIsNone(result['patches'][1]['files'][0]['beforeSha256'])
+
+    def test_new_file_does_not_replace_an_existing_input(self):
+        self.add_new_file_patch()
+        source = self.sources['stable-diffusion'] / 'src/core/fixture.h'
+        source.parent.mkdir(parents=True)
+        source.write_text('original\n')
+        with self.assertRaisesRegex(ValueError, 'Expected absent'):
+            self.apply()
+        self.assertEqual(source.read_text(), 'original\n')
+        self.assertFalse((self.root / 'prepared').exists())
+
+    def test_new_file_does_not_replace_a_dangling_symlink(self):
+        self.add_new_file_patch()
+        source = self.sources['stable-diffusion'] / 'src/core/fixture.h'
+        source.parent.mkdir(parents=True)
+        source.symlink_to('missing.h')
+        with self.assertRaisesRegex(ValueError, 'Expected absent'):
+            self.apply()
+        self.assertTrue(source.is_symlink())
+
+    def test_new_file_still_requires_the_exact_output_digest(self):
+        self.add_new_file_patch()
+        self.inventory['patches'][1]['files'][0]['afterSha256'] = '0' * 64
+        self.write_inventory()
+        with self.assertRaisesRegex(ValueError, 'Unexpected patch output'):
+            self.apply()
     def test_completed_tree_is_moved_not_copied_again(self):
         with patch.object(prepare_module.shutil, 'copytree', wraps=shutil.copytree) as copied:
             self.apply()

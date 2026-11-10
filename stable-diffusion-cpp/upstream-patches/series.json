@@ -585,6 +585,164 @@
           "afterSha256": "24fb48cbdbf36042165dec8e1936a205042ed55c059fdcaf4b9effda474e3f6f"
         }
       ]
+    },
+    {
+      "file": "0036-webgpu-bf16-weight-kernels.patch",
+      "target": "ggml",
+      "reason": "Backport upstream 4b1622afb BF16-left WebGPU matrix and row-lookup kernels while preserving existing binding, alignment and dispatch contracts. Remove when the image ggml pin supplies the equivalent kernels.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "ad516fcdb8dd70900c3b9a82810d515ccc2f0cbc62b5e2073f2c0a388f8d14b4",
+          "afterSha256": "b4f0e3813b4411229d3476dd7ad3d40fef054561d9dfd203cd1838c5183eb289"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+          "beforeSha256": "e3733234c0799d01a0598f662dfaaf98c4d21d9358ebb0b2d41dfdecf8a1eeb6",
+          "afterSha256": "c6e09e33668d83fc4ae6b467197e4bc441c343104f8048c9ea04d1b02efee34d"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl",
+          "beforeSha256": "47bfb54af001be0e17be0eea41ca79806328aedf8ea9eae67253e10faf4b7f09",
+          "afterSha256": "1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl",
+          "beforeSha256": "cdcc4879b1e01157a3bdc4aa9bf40a66eef5878a85edbcb067c22a754ec4a088",
+          "afterSha256": "0ad2af306e33260e6e6f3a0082aefd1811037ea3550161f17ab3f17dbc0a60a7"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl",
+          "beforeSha256": "e24c35b4ec3b013583ed0dc1fd5093259dc5e8609f27b3a4a66cd2d2d7df6887",
+          "afterSha256": "e29282ffcb16bdeb0aa0c6cd7ae15703ec855c4ff010e8398075d0257b6a49d5"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl",
+          "beforeSha256": "29a361d0dc626ee31ea491a51dfa6dd725725a0ee9820f986928a4d81f12df61",
+          "afterSha256": "c938be30a28ea800dda6297dae2a9aee71ddef83f189c077b22bf8c8317d98dc"
+        }
+      ]
+    },
+    {
+      "file": "0037-webgpu-bounded-tensor-uploads.patch",
+      "target": "ggml",
+      "reason": "Bound WebGPU tensor writes and queue-wide pending uploads without changing tensor bytes, command order or completion ownership. Remove when upstream provides equivalent bounded upload and failure contracts.",
+      "files": [
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu-bounded-upload.h",
+          "beforeSha256": null,
+          "afterSha256": "3e5e52073410cc51327da38ce14cf8893f63cfbbe27929c2796c955716ecb253"
+        },
+        {
+          "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+          "beforeSha256": "b4f0e3813b4411229d3476dd7ad3d40fef054561d9dfd203cd1838c5183eb289",
+          "afterSha256": "5ba49cf6b4f3215852af191c8bccb42b25821d2cb3d98106f6a6b1f88f77b000"
+        }
+      ]
+    },
+    {
+      "file": "0038-browser-bounded-model-reader.patch",
+      "target": "stable-diffusion",
+      "reason": "Read eligible original BF16 device weights through bounded loader scratch without changing file bytes or offsets, retaining conversion and generic-reader fallbacks. Remove when upstream supplies equivalent checked, bounded reads and cleanup.",
+      "files": [
+        {
+          "path": "src/model_io/browser_weight_reader.h",
+          "beforeSha256": null,
+          "afterSha256": "6cbebf1ba778d2fb2928904b53808fe15bd8e8e99aaa23814436f4002a47343c"
+        },
+        {
+          "path": "src/model_loader.cpp",
+          "beforeSha256": "8e330d612d5f3b02cf2e9487fad1e96a35011d4b1e12c462126247229e3fd0d9",
+          "afterSha256": "7e7d978883b92ed666e1aa6ac22a2c26f4ea1f4666fb32efc2bcd72c995b3f4d"
+        }
+      ]
+    },
+    {
+      "file": "0039-browser-bf16-weight-retention.patch",
+      "target": "stable-diffusion",
+      "reason": "Retain explicitly registered original BF16 matrix/lookup weights on WebGPU with role, identity and allocation checks; preserve F32/F16, CPU and other roles. Remove when upstream supplies the same checked storage and fallback contract.",
+      "files": [
+        {
+          "path": "include/stable-diffusion.h",
+          "beforeSha256": "c9fc87ee49cfdf50b2f0b64a9db42ac0964a328ab42686ef041a30eb3d88da58",
+          "afterSha256": "aa9c87331f7967acac6231417e8c7290a92b50d2973ffca9e745abcdd4c5fc21"
+        },
+        {
+          "path": "src/core/backend_fit.cpp",
+          "beforeSha256": "f6c713f43080472f25e251b6058cc292af0477fe70c11b5b40ebe4e88c6b424d",
+          "afterSha256": "13a646366e1007fcc348e8177e378549381e6dcf46cb14d147279f42d60686a0"
+        },
+        {
+          "path": "src/core/browser_bf16_retention.h",
+          "beforeSha256": null,
+          "afterSha256": "89ab661e63607d62cb9b497ceb79e09432151c798515aa565dae834df85a0e13"
+        },
+        {
+          "path": "src/core/compute_workspace.cpp",
+          "beforeSha256": "c112e15d05f394b72dd775fb854e3244f93a4a9c6214f341c7c348604f55bd99",
+          "afterSha256": "5da427bb802f464f3d2bd910d33ea25b53d9c2207d58bea5b0d32ad636d1f47d"
+        },
+        {
+          "path": "src/core/compute_workspace.h",
+          "beforeSha256": "3fc42ab9f97f7b39003edbdb47394709828de7f9c98ec14e2161b9ccf5ab79cf",
+          "afterSha256": "0c8ab221798d19054dcf9e79547d2a6fb5d118896067e99967b67f2f89708e9c"
+        },
+        {
+          "path": "src/core/execution_engine.cpp",
+          "beforeSha256": "6181835101d6f11c544496b89e53cafce251234e44c80a5fdceadef269bcb690",
+          "afterSha256": "2f2aa144525ad9769f81f073ee8476c1ca51ab2c8623e334abd802e5d83338f6"
+        },
+        {
+          "path": "src/core/ggml_runner.h",
+          "beforeSha256": "6b821341dfcf591ffef5ba0de0341c740077c4ca5aed7598e4e1cfa23329fe23",
+          "afterSha256": "ad15bf4bf5696493746fefe561043a2cfb909e862b87bb245d91af1d9f946943"
+        },
+        {
+          "path": "src/device_residency_manager.h",
+          "beforeSha256": "9cabab96667d55681066b0c633d471c4a92f0bf8cde81c5bde4e632cf22530f3",
+          "afterSha256": "088b91b5d7c5a0b2e8e47dfe78a7b0815b87932dced55c438e6410efb6e0761a"
+        },
+        {
+          "path": "src/model/common/ggml_block.hpp",
+          "beforeSha256": "5700218fe27d7fe53f0d087cdaab602fb930810252f10538e7b98657ded279f3",
+          "afterSha256": "e9b910fdad7036a534dc53898b9a415f99a0bb107a341b028ebe16dde2388ace"
+        },
+        {
+          "path": "src/model/diffusion/minimax_h3.hpp",
+          "beforeSha256": "2f4a3d9407612cee424743de9bb8be38e0e74ee14606328a75e4e5e21e437e63",
+          "afterSha256": "35813b9ee695a8bc45100b4fb56bc8ce7efd99a52fb6d07dbe919363ff502b7d"
+        },
+        {
+          "path": "src/model/te/llm.hpp",
+          "beforeSha256": "eb6fbdc0ca151b798a643e3c3f0085c27717a793d09849f5740edb575b67db4a",
+          "afterSha256": "4eb0288619f997f976fe1526f3ba6c0f3fea47f9da496d1739deeebcf090076f"
+        },
+        {
+          "path": "src/model/te/ming_image_te.hpp",
+          "beforeSha256": "daf8f225f38ffece90ead3524e81c022eccc978baaf2fb3c818005bdfcd8873b",
+          "afterSha256": "45c2c9d72061f86f074348a2f5d755c2f9b5d84e1f30db8955a4404148ef96be"
+        },
+        {
+          "path": "src/model_manager.cpp",
+          "beforeSha256": "f954c1f17ae134ee4a7d3530d687134d637ffdf6f9ada8c7e5b04bff2031e651",
+          "afterSha256": "62e15f3d6fdcdec5493f858b73ede42249543b7984afb3d2505c467af26f04d8"
+        },
+        {
+          "path": "src/model_manager.h",
+          "beforeSha256": "3d0a77f62f96c69ea6bef3523eb2506b8e2ccae1e80792b6a695f2fca4f24732",
+          "afterSha256": "9cf609896b2c3f83ab7f2b9c9216e92cf0fdcb501c983a8c3f9b39b5bc12e6bc"
+        },
+        {
+          "path": "src/pipeline/diffusion_engine.cpp",
+          "beforeSha256": "e5713d973f8ec49dd052279b2a4efa79fa45b2caa3aadc4d9e94ca26087c8c0c",
+          "afterSha256": "d8ee9ba0d02c381e9e4dc083ff63d646ee96ebfcae6d41c5bc1ae0b5a758a289"
+        },
+        {
+          "path": "src/stable-diffusion.cpp",
+          "beforeSha256": "0dc57372dd7ff4d0504f406e5e0b19fa2a7d4e008a033c8d9fe27391b3df3ac2",
+          "afterSha256": "8eaf7b48097555c19d9cad8183732aeb75771fda81b17dbd78e6feb32e04b66a"
+        }
+      ]
     }
   ]
 }

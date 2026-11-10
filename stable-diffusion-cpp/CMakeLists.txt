@@ -188,7 +188,28 @@ if(SDCB_NATIVE_CHECK)
     target_include_directories(gguf-original-shapes-fallback-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
     target_link_libraries(gguf-original-shapes-fallback-test PRIVATE stable-diffusion)
     add_test(NAME gguf-original-shapes-fallback COMMAND gguf-original-shapes-fallback-test)
+    add_executable(bounded-weight-uploads-test tests/bounded-weight-uploads.cpp)
+    target_compile_definitions(bounded-weight-uploads-test PRIVATE GGML_MAX_NAME=160)
+    target_include_directories(bounded-weight-uploads-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src/ggml-webgpu")
+    target_link_libraries(bounded-weight-uploads-test PRIVATE ggml-base)
+    add_test(NAME bounded-weight-uploads COMMAND bounded-weight-uploads-test)
+    add_executable(browser-weight-reader-integration-test tests/browser-weight-reader-integration.cpp)
+    target_compile_definitions(browser-weight-reader-integration-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+    target_include_directories(browser-weight-reader-integration-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(browser-weight-reader-integration-test PRIVATE stable-diffusion)
+    add_test(NAME browser-weight-reader-integration COMMAND browser-weight-reader-integration-test)
+    add_executable(bf16-retention-test tests/bf16-retention-test.cpp)
+    target_compile_definitions(bf16-retention-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+    target_include_directories(bf16-retention-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(bf16-retention-test PRIVATE stable-diffusion)
+    add_test(NAME bf16-retention COMMAND bf16-retention-test)
     if(UNIX)
+        add_test(NAME webgpu-bf16-weight-kernels-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-bf16-weight-kernels/check_kernels.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-dispatch-grid-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-dispatch-grid/check_grid.py"
             --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")

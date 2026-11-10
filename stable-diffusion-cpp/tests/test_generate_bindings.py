@@ -62,6 +62,30 @@ class Bindings(unittest.TestCase):
         self.assertIn('not implemented', reasons['ggml_threadpool_get_n_threads'])
 
     @unittest.skipUnless(shutil.which('clang') and shutil.which('c++'), 'native compilers required')
+    def test_public_bf16_retention_version_is_exported_with_its_unsigned_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/'include').mkdir()
+            (root/'include/stable-diffusion.h').write_text(
+                '#include <stdint.h>\n'
+                'enum sd_type_t { SD_TYPE_F32 = 0, SD_TYPE_F16 = 1, SD_TYPE_BF16 = 30 };\n'
+                'uint32_t sd_browser_bf16_retention_version(void);\n')
+            output = root/'generated'
+            schema = generator.generate(root, output, 'clang')
+            self.assertEqual(schema['functions'], [{
+                'name': 'sd_browser_bf16_retention_version',
+                'export': '_sdc_sd_browser_bf16_retention_version',
+                'returnType': 'uint32_t', 'returnKind': 'unsigned', 'parameters': [],
+            }])
+            self.assertIn('SD_TYPE_BF16', schema['constants'])
+            self.assertIn('_sdc_sd_browser_bf16_retention_version', json.loads((output/'exports.json').read_text()))
+            self.assertIn('_sd_browser_bf16_retention_version', json.loads((output/'exports.json').read_text()))
+            self.assertIn('sdc_sd_browser_bf16_retention_version', json.loads((output/'jspi-exports.json').read_text()))
+            self.assertIn('sd_browser_bf16_retention_version', json.loads((output/'jspi-exports.json').read_text()))
+            self.assertIn('uint32_t sdc_sd_browser_bf16_retention_version(void)', (output/'bindings.cpp').read_text())
+            self.assertIn('sd_browser_bf16_retention_version(): Promise<number>', (output/'functions.d.ts').read_text())
+
+    @unittest.skipUnless(shutil.which('clang') and shutil.which('c++'), 'native compilers required')
     def test_direct_function_pointer_return_is_rejected_instead_of_guessed_as_void(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

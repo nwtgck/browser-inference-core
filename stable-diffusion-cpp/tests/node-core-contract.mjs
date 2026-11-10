@@ -15,8 +15,8 @@ if (!directory || !['direct', 'asyncify'].includes(suspension) ||
     !['4', '8'].includes(pointerWidth) || (extra.length && !arithmeticEnabled)) {
   throw new TypeError('Usage: node node-core-contract.mjs <build-directory> <direct|asyncify> <4|8> [--arithmetic]');
 }
-if (arithmeticEnabled) {
-  // A direct CPU probe must never discover or initialize a WebGPU device.
+{
+  // Every CPU contract must reject attempts to discover or initialize WebGPU.
   const navigator = globalThis.navigator ?? {};
   Object.defineProperty(navigator, 'gpu', {
     get() { throw Error('Node CPU contracts must not access the GPU API'); },
@@ -35,6 +35,27 @@ assert.equal(module._sdc_model_io_capabilities(), 7);
 const core = attachCore(module, schema, { suspension });
 assert.equal(core.pointerBytes, Number(pointerWidth));
 const checks = ['ABI, schema fingerprint and pointer width'];
+const retentionVersion = schema.functions.find(item => item.name === 'sd_browser_bf16_retention_version');
+assert.ok(retentionVersion);
+assert.equal(retentionVersion.returnType, 'uint32_t');
+assert.equal(retentionVersion.returnKind, 'unsigned');
+assert.deepEqual(retentionVersion.parameters, []);
+assert.equal(await core.api.sd_browser_bf16_retention_version(), 1);
+assert.equal(core.constant('SD_TYPE_BF16'), 30);
+const contextParams = core.allocRecord('sd_ctx_params_t');
+try {
+  await core.api.sd_ctx_params_init(contextParams);
+  assert.equal(core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type'), core.constant('SD_TYPE_F32'));
+  for (const type of ['SD_TYPE_F16', 'SD_TYPE_BF16']) {
+    core.setField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type', core.constant(type));
+    assert.equal(core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type'), core.constant(type));
+    await core.api.sd_ctx_params_init(contextParams);
+    assert.equal(core.getField('sd_ctx_params_t', contextParams, 'webgpu_bf16_type'), core.constant('SD_TYPE_F32'));
+  }
+  checks.push('BF16 retention version 1, explicit parameter-type roundtrip and preserved F32 initializer');
+} finally {
+  core.free(contextParams);
+}
 
 function readPointer(storage) {
   const bytes = core.bytes(storage, core.pointerBytes);

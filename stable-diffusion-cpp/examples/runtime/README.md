@@ -17,6 +17,20 @@ ABI 2 describes this wire convention, not compatibility between upstream API
 revisions. A matching schema and Wasm can still require changes in the caller
 when a function signature, record field, ownership rule, or field unit changes.
 
+The image manifest's `capabilities.bf16WeightRetention` identifies builds exposing
+`await core.api.sd_browser_bf16_retention_version()`, which returns `1` for this
+browser policy. Check the source-bound capability and the generated API/version
+before selecting `sd_ctx_params_t.webgpu_bf16_type = core.constant('SD_TYPE_BF16')`.
+This explicit option retains original BF16 parameters for supported WebGPU weight
+operations. The initializer still selects `SD_TYPE_F32` widening; `SD_TYPE_F16`
+remains the caller's explicit narrowing choice. It does not change source files,
+other parameter types, activation precision or the runtime profile. The version
+reports compiled functionality, not successful execution on a device or proof
+that a complete model fits. The separate model-IO capability bits remain `7`.
+Package validation also requires the same ordered kernel, bounded upload,
+bounded reader and explicit retention patch hashes in every source-bound profile
+and variant; the version getter alone does not establish this capability.
+
 Allocate records, call their upstream initializer, set fields, and invoke upstream
 functions. `getField`/`setField` handle native scalar widths; use `fieldAddress`
 for nested records and pointer-width DataView access for pointer out-parameters.
@@ -199,7 +213,8 @@ node tests/node-core-contract.mjs build/webgpu-wasm32-asyncify/test asyncify 4
 
 Use a Node version with JSPI support for the first command. Pass `8` for a wasm64
 build. The directory must contain `runtime/core.mjs`, `runtime/core.wasm` and its
-matching `generated/schema.mjs`. The probe checks record layouts, pointer width,
+matching `generated/schema.mjs`. The probe checks BF16 retention version/defaults,
+record layouts, pointer width,
 64-bit fields, by-value preview info, null-context generation results and snapshot
 failure atomicity. It never queries devices, creates model contexts or computes
 graphs, and it does not update browser-smoke provenance.

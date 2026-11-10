@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 extern "C" uint32_t sdc_abi_version();
+extern "C" uint32_t sdc_sd_browser_bf16_retention_version();
 extern "C" int sdc_test_qwen_timestep(const char *);
 extern "C" int sdc_test_bf16_weights(const char *);
 extern "C" int sdc_test_graph_walk();
@@ -209,6 +210,8 @@ static void model_io_checks() {
 int main() {
     try {
         check(sdc_abi_version() == 2, "ABI version");
+        check(sd_browser_bf16_retention_version() == 1 && sdc_sd_browser_bf16_retention_version() == 1,
+              "BF16 retention public and generated version contract");
         check(sdc_test_graph_walk() == 1, "deep graph traversal, selection, ordering and shared operand counts");
         sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)), 17);
         check(sdc_test_qwen_timestep("CPU") == 1, "Qwen BF16 timestep activation placement and numerical parity");
@@ -248,6 +251,9 @@ int main() {
                   context.conditioning_cache_size == reference.conditioning_cache_size,
               "binding must retain upstream defaults");
         check(context.webgpu_bf16_type == SD_TYPE_F32, "BF16 WebGPU policy defaults to exact F32 widening");
+        context.webgpu_bf16_type = SD_TYPE_BF16;
+        sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
+        check(context.webgpu_bf16_type == SD_TYPE_F32, "Reinitialization clears explicit BF16 retention");
         sd_img_gen_params_t image{};
         sdc_sd_img_gen_params_init(uint64_t(uintptr_t(&image)));
         sd_img_gen_params_t defaults{};

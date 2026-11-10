@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,44 @@ PROFILES = json.loads((ROOT / 'config/profiles.json').read_text())
 NAME = 'stable-diffusion-cpp-browser-core'
 HELPERS = ('index.mjs', 'index.d.ts', 'bindings.mjs', 'read-only-file.mjs', 'README.md')
 API_FILES = ('schema.json', 'schema.mjs', 'functions.d.ts')
-CAPABILITIES = {'ggufFileOffsetBits': 64, 'callerOwnedRandomAccess': True, 'upstreamApi': True, 'safetensorsFileOffsetBits': 64, 'ggufShards': True, 'ggufOriginalShapes': True}
+CAPABILITIES = {'ggufFileOffsetBits': 64, 'callerOwnedRandomAccess': True, 'upstreamApi': True, 'safetensorsFileOffsetBits': 64, 'ggufShards': True, 'ggufOriginalShapes': True, 'bf16WeightRetention': True}
+BF16_RETENTION_PATCHES = (
+    ('0036-webgpu-bf16-weight-kernels.patch', 'ggml'),
+    ('0037-webgpu-bounded-tensor-uploads.patch', 'ggml'),
+    ('0038-browser-bounded-model-reader.patch', 'stable-diffusion'),
+    ('0039-browser-bf16-weight-retention.patch', 'stable-diffusion'),
+)
+
+def validate_bf16_retention_schema(schema: dict) -> None:
+    functions = [function for function in schema.get('functions', [])
+                 if function.get('name') == 'sd_browser_bf16_retention_version']
+    if (len(functions) != 1 or functions[0].get('returnType') != 'uint32_t' or
+            functions[0].get('returnKind') != 'unsigned' or functions[0].get('parameters') != [] or
+            functions[0].get('export') != '_sdc_sd_browser_bf16_retention_version' or
+            'SD_TYPE_BF16' not in schema.get('constants', [])):
+        raise ValueError('Image BF16 retention capability requires its generated public version API and type')
+
+def bf16_retention_patch_identity(provenance: dict) -> list[dict[str, str]]:
+    entries = provenance.get('patches') if isinstance(provenance, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError('Image BF16 retention requires ordered patch provenance')
+    names = set()
+    required = dict(BF16_RETENTION_PATCHES)
+    identity = []
+    for entry in entries:
+        name = entry.get('file') if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name or name in names:
+            raise ValueError('Image BF16 retention patch provenance has a missing or duplicate filename')
+        names.add(name)
+        if name in required:
+            digest = entry.get('sha256')
+            if (entry.get('target') != required[name] or not isinstance(digest, str) or
+                    not re.fullmatch(r'[0-9a-f]{64}', digest)):
+                raise ValueError('Image BF16 retention patch provenance has an invalid target or SHA-256')
+            identity.append({'file': name, 'target': entry['target'], 'sha256': digest})
+    if [(entry['file'], entry['target']) for entry in identity] != list(BF16_RETENTION_PATCHES):
+        raise ValueError('Image BF16 retention patch provenance is incomplete or out of order')
+    return identity
 
 def sha(path: Path) -> str:
     with path.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -63,7 +101,9 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
             (directory / 'api/schema.mjs').read_text() != expected_module or
             manifest.get('capabilities') != CAPABILITIES):
         raise ValueError('Image schema/capability fingerprint mismatch')
+    validate_bf16_retention_schema(schema)
     if set(manifest['profiles']) != set(PROFILES): raise ValueError('Incomplete image profiles')
+    bf16_patch_identity = None
     for profile, info in manifest['profiles'].items():
         if set(info['variants']) != set(VARIANTS): raise ValueError('Incomplete image variants')
         for variant, data in info['variants'].items():
@@ -75,6 +115,10 @@ def validate(directory: Path, require_clean: bool = True, *, check_npm_pack: boo
             if data['validation'].get('compiled') is not True or (require_clean and data['sourceDirty'] is not False):
                 raise ValueError('Image runtime is uncompiled or dirty')
             if not data.get('patches', {}).get('patches'): raise ValueError('Missing upstream patch provenance')
+            current_identity = bf16_retention_patch_identity(data['patches'])
+            if bf16_patch_identity is not None and current_identity != bf16_patch_identity:
+                raise ValueError('Image BF16 retention patch identity differs between profile variants')
+            bf16_patch_identity = current_identity
             for ext in ('mjs', 'wasm', 'd.ts'):
                 if f'profiles/{profile}/{variant}/core.{ext}' not in expected: raise ValueError('Missing image runtime')
             with (directory / f'profiles/{profile}/{variant}/core.wasm').open('rb') as wasm:

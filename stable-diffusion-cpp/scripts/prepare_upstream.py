@@ -63,7 +63,13 @@ def prepare(sources: dict[str, Path], destination: Path, patches: Path = ROOT / 
             if len(touched) != len(entry['files']) or set(touched) != {f['path'] for f in entry['files']}:
                 raise ValueError('Patch changes files outside its inventory')
             for file in entry['files']:
-                if digest(safe_file(target, file['path'])) != file['beforeSha256']:
+                candidate = safe_file(target, file['path'])
+                if file['beforeSha256'] is None:
+                    # Null authorizes one new regular file, never replacing an
+                    # existing file, directory or even a dangling symlink.
+                    if candidate.exists() or candidate.is_symlink():
+                        raise ValueError(f'Expected absent new patch input: {file["path"]}')
+                elif digest(candidate) != file['beforeSha256']:
                     raise ValueError(f'Unreviewed upstream input: {entry["file"]}: {file["path"]}')
             subprocess.run(['git', 'apply', '--check', '--whitespace=error-all', str(patch.resolve())], cwd=target, env=env, check=True)
             subprocess.run(['git', 'apply', '--whitespace=error-all', str(patch.resolve())], cwd=target, env=env, check=True)
