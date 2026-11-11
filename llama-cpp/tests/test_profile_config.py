@@ -5,6 +5,7 @@ import re
 import sys
 import tempfile
 import unittest
+from model_graph_test_support import seed_model_graph_outputs
 from fixture_toolchain import merged_toolchain, seed_toolchain
 from unittest.mock import patch
 
@@ -70,6 +71,7 @@ class ProfileConfiguration(unittest.TestCase):
                                   'command': 'em++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(profiles[profile]['webgpu'])) + ' -c /build/generated/' + name}
                                  for name in ('clip.cpp', 'mtmd.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
+                    graph_record = seed_model_graph_outputs(module.parent.parent)
                     with self.subTest(profile=profile, variant=variant), \
                          patch.object(build, 'ROOT', root), \
                          patch.object(build, 'source_status', return_value=[]), \
@@ -95,6 +97,7 @@ class ProfileConfiguration(unittest.TestCase):
                         provenance = json.loads((root / 'build' / profile / variant / 'provenance.json').read_text())
                         self.assertEqual(provenance['configuration'], profiles[profile])
                         self.assertEqual(provenance['variant'], variant)
+                        self.assertEqual(provenance['modelGraphBoundary'], graph_record)
                         self.assertEqual(provenance['variantConfiguration'], settings)
                         self.assertEqual('browserModulePreparation' in provenance, variant == 'browser')
                         if variant == 'browser':
