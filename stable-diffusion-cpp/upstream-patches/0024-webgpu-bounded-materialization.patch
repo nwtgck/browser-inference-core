@@ -1,7 +1,6 @@
-diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
 --- a/src/core/ggml_extend.cpp
 +++ b/src/core/ggml_extend.cpp
-@@ -424,6 +424,65 @@
+@@ -411,6 +411,65 @@
      return result;
  }
  
@@ -64,35 +63,23 @@ diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
 +}
 +#endif
 +
- ggml_tensor* ggml_ext_conv_2d(ggml_context* ctx,
+ ggml_tensor* ggml_ext_conv_2d(GGMLRunnerContext* runner_ctx,
                                ggml_tensor* x,
                                ggml_tensor* w,
-@@ -437,7 +496,8 @@
-                               bool direct,
-                               bool circular_x,
-                               bool circular_y,
--                              float scale) {
-+                              float scale,
-+                              ggml_backend_t backend) {
-     if (scale != 1.f) {
-         x = ggml_ext_scale(ctx, x, scale);
-     }
-@@ -454,7 +514,13 @@
+@@ -442,7 +501,11 @@
      if (direct) {
          x = ggml_conv_2d_direct(ctx, w, x, s0, s1, p0, p1, d0, d1);
      } else {
 -        x = ggml_conv_2d(ctx, w, x, s0, s1, p0, p1, d0, d1);
 +        ggml_tensor* bounded = nullptr;
 +#ifdef SD_BROWSER_WEBGPU
-+        bounded = browser_bounded_conv_2d(ctx, backend, x, w, s0, s1, p0, p1, d0, d1);
-+#else
-+        (void)backend;
++        bounded = browser_bounded_conv_2d(ctx, runner_ctx->backend, x, w, s0, s1, p0, p1, d0, d1);
 +#endif
 +        x = bounded != nullptr ? bounded : ggml_conv_2d(ctx, w, x, s0, s1, p0, p1, d0, d1);
      }
      if (scale != 1.f) {
-         x = ggml_ext_scale(ctx, x, 1.f / scale);
-@@ -685,6 +751,66 @@
+         x = ggml_ext_scale(runner_ctx, x, 1.f / scale);
+@@ -657,6 +720,66 @@
      }
  }
  
@@ -156,15 +143,15 @@ diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
 +}
 +#endif
 +
- ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-                                     ggml_backend_t backend,
+ ggml_tensor* ggml_ext_attention_ext(GGMLRunnerContext* runner_ctx,
                                      ggml_tensor* q,
-@@ -852,22 +978,27 @@
-         v = ggml_ext_cont(ctx, ggml_permute(ctx, v, 1, 2, 0, 3));  // [N, n_kv_head, d_head, L_k]
-         v = ggml_reshape_3d(ctx, v, L_k, d_head, n_kv_head * N);   // [N * n_kv_head, d_head, L_k]
+                                     ggml_tensor* k,
+@@ -837,22 +960,27 @@
+         v = ggml_ext_cont(runner_ctx, ggml_permute(ctx, v, 1, 2, 0, 3));  // [N, n_kv_head, d_head, L_k]
+         v = ggml_reshape_3d(ctx, v, L_k, d_head, n_kv_head * N);          // [N * n_kv_head, d_head, L_k]
  
 -        auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
--        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+-        ggml_prec_set_acc(kq, GGML_PREC_F32);
 -        kq = ggml_scale_inplace(ctx, kq, scale);
 -        if (mask) {
 -            kq = ggml_add_inplace(ctx, kq, mask);
@@ -184,7 +171,7 @@ diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
 +#endif
 +        if (kqv == nullptr) {
 +            auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
-+            ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
++            ggml_prec_set_acc(kq, GGML_PREC_F32);
 +            kq = ggml_scale_inplace(ctx, kq, scale);
 +            if (mask) {
 +                kq = ggml_add_inplace(ctx, kq, mask);
@@ -203,58 +190,3 @@ diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
  
          kqv = ggml_reshape_4d(ctx, kqv, d_head, L_q, n_head, N);  // [N, n_head, L_q, d_head]
          kqv = ggml_permute(ctx, kqv, 0, 2, 1, 3);                 // [N, L_q, n_head, d_head]
-diff --git a/src/core/ggml_extend.h b/src/core/ggml_extend.h
---- a/src/core/ggml_extend.h
-+++ b/src/core/ggml_extend.h
-@@ -132,7 +132,8 @@
-                               bool direct     = false,
-                               bool circular_x = false,
-                               bool circular_y = false,
--                              float scale     = 1.f);
-+                              float scale     = 1.f,
-+                              ggml_backend_t backend = nullptr);
- 
- // w: [OC，IC, KD, 1 * 1]
- // x: [N, IC, IH, IW]
-diff --git a/src/model/common/ggml_block.hpp b/src/model/common/ggml_block.hpp
---- a/src/model/common/ggml_block.hpp
-+++ b/src/model/common/ggml_block.hpp
-@@ -507,7 +507,7 @@
-                                 ctx->conv2d_direct_enabled,
-                                 ctx->circular_x_enabled,
-                                 ctx->circular_y_enabled,
--                                scale);
-+                                scale, ctx->backend);
-     }
- };
- 
-@@ -590,7 +590,7 @@
-                                     ctx->conv2d_direct_enabled,
-                                     ctx->circular_x_enabled,
-                                     ctx->circular_y_enabled,
--                                    scale);
-+                                    scale, ctx->backend);
-         }
- 
-         if (groups == in_channels && groups == out_channels) {
-@@ -659,7 +659,7 @@
-                                                  ctx->conv2d_direct_enabled,
-                                                  ctx->circular_x_enabled,
-                                                  ctx->circular_y_enabled,
--                                                 scale);
-+                                                 scale, ctx->backend);
-             }
-         }
- 
-diff --git a/src/model/vae/wan_vae.hpp b/src/model/vae/wan_vae.hpp
---- a/src/model/vae/wan_vae.hpp
-+++ b/src/model/vae/wan_vae.hpp
-@@ -133,7 +133,7 @@
-                 x2              = ggml_ext_conv_2d(ctx->ggml_ctx, x2, w2, b,
-                                                    std::get<2>(stride), std::get<1>(stride), 0, 0,
-                                                    std::get<2>(dilation), std::get<1>(dilation),
--                                                   ctx->conv2d_direct_enabled);
-+                                                   ctx->conv2d_direct_enabled, false, false, 1.f, ctx->backend);
-                 return ggml_reshape_4d(ctx->ggml_ctx, x2, x2->ne[0], x2->ne[1], 1, out_channels);
-             }
-             return ggml_ext_conv_3d(ctx->ggml_ctx, ctx->backend, x, w, b, in_channels,

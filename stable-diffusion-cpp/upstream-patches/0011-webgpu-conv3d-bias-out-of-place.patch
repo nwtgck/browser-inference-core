@@ -1,8 +1,24 @@
-diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
 --- a/src/core/ggml_extend.cpp
 +++ b/src/core/ggml_extend.cpp
-@@ -521,7 +521,13 @@
- 
+@@ -477,7 +477,16 @@
+     if (allow_conv2d && w->ne[2] == 1 && x->ne[2] == 1 && x->ne[3] == IC && p2 == 0) {
+         auto x2 = ggml_reshape_4d(ctx, ggml_ext_cont(runner_ctx, x), x->ne[0], x->ne[1], IC, 1);
+         auto w2 = ggml_reshape_4d(ctx, w, w->ne[0], w->ne[1], IC, w->ne[3] / IC);
++#ifdef SD_BROWSER_WEBGPU
++        // Keep the mixed-backend bias allocation rule on the 2D shortcut too.
++        x2 = ggml_ext_conv_2d(runner_ctx, x2, w2, nullptr, s0, s1, p0, p1, d0, d1, runner_ctx->conv2d_direct_enabled, false, false, scale);
++        if (b != nullptr) {
++            auto bias = ggml_reshape_4d(ctx, b, 1, 1, b->ne[0], 1);
++            x2 = ggml_add(ctx, x2, bias);
++        }
++#else
+         x2      = ggml_ext_conv_2d(runner_ctx, x2, w2, b, s0, s1, p0, p1, d0, d1, runner_ctx->conv2d_direct_enabled, false, false, scale);
++#endif
+         return ggml_reshape_4d(ctx, x2, x2->ne[0], x2->ne[1], 1, w->ne[3] / IC);
+     }
+     if (scale != 1.f) {
+@@ -536,7 +545,13 @@
+     }
      if (b != nullptr) {
          b = ggml_reshape_4d(ctx, b, 1, 1, 1, b->ne[0]);  // [OC, 1, 1, 1]
 +#ifdef SD_BROWSER_WEBGPU

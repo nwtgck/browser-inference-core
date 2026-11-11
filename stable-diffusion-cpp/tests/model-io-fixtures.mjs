@@ -34,5 +34,48 @@ export function makeModelIoFixtures(gib) {
     const header = new Uint8Array(Math.ceil(bytes.length / 32) * 32); header.set(bytes);
     return sparse(`/models/parts-0000${index + 1}-of-00002.gguf`, header, header.length + 4, header.length);
   });
-  return { safetensors, shards };
+  const originalShapes = [
+    { id: 'restored', descriptor: [64], shapes: [[2, 32]], expected: [32, 2, 1, 1], numeric: true },
+    { id: 'consistent', descriptor: [32, 2], shapes: [[2, 32]], expected: [32, 2, 1, 1], numeric: true },
+    { id: 'singleton', descriptor: [64], shapes: [[1, 64]], expected: [64, 1, 1, 1] },
+    { id: 'orphan', descriptor: [64], shapes: [[2, 32]], tensor: 'another-shard-weight', expected: [64, 1, 1, 1] },
+    { id: 'conflict', descriptor: [16, 4], shapes: [[2, 32]] },
+    { id: 'count', descriptor: [64], shapes: [[2, 31]] },
+    { id: 'negative', descriptor: [64], shapes: [[-1, 64]] },
+    { id: 'duplicate', descriptor: [64], shapes: [[2, 32], [4, 16]] },
+    { id: 'float', descriptor: [64], shapes: [[2, 32]], element: 6 },
+  ].map(fixture => {
+    const bytes = [];
+    const u32 = value => { for (let i = 0; i < 4; i++) bytes.push(value >>> (8 * i) & 255); };
+    const u64 = value => { const n = BigInt(value); for (let i = 0; i < 8; i++) bytes.push(Number(n >> BigInt(8 * i) & 255n)); };
+    const str = value => { const data = new TextEncoder().encode(value); u64(data.length); bytes.push(...data); };
+    u32(0x46554747); u32(3); u64(1); u64(fixture.shapes.length);
+    for (const shape of fixture.shapes) {
+      str('comfy.gguf.orig_shape.' + (fixture.tensor ?? 'weight'));
+      u32(9); u32(fixture.element ?? 5); u64(shape.length);
+      for (const dimension of shape) u32(dimension);
+    }
+    str('weight'); u32(fixture.descriptor.length);
+    for (const dimension of fixture.descriptor) u64(dimension);
+    u32(0); u64(0);
+    const offset = Math.ceil(bytes.length / 32) * 32;
+    const data = new Uint8Array(offset + 256); data.set(bytes);
+    const view = new DataView(data.buffer);
+    for (let i = 0; i < 64; i++) view.setFloat32(offset + 4 * i, i + 1, true);
+    return {
+      path: '/models/original-shape-' + fixture.id + '.gguf',
+      expected: fixture.expected, numeric: fixture.numeric ?? false,
+      source: {
+        size: data.length,
+        read(destination, position) {
+          if (!Number.isSafeInteger(position) || position < 0 || position > data.length || destination.length > 65536)
+            throw Error('Invalid original-shape fixture read');
+          const count = Math.min(destination.length, data.length - position);
+          destination.set(data.subarray(position, position + count));
+          return count;
+        },
+      },
+    };
+  });
+  return { safetensors, shards, originalShapes };
 }

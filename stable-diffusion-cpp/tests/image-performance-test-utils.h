@@ -3,6 +3,7 @@
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
+#include "core/ggml_runner.h"
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -22,6 +23,12 @@ inline void require(bool ok, const std::string & message) {
 inline Context context(size_t bytes = 8 * 1024 * 1024) {
     Context result(ggml_init({bytes, nullptr, true}), ggml_free);
     require(result != nullptr, "context allocation failed");
+    return result;
+}
+inline GGMLRunnerContext runner(ggml_context * context, ggml_backend_t backend) {
+    GGMLRunnerContext result;
+    result.ggml_ctx = context;
+    result.backend = backend;
     return result;
 }
 inline Backend cpu() {

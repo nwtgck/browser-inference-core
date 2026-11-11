@@ -96,7 +96,7 @@ else()
         target_include_directories(core PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
         target_compile_definitions(core PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
         file(READ "${SDCB_GENERATED}/exports.json" SDCB_EXPORTS)
-        foreach(probe sdc_test_gguf_offset sdc_test_gguf_value sdc_test_callbacks sdc_test_safetensors_offset sdc_test_safetensors_value sdc_test_model_tensor_count sdc_test_qwen_timestep sdc_test_bf16_weights sdc_test_graph_walk sdc_test_conv3d_bias sdc_test_webgpu_performance)
+        foreach(probe sdc_test_gguf_offset sdc_test_gguf_value sdc_test_callbacks sdc_test_safetensors_offset sdc_test_safetensors_value sdc_test_model_tensor_count sdc_test_gguf_shape sdc_test_gguf_original_shape_values sdc_test_qwen_timestep sdc_test_bf16_weights sdc_test_graph_walk sdc_test_conv3d_bias sdc_test_webgpu_performance)
             string(JSON length LENGTH "${SDCB_EXPORTS}")
             string(JSON SDCB_EXPORTS SET "${SDCB_EXPORTS}" ${length} "\"_${probe}\"")
         endforeach()
@@ -175,7 +175,41 @@ if(SDCB_NATIVE_CHECK)
         target_link_options(anima-context-test PRIVATE -Wl,--wrap=ggml_backend_alloc_ctx_tensors)
     endif()
     add_test(NAME browser-boundary COMMAND browser-boundary-test)
+    add_executable(gguf-original-shapes-test tests/gguf-original-shapes-test.cpp tests/wasm-probes.cpp)
+    target_compile_definitions(gguf-original-shapes-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+    target_include_directories(gguf-original-shapes-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(gguf-original-shapes-test PRIVATE stable-diffusion)
+    add_test(NAME gguf-original-shapes COMMAND gguf-original-shapes-test)
+    # Link the real prepared IO source without the browser macro as well, so
+    # native generic-parser fallback cannot bypass original-shape validation.
+    add_executable(gguf-original-shapes-fallback-test tests/gguf-original-shapes-test.cpp tests/wasm-probes.cpp
+        "${SDCB_SOURCE}/src/model_io/gguf_io.cpp")
+    target_compile_definitions(gguf-original-shapes-fallback-test PRIVATE SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160 SDCB_TEST_GGUF_GENERIC_FALLBACK=1)
+    target_include_directories(gguf-original-shapes-fallback-test PRIVATE "${SDCB_SOURCE}/src" "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(gguf-original-shapes-fallback-test PRIVATE stable-diffusion)
+    add_test(NAME gguf-original-shapes-fallback COMMAND gguf-original-shapes-fallback-test)
+    add_executable(bounded-weight-uploads-test tests/bounded-weight-uploads.cpp)
+    target_compile_definitions(bounded-weight-uploads-test PRIVATE GGML_MAX_NAME=160)
+    target_include_directories(bounded-weight-uploads-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src/ggml-webgpu")
+    target_link_libraries(bounded-weight-uploads-test PRIVATE ggml-base)
+    add_test(NAME bounded-weight-uploads COMMAND bounded-weight-uploads-test)
+    add_executable(browser-weight-reader-integration-test tests/browser-weight-reader-integration.cpp)
+    target_compile_definitions(browser-weight-reader-integration-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+    target_include_directories(browser-weight-reader-integration-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(browser-weight-reader-integration-test PRIVATE stable-diffusion)
+    add_test(NAME browser-weight-reader-integration COMMAND browser-weight-reader-integration-test)
+    add_executable(bf16-retention-test tests/bf16-retention-test.cpp)
+    target_compile_definitions(bf16-retention-test PRIVATE SD_BROWSER_WEBGPU=1 SD_USE_UPSTREAM_GGML GGML_MAX_NAME=160)
+    target_include_directories(bf16-retention-test PRIVATE "${SDCB_SOURCE}/src"
+        "${SDCB_GGML_SOURCE}/include" "${SDCB_GGML_SOURCE}/src")
+    target_link_libraries(bf16-retention-test PRIVATE stable-diffusion)
+    add_test(NAME bf16-retention COMMAND bf16-retention-test)
     if(UNIX)
+        add_test(NAME webgpu-bf16-weight-kernels-contract COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-bf16-weight-kernels/check_kernels.py"
+            --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")
         add_test(NAME webgpu-dispatch-grid-contract COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/webgpu-dispatch-grid/check_grid.py"
             --source "${SDCB_WEBGPU_SOURCE}" --cxx "${CMAKE_CXX_COMPILER}")

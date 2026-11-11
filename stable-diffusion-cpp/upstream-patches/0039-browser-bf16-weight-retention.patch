@@ -1,0 +1,632 @@
+diff --git a/include/stable-diffusion.h b/include/stable-diffusion.h
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@ -256,7 +256,7 @@
+     int conditioning_cache_size;  // Maximum cached conditioning entries per context; 0 disables caching (default: 4)
+     const char* flash_attn_mode;  // on/off/auto or module assignments (e.g. "auto,te=off"); NULL/empty honors legacy flags.
+     const char* conv_direct_mode;  // on/off/auto or diffusion/vae/controlnet assignments; NULL/empty honors legacy flags.
+-    enum sd_type_t webgpu_bf16_type;  // BF16 parameters on WebGPU: F32 (default, exact widening) or F16 (lossy, opt-in)
++    enum sd_type_t webgpu_bf16_type;  // WebGPU BF16: F32 (default), F16 (lossy), or BF16 (checked matrix/lookup retention; other roles use F32)
+ } sd_ctx_params_t;
+ 
+ typedef struct {
+@@ -563,6 +563,9 @@
+ // Scheduler reserve includes its existing synchronization; these markers do not
+ // distinguish that internal wait from splitting/allocator size estimation.
+ SD_API void sd_set_graph_diagnostics(bool enabled);
++// Checked WebGPU BF16 weight-retention contract version; 0 when unavailable.
++// A nonzero value does not attest model/operator admission or GPU execution.
++SD_API uint32_t sd_browser_bf16_retention_version(void);
+ SD_API void sd_set_progress_callback(sd_progress_cb_t cb, void* data);
+ // Context-local generation events, independent of preview and the legacy progress callback.
+ // Strings and the event are valid only during the synchronous callback. Callbacks must not throw.
+diff --git a/src/core/backend_fit.cpp b/src/core/backend_fit.cpp
+--- a/src/core/backend_fit.cpp
++++ b/src/core/backend_fit.cpp
+@@ -115,7 +115,9 @@
+             // Placement is decided later. Include widening conservatively even
+             // for components the planner may ultimately assign to CPU.
+             if (stored_tensor.type == GGML_TYPE_BF16 && ts.type == GGML_TYPE_BF16) {
+-                ts.type = webgpu_bf16_type;
++                // File metadata does not identify reviewed Linear/Embedding roles.
++                // Retention is resolved later; keep this early estimate conservative.
++                ts.type = webgpu_bf16_type == GGML_TYPE_BF16 ? GGML_TYPE_F32 : webgpu_bf16_type;
+             }
+ #endif
+             const int64_t tensor_bytes = (int64_t)ts.nbytes() + 64;
+diff --git a/src/core/browser_bf16_retention.h b/src/core/browser_bf16_retention.h
+new file mode 100644
+--- /dev/null
++++ b/src/core/browser_bf16_retention.h
+@@ -0,0 +1,185 @@
++#ifndef __SD_CORE_BROWSER_BF16_RETENTION_H__
++#define __SD_CORE_BROWSER_BF16_RETENTION_H__
++
++#include <cstdint>
++#include <cstring>
++#include <limits>
++#include <stdexcept>
++#include <string>
++#include <unordered_set>
++#include <vector>
++
++#include "ggml-backend.h"
++#include "core/ggml_compat.h"
++
++namespace sd {
++    inline bool browser_bf16_matrix_role(const ggml_tensor* tensor, ggml_op role) {
++        return tensor != nullptr && tensor->type == GGML_TYPE_BF16 &&
++               tensor->op == GGML_OP_NONE && tensor->view_src == nullptr &&
++               ggml_n_dims(tensor) == 2 && ggml_is_contiguous(tensor) &&
++               (role == GGML_OP_MUL_MAT || role == GGML_OP_GET_ROWS);
++    }
++
++    // Opt-in original-weight contract. Metadata views may borrow the original
++    // storage; copies, casts and weight-side arithmetic are never substitutes
++    // for retaining that storage. The caller must not retry on CPU or in F32.
++    class BrowserBf16RetainedGraph {
++        struct Consumer {
++            ggml_tensor* node;
++            ggml_tensor* weight;
++        };
++        std::vector<Consumer> consumers_;
++        ggml_backend_t backend_ = nullptr;
++
++        [[noreturn]] static void fail(const char* reason) {
++            throw std::runtime_error(std::string("WebGPU BF16 retention: ") + reason);
++        }
++
++        static bool is_view(ggml_op op) {
++            return op == GGML_OP_VIEW || op == GGML_OP_RESHAPE ||
++                   op == GGML_OP_PERMUTE || op == GGML_OP_TRANSPOSE;
++        }
++
++        static bool is_weight(const ggml_tensor* tensor, const std::unordered_set<const ggml_tensor*>& roots) {
++            return tensor != nullptr && (roots.count(tensor) != 0 ||
++                   (tensor->view_src != nullptr && roots.count(tensor->view_src) != 0));
++        }
++
++        static ggml_backend_buffer_t buffer_of(const ggml_tensor* tensor) {
++            return tensor == nullptr ? nullptr : tensor->buffer != nullptr ? tensor->buffer :
++                   tensor->view_src != nullptr ? tensor->view_src->buffer : nullptr;
++        }
++
++        static uint64_t checked_span(const ggml_tensor* tensor, uint64_t scalar_bytes) {
++            if (tensor == nullptr || tensor->nb[0] != scalar_bytes) fail("unsupported inner stride");
++            uint64_t span = scalar_bytes, elements = 1;
++            const auto limit = uint64_t(std::numeric_limits<uint32_t>::max());
++            for (int i = 0; i < GGML_MAX_DIMS; ++i) {
++                if (tensor->ne[i] <= 0 || uint64_t(tensor->ne[i]) > limit || tensor->nb[i] == 0 ||
++                    tensor->nb[i] % scalar_bytes != 0 || tensor->nb[i] > limit) {
++                    fail("unsupported tensor shape or stride");
++                }
++                const auto count = uint64_t(tensor->ne[i]);
++                if (elements > limit / count || count - 1 > (limit - span) / tensor->nb[i]) {
++                    fail("tensor span exceeds the reviewed range");
++                }
++                elements *= count;
++                span += (count - 1) * tensor->nb[i];
++            }
++            return span;
++        }
++
++        void inspect(ggml_cgraph* graph, const std::unordered_set<const ggml_tensor*>& roots) {
++            if (roots.empty()) return;
++            if (graph == nullptr) fail("missing graph");
++            for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
++                auto* node = ggml_graph_node(graph, i);
++                bool uses_weight = false;
++                for (const auto* input : node->src) uses_weight = uses_weight || is_weight(input, roots);
++                if (!uses_weight) continue;
++                if (is_view(node->op)) {
++                    if (!is_weight(node, roots)) fail("metadata view lost original storage");
++                    continue;
++                }
++                auto* weight = node->src[0];
++                auto* input = node->src[1];
++                if (!is_weight(weight, roots) || weight->type != GGML_TYPE_BF16 || node->type != GGML_TYPE_F32) {
++                    fail("unsupported weight operand or output type");
++                }
++                for (int s = 1; s < GGML_MAX_SRC; ++s) {
++                    if (is_weight(node->src[s], roots)) fail("weight used outside the left operand");
++                }
++                if (!ggml_is_contiguous(weight)) fail("non-contiguous retained weight");
++                auto* root = weight->view_src != nullptr ? weight->view_src : weight;
++                const auto root_bytes = checked_span(root, 2);
++                const auto weight_bytes = checked_span(weight, 2);
++                if (weight->view_offs % 4 != 0 || weight->view_offs > root_bytes ||
++                    weight_bytes > root_bytes - weight->view_offs) {
++                    fail("unaligned or out-of-bounds weight view");
++                }
++                checked_span(node, 4);
++                if (input == nullptr) fail("missing input");
++                checked_span(input, 4);
++                if (node->op == GGML_OP_MUL_MAT) {
++                    if (input->type != GGML_TYPE_F32 || weight->ne[0] != input->ne[0] ||
++                        input->ne[2] % weight->ne[2] != 0 || input->ne[3] % weight->ne[3] != 0 ||
++                        node->ne[0] != weight->ne[1] || node->ne[1] != input->ne[1] ||
++                        node->ne[2] != input->ne[2] || node->ne[3] != input->ne[3]) {
++                        fail("unsupported matmul input or shape");
++                    }
++                    const auto batches = uint64_t(input->ne[2]) * uint64_t(input->ne[3]);
++                    if (input->ne[1] > 65535 || batches > 65535 || uint64_t(weight->ne[1]) > 65535 / batches) {
++                        fail("matmul exceeds the reviewed dispatch envelope");
++                    }
++                } else if (node->op == GGML_OP_GET_ROWS) {
++                    const auto rows = uint64_t(node->ne[1]) * uint64_t(node->ne[2]) * uint64_t(node->ne[3]);
++                    if (input->type != GGML_TYPE_I32 || rows > 65535) {
++                        fail("row lookup exceeds the reviewed index or dispatch envelope");
++                    }
++                } else {
++                    fail("unsupported operation on retained weight");
++                }
++                consumers_.push_back({node, weight});
++            }
++        }
++
++    public:
++        static bool is_webgpu(ggml_backend_t backend) {
++            auto* device = backend != nullptr ? ggml_backend_get_device(backend) : nullptr;
++            auto* registry = device != nullptr ? ggml_backend_dev_backend_reg(device) : nullptr;
++            return registry != nullptr && std::strcmp(ggml_backend_reg_name(registry), "WebGPU") == 0;
++        }
++
++        // Check the complete graph before lazy weight preparation or graph-cut
++        // caches can hide an unsupported use behind a derived tensor.
++        static void validate_unallocated(ggml_cgraph* graph, const std::vector<ggml_tensor*>& weights) {
++            std::unordered_set<const ggml_tensor*> roots;
++            for (auto* weight : weights) {
++                if (weight == nullptr || weight->type != GGML_TYPE_BF16) fail("registered retained weight changed type");
++                roots.insert(weight);
++            }
++            BrowserBf16RetainedGraph check;
++            check.inspect(graph, roots);
++        }
++
++        void prepare(ggml_cgraph* graph, ggml_backend_sched_t scheduler, ggml_backend_t target,
++                     const std::vector<ggml_tensor*>& registered_weights) {
++            consumers_.clear();
++            backend_ = target;
++            if (registered_weights.empty()) return;
++            if (!is_webgpu(target)) fail("retained operation requires WebGPU");
++            std::unordered_set<const ggml_tensor*> roots;
++            for (auto* weight : registered_weights) {
++                if (weight == nullptr || weight->type != GGML_TYPE_BF16) fail("registered retained weight changed type");
++                roots.insert(weight);
++            }
++            inspect(graph, roots);
++            for (const auto& item : consumers_) {
++                auto* buffer = buffer_of(item.weight);
++                if (buffer == nullptr || !ggml_backend_supports_buft(target, ggml_backend_buffer_get_type(buffer))) {
++                    fail("retained storage is not accessible by WebGPU");
++                }
++                if (!ggml_backend_supports_op(target, item.node)) fail("WebGPU rejects retained weight operation");
++            }
++            // Validate the complete segment before changing assignments.
++            for (const auto& item : consumers_) ggml_backend_sched_set_tensor_backend(scheduler, item.node, target);
++        }
++
++        void verify_allocated(ggml_backend_sched_t scheduler) const {
++            for (const auto& item : consumers_) {
++                if (item.node->src[0] != item.weight) fail("scheduler copied retained storage");
++                if (ggml_backend_sched_get_tensor_backend(scheduler, item.node) != backend_) {
++                    fail("retained operation left WebGPU");
++                }
++                auto* weight = buffer_of(item.weight);
++                auto* input = buffer_of(item.node->src[1]);
++                auto* output = buffer_of(item.node);
++                if (weight == nullptr || input == nullptr || output == nullptr) fail("missing allocated buffer");
++                if (weight == input || weight == output) fail("weight shares an activation buffer");
++                if (!ggml_backend_supports_op(backend_, item.node)) fail("allocated operation is unsupported by WebGPU");
++            }
++        }
++    };
++}
++
++#endif  // __SD_CORE_BROWSER_BF16_RETENTION_H__
+diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
+--- a/src/core/compute_workspace.cpp
++++ b/src/core/compute_workspace.cpp
+@@ -10,6 +10,9 @@
+ #include <unordered_set>
+ 
+ #include "core/ggml_compat.h"
++#ifdef SD_BROWSER_WEBGPU
++#include "core/browser_bf16_retention.h"
++#endif
+ #include "core/ggml_extend_backend.h"
+ #include "core/util.h"
+ 
+@@ -203,7 +206,8 @@
+                release();
+     }
+ 
+-    bool ComputeWorkspace::allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes) {
++    bool ComputeWorkspace::allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes,
++                                     const std::vector<ggml_tensor*>* browser_retained_weights) {
+         GGML_ASSERT(!active_);
+ #ifdef SD_BROWSER_WEBGPU
+         const BrowserPlacement placement(graph, backend_);
+@@ -219,12 +223,17 @@
+         }
+         ggml_backend_sched_reset(scheduler_);
+         assign_nodes(scheduler_, graph);
++#ifdef SD_BROWSER_WEBGPU
++        BrowserBf16RetainedGraph retained;
++        if (browser_retained_weights != nullptr) retained.prepare(graph, scheduler_, backend_, *browser_retained_weights);
++#endif
+         // Scheduler allocation rewrites sources. Split the execution graph only once.
+         if (!ggml_backend_sched_alloc_graph(scheduler_, graph)) {
+             release();
+             return false;
+         }
+ #ifdef SD_BROWSER_WEBGPU
++        retained.verify_allocated(scheduler_);
+         placement.report(graph, backend_, scheduler_);
+ #endif
+         active_ = true;
+diff --git a/src/core/compute_workspace.h b/src/core/compute_workspace.h
+--- a/src/core/compute_workspace.h
++++ b/src/core/compute_workspace.h
+@@ -39,7 +39,8 @@
+         void set_extra_backends(const std::vector<ggml_backend_t>& backends);
+         bool prepare(const Measurement& measurement);
+         bool release_excess(const Measurement& measurement);
+-        bool allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes);
++        bool allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes,
++                      const std::vector<ggml_tensor*>* browser_retained_weights = nullptr);
+         Measurement measure(
+             ggml_cgraph* graph,
+             const std::function<ggml_backend_t(const ggml_tensor*)>& external_backend,
+diff --git a/src/core/execution_engine.cpp b/src/core/execution_engine.cpp
+--- a/src/core/execution_engine.cpp
++++ b/src/core/execution_engine.cpp
+@@ -1,4 +1,7 @@
+ #include "core/execution_engine.h"
++#ifdef SD_BROWSER_WEBGPU
++#include "core/browser_bf16_retention.h"
++#endif
+ 
+ #include <algorithm>
+ #include <chrono>
+@@ -28,6 +31,7 @@
+         const ComputeTask& task_;
+         std::shared_ptr<DeviceResidencyManager> manager_;
+         std::unordered_set<const ggml_tensor*> params_tensor_set_;
++        std::vector<ggml_tensor*> browser_retained_weights_;
+         ggml_status last_compute_status_ = GGML_STATUS_FAILED;
+         Tensor<float> output_;
+         const char* diagnostic_label_ = nullptr;
+@@ -67,16 +71,25 @@
+                         params_tensor_set_.insert(parameter);
+                     }
+                 }
++                const bool retained_policy = manager_->browser_bf16_retention_enabled();
+                 for (auto* tensor : params_tensor_set_) {
+                     auto* parameter = manager_->resolve_param_tensor(const_cast<ggml_tensor*>(tensor));
+                     if (parameter != nullptr) {
+                         session_.params_.insert(parameter);
++                        if (retained_policy && manager_->is_browser_retained_bf16_param(parameter)) {
++                            browser_retained_weights_.push_back(parameter);
++                        }
+                     }
+                 }
+             }
+         }
+ 
+         ComputeResult run() {
++#ifdef SD_BROWSER_WEBGPU
++            if (!browser_retained_weights_.empty()) {
++                BrowserBf16RetainedGraph::validate_unallocated(task_.graph, browser_retained_weights_);
++            }
++#endif
+             if (!execute_graph(task_.graph, task_.n_threads, task_.no_return, task_.read_outputs)) {
+                 return {last_compute_status_, {}};
+             }
+@@ -692,7 +705,7 @@
+             new_cache_bytes = add_bytes(last ? 0 : session_.cut_cache_.estimate_output_bytes(graph, segment), session_.cache_.pending_bytes(segment_graph));
+             if (!session_.workspace_.allocate(segment_graph, [&](ggml_backend_sched_t scheduler, ggml_cgraph* current) {
+                     pin_multi_device_nodes(scheduler, current);
+-                })) {
++                }, &browser_retained_weights_)) {
+                 last_compute_status_ = GGML_STATUS_ALLOC_FAILED;
+                 return fail_segment("workspace allocation");
+             }
+diff --git a/src/core/ggml_runner.h b/src/core/ggml_runner.h
+--- a/src/core/ggml_runner.h
++++ b/src/core/ggml_runner.h
+@@ -239,6 +239,9 @@
+ public:
+     virtual std::string get_desc() = 0;
+ 
++    // Model builders explicitly identify reviewed parameter consumers.
++    virtual void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& tensor_ops) { (void)tensor_ops; }
++
+     GGMLRunner(ggml_backend_t backend,
+                std::shared_ptr<DeviceResidencyManager> manager = nullptr);
+ 
+diff --git a/src/device_residency_manager.h b/src/device_residency_manager.h
+--- a/src/device_residency_manager.h
++++ b/src/device_residency_manager.h
+@@ -76,6 +76,9 @@
+ 
+     std::shared_ptr<sd::ExecutionEngine> execution_engine();
+ 
++    // Default-off storage policy; dtype alone is not proof of an opt-in retained weight.
++    virtual bool browser_bf16_retention_enabled() const { return false; }
++    virtual bool is_browser_retained_bf16_param(const ggml_tensor* tensor) const { (void)tensor; return false; }
+     virtual bool segmented_compute_enabled() const          = 0;
+     virtual bool prefetch_enabled() const                   = 0;
+     virtual void register_runtime_owner(uintptr_t owner_id) = 0;
+diff --git a/src/model/common/ggml_block.hpp b/src/model/common/ggml_block.hpp
+--- a/src/model/common/ggml_block.hpp
++++ b/src/model/common/ggml_block.hpp
+@@ -142,6 +142,12 @@
+ 
+ class Linear : public UnaryBlock {
+ protected:
++#ifdef SD_BROWSER_WEBGPU
++    enum ggml_op param_usage_op(const std::string& name) const override {
++        return name == "weight" ? GGML_OP_MUL_MAT : GGML_OP_NONE;
++    }
++#endif
++
+     int64_t in_features;
+     int64_t out_features;
+     bool bias;
+diff --git a/src/model/diffusion/minimax_h3.hpp b/src/model/diffusion/minimax_h3.hpp
+--- a/src/model/diffusion/minimax_h3.hpp
++++ b/src/model/diffusion/minimax_h3.hpp
+@@ -1272,6 +1272,10 @@
+ 
+         std::string get_desc() override {
+             return "minimax_h3";
++        }
++
++        void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& tensor_ops) override {
++            model.get_param_tensor_ops(tensor_ops);
+         }
+ 
+         void get_param_tensors(std::map<std::string, ggml_tensor*>& tensors,
+diff --git a/src/model/te/llm.hpp b/src/model/te/llm.hpp
+--- a/src/model/te/llm.hpp
++++ b/src/model/te/llm.hpp
+@@ -2451,7 +2451,7 @@
+             model.get_param_tensors(tensors, prefix);
+         }
+ 
+-        void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& tensor_ops) {
++        void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& tensor_ops) override {
+             model.get_param_tensor_ops(tensor_ops);
+         }
+ 
+diff --git a/src/model/te/ming_image_te.hpp b/src/model/te/ming_image_te.hpp
+--- a/src/model/te/ming_image_te.hpp
++++ b/src/model/te/ming_image_te.hpp
+@@ -106,7 +106,7 @@
+             model.get_param_tensors(tensors, prefix);
+         }
+ 
+-        void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& ops) {
++        void get_param_tensor_ops(std::map<ggml_tensor*, enum ggml_op>& ops) override {
+             model.get_param_tensor_ops(ops);
+         }
+ 
+diff --git a/src/model_manager.cpp b/src/model_manager.cpp
+--- a/src/model_manager.cpp
++++ b/src/model_manager.cpp
+@@ -8,6 +8,9 @@
+ #include <unordered_set>
+ 
+ #include "core/ggml_extend_backend.h"
++#ifdef SD_BROWSER_WEBGPU
++#include "core/browser_bf16_retention.h"
++#endif
+ #include "core/util.h"
+ #include "model/adapter/lora.hpp"
+ 
+@@ -79,6 +82,9 @@
+     if (op == GGML_OP_GET_ROWS) {
+         ggml_tensor* indices = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 1);
+         op_tensor            = ggml_get_rows(ctx, weight, indices);
++    } else if (op == GGML_OP_MUL_MAT) {
++        ggml_tensor* input = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, weight->ne[0], 1);
++        op_tensor         = ggml_mul_mat(ctx, weight, input);
+     } else if (op == GGML_OP_CUSTOM) {
+         op_tensor         = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 1);
+         op_tensor->op     = op;
+@@ -268,28 +274,55 @@
+                 state->usage_op = op_it->second;
+             }
+         }
++#ifdef SD_BROWSER_WEBGPU
++        // The Linear role declaration must not change legacy/native placement.
++        // Only original BF16 matrices in the new WebGPU policy use this probe.
++        if (state->usage_op == GGML_OP_MUL_MAT &&
++            (webgpu_bf16_type_ != GGML_TYPE_BF16 || !sd_backend_is(compute_backend, "WebGPU") ||
++             state->sources.empty() || state->sources.front().type != GGML_TYPE_BF16 || tensor->type != GGML_TYPE_BF16)) {
++            state->usage_op = GGML_OP_NONE;
++        }
++#endif
+         new_states.push_back(std::move(state));
+     }
+ 
+ #ifdef SD_BROWSER_WEBGPU
+-    size_t converted_tensors = 0;
+-    uint64_t source_bytes = 0, destination_bytes = 0;
++    size_t converted_tensors = 0, retained_tensors = 0;
++    uint64_t source_bytes = 0, destination_bytes = 0, retained_bytes = 0;
++    const auto destination_type = [&](const TensorState& state) {
++        if (webgpu_bf16_type_ != GGML_TYPE_BF16) return webgpu_bf16_type_;
++        const bool original_bf16 = std::all_of(state.sources.begin(), state.sources.end(), [](const TensorStorage& source) {
++            return source.type == GGML_TYPE_BF16;
++        });
++        return original_bf16 && sd::browser_bf16_matrix_role(state.tensor, state.usage_op) ? GGML_TYPE_BF16 : GGML_TYPE_F32;
++    };
+     if (sd_backend_is(compute_backend, "WebGPU")) {
+         for (auto& state : new_states) {
+             ggml_tensor* tensor = state->tensor;
+             if (state->sources.empty() || state->sources.front().type != GGML_TYPE_BF16 || tensor->type != GGML_TYPE_BF16) {
+                 continue;
+             }
+-            // Change only unallocated parameter metadata. The loader must retain
+-            // the original file type/offset and convert once into this destination.
++            const auto target = destination_type(*state);
++            // Only unallocated metadata changes. Source dtype/offset remain the
++            // file contract; retention never substitutes a converted file copy.
+             if (tensor->buffer != nullptr || tensor->data != nullptr || tensor->view_src != nullptr ||
+-                !ggml_is_contiguous(tensor) || uint64_t(ggml_nelements(tensor)) > SIZE_MAX / ggml_type_size(webgpu_bf16_type_)) {
++                !ggml_is_contiguous(tensor) || uint64_t(ggml_nelements(tensor)) > SIZE_MAX / ggml_type_size(target)) {
+                 LOG_ERROR("cannot prepare BF16 parameter storage for WebGPU");
+                 return false;
+             }
+-            source_bytes += ggml_nbytes(tensor);
+-            destination_bytes += uint64_t(ggml_nelements(tensor)) * ggml_type_size(webgpu_bf16_type_);
+-            ++converted_tensors;
++            if (target == GGML_TYPE_BF16) {
++                auto buft = ggml_backend_get_default_buffer_type(compute_backend);
++                if (!device_supports_param_op(ggml_backend_get_device(compute_backend), tensor, state->usage_op, buft)) {
++                    LOG_ERROR("WebGPU rejects a retained BF16 matrix or lookup parameter");
++                    return false;
++                }
++                ++retained_tensors;
++                retained_bytes += ggml_nbytes(tensor);
++            } else {
++                source_bytes += ggml_nbytes(tensor);
++                destination_bytes += uint64_t(ggml_nelements(tensor)) * ggml_type_size(target);
++                ++converted_tensors;
++            }
+         }
+         // Do not leave earlier tensors changed when a later candidate is invalid.
+         for (auto& state : new_states) {
+@@ -297,20 +330,22 @@
+             if (state->sources.empty() || state->sources.front().type != GGML_TYPE_BF16 || tensor->type != GGML_TYPE_BF16) {
+                 continue;
+             }
+-            tensor->type = webgpu_bf16_type_;
++            tensor->type = destination_type(*state);
++            state->browser_retained_bf16 = tensor->type == GGML_TYPE_BF16;
+             tensor->nb[0] = ggml_type_size(tensor->type);
+-            for (int i = 1; i < GGML_MAX_DIMS; ++i) {
+-                tensor->nb[i] = tensor->nb[i - 1] * tensor->ne[i - 1];
+-            }
++            for (int i = 1; i < GGML_MAX_DIMS; ++i) tensor->nb[i] = tensor->nb[i - 1] * tensor->ne[i - 1];
+         }
+     }
+     if (converted_tensors != 0) {
+-        // These are unique parameter bytes, not repeated graph operand uses or
+-        // peak memory: the loader additionally needs per-tensor conversion buffers.
++        const auto target = webgpu_bf16_type_ == GGML_TYPE_BF16 ? GGML_TYPE_F32 : webgpu_bf16_type_;
+         LOG_INFO("browser-weight-conversion-v1 target=%s tensors=%zu source_bytes=%llu destination_bytes=%llu extra_bytes=%llu",
+-                 ggml_type_name(webgpu_bf16_type_), converted_tensors,
++                 ggml_type_name(target), converted_tensors,
+                  (unsigned long long)source_bytes, (unsigned long long)destination_bytes,
+                  (unsigned long long)(destination_bytes - source_bytes));
++    }
++    if (retained_tensors != 0) {
++        LOG_INFO("browser-weight-retention-v1 tensors=%zu source_bytes=%llu resident_bytes=%llu fallback_f32_tensors=%zu",
++                 retained_tensors, (unsigned long long)retained_bytes, (unsigned long long)retained_bytes, converted_tensors);
+     }
+ #endif
+     if (registered_tensor_size != nullptr) {
+@@ -685,6 +720,14 @@
+ bool ModelManager::apply_loras_to_params(const std::vector<TensorState*>& states) {
+     if (loras_.empty() || applying_loras_)
+         return true;
++#ifdef SD_BROWSER_WEBGPU
++    if (webgpu_bf16_type_ == GGML_TYPE_BF16 && std::any_of(states.begin(), states.end(), [](const TensorState* state) {
++            return state != nullptr && state->browser_retained_bf16;
++        })) {
++        LOG_ERROR("checked BF16 retention does not support destructive LoRA weight updates");
++        return false;
++    }
++#endif
+     applying_loras_ = true;
+     struct ApplyGuard {
+         bool& active;
+@@ -823,6 +866,13 @@
+         return false;
+     }
+ 
++#ifdef SD_BROWSER_WEBGPU
++    if (state.browser_retained_bf16 &&
++        std::any_of(state.sources.begin(), state.sources.end(), [](const TensorStorage& source) { return source.type != GGML_TYPE_BF16; })) {
++        LOG_ERROR("registered retained BF16 parameter changed its source dtype");
++        return false;
++    }
++#endif
+     TensorStorage tensor_storage = state.sources.front();
+     if (state.sources.size() > 1) {
+         const int dim = tensor_storage.n_dims - 1;
+diff --git a/src/model_manager.h b/src/model_manager.h
+--- a/src/model_manager.h
++++ b/src/model_manager.h
+@@ -37,6 +37,7 @@
+ 
+     struct TensorState {
+         std::string name;
++        bool browser_retained_bf16 = false;
+         ggml_tensor* tensor      = nullptr;
+         ModelComponent component = ModelComponent::Count;
+         std::vector<TensorStorage> sources;
+@@ -215,8 +216,14 @@
+     void set_prefetch_disabled(bool disabled) { prefetch_disabled_ = disabled; }
+     void set_enable_mmap(bool enable_mmap) { enable_mmap_ = enable_mmap; }
+     void set_webgpu_bf16_type(ggml_type type) {
+-        GGML_ASSERT(type == GGML_TYPE_F32 || type == GGML_TYPE_F16);
++        GGML_ASSERT(type == GGML_TYPE_F32 || type == GGML_TYPE_F16 || type == GGML_TYPE_BF16);
++        GGML_ASSERT(tensor_states_.empty());
+         webgpu_bf16_type_ = type;
++    }
++    bool browser_bf16_retention_enabled() const override { return webgpu_bf16_type_ == GGML_TYPE_BF16; }
++    bool is_browser_retained_bf16_param(const ggml_tensor* tensor) const override {
++        auto it = tensor_states_by_tensor_.find(const_cast<ggml_tensor*>(tensor));
++        return it != tensor_states_by_tensor_.end() && it->second->browser_retained_bf16;
+     }
+     void set_writable_mmap(bool writable_mmap) { writable_mmap_ = writable_mmap; }
+     void set_common_ignore_tensors(std::set<std::string> ignore_tensors);
+diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@ -327,6 +327,11 @@
+     if constexpr (std::is_base_of_v<Conditioner, T>) {
+         model->get_param_tensor_ops(tensor_ops);
+     }
++#ifdef SD_BROWSER_WEBGPU
++    else if constexpr (std::is_base_of_v<GGMLRunner, T>) {
++        model->get_param_tensor_ops(tensor_ops);
++    }
++#endif
+     if (model_manager == nullptr) {
+         return true;
+     }
+@@ -900,8 +905,9 @@
+     if (!validate_tensor_types(sd_ctx_params->wtype, sd_ctx_params->tensor_type_rules)) {
+         return false;
+     }
+-    if (sd_ctx_params->webgpu_bf16_type != SD_TYPE_F32 && sd_ctx_params->webgpu_bf16_type != SD_TYPE_F16) {
+-        LOG_ERROR("webgpu_bf16_type must be F32 or F16");
++    if (sd_ctx_params->webgpu_bf16_type != SD_TYPE_F32 && sd_ctx_params->webgpu_bf16_type != SD_TYPE_F16 &&
++        sd_ctx_params->webgpu_bf16_type != SD_TYPE_BF16) {
++        LOG_ERROR("webgpu_bf16_type must be F32, F16 or BF16");
+         return false;
+     }
+     for (float scale : {sd_ctx_params->linear_scale, sd_ctx_params->attn_scale}) {
+diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
+--- a/src/stable-diffusion.cpp
++++ b/src/stable-diffusion.cpp
+@@ -376,6 +376,14 @@
+     hires_params->upscale_tile_size   = 128;
+     hires_params->custom_sigmas       = nullptr;
+     hires_params->custom_sigmas_count = 0;
++}
++
++uint32_t sd_browser_bf16_retention_version(void) {
++#ifdef SD_BROWSER_WEBGPU
++    return 1;
++#else
++    return 0;
++#endif
+ }
+ 
+ void sd_ctx_params_init(sd_ctx_params_t* sd_ctx_params) {

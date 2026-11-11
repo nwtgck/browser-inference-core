@@ -133,9 +133,8 @@ void modulation(ggml_backend_t cpu, int width, int tokens, int prefix, int consu
         int i = n % 4;
         auto reference = qwen21_reference::ReferenceQwenImage21TransformerBlock::modulate(before.get(), x, params[i],
                                                                                           prefix, i % 2 == 1);
-        auto result = prepared
-                          ? Block::modulate_prepared(after.get(), x, prepared->target[i], prepared->prefix[i], prefix)
-                          : Block::modulate(after.get(), x, params[i], prefix, i % 2 == 1);
+        auto result = prepared ? Block::modulate_prepared(&ctx, x, prepared->target[i], prepared->prefix[i], prefix)
+                               : Block::modulate(&ctx, x, params[i], prefix, i % 2 == 1);
         expected = expected ? ggml_concat(before.get(), expected, reference, 1) : reference;
         actual = actual ? ggml_concat(after.get(), actual, result, 1) : result;
         if (prepared && prefix == 0 && !strided) {

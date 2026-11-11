@@ -122,6 +122,30 @@ class NativeLicenseIndex(unittest.TestCase):
         validate_index(image, runtime='stable-diffusion-cpp')
         self.assertEqual(set(json.loads((image / INDEX).read_text())), {'components'})
 
+    def test_image_cuda_sageattention_notices_are_distinct_from_ggml_copies(self):
+        image = self.root / 'image'
+        put(image, 'LICENSE', 'Image core')
+        current = 'licenses/stable-diffusion/src/core/cuda/sageattention/LICENSE'
+        nested = 'licenses/stable-diffusion/ggml/src/ggml-cuda/sageattention/LICENSE'
+        independent = 'licenses/ggml/ggml/src/ggml-cuda/sageattention/LICENSE'
+        original = 'Complete SageAttention notice\r\nAdditional attribution\r\n'
+        put(image, current, original)
+        put(image, nested, 'Nested ggml SageAttention notice')
+        put(image, independent, 'Independent ggml SageAttention notice')
+
+        write_index(image, runtime='stable-diffusion-cpp')
+        validate_index(image, runtime='stable-diffusion-cpp')
+        components = {item['id']: item for item in json.loads((image / INDEX).read_text())['components']}
+        self.assertEqual(components['stable-diffusion.cpp/sageattention']['name'], 'SageAttention (stable-diffusion.cpp)')
+        self.assertEqual(components['stable-diffusion.cpp/sageattention']['notices'], [{'path': current}])
+        self.assertEqual({item['path'] for item in components['ggml/sageattention']['notices']}, {nested, independent})
+        self.assertEqual((image / current).read_bytes(), original.encode('utf-8'))
+
+    def test_unreviewed_image_cuda_notices_remain_rejected(self):
+        for relative in ('src/core/cuda/unreviewed/LICENSE', 'src/core/cuda/sageattention-extra/LICENSE'):
+            with self.subTest(path=relative), self.assertRaisesRegex(ValueError, 'Unclassified native notice'):
+                owner('stable-diffusion.cpp', relative)
+
     def test_paths_reject_traversal_absolute_windows_and_control_forms(self):
         for value in ('../x', '/x', 'a//b', 'a/./b', 'C:/x', 'a\\b', 'a\0b', ''):
             with self.subTest(path=value), self.assertRaisesRegex(ValueError, 'Unsafe'): safe_path(value)

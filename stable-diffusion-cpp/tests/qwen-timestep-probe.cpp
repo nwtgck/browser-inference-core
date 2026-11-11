@@ -6,6 +6,7 @@
 #include "ggml-cpu.h"
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -58,7 +59,7 @@ bool measurement_preserves_addresses(ggml_backend_t backend) {
             bool valid = true;
             int checked = 0;
             const auto measurement = workspace.measure(
-                graph, 0, [&](const ggml_tensor * source) { return source == weight ? backend : nullptr; },
+                graph, [&](const ggml_tensor * source) { return source == weight ? backend : nullptr; },
                 [&](ggml_backend_sched_t scheduler, ggml_cgraph * copy) {
                     for (int i = 0; i < ggml_graph_n_nodes(copy); ++i) {
                         auto node = ggml_graph_node(copy, i);
@@ -86,9 +87,8 @@ bool measurement_preserves_addresses(ggml_backend_t backend) {
                         }
                     }
                 });
-            if (!valid || checked != 2 || !measurement.scheduler || measurement.buffers.empty() ||
-                weight->data != original_data || weight->buffer != original_buffer ||
-                view->data != original_view_data || view->view_src != weight ||
+            if (!valid || checked != 2 || measurement.buffers.empty() || weight->data != original_data ||
+                weight->buffer != original_buffer || view->data != original_view_data || view->view_src != weight ||
                 view->view_offs != original_view_offset || direct_rows->src[0] != weight || view_rows->src[0] != view)
                 return false;
             std::vector<size_t> sizes;
@@ -110,7 +110,9 @@ extern "C" int sdc_test_qwen_timestep(const char * backend_name) {
     using Backend = std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)>;
     using Context = std::unique_ptr<ggml_context, decltype(&ggml_free)>;
     using Buffer = std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)>;
-    Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+    Backend backend(std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                                          : ggml_backend_init_by_name(backend_name, nullptr),
+                    ggml_backend_free);
     if (!backend)
         return -1;
     if (ggml_backend_is_cpu(backend.get()))

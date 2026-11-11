@@ -13,19 +13,68 @@ must match. `api` calls normalize pointers and 64-bit integers to bigint, serial
 native access, and preserve upstream defaults and results. Record layouts are
 queried from the compiled module, never guessed from JavaScript.
 
+ABI 2 describes this wire convention, not compatibility between upstream API
+revisions. A matching schema and Wasm can still require changes in the caller
+when a function signature, record field, ownership rule, or field unit changes.
+
+The image manifest's `capabilities.bf16WeightRetention` identifies builds exposing
+`await core.api.sd_browser_bf16_retention_version()`, which returns `1` for this
+browser policy. Check the source-bound capability and the generated API/version
+before selecting `sd_ctx_params_t.webgpu_bf16_type = core.constant('SD_TYPE_BF16')`.
+This explicit option retains original BF16 parameters for supported WebGPU weight
+operations. The initializer still selects `SD_TYPE_F32` widening; `SD_TYPE_F16`
+remains the caller's explicit narrowing choice. It does not change source files,
+other parameter types, activation precision or the runtime profile. The version
+reports compiled functionality, not successful execution on a device or proof
+that a complete model fits. The separate model-IO capability bits remain `7`.
+Package validation also requires the same ordered kernel, bounded upload,
+bounded reader and explicit retention patch hashes in every source-bound profile
+and variant; the version getter alone does not establish this capability.
+
 Allocate records, call their upstream initializer, set fields, and invoke upstream
 functions. `getField`/`setField` handle native scalar widths; use `fieldAddress`
 for nested records and pointer-width DataView access for pointer out-parameters.
-Call `free_sd_images` for image arrays (including every channel buffer), `free_sd_ctx`
-for contexts, and `free` only for caller allocations. Borrowed strings/preview
-images must not be freed; copy preview data before returning from a callback.
+Re-read the memory view after an awaited native call; Wasm memory may have grown.
+
+`generate_image(ctx, params, resultOut)` writes an owned
+`sd_image_generation_result_t*` to caller-allocated pointer storage. Read `items`
+and `count` from that result, then use `recordSize('sd_image_result_t')` to step
+through the items and `fieldAddress(..., 'image')` for each embedded `sd_image_t`.
+Each item owns its pixels and its UTF-8 JSON `generation_info`. Copy the data the
+application needs before calling `free_sd_image_generation_result(result)`.
+The result is independent of the context lifetime. Do not separately free its
+items, pixels or metadata. A failed generation sets the output pointer to null.
+
+`generate_video` and `upscale_video` return an owned
+`sd_video_generation_result_t*`, released by `free_sd_video_generation_result`.
+`upscale` and `adetail_image` use the image-result owner. `free_sd_images` still
+exists for separately owned image arrays; it does not release a generation-result
+owner. Call `free_sd_ctx` for contexts and `free` only for caller allocations.
+Borrowed preview images must not be freed; copy their data before returning from
+a callback.
+
+`sd_tiling_params_t.tile_size_w` and `tile_size_h` are image-pixel dimensions for
+both VAE encode and decode; zero selects the upstream default of 256 pixels.
+The old `tile_size_x/y` names and latent-space units are no longer accepted.
+`rel_size_w/h` values up to one are dimension fractions; larger positive values
+specify target tile counts. The application owns migration of saved settings.
 
 `module.addFunction` / `removeFunction` expose upstream callbacks. Use the native
 pointer signature `p` (not a fixed `i`) for pointer arguments, e.g. log `vipp`,
-progress `viifp`, preview `viipip`, graph evaluation `ipip`. Callback registrations
-are upstream module-global; separate instances do not share them. A callback must
-be synchronous, catch its own errors, and must not start a second native operation
-while one is pending. Clear native registrations before removing table entries.
+progress `viifp`, generation progress `vpp`, preview `viipip`, graph evaluation
+`ipip`. Log, legacy progress and preview registrations are module-global;
+`sd_set_generation_progress_callback(ctx, callback, data)` is context-local.
+Generation-progress records and their strings are borrowed only during the
+callback; copy needed values synchronously. Its 64-bit counters use bigint, and
+`total == 0` means an unknown total. Register and clear callbacks while the
+context is idle, before removing their function-table entries. A callback must
+be synchronous, catch its own errors, and must not start a second host-helper
+operation while one is pending.
+
+`sd_get_preview_info` returns a record by value in C, so the generated call is
+`await core.api.sd_get_preview_info(preallocatedOutput)`. The helper's serialization
+guard also applies to this call; do not invoke it through `core.api` from a pending
+generation callback. Separate Wasm instances do not share callback state.
 A Worker receiving no events while native code runs cannot accept a cancellation
 message; the caller can terminate that Worker, or explicitly design a shared
 control mechanism. The core does not choose for the caller.
@@ -151,3 +200,21 @@ address-width limits; it does not replace the large-file model-reader contract
 above. `ggml_set_abort_callback` is module-global and returns the previous
 callback pointer; manage JS callback-table lifetime yourself and never throw
 across the native boundary.
+
+## Node ABI contract probe
+
+An already compiled `test` variant can run the small Node-only ABI probe without
+a browser or model files. From the runtime source directory, for example:
+
+```sh
+node --experimental-wasm-jspi tests/node-core-contract.mjs build/webgpu-wasm32-jspi/test direct 4
+node tests/node-core-contract.mjs build/webgpu-wasm32-asyncify/test asyncify 4
+```
+
+Use a Node version with JSPI support for the first command. Pass `8` for a wasm64
+build. The directory must contain `runtime/core.mjs`, `runtime/core.wasm` and its
+matching `generated/schema.mjs`. The probe checks BF16 retention version/defaults,
+record layouts, pointer width,
+64-bit fields, by-value preview info, null-context generation results and snapshot
+failure atomicity. It never queries devices, creates model contexts or computes
+graphs, and it does not update browser-smoke provenance.

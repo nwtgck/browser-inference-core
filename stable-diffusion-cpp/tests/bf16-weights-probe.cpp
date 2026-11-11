@@ -20,17 +20,25 @@ static std::string file_bytes(const char * path) {
     return std::string(std::istreambuf_iterator<char>(input), {});
 }
 
-static bool write_fixture(const char * path, bool safetensors, ggml_context * ctx) {
-    auto weight = ggml_new_tensor_2d(ctx, GGML_TYPE_BF16, 32, 32);
+static bool write_fixture(const char * path, bool safetensors, bool multipart, ggml_context * ctx) {
+    auto weight = ggml_new_tensor_2d(ctx, GGML_TYPE_BF16, 32, multipart ? 16 : 32);
+    auto second = multipart ? ggml_new_tensor_2d(ctx, GGML_TYPE_BF16, 32, 16) : nullptr;
     auto range = ggml_new_tensor_1d(ctx, GGML_TYPE_BF16, 8);
     auto control = ggml_new_tensor_1d(ctx, safetensors ? GGML_TYPE_F16 : GGML_TYPE_Q4_K, 256);
     ggml_set_name(weight, "weight");
+    if (second)
+        ggml_set_name(second, "weight.1");
     ggml_set_name(range, "range");
     ggml_set_name(control, "control");
     std::memset(weight->data, 0, ggml_nbytes(weight));
+    if (second)
+        std::memset(second->data, 0, ggml_nbytes(second));
     std::memset(control->data, 0, ggml_nbytes(control));
-    for (int i = 0; i < 32; ++i)
+    for (int i = 0; i < weight->ne[1]; ++i)
         static_cast<ggml_bf16_t *>(weight->data)[i * 32 + i] = ggml_fp32_to_bf16(0.75f);
+    if (second)
+        for (int i = 0; i < 16; ++i)
+            static_cast<ggml_bf16_t *>(second->data)[i * 32 + i + 16] = ggml_fp32_to_bf16(0.75f);
     // F32 must preserve the BF16 exponent range; opt-in F16 may overflow/underflow.
     const float values[] = {0.f, -0.f, 1.f, -2.f, 65536.f, -65536.f, 0x1p-30f, -0x1p-30f};
     ggml_fp32_to_bf16_row(values, static_cast<ggml_bf16_t *>(range->data), 8);
@@ -38,6 +46,8 @@ static bool write_fixture(const char * path, bool safetensors, ggml_context * ct
         std::unique_ptr<gguf_context, decltype(&gguf_free)> file(gguf_init_empty(), gguf_free);
         for (auto tensor : {weight, range, control})
             gguf_add_tensor(file.get(), tensor);
+        if (second)
+            gguf_add_tensor(file.get(), second);
         return gguf_write_to_file(file.get(), path, false);
     }
     const std::string header = "{\"weight\":{\"dtype\":\"BF16\",\"shape\":[32,32],\"data_offsets\":[0,2048]},"
@@ -52,7 +62,7 @@ static bool write_fixture(const char * path, bool safetensors, ggml_context * ct
     return bool(file);
 }
 
-static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target_type) {
+static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target_type, bool multipart = false) {
     const char * path = safetensors ? "bf16-weights.safetensors" : "bf16-weights.gguf";
     struct RemoveFile {
         const char * path;
@@ -63,7 +73,7 @@ static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target
     ProbeContext source(ggml_init({1024 * 1024, nullptr, false}), ggml_free);
     ProbeContext params(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     ProbeContext graph_ctx(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
-    if (!source || !params || !graph_ctx || !write_fixture(path, safetensors, source.get()))
+    if (!source || !params || !graph_ctx || !write_fixture(path, safetensors, multipart, source.get()))
         return -20;
     const auto original = file_bytes(path);
     ModelManager manager;
@@ -75,7 +85,12 @@ static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target
         return -21;
     std::map<std::string, ggml_tensor *> weights;
     for (const auto & entry : manager.loader().get_tensor_storage_map()) {
-        weights[entry.first] = ggml_new_tensor(params.get(), entry.second.type, entry.second.n_dims, entry.second.ne);
+        if (multipart && entry.first == "weight.1")
+            continue;
+        weights[entry.first] =
+            multipart && entry.first == "weight"
+                ? ggml_new_tensor_2d(params.get(), entry.second.type, 32, 32)
+                : ggml_new_tensor(params.get(), entry.second.type, entry.second.n_dims, entry.second.ne);
     }
     size_t registered_bytes = 0;
     if (!ggml_backend_is_cpu(backend)) {
@@ -172,7 +187,7 @@ static int check_file(ggml_backend_t backend, bool safetensors, ggml_type target
     auto graph = ggml_new_graph_custom(graph_ctx.get(), 32, false);
     ggml_build_forward_expand(graph, output);
     sd::ComputeWorkspace workspace(backend);
-    if (!workspace.allocate(graph, {}))
+    if (!workspace.allocate(graph, [](ggml_backend_sched_t, ggml_cgraph *) {}))
         return -28;
     auto scheduler = workspace.scheduler();
     if (workspace.cpu_backend() != nullptr)
@@ -222,7 +237,9 @@ extern "C" int sdc_test_bf16_weights(const char * backend_name) {
         return -41;
 
     std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend(
-        ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+        std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                              : ggml_backend_init_by_name(backend_name, nullptr),
+        ggml_backend_free);
     if (!backend)
         return -1;
     if (ggml_backend_is_cpu(backend.get()))
@@ -232,6 +249,13 @@ extern "C" int sdc_test_bf16_weights(const char * backend_name) {
             const int result = check_file(backend.get(), safetensors, type);
             if (result != 1)
                 return result;
+            if (!safetensors) {
+                // The manager assembles weight and weight.1 into one destination.
+                // Identity arithmetic checks both halves after BF16 policy conversion.
+                const int merged = check_file(backend.get(), false, type, true);
+                if (merged != 1)
+                    return merged;
+            }
         }
     }
     return 1;

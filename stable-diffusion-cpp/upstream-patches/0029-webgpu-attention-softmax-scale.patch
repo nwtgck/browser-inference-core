@@ -1,8 +1,6 @@
-diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
-index 9702c1d..84d0ea4 100644
 --- a/src/core/ggml_extend.cpp
 +++ b/src/core/ggml_extend.cpp
-@@ -752,6 +752,25 @@ ggml_tensor* ggml_ext_cast_f32(ggml_context* ctx, ggml_backend_t backend, ggml_t
+@@ -721,6 +721,25 @@
  }
  
  #ifdef SD_BROWSER_WEBGPU
@@ -28,10 +26,11 @@ index 9702c1d..84d0ea4 100644
  // Split queries, never keys: each row retains its complete softmax denominator,
  // mask and optional sink. This preserves manual attention (including precision)
  // instead of silently enabling Flash Attention when its setting is disabled.
-@@ -779,23 +798,30 @@ static ggml_tensor* browser_bounded_attention(ggml_context* ctx, ggml_backend_t
+@@ -747,24 +766,31 @@
+             auto query = ggml_view_4d(ctx, q, q->ne[0], count, q->ne[2], q->ne[3],
                                          q->nb[1], q->nb[2], q->nb[3], begin * q->nb[1]);
              auto scores = ggml_mul_mat(ctx, k, query);
-             ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+-            ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
 -            auto scaled = ggml_scale_inplace(ctx, scores, scale);
 -            auto logits = scaled;
 -            if (mask != nullptr) {
@@ -43,6 +42,7 @@ index 9702c1d..84d0ea4 100644
 -            auto probabilities = sinks != nullptr ? ggml_soft_max(ctx, logits) : ggml_soft_max_inplace(ctx, logits);
 -            if (sinks != nullptr) {
 -                ggml_soft_max_add_sinks(probabilities, sinks);
++            ggml_prec_set_acc(scores, GGML_PREC_F32);
 +            auto probabilities = browser_attention_soft_max(ctx, backend, scores, mask, sinks, scale);
 +            ggml_tensor* scaled = nullptr;
 +            ggml_tensor* logits = nullptr;
@@ -72,21 +72,13 @@ index 9702c1d..84d0ea4 100644
                  !ggml_backend_supports_op(backend, chunk) || !ggml_backend_supports_op(backend, merged)) {
                  supported = false;
                  break;
-@@ -984,20 +1010,27 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
+@@ -966,20 +992,27 @@
          if (kqv == nullptr) {
              auto kq = ggml_mul_mat(ctx, k, q);  // [N * n_head, L_q, L_k]
-             ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+             ggml_prec_set_acc(kq, GGML_PREC_F32);
 -            kq = ggml_scale_inplace(ctx, kq, scale);
 -            if (mask) {
 -                kq = ggml_add_inplace(ctx, kq, mask);
--            }
--            if (sinks != nullptr) {
--                // A sink-bearing fallback may be placed separately from its input.
--                // Do not retain an in-place output on a different backend's storage.
--                kq = ggml_soft_max(ctx, kq);
--                ggml_soft_max_add_sinks(kq, sinks);
--            } else {
--                kq = ggml_soft_max_inplace(ctx, kq);
 +            ggml_tensor* probabilities = nullptr;
 +#ifdef SD_BROWSER_WEBGPU
 +            probabilities = browser_attention_soft_max(ctx, backend, kq, mask, sinks, scale);
@@ -106,8 +98,17 @@ index 9702c1d..84d0ea4 100644
 +                }
 +                probabilities = kq;
              }
- 
+-            if (sinks != nullptr) {
+-                // A sink-bearing fallback may be placed separately from its input.
+-                // Do not retain an in-place output on a different backend's storage.
+-                kq = ggml_soft_max(ctx, kq);
+-                ggml_soft_max_add_sinks(kq, sinks);
+-            } else {
+-                kq = ggml_soft_max_inplace(ctx, kq);
+-            }
+-
 -            kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
++
 +            kqv = ggml_mul_mat(ctx, v, probabilities);  // [N * n_head, L_q, d_head]
          }
  

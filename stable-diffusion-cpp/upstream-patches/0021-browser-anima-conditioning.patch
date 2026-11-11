@@ -1,104 +1,39 @@
-diff --git a/src/core/ggml_extend.cpp b/src/core/ggml_extend.cpp
-index 103ba5d..6310294 100644
---- a/src/core/ggml_extend.cpp
-+++ b/src/core/ggml_extend.cpp
-@@ -695,7 +695,8 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-                                     bool skip_reshape,
-                                     bool flash_attn,
-                                     float kv_scale,
--                                    bool sage_attn) {  // avoid overflow
-+                                    bool sage_attn,
-+                                    ggml_tensor* sinks) {  // avoid overflow
-     int64_t L_q;
-     int64_t L_k;
-     int64_t C;
-@@ -773,6 +774,9 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-         }
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@ -2353,6 +2353,11 @@
+     using QwenPrefixInputs       = std::tuple<const sd::Tensor<float>*, const sd::Tensor<int32_t>*,
+                                               const std::vector<sd::Tensor<float>>*>;
+     std::vector<QwenPrefixInputs> qwen_prefix_inputs;
++    AnimaConditionIds anima_condition_ids;
++    if (std::any_of(generation_extensions.begin(), generation_extensions.end(),
++                    [](const auto& extension) { return extension->is_enabled(); })) {
++        anima_condition_ids.disable();
++    }
  
-         auto out = ggml_flash_attn_ext(ctx, q_in, k_in, v_in, mask_in, scale / kv_scale, 0, 0);
-+        if (sinks != nullptr) {
-+            ggml_flash_attn_ext_add_sinks(out, sinks);
-+        }
-         if (!ggml_backend_supports_op(backend, out)) {
-             return nullptr;
-         }
-@@ -787,7 +791,7 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-     };
+     RunnerEndOnExit sample_control_runner_end{!control_image.empty() && control_net != nullptr ? control_net.get() : nullptr};
  
- #ifndef SD_USE_UPSTREAM_GGML
--    if (sage_attn && mask == nullptr && d_head > 0 && d_head <= 128) {
-+    if (sage_attn && sinks == nullptr && mask == nullptr && d_head > 0 && d_head <= 128) {
-         auto q_in                 = ggml_reshape_4d(ctx, ggml_ext_cont(ctx, q->type == GGML_TYPE_F32 ? q : ggml_cast(ctx, q, GGML_TYPE_F32)), d_head, L_q, n_head, N);
-         auto k_in                 = ggml_reshape_4d(ctx, ggml_ext_cont(ctx, k->type == GGML_TYPE_F32 ? k : ggml_cast(ctx, k, GGML_TYPE_F32)), d_head, L_k, n_kv_head, N);
-         auto v_in                 = ggml_ext_cont(ctx, ggml_permute(ctx, v, 0, 2, 1, 3));
-@@ -854,7 +858,14 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-         if (mask) {
-             kq = ggml_add_inplace(ctx, kq, mask);
-         }
--        kq = ggml_soft_max_inplace(ctx, kq);
-+        if (sinks != nullptr) {
-+            // A sink-bearing fallback may be placed separately from its input.
-+            // Do not retain an in-place output on a different backend's storage.
-+            kq = ggml_soft_max(ctx, kq);
-+            ggml_soft_max_add_sinks(kq, sinks);
-+        } else {
-+            kq = ggml_soft_max_inplace(ctx, kq);
-+        }
- 
-         kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
- 
-diff --git a/src/core/ggml_extend.h b/src/core/ggml_extend.h
-index 33d8c3b..b054a4c 100644
---- a/src/core/ggml_extend.h
-+++ b/src/core/ggml_extend.h
-@@ -221,7 +221,8 @@ ggml_tensor* ggml_ext_attention_ext(ggml_context* ctx,
-                                     bool skip_reshape = false,
-                                     bool flash_attn   = false,
-                                     float kv_scale    = 1.0f,
--                                    bool sage_attn    = false);
-+                                    bool sage_attn    = false,
-+                                    ggml_tensor* sinks = nullptr);
- 
- ggml_tensor* ggml_ext_layer_norm(ggml_context* ctx,
-                                  ggml_tensor* x,
-diff --git a/src/core/ggml_runner.cpp b/src/core/ggml_runner.cpp
-index f1bb643..854adb0 100644
---- a/src/core/ggml_runner.cpp
-+++ b/src/core/ggml_runner.cpp
-@@ -21,11 +21,12 @@ ggml_tensor* ggml_ext_attention_ext(GGMLRunnerContext* ctx,
-                                     ggml_tensor* mask,
-                                     bool skip_reshape,
-                                     bool flash_attn,
--                                    float kv_scale) {
-+                                    float kv_scale,
-+                                    ggml_tensor* sinks) {
-     if (ctx->attn_scale > 0.f) {
-         kv_scale = ctx->attn_scale;
-     }
--    return ggml_ext_attention_ext(ctx->ggml_ctx, ctx->backend, q, k, v, n_head, mask, skip_reshape, flash_attn, kv_scale, ctx->sage_attn_enabled);
-+    return ggml_ext_attention_ext(ctx->ggml_ctx, ctx->backend, q, k, v, n_head, mask, skip_reshape, flash_attn, kv_scale, ctx->sage_attn_enabled, sinks);
- }
- 
- void GGMLRunner::alloc_params_ctx() {
-diff --git a/src/core/ggml_runner.h b/src/core/ggml_runner.h
-index b5839eb..70b5da3 100644
---- a/src/core/ggml_runner.h
-+++ b/src/core/ggml_runner.h
-@@ -125,7 +125,8 @@ ggml_tensor* ggml_ext_attention_ext(GGMLRunnerContext* ctx,
-                                     ggml_tensor* mask = nullptr,
-                                     bool skip_reshape = false,
-                                     bool flash_attn   = false,
--                                    float kv_scale    = 1.f);
-+                                    float kv_scale    = 1.f,
-+                                    ggml_tensor* sinks = nullptr);
- 
- struct GGMLRunner {
- private:
-diff --git a/src/model/diffusion/anima.hpp b/src/model/diffusion/anima.hpp
-index 9ace46d..a4059ae 100644
+@@ -2678,6 +2683,18 @@
+                     }
+                 }
+             }
++            if (sd_version_is_anima(version)) {
++                // Once an extension can mutate a condition, never re-enable
++                // address-based IDs for the remainder of this sampling run.
++                if (std::any_of(generation_extensions.begin(), generation_extensions.end(),
++                                [](const auto& extension) { return extension->is_enabled(); })) {
++                    anima_condition_ids.disable();
++                }
++                auto* extra = std::get_if<AnimaDiffusionExtra>(&diffusion_params.extra);
++                if (extra != nullptr) {
++                    extra->condition_id = anima_condition_ids.get(diffusion_params.context, extra->t5_ids, extra->t5_weights);
++                }
++            }
+             auto output_opt = work_diffusion_model->compute(n_threads, diffusion_params);
+             if (output_opt.empty()) {
+                 LOG_ERROR("diffusion model compute failed");
 --- a/src/model/diffusion/anima.hpp
 +++ b/src/model/diffusion/anima.hpp
-@@ -15,6 +15,54 @@
+@@ -16,6 +16,54 @@
  
  namespace Anima {
      constexpr int ANIMA_GRAPH_SIZE = 65536;
@@ -114,7 +49,7 @@ index 9ace46d..a4059ae 100644
 +    inline TextContext finish_text_context(GGMLRunnerContext* ctx, ggml_tensor* values,
 +                                           int64_t heads, bool compact) {
 +        if (values->ne[1] > ANIMA_CONTEXT_LENGTH) {
-+            values = ggml_ext_slice(ctx->ggml_ctx, values, 1, 0, ANIMA_CONTEXT_LENGTH);
++            values = ggml_ext_slice(ctx, values, 1, 0, ANIMA_CONTEXT_LENGTH);
 +        }
 +        const int64_t zeros = ANIMA_CONTEXT_LENGTH - values->ne[1];
 +        if (zeros <= 0) return {values, nullptr};
@@ -122,7 +57,7 @@ index 9ace46d..a4059ae 100644
 +        if (compact && !ctx->weight_adapter && values->ne[1] > 0) {
 +            // Bias-free K/V projections map these positions to zero. Their
 +            // exp(0) contributions remain in the denominator, not in the matmuls.
-+            auto sinks = ggml_ext_full(ctx->ggml_ctx, std::log(static_cast<float>(zeros)),
++            auto sinks = ggml_ext_full(ctx, std::log(static_cast<float>(zeros)),
 +                                        heads * values->ne[2], 1, 1, 1);
 +            return {values, sinks};
 +        }
@@ -130,7 +65,7 @@ index 9ace46d..a4059ae 100644
 +        (void)compact;
 +        (void)heads;
 +#endif
-+        auto padding = ggml_ext_zeros(ctx->ggml_ctx, values->ne[0], zeros, values->ne[2], 1);
++        auto padding = ggml_ext_zeros(ctx, values->ne[0], zeros, values->ne[2], 1);
 +        return {ggml_concat(ctx->ggml_ctx, values, padding, 1), nullptr};
 +    }
 +
@@ -153,7 +88,7 @@ index 9ace46d..a4059ae 100644
  
      struct AnimaConfig {
          int64_t in_channels       = 16;
-@@ -200,7 +248,8 @@ namespace Anima {
+@@ -201,7 +249,8 @@
                               ggml_tensor* hidden_states,
                               ggml_tensor* encoder_hidden_states = nullptr,
                               ggml_tensor* pe_q                  = nullptr,
@@ -163,29 +98,31 @@ index 9ace46d..a4059ae 100644
              if (encoder_hidden_states == nullptr) {
                  encoder_hidden_states = hidden_states;
              }
-@@ -244,7 +293,9 @@ namespace Anima {
+@@ -245,7 +294,10 @@
                                                       num_heads,
                                                       nullptr,
                                                       true,
 -                                                     ctx->flash_attn_enabled);
 +                                                     ctx->flash_attn_enabled,
 +                                                     1.f,
++                                                     nullptr,
 +                                                     sinks);
              } else {
                  auto q_flat = ggml_reshape_3d(ctx->ggml_ctx, q4, head_dim * num_heads, L_q, N);
                  auto k_flat = ggml_reshape_3d(ctx->ggml_ctx, k4, head_dim * num_heads, L_k, N);
-@@ -255,7 +306,9 @@ namespace Anima {
+@@ -256,7 +308,10 @@
                                                       num_heads,
                                                       nullptr,
                                                       false,
 -                                                     ctx->flash_attn_enabled);
 +                                                     ctx->flash_attn_enabled,
 +                                                     1.f,
++                                                     nullptr,
 +                                                     sinks);
              }
  
              return out_proj->forward(ctx, attn_out);
-@@ -407,7 +460,8 @@ namespace Anima {
+@@ -408,7 +463,8 @@
                               ggml_tensor* encoder_hidden_states,
                               ggml_tensor* embedded_timestep,
                               ggml_tensor* temb,
@@ -195,7 +132,7 @@ index 9ace46d..a4059ae 100644
              auto norm1 = std::dynamic_pointer_cast<AdaLayerNormZero>(blocks["adaln_modulation_self_attn"]);
              auto attn1 = std::dynamic_pointer_cast<AnimaAttention>(blocks["self_attn"]);
              auto norm2 = std::dynamic_pointer_cast<AdaLayerNormZero>(blocks["adaln_modulation_cross_attn"]);
-@@ -420,7 +474,7 @@ namespace Anima {
+@@ -421,7 +477,7 @@
              hidden_states         = ggml_add(ctx->ggml_ctx, hidden_states, apply_gate(ctx->ggml_ctx, h, gate1));
  
              auto [normed2, gate2] = norm2->forward(ctx, hidden_states, embedded_timestep, temb);
@@ -204,7 +141,7 @@ index 9ace46d..a4059ae 100644
              hidden_states         = ggml_add(ctx->ggml_ctx, hidden_states, apply_gate(ctx->ggml_ctx, h, gate2));
  
              auto [normed3, gate3] = norm3->forward(ctx, hidden_states, embedded_timestep, temb);
-@@ -478,6 +532,51 @@ namespace Anima {
+@@ -479,6 +535,51 @@
              blocks["llm_adapter"] = std::make_shared<LLMAdapter>(1024, 1024, 1024, 6, 16);
          }
  
@@ -242,7 +179,7 @@ index 9ace46d..a4059ae 100644
 +            // The full adapter must run before truncating: its self-attention
 +            // can depend on target positions beyond the final 512 positions.
 +            if (adapted->ne[1] > ANIMA_CONTEXT_LENGTH) {
-+                adapted = ggml_ext_slice(ctx->ggml_ctx, adapted, 1, 0, ANIMA_CONTEXT_LENGTH);
++                adapted = ggml_ext_slice(ctx, adapted, 1, 0, ANIMA_CONTEXT_LENGTH);
 +            }
 +            if (!cache_name.empty()) {
 +                // A materialized source lets RunnerCache use a backend-to-backend
@@ -256,7 +193,7 @@ index 9ace46d..a4059ae 100644
          ggml_tensor* forward(GGMLRunnerContext* ctx,
                               ggml_tensor* x,
                               ggml_tensor* timestep,
-@@ -487,14 +586,14 @@ namespace Anima {
+@@ -488,14 +589,14 @@
                               ggml_tensor* t5_weights               = nullptr,
                               ggml_tensor* adapter_q_pe             = nullptr,
                               ggml_tensor* adapter_k_pe             = nullptr,
@@ -273,7 +210,7 @@ index 9ace46d..a4059ae 100644
  
              int64_t W = x->ne[0];
              int64_t H = x->ne[1];
-@@ -518,27 +617,13 @@ namespace Anima {
+@@ -519,27 +620,13 @@
              auto temb              = t_embedder->forward(ctx, timestep_proj);
              auto embedded_timestep = t_embedding_norm->forward(ctx, timestep_proj);
  
@@ -289,14 +226,14 @@ index 9ace46d..a4059ae 100644
 -                    adapted_context = ggml_mul(ctx->ggml_ctx, adapted_context, w);
 -                }
 -                if (adapted_context->ne[1] < 512) {
--                    auto pad_ctx    = ggml_ext_zeros(ctx->ggml_ctx,
+-                    auto pad_ctx    = ggml_ext_zeros(ctx,
 -                                                     adapted_context->ne[0],
 -                                                     512 - adapted_context->ne[1],
 -                                                     adapted_context->ne[2],
 -                                                     1);
 -                    adapted_context = ggml_concat(ctx->ggml_ctx, adapted_context, pad_ctx, 1);
 -                } else if (adapted_context->ne[1] > 512) {
--                    adapted_context = ggml_ext_slice(ctx->ggml_ctx, adapted_context, 1, 0, 512);
+-                    adapted_context = ggml_ext_slice(ctx, adapted_context, 1, 0, 512);
 -                }
 -                encoder_hidden_states = adapted_context;
 +                auto adapted = prepare_context(ctx, encoder_hidden_states, t5_ids, t5_weights,
@@ -307,7 +244,7 @@ index 9ace46d..a4059ae 100644
              }
  
              sd::ggml_graph_cut::mark_graph_cut(x, "anima.prelude", "x");
-@@ -548,7 +633,7 @@ namespace Anima {
+@@ -549,7 +636,7 @@
  
              for (int i = 0; i < config.num_layers; i++) {
                  auto block = std::dynamic_pointer_cast<TransformerBlock>(blocks["blocks." + std::to_string(i)]);
@@ -315,9 +252,9 @@ index 9ace46d..a4059ae 100644
 +                x          = block->forward(ctx, x, encoder_hidden_states, embedded_timestep, temb, image_pe, context_sinks);
                  sd::ggml_graph_cut::mark_graph_cut(x, "anima.blocks." + std::to_string(i), "x");
              }
-             x = ggml_ext_slice(ctx->ggml_ctx, x, 1, 0, img_len);
-@@ -568,14 +653,24 @@ namespace Anima {
-         std::vector<float> adapter_k_pe_vec;
+             x = ggml_ext_slice(ctx, x, 1, 0, img_len);
+@@ -568,14 +655,24 @@
+     public:
          AnimaConfig config;
          AnimaNet net;
 +        bool context_cache_enabled = true;
@@ -342,7 +279,7 @@ index 9ace46d..a4059ae 100644
              net.init(params_ctx, tensor_storage_map, prefix + ".net");
          }
  
-@@ -641,7 +736,8 @@ namespace Anima {
+@@ -641,7 +738,8 @@
                                   const sd::Tensor<float>& context_tensor                  = {},
                                   const sd::Tensor<int32_t>& t5_ids_tensor                 = {},
                                   const sd::Tensor<float>& t5_weights_tensor               = {},
@@ -352,7 +289,7 @@ index 9ace46d..a4059ae 100644
              ggml_tensor* x          = make_input(x_tensor);
              ggml_tensor* timesteps  = make_input(timesteps_tensor);
              ggml_tensor* context    = make_optional_input(context_tensor);
-@@ -702,7 +798,8 @@ namespace Anima {
+@@ -706,7 +804,8 @@
                                            t5_weights,
                                            adapter_q_pe,
                                            adapter_k_pe,
@@ -362,7 +299,7 @@ index 9ace46d..a4059ae 100644
  
              ggml_build_forward_expand(gf, out);
              return gf;
-@@ -715,11 +812,27 @@ namespace Anima {
+@@ -719,11 +818,27 @@
                                    const sd::Tensor<int32_t>& t5_ids                 = {},
                                    const sd::Tensor<float>& t5_weights               = {},
                                    const std::vector<sd::Tensor<float>>& ref_latents = {},
@@ -382,7 +319,7 @@ index 9ace46d..a4059ae 100644
 -            return restore_trailing_singleton_dims(GGMLRunner::compute(get_graph, n_threads, false), x.dim());
 +            auto result = run(cache_id);
 +            if (result.empty() && last_compute_status() == GGML_STATUS_ALLOC_FAILED &&
-+                (cache_id != 0 || !cache_.empty())) {
++                (cache_id != 0 || has_cache_tensors())) {
 +                // The failed graph has ended. Never retry cancellation, device
 +                // failure or arithmetic errors as if they were memory pressure.
 +                free_cache_ctx_and_buffer();
@@ -394,7 +331,7 @@ index 9ace46d..a4059ae 100644
          }
  
          sd::Tensor<float> compute(int n_threads,
-@@ -735,7 +848,8 @@ namespace Anima {
+@@ -739,7 +854,8 @@
                             tensor_or_empty(extra->t5_ids),
                             tensor_or_empty(extra->t5_weights),
                             diffusion_params.ref_latents && diffusion_params.ref_image_params.pass_to_dit ? *diffusion_params.ref_latents : empty_ref_latents,
@@ -404,8 +341,6 @@ index 9ace46d..a4059ae 100644
          }
      };
  }  // namespace Anima
-diff --git a/src/model/diffusion/model.hpp b/src/model/diffusion/model.hpp
-index c82b9d7..ab6a8f5 100644
 --- a/src/model/diffusion/model.hpp
 +++ b/src/model/diffusion/model.hpp
 @@ -1,7 +1,9 @@
@@ -418,7 +353,7 @@ index c82b9d7..ab6a8f5 100644
  #include <utility>
  #include <variant>
  
-@@ -67,6 +69,34 @@ struct FluxDiffusionExtra {
+@@ -93,6 +95,34 @@
  struct AnimaDiffusionExtra {
      const sd::Tensor<int32_t>* t5_ids   = nullptr;
      const sd::Tensor<float>* t5_weights = nullptr;
@@ -453,52 +388,74 @@ index c82b9d7..ab6a8f5 100644
  };
  
  struct QwenImage21DiffusionExtra {
-diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
-index 5cb9b35..e7f1d0d 100644
---- a/src/pipeline/diffusion_engine.cpp
-+++ b/src/pipeline/diffusion_engine.cpp
-@@ -2270,6 +2270,11 @@ sd::Tensor<float> StableDiffusionGGML::sample(const std::shared_ptr<DiffusionMod
-     using QwenPrefixInputs = std::tuple<const sd::Tensor<float>*, const sd::Tensor<int32_t>*,
-                                         const std::vector<sd::Tensor<float>>*>;
-     std::vector<QwenPrefixInputs> qwen_prefix_inputs;
-+    AnimaConditionIds anima_condition_ids;
-+    if (std::any_of(generation_extensions.begin(), generation_extensions.end(),
-+                    [](const auto& extension) { return extension->is_enabled(); })) {
-+        anima_condition_ids.disable();
-+    }
+--- a/src/model/integrations/anima.cpp
++++ b/src/model/integrations/anima.cpp
+@@ -15,7 +15,8 @@
+     result.diffusion               = std::make_shared<Anima::AnimaRunner>(ctx.backends.runtime_backend(SDBackendModule::DIFFUSION),
+                                                                           tensor_storage_map,
+                                                                           "model.diffusion_model",
+-                                                                          weight_manager);
++                                                                          weight_manager,
++                                                                          sd_ctx_params->model_args);
+     return true;
+ }
  
-     RunnerEndOnExit sample_control_runner_end{!control_image.empty() && control_net != nullptr ? control_net.get() : nullptr};
+--- a/src/core/ggml_extend.cpp
++++ b/src/core/ggml_extend.cpp
+@@ -666,7 +666,8 @@
+                                     bool skip_reshape,
+                                     bool flash_attn,
+                                     float kv_scale,
+-                                    bool* used_flash_attn) {
++                                    bool* used_flash_attn,
++                                    ggml_tensor* sinks) {
+     auto ctx     = runner_ctx->ggml_ctx;
+     auto backend = runner_ctx->backend;
+     if (runner_ctx->attn_scale > 0.f) {
+@@ -755,6 +756,9 @@
+         }
  
-@@ -2552,6 +2557,18 @@ sd::Tensor<float> StableDiffusionGGML::sample(const std::shared_ptr<DiffusionMod
-                     }
-                 }
-             }
-+            if (sd_version_is_anima(version)) {
-+                // Once an extension can mutate a condition, never re-enable
-+                // address-based IDs for the remainder of this sampling run.
-+                if (std::any_of(generation_extensions.begin(), generation_extensions.end(),
-+                                [](const auto& extension) { return extension->is_enabled(); })) {
-+                    anima_condition_ids.disable();
-+                }
-+                auto* extra = std::get_if<AnimaDiffusionExtra>(&diffusion_params.extra);
-+                if (extra != nullptr) {
-+                    extra->condition_id = anima_condition_ids.get(diffusion_params.context, extra->t5_ids, extra->t5_weights);
-+                }
-+            }
-             auto output_opt = work_diffusion_model->compute(n_threads, diffusion_params);
-             if (output_opt.empty()) {
-                 LOG_ERROR("diffusion model compute failed");
-diff --git a/src/pipeline/model_builders.cpp b/src/pipeline/model_builders.cpp
-index 9b8819a..3becb50 100644
---- a/src/pipeline/model_builders.cpp
-+++ b/src/pipeline/model_builders.cpp
-@@ -358,7 +358,8 @@ namespace sd::model_builders {
-             result.diffusion   = std::make_shared<Anima::AnimaRunner>(ctx.backends.runtime_backend(SDBackendModule::DIFFUSION),
-                                                                     tensor_storage_map,
-                                                                     "model.diffusion_model",
--                                                                    weight_manager);
-+                                                                    weight_manager,
-+                                                                    sd_ctx_params->model_args);
-         } else if (sd_version_is_z_image(version)) {
-             result.conditioner = std::make_shared<LLMEmbedder>(ctx.backends.runtime_backend(SDBackendModule::TE),
-                                                                tensor_storage_map,
+         auto out = ggml_flash_attn_ext(ctx, q_in, k_in, v_in, mask_in, scale / kv_scale, 0, 0);
++        if (sinks != nullptr) {
++            ggml_flash_attn_ext_add_sinks(out, sinks);
++        }
+         if (!ggml_backend_supports_op(backend, out)) {
+             return nullptr;
+         }
+@@ -769,7 +773,7 @@
+     };
+ 
+ #ifndef SD_USE_UPSTREAM_GGML
+-    if (sage_attn && mask == nullptr && d_head > 0 && d_head <= 128) {
++    if (sage_attn && sinks == nullptr && mask == nullptr && d_head > 0 && d_head <= 128) {
+         auto q_in                 = ggml_reshape_4d(ctx, ggml_ext_cont(runner_ctx, q->type == GGML_TYPE_F32 ? q : ggml_cast(ctx, q, GGML_TYPE_F32)), d_head, L_q, n_head, N);
+         auto k_in                 = ggml_reshape_4d(ctx, ggml_ext_cont(runner_ctx, k->type == GGML_TYPE_F32 ? k : ggml_cast(ctx, k, GGML_TYPE_F32)), d_head, L_k, n_kv_head, N);
+         auto v_in                 = ggml_ext_cont(runner_ctx, ggml_permute(ctx, v, 0, 2, 1, 3));
+@@ -839,7 +843,14 @@
+         if (mask) {
+             kq = ggml_add_inplace(ctx, kq, mask);
+         }
+-        kq = ggml_soft_max_inplace(ctx, kq);
++        if (sinks != nullptr) {
++            // A sink-bearing fallback may be placed separately from its input.
++            // Do not retain an in-place output on a different backend's storage.
++            kq = ggml_soft_max(ctx, kq);
++            ggml_soft_max_add_sinks(kq, sinks);
++        } else {
++            kq = ggml_soft_max_inplace(ctx, kq);
++        }
+ 
+         kqv = ggml_mul_mat(ctx, v, kq);  // [N * n_head, L_q, d_head]
+ 
+--- a/src/core/ggml_extend.h
++++ b/src/core/ggml_extend.h
+@@ -182,7 +182,8 @@
+                                     bool skip_reshape     = false,
+                                     bool flash_attn       = false,
+                                     float kv_scale        = 1.0f,
+-                                    bool* used_flash_attn = nullptr);
++                                    bool* used_flash_attn = nullptr,
++                                    ggml_tensor* sinks = nullptr);
+ 
+ ggml_tensor* ggml_ext_layer_norm(GGMLRunnerContext* runner_ctx,
+                                  ggml_tensor* x,

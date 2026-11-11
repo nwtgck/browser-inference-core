@@ -8,6 +8,7 @@ import { makeFixture } from './gguf-fixture.mjs';
 import { makeModelIoFixtures } from './model-io-fixtures.mjs';
 import { pathToFileURL } from 'node:url';
 import { imageSmokeScope } from './browser-smoke-contract.mjs';
+import { runArithmeticProbes } from './arithmetic-probes.mjs';
 const root = path.resolve(process.argv[2] ?? 'dist/package');
 const testWebGpu = process.env.SDCB_TEST_WEBGPU === '1';
 const { chromium } = await import(pathToFileURL(path.resolve('../.tools/browser/node_modules/playwright/index.mjs')).href);
@@ -32,7 +33,7 @@ try {
   for (const profile of Object.keys(profiles)) {
     for (const variant of ['browser', 'test']) {
       try {
-        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu, scope }) => {
+        const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu, scope, arithmeticSource }) => {
           const run = async ({ origin, base, variant, profile, testWebGpu, scope }) => {
             const { attachCore, schema, mountReadOnlyFile } = await import(origin + '/examples/runtime/index.mjs');
             const create = (await import(base + 'core.mjs')).default;
@@ -41,7 +42,7 @@ try {
             const module = await create({ wasmBinary: new Uint8Array(await response.arrayBuffer()),
               locateFile(name) { if (name !== 'core.wasm') throw Error('Unexpected side file'); return base + name; },
             });
-            if (module._sdc_abi_version() !== 2 || module._sdc_model_io_capabilities() !== 3 || module._sdb_load !== undefined) throw Error('Wrong public surface');
+            if (module._sdc_abi_version() !== 2 || module._sdc_model_io_capabilities() !== 7 || module._sdb_load !== undefined) throw Error('Wrong public surface');
             const core = attachCore(module, schema, { suspension: profile.endsWith('asyncify') ? 'asyncify' : 'direct' });
             if (core.pointerBytes !== (profile.includes('wasm64') ? 8 : 4)) throw Error('Wrong address width');
             const params = core.allocRecord('sd_img_gen_params_t');
@@ -145,6 +146,19 @@ try {
                   if (module._sdc_test_model_tensor_count(arg(shard)) !== 2) throw Error('Native GGUF shard assembly failed');
                   mounted.pop().remove();
                   if (module._sdc_test_model_tensor_count(arg(shard)) !== 0) throw Error('Incomplete GGUF group was accepted');
+                  for (const file of fixture.originalShapes) {
+                    const mountedShape = mountReadOnlyFile(core, file.path, file.source, { maxChunkBytes: 65536 });
+                    const path = core.utf8(file.path), name = core.utf8('weight');
+                    try {
+                      for (let dimension = 0; dimension < 4; dimension++) {
+                        const expected = file.expected ? BigInt(file.expected[dimension]) : (1n << 64n) - 1n;
+                        if (BigInt.asUintN(64, module._sdc_test_gguf_shape(arg(path), arg(name), dimension)) !== expected)
+                          throw Error('Native GGUF original-shape validation mismatch');
+                      }
+                      if (file.numeric && module._sdc_test_gguf_original_shape_values(arg(path)) !== 1)
+                        throw Error('Native GGUF original-shape CPU arithmetic mismatch');
+                    } finally { core.free(path); core.free(name); mountedShape.remove(); }
+                  }
                 }
                 modelIoReads.push(fixture.safetensors.summary());
               } finally { core.free(pointer); core.free(shard); for (const file of mounted.reverse()) file.remove(); }
@@ -172,7 +186,7 @@ try {
                 const beforeDisabled = stages().length;
                 module._sdc_test_callbacks();
                 if (stages().length !== beforeDisabled) throw Error('Disabled graph diagnostics still emitted');
-              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
+              } else if (module._sdc_test_callbacks !== undefined || module._sdc_test_gguf_offset !== undefined || module._sdc_test_gguf_shape !== undefined || module._sdc_test_gguf_original_shape_values !== undefined || module._sdc_test_qwen_timestep !== undefined || module._sdc_test_bf16_weights !== undefined || module._sdc_test_graph_walk !== undefined || module._sdc_test_conv3d_bias !== undefined || module._sdc_test_webgpu_performance !== undefined) throw Error('Test probe leaked');
               await core.api.sd_set_log_callback(0n, 0n);
               await core.api.sd_set_progress_callback(0n, 0n);
               const count = logs.length + progress.length;
@@ -183,68 +197,12 @@ try {
               await core.api.sd_set_progress_callback(0n, 0n);
               module.removeFunction(log); module.removeFunction(update);
             }
-            const timestep = [];
-            const bf16Weights = [];
-            const conv3dBias = variant === 'test' ? [] : undefined;
-            const webgpuPerformance = variant === 'test' ? [] : undefined;
-            const graphWalk = variant === 'test' ? module._sdc_test_graph_walk() === 1 : undefined;
-            if (graphWalk === false) throw Error('Deep graph construction/compute propagation failed');
-            if (variant === 'test') {
-              for (const name of testWebGpu ? ['CPU', 'WebGPU'] : ['CPU']) {
-                const pointer = core.utf8(name);
-                const placement = [];
-                const conversions = [];
-                const placementLog = module.addFunction((_level, text) => {
-                  const message = core.readUtf8(BigInt(text));
-                  if (message.includes('browser-placement-v1 ')) placement.push(message);
-                  if (message.includes('browser-weight-conversion-v1 ')) conversions.push(message);
-                }, 'vipp');
-                try {
-                  await core.api.sd_set_log_callback(BigInt(placementLog), 0n);
-                  // Unlike the file probes, a WebGPU compute/readback can suspend.
-                  const code = await module.ccall('sdc_test_qwen_timestep', 'number',
-                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
-                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
-                  if (code !== 1) throw Error(`Synthetic Qwen timestep ${name} failed: ${code}`);
-                  if (placement.length !== 1 || !placement[0].includes('bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0') || placement[0].includes('probe')) throw Error('Missing or unsafe native BF16 placement summary');
-                  const expectedWeights = name === 'WebGPU'
-                    ? 'cpu_unsupported_bf16=1 webgpu_weights=1 host_weights=0 other_weights=0 webgpu_cpu_bf16=1 webgpu_cpu_bf16_use_bytes=2048'
-                    : 'cpu_unsupported_bf16=0 webgpu_weights=0 host_weights=1 other_weights=0 webgpu_cpu_bf16=0 webgpu_cpu_bf16_use_bytes=0';
-                  if (!placement[0].includes(expectedWeights)) throw Error('Original BF16 weight placement was lost across scheduler allocation');
-                  timestep.push({ backend: name, passed: true });
-                  placement.length = 0;
-                  const converted = await module.ccall('sdc_test_bf16_weights', 'number',
-                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
-                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
-                  if (converted !== 1) throw Error(`Synthetic BF16 weight loading ${name} failed: ${converted}`);
-                  if (placement.length !== 4 || placement.some(line => !line.includes(name === 'WebGPU'
-                    ? 'bf16=0 inspected=0 cpu_bf16=0 webgpu_bf16=0 other_bf16=0'
-                    : 'bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0'))) throw Error('Unexpected converted-weight placement');
-                  const expectedConversions = name === 'WebGPU' ? ['f32', 'f16', 'f32', 'f16'] : [];
-                  if (conversions.length !== expectedConversions.length || expectedConversions.some((target, index) =>
-                    !conversions[index].includes(`target=${target} tensors=2 source_bytes=2064 destination_bytes=${target === 'f32' ? 4128 : 2064} extra_bytes=${target === 'f32' ? 2064 : 0}`))) throw Error('BF16 unique-byte accounting failed');
-                  bf16Weights.push({ backend: name, passed: true });
-                  const convolution = await module.ccall('sdc_test_conv3d_bias', 'number',
-                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
-                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
-                  if (convolution !== 1) throw Error(`Synthetic 3D convolution bias ${name} failed: ${convolution}`);
-                  conv3dBias.push({ backend: name, passed: true });
-                  const performance = await module.ccall('sdc_test_webgpu_performance', 'number',
-                    [core.pointerBytes === 8 ? 'bigint' : 'number'],
-                    [core.pointerBytes === 8 ? pointer : Number(pointer)], { async: true });
-                  if (performance !== 1) throw Error(`Bounded graph/copy ${name} failed: ${performance}`);
-                  webgpuPerformance.push({ backend: name, passed: true });
-                } finally {
-                  await core.api.sd_set_log_callback(0n, 0n);
-                  module.removeFunction(placementLog);
-                  core.free(pointer);
-                }
-              }
-            }
-            return { passed: true, reads, modelIoReads, timestep, bf16Weights, graphWalk, conv3dBias, webgpuPerformance,
-              scope };
+            const arithmetic = variant === 'test'
+              ? await runArithmeticProbes({ module, core, backendNames: testWebGpu ? ['CPU', 'WebGPU'] : ['CPU'] })
+              : { timestep: [], bf16Weights: [], graphWalk: undefined, conv3dBias: undefined, webgpuPerformance: undefined };
+            return { passed: true, reads, modelIoReads, ...arithmetic, scope };
           };
-          const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
+          const source = `const makeFixture = ${fixtureSource}; const makeModelIoFixtures = ${modelIoSource}; const runArithmeticProbes = ${arithmeticSource}; const run = ${run.toString()}; onmessage = async ({ data }) => { try { postMessage({ result: await run(data) }); } catch (error) { postMessage({ error: String(error.stack || error) }); } };`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
           const worker = new Worker(url, { type: 'module' });
           let timer;
@@ -258,7 +216,7 @@ try {
           } finally {
             clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(url);
           }
-        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), testWebGpu, scope: imageSmokeScope(testWebGpu) });
+        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), arithmeticSource: runArithmeticProbes.toString(), testWebGpu, scope: imageSmokeScope(testWebGpu) });
         console.log(JSON.stringify(result, null, 2));
         results.push(result);
         // The pipeline wrapper finalizes its tested package snapshot, not build/.

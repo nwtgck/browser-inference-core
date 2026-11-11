@@ -1,0 +1,264 @@
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-bounded-upload.h
+@@ -0,0 +1,72 @@
++#pragma once
++
++#include <algorithm>
++#include <cstddef>
++#include <cstdint>
++#include <stdexcept>
++
++// State belongs to the device queue, not a tensor/set call. CPU sources may be
++// reused after WriteBuffer returns; destinations must survive until completion.
++struct ggml_webgpu_upload_budget {
++    static constexpr size_t budget_bytes = 32 * 1024 * 1024;
++    static constexpr size_t chunk_bytes = 8 * 1024 * 1024;
++
++    template <typename Wait>
++    void reserve(size_t bytes, Wait wait) {
++        if (waiting_) throw std::logic_error("reentrant WebGPU upload during completion wait");
++        if (bytes > budget_bytes) throw std::invalid_argument("WebGPU upload exceeds queue window");
++        if (bytes > budget_bytes - pending_) wait();
++        if (bytes > budget_bytes - pending_) throw std::logic_error("WebGPU upload drain did not complete");
++        // Charge before the API call: a partly enqueued failed write still owns
++        // the queue until synchronize/free/owner cleanup retires its final batch.
++        pending_ += bytes;
++    }
++
++    void begin_wait() {
++        if (waiting_) throw std::logic_error("reentrant WebGPU completion wait");
++        waiting_ = true;
++    }
++    void completed() { pending_ = 0; waiting_ = false; }
++    void failed_wait() { waiting_ = false; }
++    size_t pending_bytes() const { return pending_; }
++
++private:
++    size_t pending_ = 0;
++    bool waiting_ = false;
++};
++
++inline uint64_t ggml_webgpu_upload_offset(uint64_t base, uint64_t offset) {
++    if (offset > UINT64_MAX - base) throw std::invalid_argument("WebGPU upload offset overflow");
++    return base + offset;
++}
++
++inline uint32_t ggml_webgpu_upload_word(uint64_t offset, const uint8_t* source, size_t bytes) {
++    if (bytes == 0 || bytes > 4 - offset % 4) throw std::invalid_argument("invalid partial upload word");
++    uint32_t word = 0;
++    for (size_t i = 0; i < bytes; ++i) word |= uint32_t(source[i]) << (((offset + i) % 4) * 8);
++    return word;
++}
++
++// Emit partial head/tail words separately. Their callback preserves neighboring
++// bytes; only aligned ranges reach WriteBuffer. Offsets never narrow to uint32.
++template <typename Aligned, typename Partial>
++void ggml_webgpu_upload_ranges(uint64_t offset, uint64_t bytes, Aligned aligned, Partial partial) {
++    if (bytes > UINT64_MAX - offset) throw std::invalid_argument("WebGPU upload range overflow");
++    uint64_t consumed = 0;
++    if (offset % 4 != 0 && bytes != 0) {
++        const size_t head = static_cast<size_t>(std::min<uint64_t>(4 - offset % 4, bytes));
++        partial(offset, consumed, head);
++        offset += head;
++        consumed += head;
++        bytes -= head;
++    }
++    while (bytes >= 4) {
++        const size_t chunk = static_cast<size_t>(std::min<uint64_t>(bytes / 4 * 4,
++                                                                  ggml_webgpu_upload_budget::chunk_bytes));
++        aligned(offset, consumed, chunk);
++        offset += chunk;
++        consumed += chunk;
++        bytes -= chunk;
++    }
++    if (bytes != 0) partial(offset, consumed, static_cast<size_t>(bytes));
++}
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4,6 +4,7 @@
+ */
+ 
+ #include "ggml-webgpu.h"
++#include "ggml-webgpu-bounded-upload.h"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-impl.h"
+@@ -222,12 +223,16 @@
+     size_t   memset_bytes_per_thread;
+ };
+ 
++struct webgpu_global_context_struct;
++static void ggml_backend_webgpu_drain_uploads(webgpu_global_context_struct & ctx);
++
+ // Stores global webgpu members
+ struct webgpu_global_context_struct {
+     wgpu::Instance instance;
+     wgpu::Adapter  adapter;
+     wgpu::Device   device;
+     wgpu::Queue    queue;
++    ggml_webgpu_upload_budget uploads;
+     uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
+     uint32_t       max_inflight_batches      = UINT32_MAX;
+ 
+@@ -256,6 +261,7 @@
+ #endif
+ 
+     ~webgpu_global_context_struct() {
++        ggml_backend_webgpu_drain_uploads(*this);
+         if (this->get_tensor_staging_buf) {
+             this->get_tensor_staging_buf.Destroy();
+             this->get_tensor_staging_buf = nullptr;
+@@ -305,6 +311,7 @@
+ #endif
+ 
+     ~webgpu_context_struct() {
++        if (global_ctx) ggml_backend_webgpu_drain_uploads(*global_ctx);
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+         if (this->profile_timestamp_host_buf) {
+             this->profile_timestamp_host_buf.Destroy();
+@@ -553,12 +560,21 @@
+     return WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
+ }
+ 
+-static void ggml_backend_webgpu_wait_queue(webgpu_global_context & ctx) {
++static void ggml_backend_webgpu_wait_queue_impl(webgpu_global_context_struct & ctx) {
++    std::lock_guard<std::recursive_mutex> lock(ctx.mutex);
++    // JSPI completion waits may yield. Reject reentrant writers before they
++    // mutate the snapshot whose completion clears this queue-wide byte count.
++    ctx.uploads.begin_wait();
++    struct WaitCleanup {
++        ggml_webgpu_upload_budget & uploads;
++        bool succeeded = false;
++        ~WaitCleanup() { if (!succeeded) uploads.failed_wait(); }
++    } cleanup{ctx.uploads};
+     wgpu::QueueWorkDoneStatus callback_status = wgpu::QueueWorkDoneStatus::Error;
+     std::string               callback_message;
+ 
+-    const wgpu::WaitStatus wait_status = ctx->instance.WaitAny(
+-        ctx->queue.OnSubmittedWorkDone(
++    const wgpu::WaitStatus wait_status = ctx.instance.WaitAny(
++        ctx.queue.OnSubmittedWorkDone(
+             wgpu::CallbackMode::AllowSpontaneous,
+             [&callback_status, &callback_message](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {
+                 callback_status  = status;
+@@ -568,6 +584,18 @@
+ 
+     ggml_backend_webgpu_check_wait_status(wait_status, callback_status, wgpu::QueueWorkDoneStatus::Success,
+                                           "Queue wait", "Queue work", callback_message.c_str());
++    ctx.uploads.completed();
++    cleanup.succeeded = true;
++}
++
++
++static void ggml_backend_webgpu_wait_queue(webgpu_global_context & ctx) {
++    ggml_backend_webgpu_wait_queue_impl(*ctx);
++}
++
++static void ggml_backend_webgpu_drain_uploads(webgpu_global_context_struct & ctx) {
++    std::lock_guard<std::recursive_mutex> lock(ctx.mutex);
++    if (ctx.uploads.pending_bytes() != 0) ggml_backend_webgpu_wait_queue_impl(ctx);
+ }
+ 
+ static void ggml_backend_webgpu_map_buffer(webgpu_global_context & ctx,
+@@ -744,6 +772,36 @@
+     wgpu::CommandBuffer              command  = encoder.Finish();
+     std::vector<wgpu::CommandBuffer> commands = { command };
+     ctx->queue.Submit(commands.size(), commands.data());
++}
++
++// One queue-wide upload window covers both set entry points and the generic
++// CPU->GPU tensor-copy path (which calls buffer_set_tensor). Keep the final
++// partial batch queued; synchronize and destination/context destruction drain
++// it before releasing GPU storage. Each WriteBuffer consumes its CPU slice
++// before returning, including across the existing JSPI completion waits.
++static void ggml_backend_webgpu_upload(webgpu_global_context & ctx, wgpu::Buffer & buffer,
++                                         uint64_t offset, const void * data, size_t size) {
++    std::lock_guard<std::recursive_mutex> lock(ctx->mutex);
++    GGML_ASSERT(offset <= buffer.GetSize() && size <= buffer.GetSize() - offset);
++    const auto * source = static_cast<const uint8_t *>(data);
++    auto reserve = [&](size_t bytes) {
++        ctx->uploads.reserve(bytes, [&]() { ggml_backend_webgpu_wait_queue(ctx); });
++    };
++    ggml_webgpu_upload_ranges(offset, size,
++        [&](uint64_t destination, uint64_t consumed, size_t bytes) {
++            reserve(bytes);
++            ctx->queue.WriteBuffer(buffer, destination, source + static_cast<size_t>(consumed), bytes);
++        },
++        [&](uint64_t destination, uint64_t consumed, size_t bytes) {
++            // The existing partial-word shader uses uint32 byte addresses. All
++            // currently supported bindings fit this range; reject rather than
++            // truncating if a future backend exposes a larger partial range.
++            GGML_ASSERT(destination <= UINT32_MAX && bytes <= UINT32_MAX - destination);
++            const uint32_t word = ggml_webgpu_upload_word(destination,
++                source + static_cast<size_t>(consumed), bytes);
++            reserve(3 * sizeof(uint32_t)); // partial-word uniform upload
++            ggml_backend_webgpu_buffer_memset(ctx, buffer, word, static_cast<size_t>(destination), bytes);
++        });
+ }
+ 
+ /** End WebGPU Actions */
+@@ -3671,25 +3729,8 @@
+                                                  size_t         size) {
+     GGML_UNUSED(backend);
+     auto * buf_ctx      = (ggml_backend_webgpu_buffer_context *) tensor->buffer->context;
+-    size_t total_offset = ggml_webgpu_tensor_offset(tensor) + offset;
+-
+-    // Write aligned portion
+-    buf_ctx->global_ctx->queue.WriteBuffer(buf_ctx->buffer, total_offset, data, (size / 4) * 4);
+-
+-    if (size % 4 != 0) {
+-        // If size is not a multiple of 4, we need to memset the remaining bytes
+-        size_t remaining_size = size % 4;
+-
+-        // pack the remaining bytes into a uint32_t
+-        uint32_t val32 = 0;
+-
+-        for (size_t i = 0; i < remaining_size; i++) {
+-            ((uint8_t *) &val32)[i] = ((const uint8_t *) data)[size - remaining_size + i];
+-        }
+-        // memset the remaining bytes
+-        ggml_backend_webgpu_buffer_memset(buf_ctx->global_ctx, buf_ctx->buffer, val32,
+-                                          total_offset + (size - remaining_size), remaining_size);
+-    }
++    const uint64_t total_offset = ggml_webgpu_upload_offset(ggml_webgpu_tensor_offset(tensor), offset);
++    ggml_backend_webgpu_upload(buf_ctx->global_ctx, buf_ctx->buffer, total_offset, data, size);
+ }
+ 
+ static void ggml_backend_webgpu_synchronize(ggml_backend_t backend) {
+@@ -3746,6 +3787,9 @@
+ static void ggml_backend_webgpu_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     ggml_backend_webgpu_buffer_context * ctx = static_cast<ggml_backend_webgpu_buffer_context *>(buffer->context);
+     if (ctx != nullptr && ctx->buffer != nullptr) {
++        // This also retires a charged write that failed partway through enqueue.
++        // Never destroy a destination still referenced by the final upload batch.
++        ggml_backend_webgpu_drain_uploads(*ctx->global_ctx);
+         ctx->buffer.Destroy();
+         delete ctx;
+     }
+@@ -3795,24 +3839,8 @@
+     WEBGPU_LOG_DEBUG("ggml_backend_webgpu_buffer_set_tensor(" << buf_ctx->label << ", " << tensor << ", " << data
+                                                               << ", " << offset << ", " << size << ")");
+ 
+-    size_t total_offset = ggml_webgpu_tensor_offset(tensor) + offset;
+-
+-    buf_ctx->global_ctx->queue.WriteBuffer(buf_ctx->buffer, total_offset, data, (size / 4) * 4);
+-
+-    if (size % 4 != 0) {
+-        // If size is not a multiple of 4, we need to memset the remaining bytes
+-        size_t remaining_size = size % 4;
+-
+-        // pack the remaining bytes into a uint32_t
+-        uint32_t val32 = 0;
+-
+-        for (size_t i = 0; i < remaining_size; i++) {
+-            ((uint8_t *) &val32)[i] = ((const uint8_t *) data)[size - remaining_size + i];
+-        }
+-        // memset the remaining bytes
+-        ggml_backend_webgpu_buffer_memset(buf_ctx->global_ctx, buf_ctx->buffer, val32,
+-                                          total_offset + (size - remaining_size), remaining_size);
+-    }
++    const uint64_t total_offset = ggml_webgpu_upload_offset(ggml_webgpu_tensor_offset(tensor), offset);
++    ggml_backend_webgpu_upload(buf_ctx->global_ctx, buf_ctx->buffer, total_offset, data, size);
+     WEBGPU_CPU_PROFILE_TOTAL_END(set_tensor, buf_ctx->global_ctx);
+ }
+ 

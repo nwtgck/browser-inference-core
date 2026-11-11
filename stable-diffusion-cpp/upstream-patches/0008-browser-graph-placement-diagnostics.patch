@@ -1,16 +1,16 @@
-diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
 --- a/src/core/compute_workspace.cpp
 +++ b/src/core/compute_workspace.cpp
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  #include "core/compute_workspace.h"
  
  #include <algorithm>
 +#include <array>
- #include <cstring>
++#include <cstring>
  #include <exception>
  #include <map>
-@@ -14,6 +15,84 @@
- #include "ggml-impl.h"
+ #include <unordered_map>
+@@ -11,6 +13,84 @@
+ #include "core/util.h"
  
  namespace sd {
 +#ifdef SD_BROWSER_WEBGPU
@@ -94,19 +94,19 @@ diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
      ComputeWorkspace::~ComputeWorkspace() {
          segment_end();
          release();
-@@ -88,6 +167,9 @@
+@@ -69,6 +149,9 @@
  
      bool ComputeWorkspace::allocate(ggml_cgraph* graph, const AssignNodes& assign_nodes) {
          GGML_ASSERT(!active_);
 +#ifdef SD_BROWSER_WEBGPU
 +        const BrowserPlacement placement(graph, backend_);
 +#endif
-         const bool use_scheduler = needs_scheduler(graph);
-         if (use_scheduler) {
-             if (allocator_ != nullptr) {
-@@ -130,6 +212,9 @@
-                 return false;
-             }
+         const size_t capacity = static_cast<size_t>(ggml_graph_n_nodes(graph) + ggml_graph_n_leafs(graph)) + 8;
+         if (scheduler_ == nullptr || capacity > scheduler_capacity_) {
+             release();
+@@ -85,6 +168,9 @@
+             release();
+             return false;
          }
 +#ifdef SD_BROWSER_WEBGPU
 +        placement.report(graph, backend_, scheduler_);

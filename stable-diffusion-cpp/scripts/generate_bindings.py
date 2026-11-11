@@ -297,7 +297,7 @@ def generate(source: Path, output: Path, compiler: str, ggml_source: Path | None
            'void sdc_free(uint64_t ptr) { free((void *)sdc_checked_pointer(ptr)); }',
            'uint32_t sdc_pointer_bytes(void) { return sizeof(void *); }',
            f'uint32_t sdc_abi_version(void) {{ return {ABI_VERSION}; }}',
-           'uint32_t sdc_model_io_capabilities(void) { return 3; }']
+           'uint32_t sdc_model_io_capabilities(void) { return 7; }']
     for f in functions:
         args, callargs, guards = [], [], []
         if f['returnKind'] == 'record':

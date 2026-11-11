@@ -7,6 +7,7 @@
 #include "model/diffusion/qwen_image_2_1.hpp"
 #include "ggml-backend-impl.h"
 #include <cstdio>
+#include <cstring>
 #ifdef __EMSCRIPTEN__
 #include "ggml-webgpu.h"
 #endif
@@ -67,6 +68,7 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
         auto computation = context();
         ConstructionBudget budget(backend);
         auto selected = bounded ? &budget.backend : backend;
+        auto runner_context = runner(computation.get(), selected);
         ggml_tensor * input;
         ggml_tensor * output;
         Buffer parameters(nullptr, ggml_backend_buffer_free);
@@ -78,8 +80,7 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
             require(parameters != nullptr, "convolution parameter allocation");
             write(weight, values(ggml_nelements(weight), 7, 128));
             write(bias, values(4, 3, 128));
-            output = ggml_ext_conv_2d(computation.get(), input, weight, bias, 1, 1, 1, 1, 1, 1, false, false, false,
-                                      1.f, selected);
+            output = ggml_ext_conv_2d(&runner_context, input, weight, bias, 1, 1, 1, 1, 1, 1, false, false, false, 1.f);
         } else {
             constexpr int width = 16, heads = 2, queries = 65, keys = 97;
             input = ggml_new_tensor_3d(params.get(), GGML_TYPE_F32, width, queries, 1);
@@ -100,8 +101,8 @@ std::vector<float> run_graph(ggml_backend_t backend, bool convolution, bool boun
                         values[i] = -INFINITY;
                 write(mask, values);
             }
-            output = ggml_ext_attention_ext(computation.get(), selected, input, k, v, heads, mask, false, false, 1.f,
-                                            false, sinks);
+            output =
+                ggml_ext_attention_ext(&runner_context, input, k, v, heads, mask, false, false, 1.f, nullptr, sinks);
         }
         auto graph = image_test::graph(computation.get(), output);
         require((count(graph, GGML_OP_SET) != 0) == bounded, "incorrect bounded-path selection");
@@ -199,10 +200,11 @@ std::vector<float> run_shared_rope(ggml_backend_t backend, bool shared) {
     auto pe = ggml_new_tensor_4d(params.get(), GGML_TYPE_F32, 2, 2, 16, 17);
     Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
     require(parameters != nullptr, "RoPE parameter allocation");
+    auto runner_context = runner(computation.get(), backend);
     const auto prepared = Rope::prepare_matrix(computation.get(), pe);
     auto apply = [&](ggml_tensor * x) {
         return shared ? Rope::apply_rope_prepared(computation.get(), x, prepared)
-                      : Rope::apply_rope(computation.get(), x, pe);
+                      : Rope::apply_rope(&runner_context, x, pe);
     };
     auto a = apply(input);
     auto b = apply(ggml_scale(computation.get(), input, .75f));
@@ -247,9 +249,8 @@ std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, 
     require(!optimized || bool(prepared), "Qwen modulation support on requested backend");
     ggml_tensor * output = nullptr;
     for (int i = 0; i < 4; ++i) {
-        auto part = prepared ? Block::modulate_prepared(computation.get(), input, prepared->target[i],
-                                                        prepared->prefix[i], prefix)
-                             : Block::modulate(computation.get(), input, modulation[i], prefix, i % 2 == 1);
+        auto part = prepared ? Block::modulate_prepared(&ctx, input, prepared->target[i], prepared->prefix[i], prefix)
+                             : Block::modulate(&ctx, input, modulation[i], prefix, i % 2 == 1);
         part = ggml_reshape_1d(computation.get(), part, ggml_nelements(part));
         output = output ? ggml_concat(computation.get(), output, part, 0) : part;
     }
@@ -258,7 +259,7 @@ std::vector<float> run_qwen_elementwise(ggml_backend_t backend, bool optimized, 
     require(!optimized || activated != nullptr, "Qwen GLU support on requested backend");
     if (!activated) {
         if (packed) {
-            auto parts = ggml_ext_chunk(computation.get(), packed_input, 2, 0);
+            auto parts = ggml_ext_chunk(&ctx, packed_input, 2, 0);
             activated = ggml_mul(computation.get(), parts[1], ggml_silu(computation.get(), parts[0]));
         } else {
             activated = ggml_mul(computation.get(), up, ggml_silu(computation.get(), gate));
@@ -338,7 +339,9 @@ std::vector<float> run_large_rows(ggml_backend_t backend, int kind, bool inplace
 
 extern "C" int sdc_test_webgpu_performance(const char * backend_name) {
     try {
-        Backend backend(ggml_backend_init_by_name(backend_name, nullptr), ggml_backend_free);
+        Backend backend(std::strcmp(backend_name, "CPU") == 0 ? ggml_backend_cpu_init()
+                                                              : ggml_backend_init_by_name(backend_name, nullptr),
+                        ggml_backend_free);
         if (!backend)
             return -1;
         if (ggml_backend_is_cpu(backend.get()))

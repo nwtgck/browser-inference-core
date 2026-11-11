@@ -15,7 +15,8 @@ class ReferenceConv : public WAN::CausalConv3d {
         auto old = params.at("weight");
         params["weight"] = ggml_new_tensor(ctx, type, 4, old->ne);
     }
-    // Frozen pre-optimization path; never invokes the new causal fast path.
+    // Pre-optimization graph with the current caller scale propagated. This
+    // reference never invokes the causal fast path under test.
     ggml_tensor * legacy(GGMLRunnerContext * ctx, ggml_tensor * x, ggml_tensor * history) {
         auto w = params.at("weight");
         auto b = bias ? params.at("bias") : nullptr;
@@ -24,20 +25,20 @@ class ReferenceConv : public WAN::CausalConv3d {
             x = ggml_concat(ctx->ggml_ctx, history, x, 2);
             left -= static_cast<int>(history->ne[2]);
         }
-        x = ggml_ext_pad_ext(ctx->ggml_ctx, ctx->backend, x, std::get<2>(padding), std::get<2>(padding),
-                             std::get<1>(padding), std::get<1>(padding), left, 0, 0, 0, ctx->circular_x_enabled,
-                             ctx->circular_y_enabled);
+        x = ggml_ext_pad_ext(ctx, x, std::get<2>(padding), std::get<2>(padding), std::get<1>(padding),
+                             std::get<1>(padding), left, 0, 0, 0, ctx->circular_x_enabled, ctx->circular_y_enabled);
         if (w->ne[2] == 1 && x->ne[2] == 1 && x->ne[3] == in_channels) {
-            x = ggml_ext_cont(ctx->ggml_ctx, x);
+            x = ggml_ext_cont(ctx, x);
             auto x2 = ggml_reshape_4d(ctx->ggml_ctx, x, x->ne[0], x->ne[1], in_channels, 1);
             auto w2 = ggml_reshape_4d(ctx->ggml_ctx, w, w->ne[0], w->ne[1], in_channels, out_channels);
-            auto y = ggml_ext_conv_2d(ctx->ggml_ctx, x2, w2, b, std::get<2>(stride), std::get<1>(stride), 0, 0,
-                                      std::get<2>(dilation), std::get<1>(dilation), ctx->conv2d_direct_enabled);
+            auto y =
+                ggml_ext_conv_2d(ctx, x2, w2, b, std::get<2>(stride), std::get<1>(stride), 0, 0, std::get<2>(dilation),
+                                 std::get<1>(dilation), ctx->conv2d_direct_enabled, false, false, scale);
             return ggml_reshape_4d(ctx->ggml_ctx, y, y->ne[0], y->ne[1], 1, out_channels);
         }
-        return ggml_ext_conv_3d(ctx->ggml_ctx, ctx->backend, x, w, b, in_channels, std::get<2>(stride),
-                                std::get<1>(stride), std::get<0>(stride), 0, 0, 0, std::get<2>(dilation),
-                                std::get<1>(dilation), std::get<0>(dilation), false, ctx->conv3d_direct_enabled);
+        return ggml_ext_conv_3d(ctx, x, w, b, in_channels, std::get<2>(stride), std::get<1>(stride),
+                                std::get<0>(stride), 0, 0, 0, std::get<2>(dilation), std::get<1>(dilation),
+                                std::get<0>(dilation), false, ctx->conv3d_direct_enabled, scale);
     }
 };
 struct Filter {
@@ -64,6 +65,7 @@ struct Case {
     bool history = false, direct = false, circular_x = false, circular_y = false, bias = true, strided = false;
     ggml_op rejected = GGML_OP_NONE;
     bool fast = true;
+    float scale = 1.f;
 };
 void run_case(ggml_backend_t cpu, const Case & test) {
     constexpr int width = 7, height = 6, channels = 3, outputs = 5;
@@ -73,6 +75,7 @@ void run_case(ggml_backend_t cpu, const Case & test) {
                         {test.temporal_kernel == 3 ? 1 : 0, 1, 1},
                         {test.temporal_dilation, test.spatial_dilation, test.spatial_dilation}, test.bias);
     layer.init(params.get());
+    layer.set_scale(test.scale);
     layer.weight_type(params.get(), test.type);
     std::map<std::string, ggml_tensor *> weights;
     layer.get_param_tensors(weights);
@@ -197,6 +200,14 @@ int main() {
                     run_case(backend.get(), test);
                     ++cases;
                 }
+            for (float scale : {.5f, .3f}) {
+                Case test;
+                test.type = type;
+                test.scale = scale;
+                test.fast = false;
+                run_case(backend.get(), test);
+                ++cases;
+            }
         }
         std::printf("%d causal cases passed (two inputs each, synthetic CPU)\n", cases);
     } catch (const std::exception & error) {

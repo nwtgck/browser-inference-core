@@ -1,6 +1,6 @@
 --- a/src/core/ggml_extend.cpp
 +++ b/src/core/ggml_extend.cpp
-@@ -152,10 +152,27 @@
+@@ -805,6 +805,23 @@
      return x;
  }
  
@@ -21,15 +21,10 @@
 +    return ggml_group_norm(ctx, x, groups, eps);
 +}
 +
- ggml_tensor* ggml_ext_group_norm_32(ggml_context* ctx,
-                                     ggml_tensor* a) {
-     const float eps = 1e-6f;  // default eps parameter
--    return ggml_group_norm(ctx, a, 32, eps);
-+    return sd_browser_group_norm(ctx, a, 32, eps);
- }
- 
- static bool ggml_ext_is_padded_1d(const ggml_tensor* x) {
-@@ -822,7 +839,7 @@
+ ggml_tensor* ggml_ext_group_norm(GGMLRunnerContext* runner_ctx,
+                                  ggml_tensor* x,
+                                  ggml_tensor* w,
+@@ -817,7 +834,7 @@
          b = ggml_reshape_4d(ctx, b, 1, 1, b->ne[0], 1);
      }
  

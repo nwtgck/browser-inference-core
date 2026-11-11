@@ -76,18 +76,18 @@ struct TinyRunner : Anima::AnimaRunner {
         for (const auto & [name, tensor] : copies)
             gguf_add_tensor(file.get(), tensor);
         require(gguf_write_to_file(file.get(), path.c_str(), false), "fixture write failed");
-        manager = std::make_shared<ModelManager>();
         manager->set_n_threads(1);
         manager->set_enable_mmap(false);
         manager->set_prefetch_disabled(true);
-        residency_manager = manager;
         require(manager->add_file(path), "fixture registration failed");
         require(manager->register_param_tensors(ModelComponent::Diffusion, tensors,
                                                 ModelManager::ResidencyMode::ParamBackend, backend, backend),
                 "parameter registration failed");
         require(manager->load_all_params_eagerly(), "fixture loading failed");
     }
-    explicit TinyRunner(ggml_backend_t backend) : AnimaRunner(backend) {
+    explicit TinyRunner(ggml_backend_t backend) : TinyRunner(backend, std::make_shared<ModelManager>()) {}
+    TinyRunner(ggml_backend_t backend, std::shared_ptr<ModelManager> owner)
+        : AnimaRunner(backend, {}, "model.diffusion_model", owner), manager(std::move(owner)) {
         net = Anima::AnimaNet{};
         free_params_ctx();
         alloc_params_ctx();
@@ -124,7 +124,7 @@ struct TinyRunner : Anima::AnimaRunner {
         return get_cache_tensor_by_name(Anima::context_cache_name(ctx, id));
     }
     bool empty_cache() const {
-        return cache_.empty();
+        return !has_cache_tensors();
     }
 };
 

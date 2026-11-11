@@ -14,7 +14,11 @@ package = importlib.util.module_from_spec(spec); spec.loader.exec_module(package
 SOURCE = 'a' * 40
 
 def schema_fixture():
-    return {'abiVersion': 2, 'functions': [], 'records': [], 'constants': []}
+    return {'abiVersion': 2, 'functions': [{
+        'name': 'sd_browser_bf16_retention_version',
+        'export': '_sdc_sd_browser_bf16_retention_version',
+        'returnType': 'uint32_t', 'returnKind': 'unsigned', 'parameters': [],
+    }], 'records': [], 'constants': ['SD_TYPE_BF16']}
 
 def schema_hash():
     return hashlib.sha256(json.dumps(schema_fixture()).encode()).hexdigest()
@@ -24,6 +28,18 @@ def schema_file(name):
     if name == 'schema.mjs': return 'export default ' + json.dumps({**schema_fixture(), 'schemaSha256': schema_hash()}, separators=(',', ':')) + ';\n'
     return 'fixture declarations'
 
+def image_patch_provenance():
+    # These deterministic hashes describe synthetic packaging inputs only.
+    patches = [
+        ('0036-webgpu-bf16-weight-kernels.patch', 'ggml'),
+        ('0037-webgpu-bounded-tensor-uploads.patch', 'ggml'),
+        ('0038-browser-bounded-model-reader.patch', 'stable-diffusion'),
+        ('0039-browser-bf16-weight-retention.patch', 'stable-diffusion'),
+    ]
+    return {'patches': [{'file': name, 'target': target,
+                         'sha256': hashlib.sha256(('fixture ' + name).encode()).hexdigest(), 'fixtureOnly': True}
+                        for name, target in patches]}
+
 def write_manifest(root, data):
     data['files'] = [{'path': p.relative_to(root).as_posix(), 'bytes': p.stat().st_size,
                       'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
@@ -31,6 +47,27 @@ def write_manifest(root, data):
     (root / 'manifest.json').write_text(json.dumps(data))
 
 class RuntimeValidatorImports(unittest.TestCase):
+    def test_image_retention_capability_requires_the_matching_schema(self):
+        validator = package.runtime_module('stable-diffusion-cpp')
+        self.assertIs(validator.CAPABILITIES['bf16WeightRetention'], True)
+        self.assertIs(validator.CAPABILITIES['ggufOriginalShapes'], True)
+        validator.validate_bf16_retention_schema(schema_fixture())
+        for key, value in [('returnType', 'int'), ('returnKind', 'signed'),
+                           ('parameters', [{'kind': 'pointer', 'cType': 'void *'}]),
+                           ('export', '_other')]:
+            with self.subTest(field=key):
+                schema = schema_fixture()
+                schema['functions'][0][key] = value
+                with self.assertRaisesRegex(ValueError, 'BF16 retention capability'):
+                    validator.validate_bf16_retention_schema(schema)
+        missing = schema_fixture(); missing['functions'] = []
+        duplicate = schema_fixture(); duplicate['functions'].append(dict(duplicate['functions'][0]))
+        missing_type = schema_fixture(); missing_type['constants'] = []
+        for name, schema in [('missing function', missing), ('duplicate function', duplicate), ('missing type', missing_type)]:
+            with self.subTest(case=name):
+                with self.assertRaisesRegex(ValueError, 'BF16 retention capability'):
+                    validator.validate_bf16_retention_schema(schema)
+
     def test_llama_validator_loads_from_root_with_no_runtime_scripts_on_sys_path(self):
         # A fresh isolated interpreter cannot inherit imports from earlier tests.
         command = '''
@@ -94,7 +131,7 @@ class MultiRuntime(unittest.TestCase):
                 data = {'profile': profile, 'variant': variant, 'sourceCommit': SOURCE, 'sourceDirty': False,
                         'variantConfiguration': settings, 'validation': {'compiled': True, 'fixtureOnly': True, 'realModelInference': False}}
                 if runtime == 'llama-cpp': data['llamaCommit'] = manifest['llamaCommit']
-                else: data.update(upstreams=manifest['upstreams'], configuration=config, patches={'patches': [{'fixtureOnly': True}]})
+                else: data.update(upstreams=manifest['upstreams'], configuration=config, patches=image_patch_provenance())
                 variants[variant] = data
             manifest['profiles'][profile] = {'variants': variants}
         validator.write_index(root, runtime=runtime, license_roots=manifest.get('licenseRoots', []))
@@ -144,6 +181,30 @@ class MultiRuntime(unittest.TestCase):
             for data in info['variants'].values(): data['sourceCommit'] = 'c' * 40
         write_manifest(root, m)
         with self.assertRaisesRegex(ValueError, 'mix'): package.assemble(self.inputs, self.out)
+    def test_image_retention_requires_complete_ordered_matching_patch_provenance(self):
+        root = self.inputs / 'stable-diffusion-cpp'
+        validator = package.runtime_module('stable-diffusion-cpp')
+        original = json.loads((root / 'manifest.json').read_text())
+        for case in ['missing', 'duplicate', 'order', 'hash', 'target', 'variant-identity']:
+            manifest = json.loads(json.dumps(original))
+            entries = manifest['profiles']['webgpu-wasm32-jspi']['variants']['test']['patches']['patches']
+            if case == 'missing':
+                entries.pop(1)
+            elif case == 'duplicate':
+                entries.append(dict(entries[0]))
+            elif case == 'order':
+                entries[0], entries[1] = entries[1], entries[0]
+            elif case == 'hash':
+                entries[0]['sha256'] = 'not a SHA-256'
+            elif case == 'target':
+                entries[0]['target'] = 'stable-diffusion'
+            elif case == 'variant-identity':
+                entries[0]['sha256'] = 'c' * 64
+            else:
+                self.fail('Unknown test mutation')
+            write_manifest(root, manifest)
+            with self.subTest(case=case), self.assertRaisesRegex(ValueError, 'BF16 retention patch'):
+                validator.validate(root, check_npm_pack=False)
     def test_tampering_is_detected(self):
         package.assemble(self.inputs, self.out)
         (self.out / 'stable-diffusion-cpp-browser-core/profiles/webgpu-wasm32-asyncify/browser/core.wasm').write_bytes(b'invalid')

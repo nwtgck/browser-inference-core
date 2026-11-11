@@ -33,14 +33,14 @@ struct FlashFilter {
 
 // Eligibility must not assume arbitrary adapters preserve zero K/V positions.
 struct UnknownAdapter : WeightAdapter {
-    ggml_tensor * patch_weight(ggml_context *, ggml_backend_t, ggml_tensor *, const std::string &) override {
+    ggml_tensor * patch_weight(GGMLRunnerContext *, ggml_tensor *, const std::string &) override {
         throw std::runtime_error("unexpected adapter execution");
     }
-    ggml_tensor * forward_with_lora(ggml_context *, ggml_backend_t, ggml_tensor *, ggml_tensor *, ggml_tensor *,
+    ggml_tensor * forward_with_lora(GGMLRunnerContext *, ggml_tensor *, ggml_tensor *, ggml_tensor *,
                                     const std::string &, ForwardParams) override {
         throw std::runtime_error("unexpected adapter execution");
     }
-    ggml_tensor * add_lora_to_output(ggml_context *, ggml_backend_t, ggml_tensor *, ggml_tensor *, ggml_tensor *,
+    ggml_tensor * add_lora_to_output(GGMLRunnerContext *, ggml_tensor *, ggml_tensor *, ggml_tensor *,
                                      const std::string &, ForwardParams) override {
         throw std::runtime_error("unexpected adapter execution");
     }

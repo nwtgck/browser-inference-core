@@ -1,20 +1,19 @@
-diff --git a/src/model_io/gguf_io.cpp b/src/model_io/gguf_io.cpp
-index 081fcf978f0b7afec77e8c3f0d4a3d166fa220c8..9e525fadeb192afcbee6c8a506a9ca2dfa489349 100644
 --- a/src/model_io/gguf_io.cpp
 +++ b/src/model_io/gguf_io.cpp
-@@ -47,7 +47,11 @@ bool read_gguf_file(const std::string& file_path,
-     gguf_context* ctx_gguf_ = nullptr;
-     ggml_context* ctx_meta_ = nullptr;
+@@ -51,16 +51,20 @@
+     GGUFReader gguf_reader;
+     bool probe_ok = gguf_reader.load(file_path);
  
 +#ifndef SD_BROWSER_WEBGPU
-     ctx_gguf_ = gguf_init_from_file(file_path.c_str(), {true, &ctx_meta_});
+     if (!probe_ok || !gguf_reader.has_tensors_beyond_ggml_limits()) {
+         ctx_gguf_ = gguf_init_from_file(file_path.c_str(), {true, &ctx_meta_});
+     }
 +#endif
 +    // The browser metadata path must not accumulate the entire file in size_t.
 +    // Keep tensor file positions 64-bit even with a 32-bit Wasm address space.
      if (!ctx_gguf_) {
-         GGUFReader gguf_reader;
-         if (!gguf_reader.load(file_path)) {
-@@ -55,7 +59,7 @@ bool read_gguf_file(const std::string& file_path,
+         if (!probe_ok && !gguf_reader.load(file_path)) {
+             set_error(error, "failed to open '" + file_path + "' with GGUFReader");
              return false;
          }
  
@@ -23,13 +22,11 @@ index 081fcf978f0b7afec77e8c3f0d4a3d166fa220c8..9e525fadeb192afcbee6c8a506a9ca2d
          for (const auto& gguf_tensor_info : gguf_reader.tensors()) {
  #ifdef SD_USE_UPSTREAM_GGML
              if (static_cast<int>(gguf_tensor_info.type) == SD_TYPE_F8_E4M3 ||
-diff --git a/src/model_io/gguf_reader_ext.h b/src/model_io/gguf_reader_ext.h
-index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11df9c122d 100644
 --- a/src/model_io/gguf_reader_ext.h
 +++ b/src/model_io/gguf_reader_ext.h
-@@ -3,6 +3,9 @@
- 
+@@ -4,6 +4,9 @@
  #include <cstdint>
+ #include <filesystem>
  #include <fstream>
 +#include <limits>
 +#include <set>
@@ -37,13 +34,14 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
  #include <string>
  #include <vector>
  
-@@ -13,222 +16,162 @@ struct GGUFTensorInfo {
+@@ -14,247 +17,167 @@
      std::string name;
      ggml_type type;
      std::vector<int64_t> shape;
 -    size_t offset;
--};
--
++    uint64_t offset; // A position in a file, never a size_t/Wasm memory address.
+ };
+ 
 -enum class GGUFMetadataType : uint32_t {
 -    UINT8   = 0,
 -    INT8    = 1,
@@ -58,22 +56,12 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 -    UINT64  = 10,
 -    INT64   = 11,
 -    FLOAT64 = 12,
-+    uint64_t offset; // A position in a file, never a size_t/Wasm memory address.
- };
- 
 +// Bounded metadata-only GGUF v2/v3 reader. No file-wide mapping/allocation.
 +// The browser build uses this even when individual tensors fit size_t: the
 +// upstream GGUF reader also accumulates ALL tensor bytes in a size_t.
- class GGUFReader {
--private:
-     std::vector<GGUFTensorInfo> tensors_;
--    size_t data_offset_;
--    size_t alignment_ = 32;  // default alignment is 32
--
--    template <typename T>
--    bool safe_read(std::ifstream& fin, T& value) {
--        fin.read(reinterpret_cast<char*>(&value), sizeof(T));
--        return fin.good();
++class GGUFReader {
++    std::vector<GGUFTensorInfo> tensors_;
++    bool has_wide_tensors_ = false;
 +    uint64_t data_offset_ = 0;
 +    uint64_t file_size_ = 0;
 +    uint32_t alignment_ = 32;
@@ -82,103 +70,18 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +        const auto pos = in.tellg();
 +        if (pos < 0) throw std::runtime_error("invalid GGUF file position");
 +        return static_cast<uint64_t>(pos);
-     }
--
--    bool safe_read(std::ifstream& fin, char* buffer, size_t size) {
--        fin.read(buffer, size);
--        return fin.good();
++    }
 +    uint64_t remaining(std::ifstream& in) const {
 +        const uint64_t pos = tell(in);
 +        if (pos > file_size_) throw std::runtime_error("GGUF position outside file");
 +        return file_size_ - pos;
-     }
--
--    bool safe_seek(std::ifstream& fin, std::streamoff offset, std::ios::seekdir dir) {
--        fin.seekg(offset, dir);
--        return fin.good();
++    }
 +    void read(std::ifstream& in, char* bytes, size_t count) const {
 +        if (count > remaining(in) || count > static_cast<uint64_t>(std::numeric_limits<std::streamsize>::max()))
 +            throw std::runtime_error("truncated GGUF metadata");
 +        in.read(bytes, static_cast<std::streamsize>(count));
 +        if (!in) throw std::runtime_error("GGUF read failed");
-     }
--
--    bool read_metadata(std::ifstream& fin) {
--        uint64_t key_len = 0;
--        if (!safe_read(fin, key_len))
--            return false;
--
--        if (key_len > 4096)
--            return false;
--
--        std::string key(key_len, '\0');
--        if (!safe_read(fin, (char*)key.data(), key_len))
--            return false;
--
--        uint32_t type = 0;
--        if (!safe_read(fin, type))
--            return false;
--
--        if (key == "general.alignment") {
--            uint32_t align_val = 0;
--            if (!safe_read(fin, align_val))
--                return false;
--
--            if (align_val != 0 && (align_val & (align_val - 1)) == 0) {
--                alignment_ = align_val;
--                LOG_VERBOSE("Found alignment: %zu", alignment_);
--            } else {
--                LOG_ERROR("Invalid alignment value %u, fallback to default %zu", align_val, alignment_);
--            }
--            return true;
--        }
--
--        switch (static_cast<GGUFMetadataType>(type)) {
--            case GGUFMetadataType::UINT8:
--            case GGUFMetadataType::INT8:
--            case GGUFMetadataType::BOOL:
--                return safe_seek(fin, 1, std::ios::cur);
--
--            case GGUFMetadataType::UINT16:
--            case GGUFMetadataType::INT16:
--                return safe_seek(fin, 2, std::ios::cur);
--
--            case GGUFMetadataType::UINT32:
--            case GGUFMetadataType::INT32:
--            case GGUFMetadataType::FLOAT32:
--                return safe_seek(fin, 4, std::ios::cur);
--
--            case GGUFMetadataType::UINT64:
--            case GGUFMetadataType::INT64:
--            case GGUFMetadataType::FLOAT64:
--                return safe_seek(fin, 8, std::ios::cur);
--
--            case GGUFMetadataType::STRING: {
--                uint64_t len = 0;
--                if (!safe_read(fin, len))
--                    return false;
--                return safe_seek(fin, len, std::ios::cur);
--            }
--
--            case GGUFMetadataType::ARRAY: {
--                uint32_t elem_type = 0;
--                uint64_t len       = 0;
--                if (!safe_read(fin, elem_type))
--                    return false;
--                if (!safe_read(fin, len))
--                    return false;
--
--                for (uint64_t i = 0; i < len; i++) {
--                    if (!read_metadata(fin))
--                        return false;
--                }
--                return true;
--            }
--
--            default:
--                LOG_ERROR("Unknown metadata type=%u", type);
--                return false;
--        }
++    }
 +    template<class T> T integer(std::ifstream& in) const {
 +        // GGUF's little-endian representation, independent of host byte order.
 +        uint8_t bytes[sizeof(T)];
@@ -186,27 +89,7 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +        uint64_t value = 0;
 +        for (size_t i = 0; i < sizeof(T); ++i) value |= uint64_t(bytes[i]) << (8 * i);
 +        return static_cast<T>(value);
-     }
--
--    GGUFTensorInfo read_tensor_info(std::ifstream& fin) {
--        GGUFTensorInfo info;
--
--        uint64_t name_len;
--        if (!safe_read(fin, name_len))
--            throw std::runtime_error("read tensor name length failed");
--
--        info.name.resize(name_len);
--        if (!safe_read(fin, (char*)info.name.data(), name_len))
--            throw std::runtime_error("read tensor name failed");
--
--        uint32_t n_dims;
--        if (!safe_read(fin, n_dims))
--            throw std::runtime_error("read tensor dims failed");
--
--        info.shape.resize(n_dims);
--        for (uint32_t i = 0; i < n_dims; i++) {
--            if (!safe_read(fin, info.shape[i]))
--                throw std::runtime_error("read tensor shape failed");
++    }
 +    void skip(std::ifstream& in, uint64_t count) const {
 +        if (count > remaining(in)) throw std::runtime_error("GGUF metadata extends beyond file");
 +        in.seekg(static_cast<std::streamoff>(tell(in) + count), std::ios::beg);
@@ -227,14 +110,7 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +            case 4: case 5: case 6: return 4;
 +            case 10: case 11: case 12: return 8;
 +            default: return 0;
-         }
--
--        if (n_dims > GGML_MAX_DIMS) {
--            for (uint32_t i = GGML_MAX_DIMS; i < n_dims; i++) {
--                info.shape[GGML_MAX_DIMS - 1] *= info.shape[i];  // stack to last dim;
--            }
--            info.shape.resize(GGML_MAX_DIMS);
--            n_dims = GGML_MAX_DIMS;
++        }
 +    }
 +    void value(std::ifstream& in, uint32_t type) const {
 +        const uint32_t width = scalar_size(type);
@@ -252,64 +128,15 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +            for (uint64_t i = 0; i < count; ++i) skip(in, integer<uint64_t>(in));
 +        } else {
 +            throw std::runtime_error("invalid GGUF array element type");
-         }
--
--        uint32_t type;
--        if (!safe_read(fin, type))
--            throw std::runtime_error("read tensor type failed");
--        info.type = static_cast<ggml_type>(type);
--
--        if (!safe_read(fin, info.offset))
--            throw std::runtime_error("read tensor offset failed");
--
--        return info;
-     }
--
- public:
--    bool load(const std::string& file_path) {
--        std::ifstream fin(file_path, std::ios::binary);
--        if (!fin) {
--            LOG_ERROR("failed to open '%s'", file_path.c_str());
--            return false;
--        }
--
--        // --- Header ---
--        char magic[4];
--        if (!safe_read(fin, magic, 4) || strncmp(magic, "GGUF", 4) != 0) {
--            LOG_ERROR("not a valid GGUF file");
--            return false;
--        }
--
--        uint32_t version;
--        if (!safe_read(fin, version))
--            return false;
--
--        uint64_t tensor_count, metadata_kv_count;
--        if (!safe_read(fin, tensor_count))
--            return false;
--        if (!safe_read(fin, metadata_kv_count))
--            return false;
--
--        LOG_VERBOSE("GGUF v%u, tensor_count=%llu, metadata_kv_count=%llu",
--                    version, (unsigned long long)tensor_count, (unsigned long long)metadata_kv_count);
--
--        // --- Read Metadata ---
--        for (uint64_t i = 0; i < metadata_kv_count; i++) {
--            if (!read_metadata(fin)) {
--                LOG_ERROR("read meta data failed");
--                return false;
--            }
--        }
--
--        // --- Tensor Infos ---
--        tensors_.clear();
++        }
++    }
++public:
 +    bool load(const std::string& path) {
++        has_wide_tensors_ = false;
 +        tensors_.clear(); data_offset_ = 0; alignment_ = 32;
-         try {
--            for (uint64_t i = 0; i < tensor_count; i++) {
--                tensors_.push_back(read_tensor_info(fin));
++        try {
 +            static_assert(sizeof(std::streamoff) >= 8, "GGUF files require 64-bit stream offsets");
-+            std::ifstream in(path, std::ios::binary);
++            std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
 +            if (!in) throw std::runtime_error("cannot open GGUF file");
 +            in.seekg(0, std::ios::end); file_size_ = tell(in); in.seekg(0);
 +            if (integer<uint32_t>(in) != 0x46554747) throw std::runtime_error("invalid GGUF magic");
@@ -332,9 +159,7 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +                } else {
 +                    value(in, type);
 +                }
-             }
--        } catch (const std::runtime_error& e) {
--            LOG_ERROR("%s", e.what());
++            }
 +            std::set<std::string> names;
 +            std::vector<uint64_t> sizes;
 +            for (uint64_t i = 0; i < tensors; ++i) {
@@ -343,6 +168,7 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +                if (!names.insert(info.name).second) throw std::runtime_error("duplicate GGUF tensor name");
 +                const uint32_t rank = integer<uint32_t>(in);
 +                if (!rank || rank > 64 || rank > remaining(in) / 8) throw std::runtime_error("invalid GGUF tensor rank");
++                if (rank > GGML_MAX_DIMS) has_wide_tensors_ = true;
 +                uint64_t elements = 1;
 +                for (uint32_t dim = 0; dim < rank; ++dim) {
 +                    const uint64_t n = integer<uint64_t>(in);
@@ -379,10 +205,226 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 +            }
 +            return true;
 +        } catch (const std::exception& error) {
++            has_wide_tensors_ = false;
 +            tensors_.clear(); data_offset_ = 0;
 +            LOG_ERROR("GGUF metadata: %s", error.what());
-             return false;
-         }
++            return false;
++        }
++    }
++    const std::vector<GGUFTensorInfo>& tensors() const { return tensors_; }
++    bool has_tensors_beyond_ggml_limits() const { return has_wide_tensors_; }
++    uint64_t data_offset() const { return data_offset_; }
+ };
+ 
+-class GGUFReader {
+-private:
+-    std::vector<GGUFTensorInfo> tensors_;
+-    bool has_wide_tensors_    = false;
+-    uint64_t remaining_bytes_ = 0;
+-    size_t data_offset_;
+-    size_t alignment_ = 32;  // default alignment is 32
+-
+-    template <typename T>
+-    bool safe_read(std::ifstream& fin, T& value) {
+-        return safe_read(fin, reinterpret_cast<char*>(&value), sizeof(T));
+-    }
+-
+-    bool safe_read(std::ifstream& fin, char* buffer, size_t size) {
+-        if (size > remaining_bytes_)
+-            return false;
+-        fin.read(buffer, size);
+-        if (!fin.good())
+-            return false;
+-        remaining_bytes_ -= size;
+-        return true;
+-    }
+-
+-    bool safe_skip(std::ifstream& fin, uint64_t count, uint64_t element_size = 1) {
+-        if (count > remaining_bytes_ / element_size)
+-            return false;
+-        uint64_t size = count * element_size;
+-        // Seeking discards the read buffer, making arrays of short tokenizer strings expensive to skip.
+-        if (size <= 64 * 1024) {
+-            fin.ignore(static_cast<std::streamsize>(size));
+-        } else {
+-            fin.seekg(static_cast<std::streamoff>(size), std::ios::cur);
+-        }
+-        if (!fin.good())
+-            return false;
+-        remaining_bytes_ -= size;
+-        return true;
+-    }
+-
+-    bool skip_metadata_values(std::ifstream& fin, GGUFMetadataType type, uint64_t count) {
+-        switch (type) {
+-            case GGUFMetadataType::UINT8:
+-            case GGUFMetadataType::INT8:
+-            case GGUFMetadataType::BOOL:
+-                return safe_skip(fin, count);
+-
+-            case GGUFMetadataType::UINT16:
+-            case GGUFMetadataType::INT16:
+-                return safe_skip(fin, count, 2);
+-
+-            case GGUFMetadataType::UINT32:
+-            case GGUFMetadataType::INT32:
+-            case GGUFMetadataType::FLOAT32:
+-                return safe_skip(fin, count, 4);
+-
+-            case GGUFMetadataType::UINT64:
+-            case GGUFMetadataType::INT64:
+-            case GGUFMetadataType::FLOAT64:
+-                return safe_skip(fin, count, 8);
+-
+-            case GGUFMetadataType::STRING:
+-                if (count > remaining_bytes_ / sizeof(uint64_t))
+-                    return false;
+-                for (uint64_t i = 0; i < count; i++) {
+-                    uint64_t len = 0;
+-                    if (!safe_read(fin, len) || !safe_skip(fin, len))
+-                        return false;
+-                }
+-                return true;
+-
+-            default:
+-                LOG_ERROR("Unknown metadata type=%u", static_cast<uint32_t>(type));
+-                return false;
+-        }
+-    }
+-
+-    bool read_metadata(std::ifstream& fin) {
+-        uint64_t key_len = 0;
+-        if (!safe_read(fin, key_len))
+-            return false;
+-
+-        if (key_len > 4096)
+-            return false;
+-
+-        std::string key(key_len, '\0');
+-        if (!safe_read(fin, (char*)key.data(), key_len))
+-            return false;
+-
+-        uint32_t type = 0;
+-        if (!safe_read(fin, type))
+-            return false;
+-
+-        if (key == "general.alignment") {
+-            uint32_t align_val = 0;
+-            if (!safe_read(fin, align_val))
+-                return false;
+-
+-            if (align_val != 0 && (align_val & (align_val - 1)) == 0) {
+-                alignment_ = align_val;
+-                LOG_VERBOSE("Found alignment: %zu", alignment_);
+-            } else {
+-                LOG_ERROR("Invalid alignment value %u, fallback to default %zu", align_val, alignment_);
+-            }
+-            return true;
+-        }
+-
+-        uint64_t count = 1;
+-        if (type == static_cast<uint32_t>(GGUFMetadataType::ARRAY)) {
+-            if (!safe_read(fin, type) || !safe_read(fin, count))
+-                return false;
+-        }
+-        return skip_metadata_values(fin, static_cast<GGUFMetadataType>(type), count);
+-    }
+-
+-    GGUFTensorInfo read_tensor_info(std::ifstream& fin) {
+-        GGUFTensorInfo info;
+-
+-        uint64_t name_len;
+-        if (!safe_read(fin, name_len))
+-            throw std::runtime_error("read tensor name length failed");
+-
+-        info.name.resize(name_len);
+-        if (!safe_read(fin, (char*)info.name.data(), name_len))
+-            throw std::runtime_error("read tensor name failed");
+-
+-        uint32_t n_dims;
+-        if (!safe_read(fin, n_dims))
+-            throw std::runtime_error("read tensor dims failed");
+-
+-        info.shape.resize(n_dims);
+-        for (uint32_t i = 0; i < n_dims; i++) {
+-            if (!safe_read(fin, info.shape[i]))
+-                throw std::runtime_error("read tensor shape failed");
+-        }
+-
+-        if (n_dims > GGML_MAX_DIMS) {
+-            has_wide_tensors_ = true;
+-            for (uint32_t i = GGML_MAX_DIMS; i < n_dims; i++) {
+-                info.shape[GGML_MAX_DIMS - 1] *= info.shape[i];  // stack to last dim;
+-            }
+-            info.shape.resize(GGML_MAX_DIMS);
+-            n_dims = GGML_MAX_DIMS;
+-        }
+-
+-        uint32_t type;
+-        if (!safe_read(fin, type))
+-            throw std::runtime_error("read tensor type failed");
+-        info.type = static_cast<ggml_type>(type);
+-
+-        if (!safe_read(fin, info.offset))
+-            throw std::runtime_error("read tensor offset failed");
+-
+-        return info;
+-    }
+-
+-public:
+-    bool load(const std::string& file_path) {
+-        std::ifstream fin(std::filesystem::u8path(file_path), std::ios::binary | std::ios::ate);
+-        if (!fin) {
+-            LOG_ERROR("failed to open '%s'", file_path.c_str());
+-            return false;
+-        }
+-
+-        std::streamoff file_size = fin.tellg();
+-        if (file_size < 0)
+-            return false;
+-        remaining_bytes_ = static_cast<uint64_t>(file_size);
+-        fin.seekg(0, std::ios::beg);
+-        if (!fin.good())
+-            return false;
+-
+-        // --- Header ---
+-        char magic[4];
+-        if (!safe_read(fin, magic, 4) || strncmp(magic, "GGUF", 4) != 0) {
+-            LOG_ERROR("not a valid GGUF file");
+-            return false;
+-        }
+-
+-        uint32_t version;
+-        if (!safe_read(fin, version))
+-            return false;
+-
+-        uint64_t tensor_count, metadata_kv_count;
+-        if (!safe_read(fin, tensor_count))
+-            return false;
+-        if (!safe_read(fin, metadata_kv_count))
+-            return false;
+-
+-        LOG_VERBOSE("GGUF v%u, tensor_count=%llu, metadata_kv_count=%llu",
+-                    version, (unsigned long long)tensor_count, (unsigned long long)metadata_kv_count);
+-
+-        // --- Read Metadata ---
+-        for (uint64_t i = 0; i < metadata_kv_count; i++) {
+-            if (!read_metadata(fin)) {
+-                LOG_ERROR("read meta data failed");
+-                return false;
+-            }
+-        }
+-
+-        // --- Tensor Infos ---
+-        tensors_.clear();
+-        try {
+-            for (uint64_t i = 0; i < tensor_count; i++) {
+-                tensors_.push_back(read_tensor_info(fin));
+-            }
+-        } catch (const std::runtime_error& e) {
+-            LOG_ERROR("%s", e.what());
+-            return false;
+-        }
 -
 -        data_offset_ = static_cast<size_t>(fin.tellg());
 -        if ((data_offset_ % alignment_) != 0) {
@@ -390,20 +432,19 @@ index 7b372e4f596ebf079806e19d92bffa0c6a13252b..0e3384196f16987093b7a3cbfeb80e11
 -        }
 -        fin.close();
 -        return true;
-     }
+-    }
 -
-     const std::vector<GGUFTensorInfo>& tensors() const { return tensors_; }
+-    const std::vector<GGUFTensorInfo>& tensors() const { return tensors_; }
+-
+-    bool has_tensors_beyond_ggml_limits() const { return has_wide_tensors_; }
 -    size_t data_offset() const { return data_offset_; }
-+    uint64_t data_offset() const { return data_offset_; }
- };
- 
+-};
+-
 -#endif  // __SD_MODEL_IO_GGUF_READER_EXT_H__
 +#endif // __SD_MODEL_IO_GGUF_READER_EXT_H__
-diff --git a/src/model_io/tensor_storage.h b/src/model_io/tensor_storage.h
-index 1916d1f5e512f19762fba00a2b655066ff171a68..41b7a3a5f5b460a7bab53e1387bbda7d5d5d1e1a 100644
 --- a/src/model_io/tensor_storage.h
 +++ b/src/model_io/tensor_storage.h
-@@ -36,7 +36,7 @@ struct TensorStorage {
+@@ -37,7 +37,7 @@
  
      TensorStorage() = default;
  

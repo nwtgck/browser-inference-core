@@ -407,6 +407,26 @@ class RuntimeSnapshot(unittest.TestCase):
             self.validate()
         self.assertFalse(self.receipt().exists())
 
+    def test_shared_arithmetic_runner_changes_block_final_pack(self):
+        name = 'tests/arithmetic-probes.mjs'
+        identity = snapshot.test_identity(self.repo / self.runtime, self.runtime)
+        self.assertIn(name, identity)
+        self.assertNotIn(name, snapshot.TEST_INPUTS['llama-cpp'])
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('stale success')
+        def mutate(phase):
+            if phase == 'test.chromium_smoke':
+                path = self.repo / self.runtime / name
+                path.write_bytes(b'X' * path.stat().st_size)
+        self.after_command = mutate
+        original = subprocess.check_output
+        with patch('subprocess.check_output', wraps=original) as calls:
+            with self.assertRaisesRegex(ValueError, 'Test implementation or fixture changed'):
+                self.validate()
+        self.assertFalse(any(call.args[0][:2] == ['npm', 'pack'] for call in calls.call_args_list))
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
+
     def test_owned_temporary_directory_resolves_system_alias_before_use(self):
         actual = self.root / 'temporary-root'; actual.mkdir()
         alias = self.root / 'system-temp-alias'; alias.symlink_to(actual, target_is_directory=True)
