@@ -640,6 +640,7 @@ export interface LowLevelFunctions {
   preprocess_canny(arg0: bigint, arg1: number, arg2: number, arg3: number, arg4: number, arg5: number): Promise<number>;
   save_imatrix(arg0: bigint): Promise<void>;
   sd_add_rpc_servers(arg0: bigint): Promise<number>;
+  sd_browser_bf16_retention_version(): Promise<number>;
   sd_cache_params_init(arg0: bigint): Promise<void>;
   sd_cancel_generation(arg0: bigint, arg1: number): Promise<void>;
   sd_commit(): Promise<bigint>;

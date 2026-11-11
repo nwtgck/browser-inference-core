@@ -13718,6 +13718,13 @@
       ]
     },
     {
+      "name": "sd_browser_bf16_retention_version",
+      "export": "_sdc_sd_browser_bf16_retention_version",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
+      "parameters": []
+    },
+    {
       "name": "sd_cache_params_init",
       "export": "_sdc_sd_cache_params_init",
       "returnType": "void",

@@ -74,10 +74,22 @@ remains unsupported even when its file is readable.
 
 `_sdc_model_io_capabilities()` is an additive ABI 2 capability query. Bit 0
 means 64-bit safetensors file positions with bounded metadata validation; bit 1
-means complete standard GGUF shard-group loading. This build returns `3`. A
+means complete standard GGUF shard-group loading; bit 2 (value `4`) means bounded
+Comfy GGUF original-shape restoration. This build returns `7`. A
 consumer must not infer these capabilities from ABI 2 alone: older ABI 2 builds
 did not contain these loader changes. The image manifest also records
-`safetensorsFileOffsetBits: 64` and `ggufShards: true`.
+`safetensorsFileOffsetBits: 64`, `ggufShards: true`, and `ggufOriginalShapes: true`.
+
+`comfy.gguf.orig_shape.<tensor-name>` stores PyTorch-order integer dimensions.
+The model-loader reader reverses them to ggml order and restores a flattened descriptor only
+when the element count, dtype byte size and quantized row alignment agree.
+Already multidimensional descriptors must match exactly. Dimensions must be
+positive signed-64-bit values; ranks are limited to `GGML_MAX_DIMS`, with at most
+65,536 original-shape entries and 16 MiB of retained names/dimensions per file.
+Invalid types, duplicate keys and conflicting dimensions are rejected. Valid
+entries for tensors in another shard are ignored after validation. Payloads,
+dtypes, file offsets and standard shard ownership remain unchanged. The generic
+native parser cannot silently bypass recognized original-shape validation.
 
 Single safetensors files retain their original bytes, dtype and file size.
 Metadata is bounded at 100 MiB; positions and aggregate payload size use 64-bit
@@ -97,6 +109,47 @@ INT8 tensorwise/convrot is not enabled by supporting the safetensors container).
 A missing model component or unsupported operation is not repaired by changing
 file formats. Model-family detection, compatible-candidate selection, optional
 features and presets remain application responsibilities.
+
+## Explicit BF16 WebGPU weight retention
+
+`sd_browser_bf16_retention_version()` returns `1` for this browser-enabled
+implementation (`0` in a non-browser upstream build). The source-bound image
+manifest records `bf16WeightRetention: true` separately from the unchanged
+model-I/O capability mask. Callers must check the feature before selecting
+`sd_ctx_params_t.webgpu_bf16_type = SD_TYPE_BF16`; ABI 2 alone is insufficient.
+F32 remains the initializer's default, and explicit F16 keeps its existing meaning.
+No profile, precision, memory budget or application preset is selected automatically.
+
+Retention applies to original contiguous two-dimensional BF16 parameters with
+registered Linear-weight or Embedding-weight roles and WebGPU compute. Unknown
+roles, norms and biases keep the F32 conversion path and are reported separately;
+tensor rank or a suggestive name alone does not establish a role. Unsupported
+device operations or an incompatible actual graph fail explicitly rather than
+silently retrying retained weights on CPU or converting them to F32. Destructive
+LoRA weight updates are rejected when retained weights are present.
+Caller-owned source files and existing quantized/F16/F32 parameter bytes are unchanged.
+
+The image-only patch inventory combines four parts, each with exact input/output
+hashes and regression coverage:
+
+- `0036` backports the upstream BF16-left WebGPU matrix and row-lookup kernels.
+  Remove it when the image ggml pin supplies equivalent kernels and admission.
+- `0037` bounds parameter uploads while preserving existing queue order and
+  completion ownership. Remove it when upstream provides equivalent bounded uploads.
+- `0038` reads raw device tensors and BF16-to-F32/F16 conversions through bounded
+  loader scratch instead of a whole-tensor host mirror. Remove it when upstream
+  provides the same checked reader, byte and lifetime contracts.
+- `0039` adds the explicit parameter policy, registered roles and actual-graph
+  validation. Remove it only when upstream provides an equivalent opt-in API with
+  preserved defaults and failure/ownership contracts.
+
+Packaging requires these four patches in canonical order with matching targets
+and SHA-256 identities across every profile/variant, as well as the generated
+version API contract. A version declaration alone does not establish the feature.
+
+Source extraction, native CPU arithmetic and CPU-only Wasm contracts do not prove
+GPU shader execution, trained-model image quality, peak memory or browser stability.
+The feature does not imply that every BF16 parameter or operation can be retained.
 
 ## Build and distribution
 
