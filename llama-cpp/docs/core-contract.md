@@ -4,7 +4,7 @@
 
 The build publishes llama.cpp, selected backends, generated C bindings, and Embind registrations for upstream C++ chat types. It does not own model catalogs, downloads, storage paths, chat sessions, generation loops, UI, or worker protocols. `examples/runtime/` is always shipped as tested reference code for application host implementations. Its use is optional; changing application host code does not require rebuilding Wasm.
 
-The `lcb_` prefix identifies normalized C bindings while retaining upstream function names. There is no application-specific JSON command dispatcher. Deprecated, variadic, and unsupported video declarations are listed with exclusion reasons in the C schema. The complete GGML graph-building API remains outside the public surface. See [native chat and multimodal bindings](chat-and-multimodal.md) for the separate Embind surface and generated `mtmd` APIs. The conventions below describe the C bindings and optional reference wrapper.
+The `lcb_` prefix identifies normalized C bindings while retaining upstream function names. There is no application-specific JSON command dispatcher. Deprecated, variadic, and unsupported video declarations are listed with exclusion reasons in the C schema. GGML graph-building declarations accepted by the C binding generator are exposed with generated types and schema checks. The published schema is the inventory for that build; this is not a guarantee that every upstream helper is exported or that every backend implements every operation. See [native chat and multimodal bindings](chat-and-multimodal.md) for the separate Embind surface and generated `mtmd` APIs. The conventions below describe the C bindings and optional reference wrapper.
 
 ## Calling convention
 
@@ -74,3 +74,36 @@ The caller owns any OPFS access handle. Removing a mounted file is rejected whil
 Bindings check argument types, pointer-width conversion, and explicit memory-access bounds. They do not prove that an arbitrary native pointer identifies a valid live object. After misuse of raw APIs, an assertion failure, or an unexpected native exception, recovery of the same instance is not guaranteed. Applications should be able to discard and recreate the owning worker and core instance.
 
 Model support depends on the pinned llama.cpp implementation and selected backend. Exporting a function is not a claim that every model, operation, or browser is supported. Some upstream training and quantization functions are exposed, but require their own validation before being offered as browser application features.
+
+## Experimental model-graph boundary
+
+`model-graph-v1` is an optional, synchronous leaf extension. Its raw exports use
+the `lcb_model_graph_` prefix and the same checked `bigint`/`uint64_t` pointer
+convention. Each runtime variant ships `model-graph-v1.schema.json` and
+`model-graph-v1.functions.d.ts`; the schema fingerprint is reported by the
+module and recorded with the checked chat overlay in build provenance. Package
+validation rejects absent, mixed, or inconsistent extension contracts. The base
+C binding ABI is unchanged. A host must reject a missing/mismatched extension
+before calling it, and serialize calls with the ordinary C/Embind boundary.
+
+The extension owns vocabulary objects independently of a model, checks whether
+an architecture name is registered, and applies existing CPU samplers to host
+graph logits through reusable native candidate storage. The vocabulary owner
+copies GGUF tokenizer and chat metadata; the metadata context can then be freed.
+The borrowed vocabulary pointer and chat template objects must not outlive the
+owner. Destroy chat/sampler objects before freeing the vocabulary. Free each
+sampling workspace separately; its candidate storage is reset for every sample.
+The chat constructor for an independent owner is a separate overload, not a
+dummy model or context. Error strings are borrowed until the next extension
+call on that thread. Null handles and count/width errors are rejected, but
+arbitrary forged pointers are not sandboxed by this C boundary.
+
+This is a deliberately unstable experimental contract. Breaking changes should
+change the extension identifier/version/fingerprint and generated host types,
+not add speculative compatibility shims. Older artifacts without the extension
+remain usable for native models; they cannot run a host graph requiring it.
+Neither graph definitions nor model scripts are evaluated by the core. Graph
+interpretation, shape/resource checks, file policies, execution scheduling and
+user consent stay in the host. New tokenizers, kernels and unsupported graph
+operations still need an implementation update. Native model graph builders,
+`llama_decode`, and existing kernels are unchanged by this extension.

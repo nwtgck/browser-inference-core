@@ -53,6 +53,7 @@ import prepare_webgpu_moe_gather_logical32 as moe_gather_logical32
 import prepare_webgpu_profile_query_budget as profile_query_budget
 import prepare_file_backed_rows as file_rows
 import prepare_qsa_selection as qsa
+import prepare_model_graph_chat as model_graph
 
 
 def file_identity(path: Path) -> dict:
@@ -89,6 +90,52 @@ def browser_module_preparations(root: Path, manifest: dict) -> list[dict]:
              'supportingFiles': {path: file_identity(root / path) for path in
                                  ['scripts/build.py', 'bridge/host-navigator-pre.js', 'docs/browser-host.md']},
              'behavior': 'Add one @vite-ignore comment to the generated sibling core.wasm URL in browser variants. Vite skips automatic Wasm discovery at this expression; other bundlers may differ. Runtime acquisition, supplied bytes and fallback branches are unchanged. Hosts explicitly deploy the matching Wasm or supply bytes. Input/output identities describe the actual preparation, including no-op reruns.'}]
+
+
+
+def model_graph_preparations(root: Path, manifest: dict) -> list[dict]:
+    records = {f'{profile}/{variant}': info['modelGraphBoundary']
+               for profile, data in manifest['profiles'].items()
+               for variant, info in data['variants'].items() if 'modelGraphBoundary' in info}
+    if not records:
+        return []
+    total = sum(len(data['variants']) for data in manifest['profiles'].values())
+    if len(records) != total:
+        raise ValueError('Mixed model graph boundary activation in compiled provenance')
+    with tempfile.TemporaryDirectory(prefix='lcb-report-model-graph-') as temporary:
+        prepared = model_graph.prepare(root / 'vendor/llama.cpp', Path(temporary) / 'overlay')
+        copies = {path: {'logicalUpstreamPath': path, **file_identity(Path(temporary) / 'overlay' / path)}
+                  for path in prepared['outputs']}
+    import re
+    hashes = set()
+    for record in records.values():
+        if not isinstance(record, dict):
+            raise ValueError('Invalid model graph boundary provenance')
+        fingerprint = record.get('schemaSha256')
+        if not isinstance(fingerprint, str) or not re.fullmatch(r'[a-f0-9]{64}', fingerprint):
+            raise ValueError('Missing model graph boundary schema fingerprint')
+        if {key: value for key, value in record.items() if key != 'schemaSha256'} != prepared:
+            raise ValueError('Model graph boundary differs from the reviewed build overlay')
+        hashes.add(fingerprint)
+    if len(hashes) != 1:
+        raise ValueError('Mixed model graph boundary schema fingerprints')
+    patch = f'{PATCH_DIRECTORY}/{prepared["patch"]}'
+    return [{
+        'id': 'independent-vocabulary-chat', 'kind': 'build-tree-source-overlay',
+        'patch': {'path': patch, **file_identity(root / patch)},
+        'compiledCopies': copies,
+        'schemaSha256': next(iter(hashes)),
+        'application': {'preparationScript': 'scripts/prepare_model_graph_chat.py',
+                        'cmakeHook': 'cmake/ModelGraphBoundary.cmake',
+                        'enabledProfileVariants': sorted(records)},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                            ['bridge/model-graph.h', 'bridge/model-graph.cpp', 'bridge/model-graph-internal.h',
+                             'scripts/generate_model_graph.py', 'tests/model-graph/inputs.json']},
+        'behavior': 'Initialize independently owned vocabulary/chat metadata without a dummy model. '
+                    'Preserve the native model entry point; graph builders, decode and kernels stay upstream. '
+                    'The optional typed leaf boundary reuses CPU samplers for external logits; host graph '
+                    'definitions, file policies, validation and execution control remain outside the core.',
+    }]
 
 
 def collect(root: Path, manifest: dict) -> dict:
@@ -1207,6 +1254,9 @@ def collect(root: Path, manifest: dict) -> dict:
     })
     report['otherPatchFiles'].pop(runtime_patch, None)
     report['otherPatchFiles'].pop(cpu_runtime_patch, None)
+    for item in model_graph_preparations(root, manifest):
+        report['sourceOverlays'].append(item)
+        report['otherPatchFiles'].pop(item['patch']['path'], None)
 
     # Profile and normal TUs now differ. Never attribute the normal final bytes
     # to a profile artifact, including earlier overlays that share the final TU.

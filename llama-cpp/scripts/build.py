@@ -101,6 +101,8 @@ def main():
                 'cmakeCommand':command,'builtAtUnix':int(time.time()),
                 'buildCache': {'identity': os.environ.get('BIC_CACHE_ID'), 'compilerWrapper': os.environ.get('EM_COMPILER_WRAPPER')},
                 'validation':{'compiled':True,'realModelInference':False,'browserSmoke':False}}
+    provenance['modelGraphBoundary'] = json.loads((build/'model-graph-chat-overlay/provenance.json').read_text())
+    provenance['modelGraphBoundary']['schemaSha256'] = json.loads((build/'generated/model-graph-v1.schema.json').read_text())['schemaSha256']
     if browser_module is not None:
         provenance['browserModulePreparation'] = browser_module
     (build/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')

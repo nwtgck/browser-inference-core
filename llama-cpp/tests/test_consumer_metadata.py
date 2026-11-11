@@ -46,6 +46,8 @@ def fixture_package(root):
             manifest['profiles'][name]['variants'][variant] = {
                 'validation': {'compiled': True, 'browserSmoke': True, 'realModelInference': False},
             }
+    file('profiles/cpu-wasm32/browser/model-graph-v1.schema.json', b'{}\n')
+    file('profiles/cpu-wasm32/browser/model-graph-v1.functions.d.ts', b'// Fixture\n')
     file('api/schema.json', b'{}\n')
     file('api/functions.d.ts', b'// Fixture\n')
     file('examples/runtime/index.mjs', b'// Fixture\n')
@@ -121,6 +123,8 @@ class ReportMetadata(unittest.TestCase):
                 self.assertNotIn('/test/', entry['path'])
         paths = [entry['path'] for entry in self.data['interfaceFiles']]
         self.assertIn('api/schema.json', paths)
+        self.assertIn('profiles/cpu-wasm32/browser/model-graph-v1.schema.json', paths)
+        self.assertIn('profiles/cpu-wasm32/browser/model-graph-v1.functions.d.ts', paths)
         self.assertIn('examples/runtime/index.mjs', paths)
         self.assertNotIn('examples/runtime/README.md', paths)
 

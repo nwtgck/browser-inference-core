@@ -177,7 +177,8 @@ def metadata(package: Path, repository: str, commit: str, lock: dict, divergence
         'npm': lock,
         'browserProfiles': profiles,
         'interfaceFiles': [entry for name, entry in sorted(files.items())
-                           if name.startswith('api/') or name.startswith('examples/runtime/') and not name.endswith('README.md')],
+                           if name.startswith('api/') or name.startswith('examples/runtime/') and not name.endswith('README.md')
+                           or name.endswith(('/model-graph-v1.schema.json', '/model-graph-v1.functions.d.ts'))],
         'upstreamDivergences': divergences,
         'consumerIntegration': consumer_knowledge(),
         'validation': validation,

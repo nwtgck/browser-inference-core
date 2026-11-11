@@ -734,3 +734,29 @@ not establish target-device speed.
 - **No-patch alternative:** retain cooperative reduction or await equivalent upstream selection.
 - **Validation and limits:** finite authored numerical bounds, source/factory/cache/grid and physical-range checks are separate gates. Floating-point partition and reduction may differ, so cross-path bit identity is diagnostic. Direct software hot evidence covers a down projection, two bounded heads and one larger resident test, not full vocabulary, all intermediate shapes, actual model quality or Windows/macOS speed. No new preload, dequantization copy, probe, clock or GPU wait is introduced.
 - **Removal:** retire this stage and its build/provenance/tests when upstream supplies equivalent selection or the owner drops it. Re-review lane stride, partial-subgroup ownership, shape/u32 checks, typed keys, current-context fallback and device feature/limit contracts on updates.
+
+## Independently owned model vocabulary and chat metadata
+
+- **Approval:** following the 009 design explanation, the owner explicitly allowed
+  bicore changes for the model-graph experiment on 2026-11-11. Large changes to
+  llama.cpp model, memory, or execution internals still require consultation.
+- **Patch:** `common-chat-independent-vocabulary.patch`. Extract the existing chat
+  initialization body into a vocabulary/metadata entry point; keep the native
+  model entry point and its default/tool/task template, BOS/EOS and add-token
+  semantics. The native generation loop, graph builders and kernels are untouched.
+- **Leaf bindings:** `bridge/model-graph.cpp` uses the existing metadata-only model
+  loader and vocabulary implementation without constructing a dummy model. It
+  also queries actual architecture recognition and supplies reusable candidates
+  to existing CPU samplers for external logits. No external code, native function
+  pointer, model-specific builder or model-file I/O policy is introduced.
+- **Coupling:** private loader/vocabulary/architecture interfaces are pinned and
+  fingerprinted. The changed chat translation unit is prepared in an isolated build
+  overlay, with checked inputs, patch and outputs; upstream remains pristine.
+- **No-patch alternative:** require existing native architectures or separately
+  implement tokenization/prompt handling. That does not satisfy the approved
+  unknown-architecture reuse goal; it was not silently chosen instead.
+- **Validation limits:** compilation and authored boundary tests are not a claim
+  of browser inference, real model equivalence or unchanged native throughput.
+- **Removal:** retire the overlay and adapters when upstream exposes independent
+  vocabulary/chat initialization, or when this experiment is removed. Do not
+  widen accepted hashes without reviewing the semantic changes.

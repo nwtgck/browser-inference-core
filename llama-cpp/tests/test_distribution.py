@@ -86,6 +86,35 @@ class Distribution(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'BF16 runtime capability'):
             self.assemble()
 
+    def add_model_graph_boundary(self, variants):
+        from generate_model_graph import generate
+        clang = shutil.which('clang')
+        if not clang: self.skipTest('clang AST tooling required')
+        for variant in variants:
+            build = self.root / 'build/cpu-wasm32' / variant
+            schema = generate(ROOT / 'bridge/model-graph.h', build / 'runtime', build / 'generated/exports.json', clang)
+            # The export list and generated C++ metadata are build-only inputs.
+            (build / 'runtime/model-graph-exports.json').unlink()
+            (build / 'runtime/model-graph-metadata.cpp').unlink()
+            path = build / 'provenance.json'; record = json.loads(path.read_text())
+            record['modelGraphBoundary'] = {'schemaSha256': schema['schemaSha256']}
+            path.write_text(json.dumps(record))
+
+    def test_optional_model_graph_types_and_schema_are_shipped_and_validated(self):
+        self.add_model_graph_boundary(VARIANTS)
+        self.assemble()
+        validate(self.package, check_npm_pack=False)
+        for variant in VARIANTS:
+            self.assertTrue((self.package / 'profiles/cpu-wasm32' / variant / 'model-graph-v1.functions.d.ts').is_file())
+        (self.root / 'build/cpu-wasm32/test/runtime/model-graph-v1.functions.d.ts').unlink()
+        with self.assertRaisesRegex(ValueError, 'Incomplete model graph'):
+            self.assemble()
+
+    def test_model_graph_extension_cannot_silently_disappear_in_one_variant(self):
+        self.add_model_graph_boundary(['browser'])
+        with self.assertRaisesRegex(ValueError, 'Mixed model graph'):
+            self.assemble()
+
     def test_payload_tampering_is_rejected(self):
         (self.package/'profiles/cpu-wasm32/browser/core.wasm').write_bytes(b'bad')
         with self.assertRaises(ValueError): validate(self.package)

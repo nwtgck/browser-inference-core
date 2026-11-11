@@ -1,4 +1,5 @@
 #include "common/chat.h"
+#include "model-graph-internal.h"
 #include "common/json-schema-to-grammar.h"
 #include "common/reasoning-budget.h"
 
@@ -21,6 +22,9 @@ template <typename T> uint64_t address(T * value) {
 // This owner lets ordinary Embind delete() invoke that upstream deleter.
 struct templates_owner {
     common_chat_templates_ptr value;
+
+    templates_owner(uint64_t owner, const std::string & source)
+        : value(lcb_model_graph_chat_templates(owner, source)) {}
 
     templates_owner(uint64_t model, const std::string & source, const std::string & bos, const std::string & eos)
         : value(common_chat_templates_init(pointer<const llama_model>(model), source, bos, eos)) {}
@@ -279,6 +283,7 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
             "finish", +[](session_owner & self, const common_chat_input & chunk) { return self.value.finish(chunk); });
 
     class_<templates_owner>("common_chat_templates")
+        .constructor<uint64_t, const std::string &>()
         .constructor<uint64_t, const std::string &, const std::string &, const std::string &>()
         .function(
             "apply",

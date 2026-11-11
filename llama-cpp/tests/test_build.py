@@ -87,6 +87,15 @@ class BuildProvenance(unittest.TestCase):
                 commands += [{'file':'clip.cpp','command':'c++ -c clip.cpp'+runtime},
                              {'file':'mtmd.cpp','command':'c++ -c mtmd.cpp'+runtime}]
                 Path('compile_commands.json').write_text(json.dumps(commands))
+                # Compiler/provenance fixture, not an actual model-graph build.
+                # build.py requires both CMake preparation outputs to exist.
+                overlay=Path('model-graph-chat-overlay')
+                overlay.mkdir(exist_ok=True)
+                (overlay/'provenance.json').write_text(json.dumps({'fixture': 'model-graph-preparation'}))
+                generated=Path('generated')
+                generated.mkdir(exist_ok=True)
+                if os.environ.get('LCB_TEST_MODE')!='missing-model-graph-contract':
+                    (generated/'model-graph-v1.schema.json').write_text(json.dumps({'schemaSha256': 'd'*64}))
                 mode=os.environ.get('LCB_TEST_MODE')
                 if mode=='modify':
                     (root/'README.md').write_text('modified during configure\\n')
@@ -137,6 +146,7 @@ class BuildProvenance(unittest.TestCase):
             with self.subTest(profile=profile):
                 info=self.build(profile)
                 self.assertFalse(info['sourceDirty'])
+                self.assertEqual(info['modelGraphBoundary'], {'fixture': 'model-graph-preparation', 'schemaSha256': 'd'*64})
                 memory64 = json.loads((ROOT / 'config/profiles.json').read_text())[profile]['memory64']
                 self.assertIn('-DLCB_FILE_BACKED_PLE=' + ('ON' if memory64 else 'OFF'), info['cmakeCommand'])
                 self.assertEqual(info['cmakeCommand'].count('-DLCB_QSA_ALL_POOLS=ON'), 1)
@@ -149,6 +159,11 @@ class BuildProvenance(unittest.TestCase):
                     self.assertTrue((self.root/'build'/profile/'browser'/name).is_file())
                     self.assertFalse((self.root/name).exists())
                     self.assertFalse((self.caller/name).exists())
+
+    def test_missing_model_graph_contract_fails_instead_of_inventing_provenance(self):
+        result=self.build(mode='missing-model-graph-contract',check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('model-graph-v1.schema.json', result.stderr)
 
     def test_reusing_a_linked_browser_module_does_not_duplicate_the_annotation(self):
         first=self.build()
