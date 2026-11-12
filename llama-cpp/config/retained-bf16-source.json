@@ -10,6 +10,7 @@
     "tools/mtmd/models/qwen2vl.cpp": "78c89875dd44a2faa295cebc2ea8ca781735b9c2cfa992751106aa1e51b229a6",
     "tools/mtmd/models/qwen3vl.cpp": "26e0da9db8258d5dcb6c3b75edea86caeeb9bad3ac4f378c5d508f7304d74781",
     "tools/mtmd/models/gemma4v.cpp": "776bc47dacb61ad815bc867c584590a13842147991d79947882087d7690dd6ac",
+    "tools/mtmd/models/gemma4uv.cpp": "ca6d97f359897f8d12bbece629d6e9e5edb5ef04266ea2924e09dfc6eaeee370",
     "tools/mtmd/models/lfm3vl.cpp": "534c9793d9df562e991f16cb4d54b02a75cabb4858083d1d83cb208f6c687af1",
     "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
     "ggml/src/ggml-alloc.c": "9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39",

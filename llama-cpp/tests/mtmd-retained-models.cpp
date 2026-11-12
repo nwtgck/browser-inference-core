@@ -38,24 +38,32 @@ static ggml_tensor * root(ggml_tensor * p) {
         p = p->view_src;
     return p;
 }
-static void probe(std::string kind, int side) {
-    if (side != 32 && side != 48)
+static void probe(std::string kind, int side, int height) {
+    const bool unified = kind == "gemma4uv" || kind == "gemma4uv-12b";
+    const bool real_shape = kind == "gemma4uv-12b";
+    if (real_shape) {
+        // Reviewed fixture dimensions, not a claim about every upstream image shape.
+        if (side < 48 || height < 48 || side % 48 || height % 48 || side > 1680 || height > 1680 ||
+            int64_t(side) * height > 2580480)
+            throw std::runtime_error("unreviewed Gemma4UV fixture dimensions");
+    } else if ((side != 32 && side != 48) || height != side)
         throw std::runtime_error("unreviewed fixture image side");
     clip_ctx ctx;
     ctx.buf_compute_meta.resize(ggml_tensor_overhead() * ctx.max_nodes +
                                 ggml_graph_overhead_custom(ctx.max_nodes, false));
     auto & model = ctx.model;
     auto & h = model.hparams;
-    const int e = 32, ff = 64, p = 8, proj = 64, l = 2, np = (side / p) * (side / p);
-    h.image_size = kind == "gemma3" ? side : 32;
+    const int e = real_shape ? 3840 : 32, ff = unified ? 0 : 64, p = real_shape ? 48 : 8;
+    const int proj = real_shape ? 3840 : 64, l = unified ? 0 : 2, np = (side / p) * (height / p);
+    h.image_size = real_shape ? 224 : kind == "gemma3" ? side : 32;
     h.patch_size = p;
     h.n_embd = e;
     h.n_ff = ff;
-    h.n_head = 4;
-    h.n_head_kv = 4;
+    h.n_head = unified ? 0 : 4;
+    h.n_head_kv = unified ? 0 : 4;
     h.n_layer = l;
     h.projection_dim = proj;
-    h.n_merge = 2;
+    h.n_merge = unified ? 1 : 2;
     h.eps = 1e-6;
     h.ffn_op = FFN_GELU;
     h.rope_theta = 10000;
@@ -75,9 +83,14 @@ static void probe(std::string kind, int side) {
     };
     auto mat = [&](std::string n, int64_t a, int64_t b) { return tensor(n, GGML_TYPE_BF16, {a, b}); };
     auto vec = [&](std::string n, int64_t a) { return tensor(n, GGML_TYPE_F32, {a}); };
-    model.patch_embeddings_0 =
-        tensor("v.patch_embd.weight", kind == "lfm3vl" ? GGML_TYPE_F16 : GGML_TYPE_F32, {p, p, 3, e});
-    if (kind == "gemma4v")
+    if (unified)
+        model.patch_embeddings_0 = tensor("v.patch_embd.weight", GGML_TYPE_F32, {p * p * 3, e});
+    else
+        model.patch_embeddings_0 =
+            tensor("v.patch_embd.weight", kind == "lfm3vl" ? GGML_TYPE_F16 : GGML_TYPE_F32, {p, p, 3, e});
+    if (unified)
+        model.position_embeddings = tensor("v.position_embd.weight", GGML_TYPE_F32, {e, real_shape ? 1120 : 16, 2});
+    else if (kind == "gemma4v")
         model.position_embeddings = tensor("v.gemma4_position.weight", GGML_TYPE_F32, {e, 16, 2});
     else
         model.position_embeddings =
@@ -110,7 +123,7 @@ static void probe(std::string kind, int side) {
     }
     std::unique_ptr<clip_graph> graph;
     clip_image_f32 image;
-    image.set_size({side, side}, true, false);
+    image.set_size({side, height}, true, false);
     if (kind == "llava") {
         model.proj_type = PROJECTOR_TYPE_MLP;
         h.has_llava_projector = true;
@@ -138,6 +151,17 @@ static void probe(std::string kind, int side) {
         model.mm_soft_emb_norm_w = vec("mm.soft_emb_norm.weight", e);
         model.mm_input_proj_w = tensor("mm.input_projection.weight", GGML_TYPE_F16, {proj, e});
         graph = std::make_unique<clip_graph_siglip>(&ctx, image);
+    } else if (unified) {
+        model.proj_type = PROJECTOR_TYPE_GEMMA4UV;
+        model.patch_bias = vec("v.patch_embd.bias", e);
+        model.patch_norm_1_w = vec("v.patch_norm.1.weight", p * p * 3);
+        model.patch_norm_1_b = vec("v.patch_norm.1.bias", p * p * 3);
+        model.patch_norm_2_w = vec("v.patch_norm.2.weight", e);
+        model.patch_norm_2_b = vec("v.patch_norm.2.bias", e);
+        model.patch_norm_3_w = vec("v.patch_norm.3.weight", e);
+        model.patch_norm_3_b = vec("v.patch_norm.3.bias", e);
+        model.mm_input_proj_w = mat("mm.input_projection.weight", e, proj);
+        graph = std::make_unique<clip_graph_gemma4uv>(&ctx, image);
     } else if (kind == "gemma4v") {
         model.proj_type = PROJECTOR_TYPE_GEMMA4V;
         model.mm_input_proj_w = mat("mm.input_projection.weight", e, proj);
@@ -171,6 +195,22 @@ static void probe(std::string kind, int side) {
     // tables are rejected before upstream interpolation asserts on their type.
     lcb_mtmd_check_retained_roles(model, weights.get());
     auto * g = graph->build();
+    if (unified) {
+        int projection_uses = 0;
+        for (int i = 0; i < ggml_graph_n_nodes(g); ++i) {
+            auto * node = ggml_graph_node(g, i);
+            for (int j = 0; j < GGML_MAX_SRC; ++j) {
+                if (root(node->src[j]) != model.mm_input_proj_w)
+                    continue;
+                if (node->op != GGML_OP_MUL_MAT || j != 0 || node->src[j] != model.mm_input_proj_w)
+                    throw std::runtime_error("Gemma4UV projection is not a direct retained left operand");
+                ++projection_uses;
+            }
+        }
+        auto * output = ggml_graph_node(g, ggml_graph_n_nodes(g) - 1);
+        if (projection_uses != 1 || output->ne[0] != proj || output->ne[1] != np || wt.size() != 10)
+            throw std::runtime_error("Gemma4UV projection/output contract changed");
+    }
     ggml_backend_t cpu = ggml_backend_cpu_init();
     if (!cpu)
         throw std::runtime_error("CPU fixture backend missing");
@@ -203,6 +243,8 @@ static void probe(std::string kind, int side) {
     plan.prepare(weights.get(), g, sched, cpu, true);
     if (plan.consumer_count() == 0)
         throw std::runtime_error("fixture has no retained BF16 consumers");
+    if (unified && plan.consumer_count() != 1)
+        throw std::runtime_error("Gemma4UV must retain exactly the image projection");
     if (!ggml_backend_sched_reserve(sched, g))
         throw std::runtime_error("reserve failed");
     plan.verify_sources();
@@ -220,14 +262,16 @@ static void probe(std::string kind, int side) {
         if (used.count(t))
             bytes += ggml_nbytes(t);
     std::cout << "{\"kind\":\"" << kind << "\",\"policy\":\"standard-converter\",\"imageSide\":" << side
-              << ",\"weightsBytes\":" << bytes << ",\"nodeCount\":" << ggml_graph_n_nodes(g)
-              << ",\"checkedConsumers\":" << plan.consumer_count() << ",\"target\":\"CPU test fixture\"}\n";
+              << ",\"imageHeight\":" << height << ",\"weightsBytes\":" << bytes
+              << ",\"nodeCount\":" << ggml_graph_n_nodes(g) << ",\"checkedConsumers\":" << plan.consumer_count()
+              << ",\"target\":\"CPU test fixture\"}\n";
 }
 int main(int argc, char ** argv) {
     try {
-        if (argc != 3)
-            throw std::runtime_error("kind image-side required");
-        probe(argv[1], std::stoi(argv[2]));
+        if (argc != 3 && argc != 4)
+            throw std::runtime_error("kind image-width [image-height] required");
+        const int width = std::stoi(argv[2]);
+        probe(argv[1], width, argc == 4 ? std::stoi(argv[3]) : width);
     } catch (const std::exception & e) {
         std::cerr << e.what() << "\n";
         return 1;

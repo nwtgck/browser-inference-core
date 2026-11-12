@@ -419,14 +419,98 @@ static void test_roles() {
     }
 }
 
-int main() {
+// Gemma4UV is not Gemma4V: only the direct image projection is reviewed.
+static void test_gemma4uv_roles() {
+    for (ggml_type type : {GGML_TYPE_BF16, GGML_TYPE_F16, GGML_TYPE_F32}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
+        m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, type, 3840, 3840);
+        lcb_mtmd_check_retained_roles(m, f.weights);
+        ++checks;
+    }
+    // Every other image role stays excluded, even with a valid BF16 projection.
+    for (auto member : {&clip_model::patch_embeddings_0, &clip_model::patch_bias, &clip_model::position_embeddings,
+                        &clip_model::patch_norm_1_w, &clip_model::patch_norm_1_b, &clip_model::patch_norm_2_w,
+                        &clip_model::patch_norm_2_b, &clip_model::patch_norm_3_w, &clip_model::patch_norm_3_b}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
+        m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        // Match Gemma4V's allowed position shape to catch accidental inheritance.
+        m.*member = member == &clip_model::position_embeddings
+                        ? ggml_new_tensor_3d(f.weights, GGML_TYPE_BF16, 32, 16, 2)
+                        : ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+    }
+    // Do not inherit the common transformer layer allowlist from Gemma4V.
+    for (auto member : {&clip_layer::q_w, &clip_layer::k_w, &clip_layer::v_w, &clip_layer::o_w, &clip_layer::qkv_w,
+                        &clip_layer::ff_up_w, &clip_layer::ff_down_w, &clip_layer::ff_gate_w}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
+        m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        m.layers.resize(1);
+        m.layers[0].*member = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+    }
+    {
+        fixture f;
+        clip_model m{};
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
+        auto * w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        ggml_set_name(w, "mm.input_projection.weight");
+        // A matching name without the reviewed pointer is insufficient.
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+        m.mm_input_proj_w = w;
+        lcb_mtmd_check_retained_roles(m, f.weights);
+        ++checks;
+        const ggml_tensor saved = *w;
+        for (int dim : {0, 1, 2, 3}) {
+            w->ne[dim] = dim < 2 ? 0 : 2;
+            rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+            *w = saved;
+        }
+        w->nb[1] += sizeof(ggml_bf16_t);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+        *w = saved;
+        auto * extra = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
+        ggml_set_name(extra, "mm.input_projection.weight");
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+    }
+    for (bool mixed : {false, true}) {
+        fixture f;
+        clip_model m{};
+        m.proj_type = mixed ? PROJECTOR_TYPE_GEMMA4UV : PROJECTOR_TYPE_GEMMA4UA;
+        m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 3840, 3840);
+        if (mixed) {
+            auto * audio = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 640, 3840);
+            ggml_set_name(audio, "mm.a.input_projection.weight");
+        }
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); },
+                 mixed ? "unsupported weight role or layout" : "projector roles have not been reviewed");
+    }
+}
+
+int main(int argc, char ** argv) {
     try {
+        // Keep role validation independently runnable when a platform's CPU
+        // numerical path reports a sanitizer error before reaching these tests.
+        if (argc == 2 && std::string(argv[1]) == "roles") {
+            test_roles();
+            test_gemma4uv_roles();
+            std::cout << "PASS: " << checks << " role checks; metadata only, not GPU acceptance\n";
+            return 0;
+        }
+        if (argc != 1)
+            throw std::runtime_error("usage: mtmd-retained-test [roles]");
         test_reader();
         test_queue();
         test_matmul();
         test_rows();
         test_rejections();
         test_roles();
+        test_gemma4uv_roles();
         std::cout << "PASS: " << checks << " checks; real ggml CPU contract/numerical tests, not GPU acceptance\n";
         return 0;
     } catch (const std::exception & e) {

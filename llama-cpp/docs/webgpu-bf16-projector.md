@@ -1,6 +1,6 @@
 # WebGPU vision BF16 storage
 
-The pinned llama.cpp revision `8642541b255bfb5dc39cd351a178be09013a55d6`
+The pinned llama.cpp revision `cd959bae99ff4bed22bef2604f45241c09bbb8c8`
 has BF16-left/F32-right matrix multiplication and BF16 row lookup in WebGPU.
 Storage support alone does not establish complete-model compatibility or speed.
 BF16 means Brain Floating Point 16; F16/F32 mean 16/32-bit floating point.
@@ -59,11 +59,21 @@ selection is rejected rather than published as a runtime-selected comparison.
 
 A WebGPU vision load first checks the actual weight roles against the pinned
 private `clip_model` fields. Reviewed projector enums are MLP/MLP-norm,
-Qwen2/2.5/3VL, Gemma 3, Gemma4V and LFM2/3VL. This is a conservative role
+Qwen2/2.5/3VL, Gemma 3, Gemma4V, Gemma4UV and LFM2/3VL. This is a conservative role
 allowlist, not a complete real-model compatibility list. If BF16 weights exist,
 unreviewed projectors, BF16 norms/patch kernels/interpolated position tables and
 Gemma 3's custom BF16 transposed projection are rejected. Standard F16 Gemma 3
 projection stays F16. A load without BF16 weights does not need that role gate.
+
+Gemma4UV is deliberately narrower than Gemma4V: only the contiguous 2D image
+`mm_input_proj_w` is reviewed. It is the direct left operand of `MUL_MAT` in the
+pinned `models/gemma4uv.cpp`. It does not inherit the common transformer-layer
+roles or Gemma4V's BF16 position-table lookup. BF16 patch, position, norm and bias
+weights are rejected; non-BF16 types retain their existing behavior. Audio
+`mm.a.input_projection.weight` belongs to a separate context and is not added to
+this vision allowlist. The official Gemma 4 12B QAT q4_0 projector inspected for
+this change has one BF16 image projection and nine F32 image tensors. This is
+not permission to retain every 2D tensor or a guarantee for arbitrary repacks.
 
 Every reservation and encoding checks retained weights and their views:
 
@@ -164,3 +174,19 @@ Retire legacy expansion only after matched target-model evidence supports the
 change. Remove independent loader safety/diagnostics only when upstream provides
 equivalent behavior. New shaders or widened model-role acceptance require their
 own semantic review and are not implied by this storage API.
+
+### Gemma4UV regression coverage
+
+The standalone `tests/mtmd-retained` suite uses the pinned upstream graph builder
+for small fixtures and the 12B projector dimensions (3840-wide embeddings,
+48-pixel effective patches, 1120-entry x/y tables). It checks square/rectangular
+images, including the 70/1120-patch bounds, and exactly one original BF16 image
+projection consumer. It does not run preprocessing or a complete model on WebGPU.
+Role tests reject audio contamination, non-projection BF16 weights, shared-layer
+roles, name-only matches, malformed dimensions and non-contiguous layouts.
+`test_mtmd_retained_mode.py` checks that editing `gemma4uv.cpp` triggers rejection
+on an ordinary build as well as on initial configuration.
+
+`mtmd-test-logger.cpp` supplies the pinned logger state only for standalone tests
+that omit `clip.cpp`; it is not part of a distributed runtime. The vendor tree,
+model builder, shaders, legacy storage policy and consumer defaults are unchanged.

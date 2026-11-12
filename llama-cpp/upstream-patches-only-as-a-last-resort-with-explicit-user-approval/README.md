@@ -51,6 +51,14 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
   immutable storage selection in the same runtime. Existing entries remain
   legacy-expand; explicit retain-checked uses original BF16 storage and rejects
   unreviewed roles/graphs/placement instead of retrying in F32 or on CPU.
+- **Gemma4UV scope (2026-11-13):** after reviewing the one-role design, the
+  owner explicitly requested implementation, review and broad validation.
+  `mtmd-retained-roles.h` accepts only the image `mm_input_proj_w` for this
+  projector, not common layer weights, patch/position/norm weights or audio.
+  The private-role contract and `models/gemma4uv.cpp` hash require review on
+  upstream changes. No shader or upstream model-builder change is included;
+  `legacy-expand` remains the no-new-role alternative. Native contract tests
+  are not real-browser/12B model validation.
 - **Integration:** checked build-tree clip.cpp and mtmd.cpp copies, preserving
   upstream parameter-record layouts. The thin mtmd API plumbing exists in every
   profile; WebGPU loader handling remains under `LCB_WEBGPU_BF16_PROJECTOR`.

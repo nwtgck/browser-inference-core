@@ -125,13 +125,22 @@ class RetainedModeTests(unittest.TestCase):
         tracked = (build / 'build.ninja').read_text()
         for name in contract['files']:
             self.assertIn(str(source / name), tracked, name)
-        changed = source / 'ggml/src/ggml.c'
-        changed.write_text(changed.read_text() + '\n// semantic drift fixture\n')
-        attempted = subprocess.run(['cmake', '--build', str(build), '--target', 'help'],
-                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        self.assertNotEqual(attempted.returncode, 0, attempted.stdout)
-        self.assertIn('semantic review', attempted.stdout)
-        self.assertEqual((build / 'mtmd-overlay/clip.cpp').read_bytes(), before)
+        self.assertIn('tools/mtmd/models/gemma4uv.cpp', contract['files'])
+        for name in ('ggml/src/ggml.c', 'tools/mtmd/models/gemma4uv.cpp'):
+            with self.subTest(changed=name):
+                changed = source / name
+                original = changed.read_bytes()
+                changed.write_bytes(original + b'\n// semantic drift fixture\n')
+                attempted = subprocess.run(['cmake', '--build', str(build), '--target', 'help'],
+                                           text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                self.assertNotEqual(attempted.returncode, 0, attempted.stdout)
+                self.assertIn('semantic review', attempted.stdout)
+                self.assertIn(name, attempted.stdout)
+                self.assertEqual((build / 'mtmd-overlay/clip.cpp').read_bytes(), before)
+                changed.write_bytes(original)
+                restored = subprocess.run(['cmake', '--build', str(build), '--target', 'help'],
+                                          text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                self.assertEqual(restored.returncode, 0, restored.stdout)
 
 
 if __name__ == '__main__':

@@ -43,24 +43,31 @@ inline void lcb_mtmd_check_retained_roles(const clip_model & model, ggml_context
         // The standard converter already stores the transposed projection
         // as F16. Leave it that way; a custom BF16 version is not accepted.
         break;
+    case PROJECTOR_TYPE_GEMMA4UV:
+        // Unified vision has no transformer layers. Only its direct image
+        // input projection is reviewed for BF16 retention.
+        matrices.insert(model.mm_input_proj_w);
+        break;
     case PROJECTOR_TYPE_GEMMA4V:
         matrices.insert(model.mm_input_proj_w);
         break;
     default:
         throw std::runtime_error("retain-checked BF16: projector roles have not been reviewed");
     }
-    for (const clip_layer & layer : model.layers) {
-        for (const ggml_tensor * t : {layer.q_w, layer.k_w, layer.v_w, layer.o_w, layer.qkv_w, layer.ff_up_w,
-                                      layer.ff_down_w, layer.ff_gate_w}) {
-            matrices.insert(t);
-        }
-        if (model.proj_type == PROJECTOR_TYPE_QWEN3VL) {
-            matrices.insert(layer.deepstack_fc1_w);
-            matrices.insert(layer.deepstack_fc2_w);
-        }
-        if (model.proj_type == PROJECTOR_TYPE_LFM3VL) {
-            matrices.insert(layer.conv2d_in_proj_w);
-            matrices.insert(layer.conv2d_out_proj_w);
+    if (model.proj_type != PROJECTOR_TYPE_GEMMA4UV) {
+        for (const clip_layer & layer : model.layers) {
+            for (const ggml_tensor * t : {layer.q_w, layer.k_w, layer.v_w, layer.o_w, layer.qkv_w, layer.ff_up_w,
+                                          layer.ff_down_w, layer.ff_gate_w}) {
+                matrices.insert(t);
+            }
+            if (model.proj_type == PROJECTOR_TYPE_QWEN3VL) {
+                matrices.insert(layer.deepstack_fc1_w);
+                matrices.insert(layer.deepstack_fc2_w);
+            }
+            if (model.proj_type == PROJECTOR_TYPE_LFM3VL) {
+                matrices.insert(layer.conv2d_in_proj_w);
+                matrices.insert(layer.conv2d_out_proj_w);
+            }
         }
     }
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
