@@ -2287,6 +2287,16 @@ interface WasmModule {
   _lcb_sizeof_field(_0: number, _1: number): BigInt;
   _lcb_constant(_0: number): BigInt;
   _lcb_schema_hash(): BigInt;
+  _lcb_model_graph_version(): number;
+  _lcb_model_graph_last_error(): BigInt;
+  _lcb_model_graph_architecture_known(_0: BigInt): number;
+  _lcb_model_graph_vocab_new(_0: BigInt): BigInt;
+  _lcb_model_graph_vocab_get(_0: BigInt): BigInt;
+  _lcb_model_graph_vocab_free(_0: BigInt): void;
+  _lcb_model_graph_sampler_workspace_new(_0: number): BigInt;
+  _lcb_model_graph_sampler_workspace_free(_0: BigInt): void;
+  _lcb_model_graph_sample(_0: BigInt, _1: BigInt, _2: BigInt, _3: number): number;
+  _lcb_model_graph_schema_hash(): BigInt;
 }
 
 type EmbindString = ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|string;
@@ -2832,6 +2842,7 @@ interface EmbindModule {
     new(_0: common_chat_templates, _1: bigint, _2: common_chat_templates_inputs, _3: common_chat_session_params): common_chat_session;
   };
   common_chat_templates: {
+    new(_0: bigint, _1: EmbindString): common_chat_templates;
     new(_0: bigint, _1: EmbindString, _2: EmbindString, _3: EmbindString): common_chat_templates;
   };
   common_chat_verify_template(_0: EmbindString, _1: boolean): boolean;
