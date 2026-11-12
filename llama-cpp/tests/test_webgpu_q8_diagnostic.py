@@ -335,6 +335,9 @@ class Q8Diagnostic(unittest.TestCase):
         cmake = (ROOT / 'CMakeLists.txt').read_text()
         begin = cmake.index('# Keep the common generated ABI')
         block = cmake[begin:cmake.index('if(LCB_NATIVE_CHECK)', begin)].replace('${CMAKE_CURRENT_SOURCE_DIR}', '${LCB_SOURCE_ROOT}')
+        # The composed extension block also contains the independent model
+        # boundary. Include its real preparation, not a no-op stub.
+        block = block.replace('include(cmake/ModelGraphBoundary.cmake)', 'include("${LCB_SOURCE_ROOT}/cmake/ModelGraphBoundary.cmake")')
         tail = cmake[cmake.index('if(LCB_WEBGPU AND GGML_WEBGPU_GPU_PROFILE)'):].replace('${CMAKE_CURRENT_SOURCE_DIR}', '${LCB_SOURCE_ROOT}').replace('PRIVATE bridge/', 'PRIVATE ${LCB_SOURCE_ROOT}/bridge/')
         project = self.directory / 'cmake-fixture'; project.mkdir()
         (project / 'empty.cpp').write_text('int empty;\n')
@@ -343,6 +346,7 @@ class Q8Diagnostic(unittest.TestCase):
             f'set(LCB_SOURCE_ROOT "{ROOT}")\nset(LCB_LLAMA_SOURCE "{self.upstream}")\n'
             'set(LCB_WEBGPU ON)\nset(LCB_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")\nfile(MAKE_DIRECTORY "${LCB_GENERATED}")\n'
             'file(WRITE "${LCB_GENERATED}/exports.json" "[]")\nfile(WRITE "${LCB_GENERATED}/jspi-exports.json" "[]")\n'
+            + 'add_library(llama-common STATIC "${LCB_LLAMA_SOURCE}/common/chat.cpp")\n'
             + block + '\nadd_library(core STATIC empty.cpp)\n' + tail)
         build = self.directory / 'cmake-build'
         for enabled in (True, False, True):
@@ -355,6 +359,12 @@ class Q8Diagnostic(unittest.TestCase):
             self.assertEqual((build / 'runtime/q8-diagnostic-v1.functions.d.ts').exists(), enabled)
             self.assertEqual((build / 'generated/exports.json').read_text(), '[]')
             self.assertEqual((build / 'generated/jspi-exports.json').read_text(), '[]')
+            self.assertTrue((build / 'runtime/model-graph-v1.schema.json').is_file())
+            self.assertTrue((build / 'runtime/model-graph-v1.functions.d.ts').is_file())
+            exports = json.loads((build / 'generated/model-graph-exports.json').read_text())
+            self.assertIn('_lcb_model_graph_version', exports)
+            self.assertEqual('_lcb_webgpu_q8_diagnostic_run_v1' in exports, enabled)
+            self.assertEqual(len(exports), len(set(exports)))
         # The source overlay also removes its own stale profile-only sibling headers.
         source.prepare(self.upstream, self.profile)
         self.assertEqual(hashlib.sha256((self.profile / 'ggml-webgpu.cpp').read_bytes()).hexdigest(), source.FINAL_OUTPUTS[False]['ggml-webgpu.cpp'])

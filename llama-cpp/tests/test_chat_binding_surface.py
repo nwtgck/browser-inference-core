@@ -62,7 +62,7 @@ class ChatBindingSurface(unittest.TestCase):
         source = self.work / 'bridge.cpp'
         source.write_text(content)
         return subprocess.run([self.compiler, '-std=c++17', '-fsyntax-only',
-                               '-I' + str(self.work), '-I' + str(self.upstream),
+                               '-I' + str(self.work), '-I' + str(ROOT / 'bridge'), '-I' + str(self.upstream),
                                '-I' + str(self.upstream / 'include'), '-I' + str(self.upstream / 'ggml/include'),
                                str(source)], capture_output=True, text=True, timeout=45)
 

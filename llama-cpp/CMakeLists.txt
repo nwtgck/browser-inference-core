@@ -161,6 +161,8 @@ else()
                 "${CMAKE_CURRENT_BINARY_DIR}/runtime/q8-diagnostic-v1.functions.d.ts")
 endif()
 
+include(cmake/ModelGraphBoundary.cmake)
+
 if(LCB_NATIVE_CHECK)
     add_library(core SHARED "${LCB_GENERATED}/bindings.cpp")
     if(UNIX AND NOT APPLE)
@@ -209,4 +211,15 @@ if(LCB_WEBGPU AND GGML_WEBGPU_GPU_PROFILE)
     target_sources(core PRIVATE bridge/webgpu-q8-diagnostic.cpp "${LCB_GENERATED}/q8-diagnostic-metadata.cpp")
     target_compile_definitions(core PRIVATE LCB_WEBGPU_Q8_DIAGNOSTIC=1)
     target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bridge")
+endif()
+
+# The added header is consumed only by the changed chat TU and leaf bindings.
+target_include_directories(core BEFORE PRIVATE "${LCB_MODEL_GRAPH_OVERLAY}")
+target_sources(core PRIVATE bridge/model-graph.cpp "${LCB_GENERATED}/model-graph-metadata.cpp")
+
+if(LCB_NATIVE_CHECK)
+    add_executable(model-graph-boundary-test tests/model-graph/boundary.cpp)
+    target_include_directories(model-graph-boundary-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${LCB_LLAMA_SOURCE}"
+        "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/ggml/include" "${LCB_LLAMA_SOURCE}/common")
+    target_link_libraries(model-graph-boundary-test PRIVATE core)
 endif()

@@ -12,6 +12,7 @@ import tempfile
 
 sys.path.append(str(Path(__file__).resolve().parent))
 from verify_bf16_build import validate_metadata as validate_bf16_metadata
+from model_graph_contract import validate as validate_model_graph
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT.parent / 'scripts'))
@@ -96,10 +97,12 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
         if path.is_symlink() or path.stat().st_size!=file['bytes'] or sha(path)!=file['sha256']:
             raise ValueError(f'Invalid payload: {rel}')
         if path.stat().st_size >= 100*1024**2: raise ValueError(f'GitHub single-file size guard exceeded: {rel}')
+    model_graph_contracts = set()
     for name, profile in manifest['profiles'].items():
         if set(profile['variants'])!=set(VARIANTS): raise ValueError(f'Missing or unknown variant: {name}')
         for variant, info in profile['variants'].items():
             validate_bf16_metadata(info)
+            model_graph_contracts.add(validate_model_graph(directory / f'profiles/{name}/{variant}', info))
             if info['profile']!=name or info['variant']!=variant or info['variantConfiguration']!=VARIANTS[variant]:
                 raise ValueError(f'Variant provenance mismatch: {name}/{variant}')
             if info['sourceCommit']!=manifest['sourceCommit'] or info['llamaCommit']!=manifest['llamaCommit']:
@@ -119,6 +122,8 @@ def validate(directory: Path, require_clean=True, *, check_npm_pack: bool = True
             with (directory/f'profiles/{name}/{variant}/core.wasm').open('rb') as wasm:
                 if wasm.read(8) != b'\x00asm\x01\x00\x00\x00':
                     raise ValueError('Not a WebAssembly module')
+    if len(model_graph_contracts) != 1:
+        raise ValueError('Mixed model graph boundary contracts across profile variants')
     validate_index(directory, runtime='llama-cpp', license_roots=manifest['licenseRoots'])
     if check_npm_pack:
         with span('package.npm_pack', packageKind='llama'):

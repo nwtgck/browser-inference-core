@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from model_graph_test_support import seed_model_graph_outputs
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -107,6 +108,7 @@ class TensorCopyBuildCommand(unittest.TestCase):
                                   'command': 'c++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(config['webgpu'])) + ' -c ' + name}
                                  for name in ('clip.cpp', 'mtmd.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
+                    graph_record = seed_model_graph_outputs(module.parent.parent)
                     argv = ['build.py', '--profile', profile, '--variant', variant]
                     with self.subTest(profile=profile, variant=variant), patch.object(builder, 'ROOT', root), \
                          patch.object(builder, 'runtime_toolchain', return_value=toolchain), \
@@ -121,6 +123,7 @@ class TensorCopyBuildCommand(unittest.TestCase):
                         self.assertFalse(any('TENSOR_COPY' in a or 'PARAM_UPLOAD_BATCHING' in a for a in command))
                         recorded = json.loads((root / 'build' / profile / variant / 'provenance.json').read_text())
                         self.assertEqual(recorded['cmakeCommand'], command)
+                        self.assertEqual(recorded['modelGraphBoundary'], graph_record)
 
 if __name__ == '__main__':
     unittest.main()
