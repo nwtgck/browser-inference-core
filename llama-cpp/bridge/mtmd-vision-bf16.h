@@ -29,3 +29,5 @@ MTMD_API enum mtmd_vision_bf16_storage mtmd_context_vision_bf16_storage(const st
 #ifdef __cplusplus
 }
 #endif
+
+#include "mtmd-vision-bf16-diagnostics.h"

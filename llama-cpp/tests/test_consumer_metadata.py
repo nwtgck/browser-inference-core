@@ -292,6 +292,8 @@ class OverlayProvenance(unittest.TestCase):
                      'docs/webgpu-tensor-copy.md', 'docs/moe-direct-slot.md', 'scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake', 'bridge/mtmd-bf16.h',
                      'docs/webgpu-bf16-projector.md', 'bridge/mtmd-retained-upload.h', 'bridge/mtmd-retained-graph.h',
                      'bridge/mtmd-retained-roles.h', 'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'bridge/mtmd-vision-bf16-diagnostics.h', 'bridge/mtmd-vision-bf16-diagnostics-internal.h',
+                  'bridge/mtmd-vision-bf16-classification.h',
                      'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
                      'scripts/verify_retained_bf16_source.py', 'scripts/verify_bf16_build.py', 'config/retained-bf16-source.json',
                      'cmake/MtmdAudioOverlay.cmake', 'docs/audio-single-thread.md']:

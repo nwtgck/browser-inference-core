@@ -55,6 +55,74 @@ New runtime capability metadata records both modes and the legacy default.
 Normal distribution accepts the shared runtime; obsolete build-time storage
 selection is rejected rather than published as a runtime-selected comparison.
 
+## Host-owned auto selection and diagnostics (version 1)
+
+The additive `bridge/mtmd-vision-bf16-diagnostics.h` contract does **not** add
+an `auto` mode, another profile, a native retry loop, or a second model loader.
+A host such as Naidan owns policy, file lifetime, cancellation, and one-shot
+retry. Existing callers and the storage-version-1 entry remain unchanged.
+
+- `mtmd_vision_bf16_classify_metadata(has_vision, common, vision)` classifies a
+  bounded projector name using the pinned upstream name map and reviewed enum
+  inventory. It performs no file I/O, backend initialization, or weight upload.
+  `REVIEWED` is only a candidate: actual tensor roles and graphs still undergo
+  the strict existing checks. Unknown metadata is never permission to retain.
+- `mtmd_init_from_file_with_vision_bf16_report(..., report, report_size)` performs
+  exactly one explicit-mode initialization. It writes a caller-owned, versioned
+  result record, without thread-local/global last-error state. Wrong-size/null
+  report arguments fail before file access and leave the output untouched.
+- `mtmd_context_vision_bf16_statistics(context, statistics, size)` copies the
+  successful context's fixed counters. It does not rescan tensors, synchronize
+  GPU work, read back weights, or measure physical GPU memory.
+- `mtmd_vision_bf16_diagnostics_version()` identifies this separate version-1
+  contract. Hosts must check all declarations, exports, constants, version, and
+  generated record layouts; a partially present ABI is not an old runtime.
+
+A host may retry in `legacy-expand` only after `RETENTION_REFUSED` with
+`PROJECTOR_UNREVIEWED` or `WEIGHT_UNREVIEWED`, phase `PREUPLOAD`, and cleanup
+`COMPLETE`. This report is published **after** all constructed clip contexts are
+freed, before any image weight upload. Truncated file ranges are rejected before
+this classification. A wrong shape, read failure, cancellation, allocation
+failure, device loss, unsupported backend, or later graph rejection does not
+have this eligibility. Ordinary failures retain cleanup `UNKNOWN`; a null
+pointer alone is not proof that every upstream constructor resource was freed.
+A host must retire its runtime when it cannot establish a safe cleanup state.
+
+Retry requires a single live file/initialization lease, unchanged input and
+runtime, completed temporary cleanup, a cancellation check, and at most one
+retry. It must not parse logs or treat a successful metadata probe as proof of
+valid GGUF contents. Explicit `retain-checked` stays strict. No automatic
+in-place re-evaluation is provided after a graph or decode failure: text KV
+state may already have changed, so a future host replay needs a separately
+validated new-context transaction.
+
+Counters cover **original BF16 image weights only**. For known successful
+states: `source_bf16_bytes = retained_bf16_bytes + expanded_source_bf16_bytes`
+and `expanded_f32_bytes = 2 * expanded_source_bf16_bytes`. `NO_BF16` is an
+observed zero; `UNAVAILABLE`, `NOT_APPLICABLE`, and `UPSTREAM` are not. CPU
+loads remain the upstream path and do not claim WebGPU statistics. Audio,
+original F32 weights, the language model, allocator capacity, staging buffers,
+and physical GPU peaks are excluded. Native upload logs are intermediate
+observations; only a successfully returned whole mtmd context can publish its
+resident counters. A host should retain the successful counters with the
+resident projector and label later reuse instead of summing them per request.
+
+`bridge/mtmd-vision-bf16-classification.h` explicitly classifies every pinned
+`projector_type`. A scoped `-Werror=switch-enum` diagnostic is active in normal
+builds, including non-test profiles. A new enum therefore requires a conscious
+classification even after source hashes are refreshed. The ordinary role guard
+uses this same review inventory; Naidan must not maintain its own model list.
+Legacy-first is a deliberate lack of retention review, not a claim that every
+model/device combination will run. Existing source-hash and real graph checks
+remain necessary for changes within already classified projectors.
+
+The implementation's local checks include both pointer-width ABI fixtures,
+source-extracted native ownership/error boundaries, all upstream name mappings,
+compiler mutation checks, and retained-weight graph tests. These are not a
+substitute for rebuilding the WebAssembly distribution and checking real
+browser/device inference. Publish a new source-bound immutable runtime before
+updating a consumer artifact reference; do not edit an existing runtime asset.
+
 ## Checked retention contract
 
 A WebGPU vision load first checks the actual weight roles against the pinned

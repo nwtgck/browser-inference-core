@@ -1,6 +1,6 @@
 --- a/clip.cpp
 +++ b/clip.cpp
-@@ -8,6 +8,10 @@
+@@ -9,6 +9,10 @@
  #include "ggml-cpp.h"
  #include "ggml-alloc.h"
  #include "ggml-backend.h"
@@ -11,15 +11,17 @@
  #include "gguf.h"
  
  #include <algorithm>
-@@ -145,6 +149,7 @@
+@@ -146,6 +150,9 @@
  
  
  struct clip_ctx {
 +    const mtmd_vision_bf16_storage vision_bf16_storage;
++    mtmd_vision_bf16_statistics vision_bf16_statistics =
++        lcb_mtmd_empty_statistics(MTMD_VISION_BF16_EFFECTIVE_UPSTREAM);
      clip_model model;
  
      gguf_context_ptr ctx_gguf;
-@@ -174,7 +179,9 @@
+@@ -175,7 +182,9 @@
  
      bool support_batch = false;
  
@@ -30,7 +32,7 @@
          flash_attn_type = ctx_params.flash_attn_type;
          no_alloc = ctx_params.no_alloc;
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
-@@ -4567,6 +4574,12 @@
+@@ -5052,6 +5061,13 @@
  };
  
  struct clip_init_result clip_init(const char * fname, struct clip_context_params ctx_params) {
@@ -39,11 +41,12 @@
 +}
 +
 +clip_init_result lcb_clip_init_with_vision_bf16_storage(
-+        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage) {
++        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage,
++        mtmd_vision_bf16_load_report * report) {
      clip_ctx * ctx_vision = nullptr;
      clip_ctx * ctx_audio = nullptr;
      clip_ctx * ctx_gen_audio = nullptr;
-@@ -4579,7 +4592,10 @@
+@@ -5064,7 +5080,10 @@
          bool skip_audio = false;
  
          if (loader.has_vision) {
@@ -55,3 +58,46 @@
              loader.load_hparams(ctx_vision->model, CLIP_MODALITY_VISION);
              loader.load_tensors(*ctx_vision);
              loader.init_ctx(*ctx_vision);
+@@ -5110,17 +5129,38 @@
+                                                    ggml_graph_overhead_custom(ctx_gen_audio->max_nodes, false));
+         }
+ 
+-    } catch (const std::exception & e) {
+-        LOG_ERR("%s: failed to load model '%s': %s\n", __func__, fname, e.what());
+-
++    } catch (const lcb_mtmd_retention_refused & e) {
++        // Publish retry eligibility only AFTER all successfully constructed
++        // contexts have been destroyed. A destructor failure never reaches it.
+         delete ctx_vision;
+         delete ctx_audio;
+         delete ctx_gen_audio;
+-
++        if (report) {
++            *report = lcb_mtmd_new_load_report();
++            report->status = MTMD_VISION_BF16_LOAD_RETENTION_REFUSED;
++            report->reason = e.reason;
++            report->phase = MTMD_VISION_BF16_PHASE_PREUPLOAD;
++            report->cleanup = MTMD_VISION_BF16_CLEANUP_COMPLETE;
++        }
++        LOG_ERR("%s: %s\n", __func__, e.what());
+         return {nullptr, nullptr, nullptr};
++    } catch (const std::exception & e) {
++        LOG_ERR("%s: failed to load model '%s': %s\n", __func__, fname, e.what());
++
++        delete ctx_vision;
++        delete ctx_audio;
++        delete ctx_gen_audio;
++
++        return {nullptr, nullptr, nullptr};
+     }
+ 
+     return {ctx_vision, ctx_audio, ctx_gen_audio};
++}
++
++
++mtmd_vision_bf16_statistics lcb_clip_vision_bf16_statistics(const clip_ctx * context) {
++    return context ? context->vision_bf16_statistics :
++        lcb_mtmd_empty_statistics(MTMD_VISION_BF16_EFFECTIVE_NOT_APPLICABLE);
+ }
+ 
+ struct clip_cap clip_get_cap(const char * fname) {

@@ -15,15 +15,17 @@
  #include "gguf.h"
  
  #include <algorithm>
-@@ -146,6 +154,7 @@
+@@ -146,6 +154,9 @@
  
  
  struct clip_ctx {
 +    const mtmd_vision_bf16_storage vision_bf16_storage;
++    mtmd_vision_bf16_statistics vision_bf16_statistics =
++        lcb_mtmd_empty_statistics(MTMD_VISION_BF16_EFFECTIVE_UPSTREAM);
      clip_model model;
  
      gguf_context_ptr ctx_gguf;
-@@ -175,7 +184,9 @@
+@@ -175,7 +186,9 @@
  
      bool support_batch = false;
  
@@ -34,7 +36,7 @@
          flash_attn_type = ctx_params.flash_attn_type;
          no_alloc = ctx_params.no_alloc;
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
-@@ -2538,6 +2549,17 @@
+@@ -2538,6 +2551,17 @@
          auto & hparams = model.hparams;
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
@@ -52,7 +54,7 @@
  
          auto fin = open_ifstream_binary(fname);
          if (!fin) {
-@@ -2552,7 +2574,8 @@
+@@ -2552,7 +2576,8 @@
          // get offsets
          for (int64_t i = 0; i < gguf_get_n_tensors(ctx_gguf.get()); ++i) {
              const char * name = gguf_get_tensor_name(ctx_gguf.get(), i);
@@ -62,7 +64,7 @@
          }
  
          // create data context
-@@ -2579,7 +2602,24 @@
+@@ -2579,7 +2604,24 @@
              }
              if (cur) {
                  tensors_to_load.push_back(cur);
@@ -88,12 +90,27 @@
                  ggml_set_name(data_tensor, cur->name);
                  loaded_tensor_names.insert(name);
                  cur = data_tensor;
-@@ -4678,24 +4718,38 @@
+@@ -4678,24 +4720,53 @@
                  GGML_ASSERT(false && "unknown projector type");
          }
  
-+        // Validate roles before allocating weights or constructing a graph.
++        // Reject malformed file ranges before classifying a recoverable role
++        // refusal. This is metadata/seek only, not a second tensor-data load.
 +        if (retain_bf16) {
++            fin.seekg(0, std::ios::end);
++            const auto file_end = fin.tellg();
++            if (file_end < 0) throw std::runtime_error("cannot measure vision tensor file");
++            const uint64_t file_bytes = static_cast<uint64_t>(file_end);
++            for (const auto * tensor : tensors_to_load) {
++                const auto offset = tensor_offset.at(tensor->name);
++                const auto bytes = ggml_nbytes(tensor);
++                if (offset > file_bytes || bytes > file_bytes - offset) {
++                    throw std::runtime_error("truncated image tensor data");
++                }
++            }
++            fin.seekg(0, std::ios::beg);
++            if (!fin) throw std::runtime_error("cannot seek vision tensor file");
++            // Validate roles before allocating weights or constructing a graph.
 +            lcb_mtmd_check_retained_roles(model, ctx_clip.ctx_data.get());
 +        }
 +
@@ -129,7 +146,7 @@
              ggml_backend_buffer_set_usage(ctx_clip.buf.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
              // read the weight from file
              if (!ctx_clip.no_alloc) {
-@@ -4706,27 +4760,79 @@
+@@ -4706,27 +4777,86 @@
                      auto it_off = tensor_offset.find(t->name);
                      GGML_ASSERT(it_off != tensor_offset.end() && "no offset for tensor");
                      const size_t offset = it_off->second;
@@ -210,10 +227,17 @@
 +                    // Fixed metadata only; no filenames, tensor names or values.
 +                    LOG_INF("lcb_clip: bf16-f32 tensors=%zu source_bytes=%zu destination_bytes=%zu\n",
 +                            expanded_tensors, expanded_source_bytes, expanded_source_bytes * 2);
++                }
++                // Private until the ENTIRE mtmd initialization succeeds. Audio
++                // and warmup may still fail after this point.
++                if (retain_bf16 || expand_bf16) {
++                    ctx_clip.vision_bf16_statistics = lcb_mtmd_weight_statistics(retain_bf16,
++                        retain_bf16 ? retained_tensors : expanded_tensors,
++                        retain_bf16 ? retained_source_bytes : expanded_source_bytes);
                  }
                  LOG_DBG("%s: loaded %zu tensors from %s\n", __func__, tensors_to_load.size(), fname.c_str());
              } else {
-@@ -4859,7 +4965,15 @@
+@@ -4859,7 +4989,15 @@
      // only initialize backend buffers, but do not allocate them yet
      static support_info_graph reserve_compute_meta(clip_ctx & ctx_clip, const clip_image_f32_batch & batch) {
          ggml_cgraph * gf = clip_get_graph_builder(&ctx_clip, batch)->build();
@@ -230,7 +254,7 @@
  
          ctx_clip.mem_compute.clear();
          for (size_t i = 0; i < ctx_clip.backend_ptrs.size(); ++i) {
-@@ -5052,6 +5166,12 @@
+@@ -5052,6 +5190,13 @@
  };
  
  struct clip_init_result clip_init(const char * fname, struct clip_context_params ctx_params) {
@@ -239,11 +263,12 @@
 +}
 +
 +clip_init_result lcb_clip_init_with_vision_bf16_storage(
-+        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage) {
++        const char * fname, clip_context_params ctx_params, mtmd_vision_bf16_storage storage,
++        mtmd_vision_bf16_load_report * report) {
      clip_ctx * ctx_vision = nullptr;
      clip_ctx * ctx_audio = nullptr;
      clip_ctx * ctx_gen_audio = nullptr;
-@@ -5064,8 +5184,11 @@
+@@ -5064,8 +5209,11 @@
          bool skip_audio = false;
  
          if (loader.has_vision) {
@@ -256,7 +281,50 @@
              loader.load_tensors(*ctx_vision);
              loader.init_ctx(*ctx_vision);
              if (ctx_params.warmup) {
-@@ -5762,7 +5885,17 @@
+@@ -5110,17 +5258,38 @@
+                                                    ggml_graph_overhead_custom(ctx_gen_audio->max_nodes, false));
+         }
+ 
+-    } catch (const std::exception & e) {
+-        LOG_ERR("%s: failed to load model '%s': %s\n", __func__, fname, e.what());
+-
++    } catch (const lcb_mtmd_retention_refused & e) {
++        // Publish retry eligibility only AFTER all successfully constructed
++        // contexts have been destroyed. A destructor failure never reaches it.
+         delete ctx_vision;
+         delete ctx_audio;
+         delete ctx_gen_audio;
+-
++        if (report) {
++            *report = lcb_mtmd_new_load_report();
++            report->status = MTMD_VISION_BF16_LOAD_RETENTION_REFUSED;
++            report->reason = e.reason;
++            report->phase = MTMD_VISION_BF16_PHASE_PREUPLOAD;
++            report->cleanup = MTMD_VISION_BF16_CLEANUP_COMPLETE;
++        }
++        LOG_ERR("%s: %s\n", __func__, e.what());
+         return {nullptr, nullptr, nullptr};
++    } catch (const std::exception & e) {
++        LOG_ERR("%s: failed to load model '%s': %s\n", __func__, fname, e.what());
++
++        delete ctx_vision;
++        delete ctx_audio;
++        delete ctx_gen_audio;
++
++        return {nullptr, nullptr, nullptr};
+     }
+ 
+     return {ctx_vision, ctx_audio, ctx_gen_audio};
++}
++
++
++mtmd_vision_bf16_statistics lcb_clip_vision_bf16_statistics(const clip_ctx * context) {
++    return context ? context->vision_bf16_statistics :
++        lcb_mtmd_empty_statistics(MTMD_VISION_BF16_EFFECTIVE_NOT_APPLICABLE);
+ }
+ 
+ struct clip_cap clip_get_cap(const char * fname) {
+@@ -5762,7 +5931,17 @@
  
      // if buffers are not allocated, we need to do a warmup run to allocate them
      if (!ctx->is_allocated) {
@@ -275,7 +343,7 @@
      }
  
      const bool needs_gen_state = params->gen_process == CLIP_GEN_PROCESS_GEN_CODE ||
-@@ -5781,9 +5914,60 @@
+@@ -5781,9 +5960,60 @@
      // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)
      ggml_tensor * embeddings = params->out_embd ? ggml_graph_node(gf, -1) : nullptr;
  

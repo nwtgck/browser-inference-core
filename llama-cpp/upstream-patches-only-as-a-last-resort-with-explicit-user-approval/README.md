@@ -768,3 +768,12 @@ not establish target-device speed.
 - **Removal:** retire the overlay and adapters when upstream exposes independent
   vocabulary/chat initialization, or when this experiment is removed. Do not
   widen accepted hashes without reviewing the semantic changes.
+
+
+## Vision BF16 diagnostics and preupload refusal reports
+
+- **Approval and scope:** after the detailed 012 design, alternatives, private-interface coupling and validation limits, the owner explicitly requested implementation and repeated review on 2026-11-13. This narrowly extends the accepted vision-storage overlays with a separately versioned metadata classifier, per-call initialization report, and successful-context logical weight counters. The consumer owns auto selection and retry; no native auto, GPU-to-CPU retry or graph replay is added.
+- **Coupling:** pinned clip enum/string aliases, role guard, clip initialization cleanup, mtmd constructor and the existing generated record ABI. An explicit, compiler-checked enum inventory is shared by the guard and advisory classifier. Malformed layouts and file ranges, allocation/device/cancellation and graph errors are not retryable refusals. Only the typed preupload role refusal marks cleanup complete, after destruction. Generic constructor failures remain cleanup-unknown.
+- **Observation:** counters are computed in the existing load, never by rescanning tensors or GPU readback. They concern original BF16 image weights, not audio, total memory or graph execution. They become public only through a successful full mtmd context; no-allocation and non-WebGPU storage have distinct unavailable/upstream evidence.
+- **No-extension alternative:** use explicit legacy expansion and requested-policy logs only, without reliable typed retries or successful residency statistics. This does not meet the approved observation/auto goal.
+- **Removal:** retire classifier/report/counter adapters, schema and consumer capability checks together when upstream exposes equivalent contracts. Keep upstream checkouts and previously published artifacts immutable. Browser/device/model validation remains distinct from native, mock and generated-binding tests.

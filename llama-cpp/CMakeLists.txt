@@ -55,6 +55,7 @@ execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scr
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_bindings.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/bridge/mtmd-vision-bf16.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/bridge/mtmd-vision-bf16-diagnostics.h"
     "${LCB_LLAMA_SOURCE}/include/llama.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
     "${LCB_LLAMA_SOURCE}/ggml/include/ggml-alloc.h"

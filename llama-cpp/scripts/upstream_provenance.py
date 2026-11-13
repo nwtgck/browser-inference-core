@@ -391,6 +391,8 @@ def collect(root: Path, manifest: dict) -> dict:
                   'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
                   'bridge/mtmd-retained-graph.h', 'bridge/mtmd-retained-roles.h',
                   'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'bridge/mtmd-vision-bf16-diagnostics.h', 'bridge/mtmd-vision-bf16-diagnostics-internal.h',
+                  'bridge/mtmd-vision-bf16-classification.h',
                   'scripts/verify_retained_bf16_source.py', 'config/retained-bf16-source.json',
                   'docs/webgpu-bf16-projector.md']
     report = {
@@ -1234,6 +1236,8 @@ def collect(root: Path, manifest: dict) -> dict:
                         'runtimeStorageSelection': runtime_metadata()},
         'supportingFiles': {path: file_identity(root / path) for path in
                             ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'bridge/mtmd-vision-bf16-diagnostics.h', 'bridge/mtmd-vision-bf16-diagnostics-internal.h',
+                  'bridge/mtmd-vision-bf16-classification.h',
                              'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
                              'scripts/verify_bf16_build.py']},
         'behavior': 'Add explicit load-time immutable storage selection without changing upstream parameter layouts. Old entry points use legacy defaults; requested mode is distinct from actual backend placement.',

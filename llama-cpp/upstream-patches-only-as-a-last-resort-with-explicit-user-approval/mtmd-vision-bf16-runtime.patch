@@ -1,15 +1,16 @@
 --- a/mtmd.cpp
 +++ b/mtmd.cpp
-@@ -1,6 +1,8 @@
+@@ -1,6 +1,9 @@
  #include "clip.h"
  #include "clip-impl.h"
  #include "mtmd.h"
 +#include "mtmd-vision-bf16.h"
 +#include "mtmd-vision-bf16-internal.h"
++#include "mtmd-vision-bf16-classification.h"
  #include "mtmd-internal.h"
  #include "mtmd-audio.h"
  #include "mtmd-image.h"
-@@ -552,6 +554,7 @@
+@@ -577,6 +580,7 @@
  }
  
  struct mtmd_context {
@@ -17,27 +18,34 @@
      struct clip_ctx * ctx_v; // vision
      struct clip_ctx * ctx_a; // audio
      std::vector<float> out_embd; // image embedding vector
-@@ -606,7 +609,9 @@
+@@ -634,7 +638,10 @@
      mtmd_context(const char * mmproj_fname,
                     const llama_model * text_model,
                     const mtmd_context_params & ctx_params,
 -                   bool no_alloc = false) :
 +                   bool no_alloc = false,
-+                   mtmd_vision_bf16_storage storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
++                   mtmd_vision_bf16_storage storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND,
++                   mtmd_vision_bf16_load_report * report = nullptr) :
 +        vision_bf16_storage(storage),
          print_timings   (ctx_params.print_timings),
          n_threads       (ctx_params.n_threads),
          media_marker    (ctx_params.media_marker),
-@@ -656,7 +661,7 @@
+@@ -684,7 +691,13 @@
              /* progress_callback_user_data */ ctx_params.progress_callback_user_data,
          };
  
 -        auto res = clip_init(mmproj_fname, ctx_clip_params);
-+        auto res = lcb_clip_init_with_vision_bf16_storage(mmproj_fname, ctx_clip_params, storage);
++        auto res = lcb_clip_init_with_vision_bf16_storage(mmproj_fname, ctx_clip_params, storage, report);
++        if (report && (res.ctx_v || res.ctx_a || res.ctx_gen_a)) {
++            // From here constructor failure may retain raw upstream-owned
++            // pointers. Do not claim cleanup or permit a retry in this case.
++            report->phase = MTMD_VISION_BF16_PHASE_CONTEXT;
++            report->cleanup = MTMD_VISION_BF16_CLEANUP_UNKNOWN;
++        }
          ctx_v = res.ctx_v;
          ctx_a = res.ctx_a;
          ctx_gen_a = res.ctx_gen_a;
-@@ -1260,6 +1265,32 @@
+@@ -1301,6 +1314,70 @@
          LOG_ERR("%s: error: %s\n", __func__, e.what());
          return nullptr;
      }
@@ -67,6 +75,44 @@
 +
 +mtmd_vision_bf16_storage mtmd_context_vision_bf16_storage(const mtmd_context * context) {
 +    return context ? context->vision_bf16_storage : MTMD_VISION_BF16_STORAGE_INVALID;
++}
++
++
++uint32_t mtmd_vision_bf16_diagnostics_version(void) { return 1; }
++
++int32_t mtmd_vision_bf16_classify_metadata(int32_t has_vision, const char * common, const char * vision) {
++    return lcb_mtmd_classify_metadata(has_vision, common, vision);
++}
++
++mtmd_context * mtmd_init_from_file_with_vision_bf16_report(
++        const char * path, const llama_model * text_model, const mtmd_context_params params,
++        int32_t storage, mtmd_vision_bf16_load_report * report, uint32_t report_size) {
++    if (!report || report_size != sizeof(*report)) return nullptr;
++    *report = lcb_mtmd_new_load_report();
++    if (storage != MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND && storage != MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED) {
++        report->reason = MTMD_VISION_BF16_REASON_INVALID_MODE;
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED;
++        return nullptr;
++    }
++    try {
++        auto * result = new mtmd_context(path, text_model, params, false,
++            static_cast<mtmd_vision_bf16_storage>(storage), report);
++        report->status = MTMD_VISION_BF16_LOAD_SUCCEEDED;
++        report->reason = MTMD_VISION_BF16_REASON_NONE;
++        report->phase = MTMD_VISION_BF16_PHASE_COMPLETE;
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED;
++        return result;
++    } catch (const std::exception & error) {
++        LOG_ERR("%s: error: %s\n", __func__, error.what());
++        return nullptr;
++    }
++}
++
++int32_t mtmd_context_vision_bf16_statistics(const mtmd_context * context,
++        mtmd_vision_bf16_statistics * statistics, uint32_t statistics_size) {
++    if (!context || !statistics || statistics_size != sizeof(*statistics)) return 0;
++    *statistics = lcb_clip_vision_bf16_statistics(context->ctx_v);
++    return 1;
  }
  
  void mtmd_free(mtmd_context * ctx) {

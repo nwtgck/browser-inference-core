@@ -31,6 +31,19 @@ template <typename F> static void rejected(F f, const char * text) {
     }
     require(caught, "expected rejection was not raised");
 }
+template <typename F> static void classified_rejection(F f, bool retryable) {
+    bool caught = false;
+    try {
+        f();
+    } catch (const lcb_mtmd_retention_refused &) {
+        caught = true;
+        require(retryable, "malformed data was incorrectly marked retryable");
+    } catch (const std::runtime_error &) {
+        caught = true;
+        require(!retryable, "review refusal lost its typed recovery classification");
+    }
+    require(caught, "expected classified rejection");
+}
 static ggml_context * context() {
     ggml_init_params p{};
     p.mem_size = 4 * 1024 * 1024;
@@ -466,17 +479,29 @@ static void test_gemma4uv_roles() {
         lcb_mtmd_check_retained_roles(m, f.weights);
         ++checks;
         const ggml_tensor saved = *w;
+        // A contiguous 3-D matrix is still a malformed known role, not a
+        // recoverable unknown role. This distinguishes shape from stride errors.
+        auto * rank3 = ggml_new_tensor_3d(f.weights, GGML_TYPE_BF16, 32, 32, 2);
+        m.mm_input_proj_w = rank3;
+        w->type = GGML_TYPE_F32;
+        classified_rejection([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, false);
+        rank3->type = GGML_TYPE_F32;
+        *w = saved;
+        m.mm_input_proj_w = w;
         for (int dim : {0, 1, 2, 3}) {
             w->ne[dim] = dim < 2 ? 0 : 2;
-            rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+            classified_rejection([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, false);
             *w = saved;
         }
         w->nb[1] += sizeof(ggml_bf16_t);
-        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+        classified_rejection([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, false);
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UA;
+        classified_rejection([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, false);
+        m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         *w = saved;
         auto * extra = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
         ggml_set_name(extra, "mm.input_projection.weight");
-        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
+        classified_rejection([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, true);
     }
     for (bool mixed : {false, true}) {
         fixture f;

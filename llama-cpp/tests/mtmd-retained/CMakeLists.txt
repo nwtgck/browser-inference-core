@@ -45,3 +45,9 @@ foreach(shape 480x480 768x768 480x768 768x480 480x336 1536x1680)
     add_test(NAME "retained-model-gemma4uv-12b-${shape}"
         COMMAND mtmd-retained-models gemma4uv-12b ${dims})
 endforeach()
+
+add_executable(mtmd-vision-bf16-diagnostics ../mtmd-vision-bf16-diagnostics.cpp ../mtmd-test-logger.cpp)
+target_include_directories(mtmd-vision-bf16-diagnostics PRIVATE ../../bridge
+    "${LCB_LLAMA_SOURCE}/tools/mtmd" "${LCB_LLAMA_SOURCE}/include")
+target_link_libraries(mtmd-vision-bf16-diagnostics PRIVATE ggml)
+add_test(NAME mtmd-vision-bf16-diagnostics COMMAND mtmd-vision-bf16-diagnostics)
