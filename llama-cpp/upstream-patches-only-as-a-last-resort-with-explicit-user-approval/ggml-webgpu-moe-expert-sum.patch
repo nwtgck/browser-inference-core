@@ -1,6 +1,3 @@
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
-new file mode 100644
-index 0000000..8950c9b
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
 @@ -0,0 +1,76 @@
@@ -80,8 +77,6 @@ index 0000000..8950c9b
 +    if (gx > limit || gy > limit || gx * gy > UINT32_MAX / 128u) { return false; }
 +    x = uint32_t(gx); y = uint32_t(gy); return true;
 +}
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-index 62821cf..c701ca1 100644
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 @@ -4,6 +4,7 @@
@@ -92,15 +87,15 @@ index 62821cf..c701ca1 100644
  #include "ggml.h"
  #include "pre_wgsl.hpp"
  
-@@ -1258,6 +1259,7 @@ class ggml_webgpu_shader_lib {
+@@ -1289,6 +1290,7 @@
      wgpu::Device           device;
      pre_wgsl::Preprocessor preprocessor;
  
 +    std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
      std::unordered_map<int, webgpu_pipeline> hc_pipelines;
-     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is fixed, no variants yet
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is whether to compute the mean
      std::unordered_map<int, webgpu_pipeline> argmax_pipelines;         // key is vec4
-@@ -1934,6 +1936,17 @@ class ggml_webgpu_shader_lib {
+@@ -2021,6 +2023,17 @@
          return ssm_scan_pipelines[key];
      }
  
@@ -118,8 +113,6 @@ index 62821cf..c701ca1 100644
      webgpu_pipeline get_hc_pipeline(bool pre) {
          const int key = pre ? 0 : 1;
          auto it = hc_pipelines.find(key);
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-index 652e599..b4a7461 100644
 --- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 @@ -5,6 +5,7 @@
@@ -130,7 +123,7 @@ index 652e599..b4a7461 100644
  
  #include "ggml-backend-impl.h"
  #include "ggml-impl.h"
-@@ -3240,6 +3241,57 @@ static webgpu_encoded_op ggml_webgpu_cumsum(webgpu_context & ctx, ggml_tensor *
+@@ -3386,6 +3387,57 @@
      return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
  }
  
@@ -188,7 +181,7 @@ index 652e599..b4a7461 100644
  static webgpu_encoded_op ggml_webgpu_hc(webgpu_context & ctx, ggml_tensor * dst) {
      const bool pre = dst->op == GGML_OP_DSV4_HC_PRE;
      ggml_tensor * x = dst->src[0];
-@@ -3475,6 +3527,10 @@ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+@@ -3622,6 +3674,10 @@
          case GGML_OP_FLASH_ATTN_EXT:
              return ggml_webgpu_flash_attn(ctx, src0, src1, src2, node->src[3], node->src[4], node);
          case GGML_OP_ADD:
@@ -199,9 +192,6 @@ index 652e599..b4a7461 100644
          case GGML_OP_SUB:
          case GGML_OP_MUL:
          case GGML_OP_DIV:
-diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl
-new file mode 100644
-index 0000000..9e6619e
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/moe_expert_sum.wgsl
 @@ -0,0 +1,20 @@

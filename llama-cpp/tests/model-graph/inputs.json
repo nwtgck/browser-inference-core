@@ -1,16 +1,16 @@
 {
   "upstream": {
-    "common/chat.cpp": "c4396b123b02aade70d5bf30517f1f6b23cdc8da29ae92244f16e5ea6494a5e4",
-    "common/chat.h": "4d0450bc8183da591e4608be89a298d0be43ab562cd32635659d77f035c65591",
+    "common/chat.cpp": "4791ca7e6e62f9cc6ac74de0de3d8bdb432bd19fec1161552bfeed37146169c4",
+    "common/chat.h": "9c6fe13f9cc3d60a940e9a4a97a0d62fa68cb01c4f55383ea841d4813fe2f896",
     "src/llama-vocab.h": "b201040378716d004b2ded39165f92c1cffc129a361d8c6a42d8b4a1a2fd65f4",
     "src/llama-model-loader.h": "4eb5318f7b70333015386d612738f507153770e4e5635895b2c1d8355ff22103",
-    "src/llama-model-loader.cpp": "b856b513340e9e86ab81e2d8d110fedd07b60f508e0e4f8513690150f8efd7e1",
-    "src/llama-vocab.cpp": "ac6fd43eca27c67a213a98e27b87e8ca1f26d8d82a63e79543a06ca64ef10a95",
-    "src/llama-arch.h": "6088dd1edbfddbdeb0fb62293fde8cbcf645c5795a4731c5c00507bf7cf04a10",
-    "src/llama-sampler.cpp": "6313214bf0a4146036f3d62846299cba4fa9804757c353140a04de52130cf496"
+    "src/llama-model-loader.cpp": "5cce872907839dfaf90db8deafd162fae0a339d6a322add04f55f77de65b6e73",
+    "src/llama-vocab.cpp": "0e725f76067a7d4b4da8a5ba975f97490080294f4721f418bf0787d7c5834998",
+    "src/llama-arch.h": "186224d2b6fba0e3224f4d99ca20c2b04ba7876d3d0bf8038553d7507d17c5bb",
+    "src/llama-sampler.cpp": "4ebee0f29e27d356433811f6724959d4d96b89d968f6e38faa3747972bab00d2"
   },
   "patchSha256": "4a6b20a025e7e3b9ed087c86e6ad9fb4b05c060190ad1cf07ab55ab0e533fb5e",
   "outputs": {
-    "common/chat.cpp": "04ee99c6a7e1c4af4698486f278b699000f4f1b6b025560dbaa13fc44288bbbd"
+    "common/chat.cpp": "bacb20c8f5fa6fbca29b56cf2bdfd74fe18738e3d8ea9ad394eb800f43e99a84"
   }
 }

@@ -1,0 +1,15 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5234,7 +5234,12 @@
+     /* .cpy_tensor      = */ ggml_backend_webgpu_buffer_cpy_tensor,
+     /* .clear           = */ ggml_backend_webgpu_buffer_clear,
+     /* .reset           = */ NULL,  // TODO: optional, think it coordinates with
++#ifdef __EMSCRIPTEN__
++    // Keep scalar writes within their existing binding and ordering contracts.
++    /* .set_tensor_n    = */ NULL,
++#else
+     /* .set_tensor_n    = */ ggml_backend_webgpu_buffer_set_tensor_n,
++#endif
+     /* .get_tensor_n    = */ ggml_backend_webgpu_buffer_get_tensor_n,
+     /* .cpy_tensor_n    = */ NULL,
+ };

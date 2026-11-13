@@ -69,7 +69,7 @@ class ProfileConfiguration(unittest.TestCase):
                                      for name in ('webgpu-q8-diagnostic.cpp', 'q8-diagnostic-metadata.cpp')]
                     commands += [{'file': '/build/generated/' + name,
                                   'command': 'em++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(profiles[profile]['webgpu'])) + ' -c /build/generated/' + name}
-                                 for name in ('clip.cpp', 'mtmd.cpp')]
+                                 for name in ('mtmd-model.cpp', 'mtmd-subcontext.cpp', 'mtmd.cpp')]
                     (module.parent.parent / 'compile_commands.json').write_text(json.dumps(commands))
                     graph_record = seed_model_graph_outputs(module.parent.parent)
                     with self.subTest(profile=profile, variant=variant), \

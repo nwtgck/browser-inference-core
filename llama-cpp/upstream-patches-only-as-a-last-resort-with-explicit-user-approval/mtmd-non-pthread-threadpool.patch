@@ -1,0 +1,12 @@
+--- a/mtmd-subcontext.cpp
++++ b/mtmd-subcontext.cpp
+@@ -35,6 +35,9 @@
+ }
+ 
+ static std::shared_ptr<ggml_threadpool> mtmd_threadpool_init(int n_threads) {
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++    n_threads = 1;
++#endif
+     ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+     ggml_backend_reg_t reg = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
+     if (!reg || n_threads < 2) {

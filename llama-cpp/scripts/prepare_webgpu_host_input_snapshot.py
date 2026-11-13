@@ -5,23 +5,23 @@ import subprocess
 import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-host-input-snapshot.patch'
-PATCH_SHA256 = 'c652f72f19affbe2b274e6715c248e757ce40eabc93452f407777dd2bbba806a'
-INPUT_SHA256 = '4975b36e1d6a8dab34f2a0fb91c0865ad66bc67b37ab2b165583a69871b0b6e0'
-OUTPUT_SHA256 = '7414a455f3124cc0b09bc1588800f9c2fbf194be55205e6e41de8905b7cd5fe1'
+PATCH_SHA256 = '8be9ad835fbd1e2f0f745f5abb44d8b8a6360e94bafd4593b007d73041fce776'
+INPUT_SHA256 = '7fb3a7f254a3160ddf238a9c67fbbabfd2b5d8c4d0473da0c4a3a9b31af59b39'
+OUTPUT_SHA256 = '9ec1aac6c9272cb626d74d84de6870f97fbec53c9dd08036e938295babb8ee92'
 BACKEND_SOURCE_PATH = 'ggml/src/ggml-backend.cpp'
-BACKEND_OUTPUT_SHA256 = 'b9d0104d658d4e79642b9594665663dcbb39d97c1cc82c49f086ad71d60ace8e'
+BACKEND_OUTPUT_SHA256 = 'e464b9bd2fc054efcba4d450070386fbded2905703734664d75470d1741386f5'
 HEADER_PATH = 'ggml/src/ggml-backend-host-snapshot.h'
 HEADER_OUTPUT_SHA256 = 'f1133ed5459fb8cfa8f714cb855109f199a33df50ad5fafb4db04839bfc352a9'
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',
-    'ggml/src/ggml-backend-reg.cpp': '1436b46bd1e8355345d454baa4b40069be73e9cb09a3a188d32426ea1e1037fe',
+    'ggml/src/ggml-backend.cpp': '2f724930ea53dd8f50f26706ecf10a177d56601e668f109cf1cd95052b1b9ad8',
+    'ggml/src/ggml-backend-reg.cpp': '0a23a627cec97926fb1fbb2b1bf4fa7fed4900aa21b0215302eced797231578b',
     'ggml/src/ggml-backend-impl.h': '7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3',
     'ggml/include/ggml-backend.h': '34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a',
-    'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
-    'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39',
-    'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
-    'ggml/src/CMakeLists.txt': 'bae77e31bc3498973b435e29681c74e8a28857e84383698ef3b88ca2fb6b900a',
-    'src/llama-context.cpp': '4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822',
+    'ggml/include/ggml.h': 'bdb0e75be8eeb1fc14a742015025505f5810d8200cbb40bda7e981101413440b',
+    'ggml/src/ggml-alloc.c': 'c4001b08581b87b80283953acc67d0d2ff13ef0a425179e2bf621f45333bf0fa',
+    'ggml/src/ggml.c': '1008000571b896a22dd3861731ca29e6ec3615898cdc15d9cb529fb171815dfc',
+    'ggml/src/CMakeLists.txt': '232b65acee5fd0f6f0b92a1ea4ff35e31235035d3d4f6b925e4cd200c08b6a48',
+    'src/llama-context.cpp': '6b2a143eee8d53cdb559eb18b5612028bdf8545ab832cfdca2c2fd87c9c00309',
 }
 
 

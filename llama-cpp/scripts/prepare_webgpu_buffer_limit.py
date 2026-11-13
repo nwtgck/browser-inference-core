@@ -6,9 +6,9 @@ import prepare_webgpu_tensor_copy as tensor_copy
 BASE = Path('ggml/src/ggml-webgpu')
 PATCH_NAME = 'ggml-webgpu-buffer-size-limit.patch'
 PATCH_SHA256 = '7094c7d6278b7fa85a59ca88b5093f9c66aba13c3a38feb4b13bb777d8d4dd58'
-CONTRACT_INPUTS = {'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201', 'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39', 'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e'}
-INPUTS = {False: {'ggml-webgpu.cpp': 'd9ca2bb081c5b9392b3c46ddfc7dfe8dd0fcf404f884c46a081303ce90d98f14'}, True: {'ggml-webgpu.cpp': '02403383d69aa126976a6fe56289ffa4f0ebf63310c89dec2a2c8d96c953b567'}}
-OUTPUTS = {False: {'ggml-webgpu.cpp': '1d7ea35c56439dcb915505fae697d2b25e58843e3df82b65562cc01fa813f212'}, True: {'ggml-webgpu.cpp': '81d3a0f6659cd9668549425977465f40dc64ef18ed7459a168bc0d7c82e1f1f1'}}
+CONTRACT_INPUTS = {'ggml/src/ggml-webgpu/ggml-webgpu.cpp': 'c3e627af0d18c596dd45f051c7eba612a6f8f53f458bceecd557d8704f52b8ee', 'ggml/src/ggml-alloc.c': 'c4001b08581b87b80283953acc67d0d2ff13ef0a425179e2bf621f45333bf0fa', 'ggml/src/ggml-backend.cpp': '2f724930ea53dd8f50f26706ecf10a177d56601e668f109cf1cd95052b1b9ad8'}
+INPUTS = {False: {'ggml-webgpu.cpp': 'd586843f24c47a12a29357c30b35b4d3f7b186f18af17bab222a52c5612a10c4'}, True: {'ggml-webgpu.cpp': 'a62afc88802e9a84d80a8f03ac11ed50133f05841c25542d57672250f28474ad'}}
+OUTPUTS = {False: {'ggml-webgpu.cpp': '2dc724684bdc246e2583e9ed2a7547ffae48bb15e4c400211ae1e90a2fe2dc0a'}, True: {'ggml-webgpu.cpp': 'e6c279f867b6d00e95e17ab5734cbeac50b052cf2ef4a0828e6d19c0941807d1'}}
 
 
 def prepare(work: Path, source: Path, patch_root: Path, env: dict[str, str], *, gpu_profile: bool) -> None:

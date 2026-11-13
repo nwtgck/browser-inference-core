@@ -11,7 +11,7 @@ from browser_toolchain import runtime_toolchain
 import tempfile
 
 from github_api import full_sha, git
-from prepare_mtmd import PATCH_DIRECTORY, prepare
+from prepare_mtmd import PATCH_DIRECTORY, MANIFEST_NAME, prepare
 from verify_bf16_build import runtime_metadata, validate_metadata as validate_bf16_metadata
 import prepare_webgpu_tensor_copy as tensor_copy
 import prepare_webgpu_source as webgpu_source
@@ -32,6 +32,7 @@ import prepare_webgpu_q4_subgroup as q4_subgroup
 import prepare_webgpu_q6_subgroup as q6_subgroup
 import prepare_webgpu_aligned_word_load as aligned_word_load
 import prepare_webgpu_buffer_limit as buffer_limit
+import prepare_webgpu_batched_write_fallback as batched_write_fallback
 import prepare_sampler_single_sync as sampler_single_sync
 import prepare_webgpu_scale_unary as scale_unary
 import prepare_webgpu_q8_subgroup as q8_subgroup
@@ -104,7 +105,7 @@ def model_graph_preparations(root: Path, manifest: dict) -> list[dict]:
     if len(records) != total:
         raise ValueError('Mixed model graph boundary activation in compiled provenance')
     with tempfile.TemporaryDirectory(prefix='lcb-report-model-graph-') as temporary:
-        prepared = model_graph.prepare(root / 'vendor/llama.cpp', Path(temporary) / 'overlay')
+        prepared = model_graph.prepare(root / 'vendor/llama.cpp', Path(temporary) / 'overlay', root=root)
         copies = {path: {'logicalUpstreamPath': path, **file_identity(Path(temporary) / 'overlay' / path)}
                   for path in prepared['outputs']}
     import re
@@ -148,12 +149,11 @@ def collect(root: Path, manifest: dict) -> dict:
     if git('rev-parse', 'HEAD', cwd=vendor).stdout.strip() != upstream:
         raise ValueError('Reporting submodule does not match the built upstream commit')
     patch_path = f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch'
-    upstream_path = 'tools/mtmd/clip.cpp'
+    upstream_path = 'tools/mtmd/mtmd-model.cpp'
     runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-runtime.patch'
     runtime_source = 'tools/mtmd/mtmd.cpp'
-    cpu_runtime_patch = f'{PATCH_DIRECTORY}/mtmd-vision-bf16-clip-runtime.patch'
-    audio_patch = f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch'
-    audio_source = 'tools/mtmd/mtmd-audio.cpp'
+    pool_patch = f'{PATCH_DIRECTORY}/mtmd-non-pthread-threadpool.patch'
+    pool_source = 'tools/mtmd/mtmd-subcontext.cpp'
     patch_files = sorted(path.relative_to(root).as_posix() for path in (root / PATCH_DIRECTORY).rglob('*.patch'))
     enabled = []
     audio_enabled = []
@@ -204,7 +204,7 @@ def collect(root: Path, manifest: dict) -> dict:
                        if option.startswith('-DLCB_WEBGPU_BF16_PROJECTOR=')]
             if len(options) != 1 or options[0] not in ('-DLCB_WEBGPU_BF16_PROJECTOR=ON', '-DLCB_WEBGPU_BF16_PROJECTOR=OFF'):
                 raise ValueError('Unknown BF16 overlay activation in compiled provenance')
-            if options[0].endswith('=ON'):
+            if webgpu_enabled and options[0].endswith('=ON'):
                 enabled.append(profile + '/' + variant)
     rows_compiled = None
     rows_tree = None
@@ -218,7 +218,8 @@ def collect(root: Path, manifest: dict) -> dict:
             rows_source = file_rows.prepare(vendor, Path(temporary) / 'file-rows')
             # These model TUs must all use the same modified models.h definition.
             paths = [rows_source / 'llama.cpp', rows_source / 'llama-model.cpp', *sorted((rows_source / 'models').glob('*.cpp')),
-                     rows_source / 'models/models.h', rows_source / 'models/file-backed-rows.h']
+                     rows_source / 'models/models.h', rows_source / 'models/file-backed-rows.h',
+                     rows_source / 'models/file-backed-identity.h']
             identities = {p.relative_to(rows_source).as_posix(): file_identity(p) for p in paths}
             # Unchanged model TUs are covered by an aggregate rather than making
             # the publication summary grow by hundreds of per-file entries.
@@ -226,7 +227,7 @@ def collect(root: Path, manifest: dict) -> dict:
             rows_tree = {'files': len(identities), 'sha256': hashlib.sha256(encoded).hexdigest(),
                          'encoding': 'UTF-8 compact JSON of sorted relative paths to bytes/SHA-256 objects'}
             selected = ['llama.cpp', 'llama-model.cpp', 'models/models.h', 'models/qwen4exp.cpp',
-                        'models/file-backed-rows.h']
+                        'models/file-backed-rows.h', 'models/file-backed-identity.h']
             rows_compiled = {name: identities[name] for name in selected}
             rows_identities = identities
         # Describe the translation unit actually compiled, not just the first
@@ -258,14 +259,43 @@ def collect(root: Path, manifest: dict) -> dict:
             rows_compiled = values[0] if all(value == values[0] for value in values) else None
             trees = list(rows_trees_by_variant.values())
             rows_tree = trees[0] if all(value == trees[0] for value in trees) else None
-        patched = prepare(vendor, Path(temporary) / 'overlay', root / patch_path)
-        patched_identity = file_identity(patched)
-        runtime_copy = prepare(vendor, Path(temporary) / 'runtime', root / runtime_patch, filename='mtmd.cpp')
-        runtime_identity = file_identity(runtime_copy)
-        cpu_runtime_copy = prepare(vendor, Path(temporary) / 'cpu-runtime', root / cpu_runtime_patch)
-        cpu_runtime_identity = file_identity(cpu_runtime_copy)
-        audio = prepare(vendor, Path(temporary) / 'audio', root / audio_patch, filename='mtmd-audio.cpp')
-        audio_identity = file_identity(audio)
+        # Each profile compiles a complete, coherent mtmd header universe.
+        # Hash the entire tree, including unchanged builders and quoted headers.
+        mtmd_by_mode = {}
+        mtmd_trees = {}
+        for mode in ('cpu', 'webgpu'):
+            tree = prepare(vendor, Path(temporary) / ('mtmd-' + mode),
+                           mode=mode, patch_root=root / PATCH_DIRECTORY)
+            source_manifest = json.loads((tree / MANIFEST_NAME).read_text())
+            actual = {name: file_identity(tree / name) for name in source_manifest['preparedFiles']}
+            if actual != source_manifest['preparedFiles']:
+                raise ValueError('mtmd prepared inventory differs from its source manifest')
+            encoded = json.dumps(actual, sort_keys=True, separators=(',', ':')).encode()
+            raw_encoded = json.dumps(source_manifest['sourceInputs'], sort_keys=True, separators=(',', ':')).encode()
+            contract_encoded = json.dumps(source_manifest['contractInputs'], sort_keys=True, separators=(',', ':')).encode()
+            mtmd_trees[mode] = {
+                'files': len(actual), 'sha256': hashlib.sha256(encoded).hexdigest(),
+                'encoding': 'UTF-8 compact JSON of sorted relative paths to bytes/SHA-256 objects',
+                'sourceInputs': {'files': len(source_manifest['sourceInputs']),
+                                 'sha256': hashlib.sha256(raw_encoded).hexdigest()},
+                'contractInputs': {'files': len(source_manifest['contractInputs']),
+                                   'sha256': hashlib.sha256(contract_encoded).hexdigest()},
+                'manifest': file_identity(tree / MANIFEST_NAME),
+                'coreSources': source_manifest['coreSources'],
+                'modifiedFiles': source_manifest['modifiedFiles'],
+            }
+            mtmd_by_mode[mode] = actual
+        mtmd_by_variant = {variant: mtmd_by_mode['webgpu' if variant in enabled else 'cpu']
+                           for variant in audio_enabled}
+        mtmd_trees_by_variant = {variant: mtmd_trees['webgpu' if variant in enabled else 'cpu']
+                                 for variant in audio_enabled}
+        selected_mtmd = ('mtmd-model.h', 'mtmd-model.cpp', 'mtmd-subcontext.cpp', 'mtmd.cpp')
+        vision_copies = {variant: {name: mtmd_by_variant[variant][name] for name in selected_mtmd}
+                         for variant in enabled}
+        runtime_identity = mtmd_by_mode['cpu']['mtmd.cpp']
+        pool_copies = {variant: {'logicalUpstreamPath': pool_source,
+                                **mtmd_by_variant[variant]['mtmd-subcontext.cpp']}
+                       for variant in audio_enabled}
         webgpu_compiled = None
         loader_compiled = None
         sampler_compiled = None
@@ -396,7 +426,7 @@ def collect(root: Path, manifest: dict) -> dict:
     supporting = ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                   'bridge/mtmd-bf16.h', 'bridge/mtmd-retained-upload.h',
                   'bridge/mtmd-retained-graph.h', 'bridge/mtmd-retained-roles.h',
-                  'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
+                  'bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-policy.h',
                   'scripts/verify_retained_bf16_source.py', 'config/retained-bf16-source.json',
                   'docs/webgpu-bf16-projector.md']
     report = {
@@ -410,13 +440,24 @@ def collect(root: Path, manifest: dict) -> dict:
             'reason': 'llama.cpp v0.7.0 provides direct selected-slot dispatch upstream; no downstream MoE shader/header transformation is compiled.',
             'upstreamedBy': '620d2225cc436ab0b001e3200e590e3b286ef9ab',
             'documentation': 'docs/moe-direct-slot.md',
+        }, {
+            'id': 'single-thread-wasm-audio-preprocessing',
+            'reason': 'Upstream replaced shared and Parakeet worker loops with scheduler-backed log-mel graphs. The old loop patch is retired; non-pthread threadpool initialization is tracked separately.',
+            'upstreamedBy': 'a2654ec43148b8ae827d956276ce2c1eacfd3853',
+            'documentation': 'docs/audio-single-thread.md',
+        }, {
+            'id': 'vision-bf16-cpu-loader-plumbing',
+            'reason': 'The former clip-only CPU guard is consolidated into model-owned immutable policy and modality classification in the common mtmd runtime overlay. Unsupported retained GPU vision is still rejected before allocation.',
+            'replacedBy': 'vision-bf16-runtime-selection',
         }],
         'sourceOverlays': [{
             'id': 'webgpu-vision-bf16-projector',
             'kind': 'build-tree-source-overlay',
             'upstreamSource': {'path': upstream_path, **file_identity(vendor / upstream_path)},
             'patch': {'path': patch_path, **file_identity(root / patch_path)},
-            'compiledCopy': {'logicalUpstreamPath': upstream_path, **patched_identity},
+            'compiledCopies': next(iter(vision_copies.values()), None),
+            'compiledCopiesByProfileVariant': vision_copies,
+            'compiledSourceTreesByProfileVariant': {variant: mtmd_trees_by_variant[variant] for variant in enabled},
             'application': {
                 'preparationScript': 'scripts/prepare_mtmd.py',
                 'cmakeHook': 'cmake/MtmdOverlay.cmake',
@@ -426,24 +467,25 @@ def collect(root: Path, manifest: dict) -> dict:
             },
             'supportingFiles': {path: file_identity(root / path) for path in supporting},
             'searchHints': ['mtmd-webgpu-bf16', 'LCB_WEBGPU_BF16_PROJECTOR', 'lcb_clip', 'bf16-f32', 'cpu_bf16'],
-            'behavior': 'Legacy callers expand WebGPU vision BF16 weights to resident F32. Explicit per-context retain-checked keeps original BF16 storage with bounded loading and role/graph/placement guards; unsupported cases fail without implicit expansion or CPU retry. Upstream graph-allocation failure handling and model files remain unchanged.',
+            'behavior': 'Legacy callers expand WebGPU vision BF16 weights to resident F32. Immutable model-owned retain-checked policy preserves original BF16 storage and bounded uploads, explicit role/graph/placement rejection, and scheduler-before-backend cleanup in the shared compute owner, including partial construction failure. Borrowed subcontexts never free shared backends. A temporary upload backend uses the pinned WebGPU device-global queue before compute subcontexts exist; this is not a physical peak-memory guarantee. All mtmd TUs use one copied header universe; model builders and upstream graph-allocation failure handling are preserved.',
         }, {
-            'id': 'single-thread-wasm-audio-preprocessing',
+            'id': 'non-pthread-wasm-mtmd-threadpool',
             'kind': 'build-tree-source-overlay',
-            'upstreamSource': {'path': audio_source, **file_identity(vendor / audio_source)},
-            'patch': {'path': audio_patch, **file_identity(root / audio_patch)},
-            'compiledCopy': {'logicalUpstreamPath': audio_source, **audio_identity},
+            'upstreamSource': {'path': pool_source, **file_identity(vendor / pool_source)},
+            'patch': {'path': pool_patch, **file_identity(root / pool_patch)},
+            'compiledCopy': None,
+            'compiledCopiesByProfileVariant': pool_copies,
             'application': {
-                'preparationScript': 'scripts/prepare_mtmd.py --component audio',
-                'cmakeHook': 'cmake/MtmdAudioOverlay.cmake',
+                'preparationScript': 'scripts/prepare_mtmd.py --mode cpu|webgpu',
+                'cmakeHook': 'cmake/MtmdOverlay.cmake',
                 'compileGuard': 'defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)',
                 'enabledProfileVariants': sorted(audio_enabled),
             },
             'supportingFiles': {path: file_identity(root / path) for path in
-                                ['scripts/prepare_mtmd.py', 'cmake/MtmdAudioOverlay.cmake',
+                                ['scripts/prepare_mtmd.py', 'cmake/MtmdOverlay.cmake',
                                  'docs/audio-single-thread.md']},
-            'searchHints': ['mtmd-audio-single-thread', '__EMSCRIPTEN_PTHREADS__', 'log_mel_spectrogram'],
-            'behavior': 'Execute shared mel and Parakeet preprocessing serially in non-pthread Emscripten builds. Native and pthread worker loops are unchanged.',
+            'searchHints': ['mtmd-non-pthread-threadpool', '__EMSCRIPTEN_PTHREADS__', 'mtmd_threadpool_init'],
+            'behavior': 'Normalize the private shared mtmd threadpool request to one only in non-pthread Emscripten, using the existing no-pool branch. Native/pthread requested counts, upstream scheduler audio graphs, and public parameter layouts are unchanged.',
         }, {
             'id': 'webgpu-same-device-tensor-copy',
             'kind': 'build-tree-source-overlay',
@@ -660,8 +702,8 @@ def collect(root: Path, manifest: dict) -> dict:
             },
             'supportingFiles': {path: file_identity(root / path) for path in
                                 ['scripts/prepare_file_backed_rows.py', 'cmake/FileBackedRowsOverlay.cmake',
-                                 'bridge/file-backed-rows.h', 'docs/file-backed-rows.md']},
-            'behavior': 'Qwen4Exp PLE only: retain a positioned-read descriptor, gather bounded rows into F32 input, leave n-gram hashing and downstream graph unchanged. No mmap, worker pool, global cache or full-model memory guarantee. All model definition consumers compile a coherent private header copy.',
+                                 'bridge/file-backed-rows.h', 'bridge/file-backed-identity.h', 'docs/file-backed-rows.md']},
+            'behavior': 'Qwen4Exp PLE only: resolve the retained descriptor to the original public file-array index by stable file identity before publication; reject missing or ambiguous identity. Retain bounded positioned row reads into F32 input and leave n-gram hashing and downstream graph unchanged. No mmap, worker pool, global cache or full-model memory guarantee. All model definition consumers compile a coherent private header copy.',
         }, {
             'id': 'qsa-all-pools-selection',
             'kind': 'build-tree-source-overlay',
@@ -1236,7 +1278,7 @@ def collect(root: Path, manifest: dict) -> dict:
             'behavior': 'Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes.',
         }],
         'otherPatchFiles': {path: {'application': 'not classified by this report', **file_identity(root / path)}
-                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{buffer_limit.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.SHARED_PATCH[0]}', f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, audio_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
+                            for path in patch_files if path not in (f'{PATCH_DIRECTORY}/{buffer_limit.PATCH_NAME}', f'{PATCH_DIRECTORY}/{batched_write_fallback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{subgroup_size_control.SHARED_PATCH[0]}', f'{PATCH_DIRECTORY}/{checkpoint_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{aligned_word_load.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_wide_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{direct_mapped_read.PATCH_NAME}', f'{PATCH_DIRECTORY}/{quant_half_pairs.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q6_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{f32_matvec_epilogue.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_row_split.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_tight_tile_bound.PATCH_NAME}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[False][0]}', f'{PATCH_DIRECTORY}/{matmul_vec4_layout.PATCHES[True][0]}', f'{PATCH_DIRECTORY}/{iq3s_field_loads.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_gather_logical32.PATCH_NAME}', f'{PATCH_DIRECTORY}/{f32_small_m.PATCH_NAME}', f'{PATCH_DIRECTORY}/{profile_query_budget.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_encode_assembly.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_diagnostic.PATCH_NAME}', f'{PATCH_DIRECTORY}/{router_tail.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_group_skip.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ssm_conv_silu.PATCH_NAME}', f'{PATCH_DIRECTORY}/{host_input_snapshot.PATCH_NAME}', f'{PATCH_DIRECTORY}/{iq3s_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{rms_scale.PATCH_NAME}', f'{PATCH_DIRECTORY}/{async_tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{scale_unary.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_subgroup.PATCH_NAME}', f'{PATCH_DIRECTORY}/{sampler_single_sync.PATCH_NAME}', f'{PATCH_DIRECTORY}/{bind_group_cache.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q4_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{ordered_readback.PATCH_NAME}', f'{PATCH_DIRECTORY}/{expert_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{moe_sum.PATCH_NAME}', f'{PATCH_DIRECTORY}/{q8_short.PATCH_NAME}', f'{PATCH_DIRECTORY}/{hc.PATCH_NAME}', f'{PATCH_DIRECTORY}/{qsa.PATCH_NAME}', f'{PATCH_DIRECTORY}/{file_rows.PATCH_NAME}', patch_path, pool_patch, f'{PATCH_DIRECTORY}/{tensor_copy.PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.PARAM_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.LOADER_PATCH_NAME}', f'{PATCH_DIRECTORY}/{webgpu_source.SSM_PATCH_NAME}')},
         'toolchainDivergences': {
             'emscriptenAsyncifyBigInt': {
                 'scope': 'Emscripten runtime, not upstream llama.cpp',
@@ -1253,35 +1295,37 @@ def collect(root: Path, manifest: dict) -> dict:
         'upstreamSource': {'path': runtime_source, **file_identity(vendor / runtime_source)},
         'patch': {'path': runtime_patch, **file_identity(root / runtime_patch)},
         'compiledCopy': {'logicalUpstreamPath': runtime_source, **runtime_identity},
-        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component runtime',
-                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
+        'compiledSourceTreesByProfileVariant': mtmd_trees_by_variant,
+        'application': {'preparationScript': 'scripts/prepare_mtmd.py --mode cpu|webgpu',
+                        'cmakeHook': 'cmake/MtmdOverlay.cmake',
                         'enabledProfileVariants': sorted(audio_enabled),
                         'runtimeStorageSelection': runtime_metadata()},
         'supportingFiles': {path: file_identity(root / path) for path in
-                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h', 'bridge/mtmd-vision-bf16-policy.h',
-                             'cmake/MtmdBf16Runtime.cmake', 'scripts/generate_bindings.py',
+                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-policy.h',
+                             'cmake/MtmdOverlay.cmake', 'scripts/generate_bindings.py',
                              'scripts/verify_bf16_build.py']},
-        'behavior': 'Add explicit load-time immutable storage selection without changing upstream parameter layouts. Old entry points use legacy defaults; requested mode is distinct from actual backend placement.',
-    })
-    report['sourceOverlays'].append({
-        'id': 'vision-bf16-cpu-loader-plumbing',
-        'kind': 'build-tree-source-overlay',
-        'upstreamSource': {'path': upstream_path, **file_identity(vendor / upstream_path)},
-        'patch': {'path': cpu_runtime_patch, **file_identity(root / cpu_runtime_patch)},
-        'compiledCopy': {'logicalUpstreamPath': upstream_path, **cpu_runtime_identity},
-        'application': {'preparationScript': 'scripts/prepare_mtmd.py --component clip-runtime',
-                        'cmakeHook': 'cmake/MtmdBf16Runtime.cmake',
-                        'enabledProfileVariants': sorted(set(audio_enabled) - set(enabled))},
-        'supportingFiles': {path: file_identity(root / path) for path in
-                            ['bridge/mtmd-vision-bf16.h', 'bridge/mtmd-vision-bf16-internal.h',
-                             'bridge/mtmd-vision-bf16-policy.h', 'cmake/MtmdBf16Runtime.cmake']},
-        'behavior': 'Keep CPU/audio storage unchanged and pass immutable mode explicitly. Reject a GPU-requested retained vision load at existing modality classification before allocating weights; audio-only loads keep their original behavior.',
+        'behavior': 'Add explicit load-time immutable storage selection without changing upstream parameter layouts. Models own the policy shared by const subcontexts. Old entry points use legacy defaults; audio and CPU storage retain upstream behavior. Unsupported GPU retain requests fail after existing modality classification and before weight allocation. Every mtmd TU and quoted private header comes from the same checked subtree.',
     })
     report['otherPatchFiles'].pop(runtime_patch, None)
-    report['otherPatchFiles'].pop(cpu_runtime_patch, None)
     for item in model_graph_preparations(root, manifest):
         report['sourceOverlays'].append(item)
         report['otherPatchFiles'].pop(item['patch']['path'], None)
+    report['sourceOverlays'].append({
+        'id': 'webgpu-batched-write-scalar-fallback',
+        'kind': 'build-tree-source-overlay',
+        'patch': {'path': f'{PATCH_DIRECTORY}/{batched_write_fallback.PATCH_NAME}',
+                  **file_identity(root / PATCH_DIRECTORY / batched_write_fallback.PATCH_NAME)},
+        'reviewedInputs': batched_write_fallback.CONTRACT_INPUTS,
+        'compiledCopies': next(iter(limit_copies.values()), None),
+        'compiledCopiesByProfileVariant': limit_copies,
+        'application': {'preparationScript': 'scripts/prepare_webgpu_batched_write_fallback.py',
+                        'cmakeHook': 'cmake/WebgpuSourceOverlay.cmake',
+                        'compileGuard': 'defined(__EMSCRIPTEN__)',
+                        'enabledProfileVariants': sorted(copy_enabled)},
+        'supportingFiles': {path: file_identity(root / path) for path in
+                           ['scripts/prepare_webgpu_batched_write_fallback.py', 'cmake/WebgpuSourceOverlay.cmake']},
+        'behavior': 'Leave the optional WebGPU set_tensor_n hook NULL in Emscripten so the public batch API uses the existing generic scalar/2D fallback. This avoids whole-buffer storage bindings, packed scratch and unordered overlapping shader writes. Native hooks, upstream set/get_n bodies, shaders and eager pipeline creation are unchanged. Ordering is the generic same-buffer-type contract; this does not add a global upload budget or alter bounded checkpoint reads.',
+    })
 
     # Profile and normal TUs now differ. Never attribute the normal final bytes
     # to a profile artifact, including earlier overlays that share the final TU.

@@ -200,6 +200,7 @@ add_custom_target(checked COMMAND "${{CMAKE_COMMAND}}" -E echo checked)
             command = ['cmake', '--build', str(build), '--target', 'checked']
             subprocess.run(command, check=True, capture_output=True)
             for relative in ('src/llama-context.cpp', 'src/llama-graph.cpp',
+                             'src/llama-graph.h', 'src/llama-model.cpp', 'src/llama-model.h',
                              'src/llama-cparams.h', 'ggml/include/ggml.h'):
                 path = source / relative
                 original = path.read_bytes()

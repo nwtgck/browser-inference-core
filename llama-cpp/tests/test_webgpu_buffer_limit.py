@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import prepare_webgpu_buffer_limit as limit
 import prepare_webgpu_source as webgpu
+from webgpu_prefix_context import without_batched_write_fallback
 
 
 def definition(text, marker):
@@ -49,6 +50,9 @@ def memset_fixture(prepared):
 class BufferLimit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        prefix = without_batched_write_fallback(webgpu)
+        prefix.__enter__()
+        cls.addClassCleanup(prefix.__exit__, None, None, None)
         cls.temporary = tempfile.TemporaryDirectory(prefix='lcb-buffer-limit-')
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.work = Path(cls.temporary.name)

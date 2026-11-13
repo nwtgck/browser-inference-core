@@ -11,6 +11,7 @@ import prepare_webgpu_aligned_word_load as word
 import prepare_webgpu_subgroup_size_control as optional
 import prepare_webgpu_q6_subgroup as q6
 import prepare_webgpu_buffer_limit as buffer_limit
+import prepare_webgpu_batched_write_fallback as batched_write_fallback
 import prepare_webgpu_source as source
 
 
@@ -69,6 +70,28 @@ def legacy_fixed_sources(prepared: Path) -> dict[str, str]:
     original = {name: (prepared / name).read_text() for name in names}
     if not (prepared / optional.HELPER_NAME).exists():
         return original
+    # Reverse only the exact final browser write-hook stage before older prefixes.
+    digest = lambda text: hashlib.sha256(text.encode()).hexdigest()
+    write_modes = [profile for profile in (False, True)
+                   if digest(original['ggml-webgpu.cpp']) == batched_write_fallback.OUTPUTS[profile]['ggml-webgpu.cpp']
+                   and digest(original['ggml-webgpu-shader-lib.hpp']) == q6.OUTPUTS[profile]['ggml-webgpu-shader-lib.hpp']]
+    if write_modes:
+        profile, = write_modes
+        root = Path(__file__).resolve().parents[1]
+        patch_path = root / source.PATCH_DIRECTORY / batched_write_fallback.PATCH_NAME
+        if hashlib.sha256(patch_path.read_bytes()).hexdigest() != batched_write_fallback.PATCH_SHA256:
+            raise ValueError('Legacy batched-write prefix patch identity changed')
+        with tempfile.TemporaryDirectory(prefix='legacy-batched-write-prefix-') as temporary:
+            work = Path(temporary)
+            target = work / batched_write_fallback.BASE / 'ggml-webgpu.cpp'
+            target.parent.mkdir(parents=True)
+            target.write_text(original[target.name])
+            for flags in (['--check'], []):
+                subprocess.run(['git', 'apply', '--no-index', '-R', *flags, str(patch_path)], cwd=work,
+                               env=source.patch_environment(work), check=True, capture_output=True)
+            original[target.name] = target.read_text()
+        if digest(original['ggml-webgpu.cpp']) != batched_write_fallback.INPUTS[profile]['ggml-webgpu.cpp']:
+            raise ValueError('Legacy batched-write inverse changed unrelated source')
     # Restore the independently checked allocation-limit getter before the
     # historical Q6/optional inverses; reject every unrecognized composition.
     digest = lambda text: hashlib.sha256(text.encode()).hexdigest()

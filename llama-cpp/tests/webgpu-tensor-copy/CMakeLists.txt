@@ -5,6 +5,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(EMSCRIPTEN TRUE)
 set(GGML_WEBGPU_JSPI ON)
 set(LCB_WEBGPU ON)
+set(LCB_WEBGPU_BF16_PROJECTOR ON)
 set(LCB_MEMORY64 ON)
 function(ggml_add_backend_library name)
     add_library(${name} STATIC ${ARGN})
@@ -46,9 +47,11 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/after.txt" "${after}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/includes.txt" "${includes}")
 # Real mtmd source preparation is covered independently by existing tests;
 # this fixture exercises all overlay hooks against independent targets at once.
-add_library(mtmd STATIC "${LCB_LLAMA_SOURCE}/tools/mtmd/clip.cpp")
-set_property(TARGET mtmd PROPERTY SOURCES "clip.cpp;mtmd-audio.cpp")
+add_library(mtmd STATIC
+    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd-model.cpp"
+    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd-subcontext.cpp"
+    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd-audio.cpp"
+    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd.cpp")
 include(../../cmake/MtmdOverlay.cmake)
-include(../../cmake/MtmdAudioOverlay.cmake)
 get_target_property(mtmd_sources mtmd SOURCES)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/mtmd.txt" "${mtmd_sources}")

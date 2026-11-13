@@ -6,7 +6,7 @@ from unittest.mock import patch
 @contextmanager
 def without_shared_word_load(source):
     """Retain the exact Q4-and-earlier prefix for historical arithmetic fixtures."""
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source.aligned_word_load, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.q4_subgroup.OUTPUTS):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source.aligned_word_load, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.q4_subgroup.OUTPUTS):
         yield
 
 
@@ -14,7 +14,7 @@ def without_shared_word_load(source):
 def without_final_matvec_stages(source, **row_split_options):
     # Keep these independent patches in a helper to avoid Python's static
     # nesting limit in older, intentionally long composition-prefix fixtures.
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source.aligned_word_load, 'prepare', return_value={}), patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_wide_m, 'prepare'), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.q6_short, 'prepare'), patch.object(source.f32_matvec_epilogue, 'prepare', return_value={}):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source.aligned_word_load, 'prepare', return_value={}), patch.object(source.q4_subgroup, 'prepare'), patch.object(source.quant_wide_m, 'prepare'), patch.object(source.direct_mapped_read, 'prepare'), patch.object(source.quant_half_pairs, 'prepare', return_value={}), patch.object(source.q6_short, 'prepare'), patch.object(source.f32_matvec_epilogue, 'prepare', return_value={}):
         with patch.object(source, 'replace_iq3s_row_split_embedding', **row_split_options) as row_split:
             yield row_split
 
@@ -22,26 +22,35 @@ def without_final_matvec_stages(source, **row_split_options):
 @contextmanager
 def without_checkpoint_readback(source):
     """Keep the shared-word stage as the exact historical prefix."""
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.aligned_word_load.OUTPUTS):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source.checkpoint_readback, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.aligned_word_load.OUTPUTS):
         yield
 
 
 @contextmanager
 def without_subgroup_size_control(source):
     """Keep the checkpoint stage as its exact historical prefix."""
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.checkpoint_readback.OUTPUTS):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source.subgroup_size_control, 'prepare', return_value={}), patch.object(source, 'FINAL_OUTPUTS', source.checkpoint_readback.OUTPUTS):
         yield
 
 
 @contextmanager
 def without_q6_subgroup(source):
     """Keep the subgroup-size-control stage as the exact historical prefix."""
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source, 'FINAL_OUTPUTS', source.subgroup_size_control.OUTPUTS):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source.q6_subgroup, 'prepare'), patch.object(source, 'FINAL_OUTPUTS', source.subgroup_size_control.OUTPUTS):
         yield
 
 
 @contextmanager
 def without_buffer_limit(source):
     """Keep the Q6 stage as the exact historical prefix."""
-    with patch.object(source.buffer_limit, 'prepare'), patch.object(source, 'FINAL_OUTPUTS', source.q6_subgroup.OUTPUTS):
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source.buffer_limit, 'prepare'), patch.object(source, 'FINAL_OUTPUTS', source.q6_subgroup.OUTPUTS):
+        yield
+
+
+@contextmanager
+def without_batched_write_fallback(source):
+    """Keep the allocation-limit stage as the exact historical prefix."""
+    outputs = {p: {**source.q6_subgroup.OUTPUTS[p], **source.buffer_limit.OUTPUTS[p]}
+               for p in (False, True)}
+    with patch.object(source.batched_write_fallback, 'prepare'), patch.object(source, 'FINAL_OUTPUTS', outputs):
         yield

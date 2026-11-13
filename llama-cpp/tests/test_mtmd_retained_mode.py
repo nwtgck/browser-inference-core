@@ -24,7 +24,7 @@ class RetainedModeTests(unittest.TestCase):
 
     def test_source_contract_matches_pinned_upstream(self):
         source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp'))
-        if not (source / 'tools/mtmd/clip.cpp').is_file():
+        if not (source / 'tools/mtmd/mtmd-model.cpp').is_file():
             self.skipTest('Set LCB_TEST_LLAMA_SOURCE to the pinned checkout')
         verify_source(source)
 
@@ -57,28 +57,30 @@ class RetainedModeTests(unittest.TestCase):
 
     def test_actual_compile_definition_is_required_and_unambiguous(self):
         db = self.work / 'commands.json'
+        names = ('mtmd.cpp', 'mtmd-model.cpp', 'mtmd-subcontext.cpp')
+        def entries(arguments, key='arguments'):
+            return [{'file': '/build/' + name, key: ['c++', '-c', name, *arguments] if key == 'arguments'
+                     else ' '.join(['c++', '-c', name, *arguments])} for name in names]
         for webgpu in (False, True):
             expected = ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=' + str(int(webgpu))]
             for key in ('arguments', 'command'):
-                args = ['c++', '-c', 'mtmd.cpp', *expected]
-                db.write_text(json.dumps([{'file': '/build/mtmd.cpp', key: args if key == 'arguments' else ' '.join(args)},
-                                          {'file':'clip.cpp', 'command':'c++ -c clip.cpp '+expected[0]}]))
+                db.write_text(json.dumps(entries(expected, key)))
                 verify_build(db, webgpu=webgpu)
         for args in ([], ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=0'], ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME'],
                      ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1', '-DLCB_MTMD_WEBGPU_BF16_RUNTIME=0'],
                      ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1', '-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1'],
                      ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1', '-U', 'LCB_MTMD_WEBGPU_BF16_RUNTIME'],
                      ['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1', '-D', 'LCB_MTMD_WEBGPU_BF16_RUNTIME=0']):
-            db.write_text(json.dumps([{'file':'mtmd.cpp','arguments':['c++',*args]},
-                                      {'file':'clip.cpp','command':'c++ -c clip.cpp -DLCB_MTMD_WEBGPU_BF16_RUNTIME=1'}]))
+            db.write_text(json.dumps(entries(args)))
             with self.assertRaisesRegex(ValueError, 'mismatch'):
                 verify_build(db, webgpu=True)
-        for entries in ([], [{'file':'clip.cpp','command':'c++'}] * 2):
-            db.write_text(json.dumps(entries))
-            with self.assertRaisesRegex(ValueError, 'exactly one'):
-                verify_build(db, webgpu=False)
-        db.write_text(json.dumps([{'file':'mtmd.cpp','command':'c++ -DLCB_MTMD_WEBGPU_BF16_RUNTIME=1'},
-                                  {'file':'clip.cpp','command':'c++ -DLCB_MTMD_RETAIN_BF16=1'}]))
+        valid = entries(['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1'])
+        for index in range(len(valid)):
+            for rows in (valid[:index] + valid[index + 1:], valid + [valid[index]]):
+                db.write_text(json.dumps(rows))
+                with self.assertRaisesRegex(ValueError, 'exactly one'):
+                    verify_build(db, webgpu=True)
+        db.write_text(json.dumps(entries(['-DLCB_MTMD_WEBGPU_BF16_RUNTIME=1', '-DLCB_MTMD_RETAIN_BF16=1'])))
         with self.assertRaisesRegex(ValueError, 'Obsolete'):
             verify_build(db, webgpu=True)
 
@@ -94,7 +96,7 @@ class RetainedModeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('cmake') and shutil.which('ninja'), 'CMake and Ninja are required')
     def test_ordinary_build_rechecks_changed_reviewed_sources(self):
         upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp'))
-        if not (upstream / 'tools/mtmd/clip.cpp').is_file():
+        if not (upstream / 'tools/mtmd/mtmd-model.cpp').is_file():
             self.skipTest('Set LCB_TEST_LLAMA_SOURCE to the pinned checkout')
         source = self.work / 'source'
         contract = json.loads((ROOT / 'config/retained-bf16-source.json').read_text())
@@ -107,12 +109,14 @@ class RetainedModeTests(unittest.TestCase):
         # normal CMake regeneration, which must reject source drift first.
         project = self.work / 'project'
         project.mkdir()
-        (project / 'clip.cpp').write_text('void fixture() {}\n')
+        shutil.copytree(upstream / 'tools/mtmd', source / 'tools/mtmd', dirs_exist_ok=True)
         cmake = [
             'cmake_minimum_required(VERSION 3.24)',
             'project(retained_dependency LANGUAGES CXX)',
             'find_package(Python3 REQUIRED COMPONENTS Interpreter)',
-            'add_library(mtmd STATIC clip.cpp)',
+            f'add_library(mtmd STATIC "{source}/tools/mtmd/mtmd-model.cpp")',
+            'set(LCB_WEBGPU ON)',
+            'set(LCB_WEBGPU_BF16_PROJECTOR ON)',
             f'set(LCB_LLAMA_SOURCE "{source}")',
             f'include("{ROOT / "cmake/MtmdOverlay.cmake"}")',
         ]
@@ -121,7 +125,7 @@ class RetainedModeTests(unittest.TestCase):
         configure = subprocess.run(['cmake', '-G', 'Ninja', '-S', str(project), '-B', str(build)],
                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         self.assertEqual(configure.returncode, 0, configure.stdout)
-        before = (build / 'mtmd-overlay/clip.cpp').read_bytes()
+        before = (build / 'mtmd-source-overlay/mtmd-model.cpp').read_bytes()
         tracked = (build / 'build.ninja').read_text()
         for name in contract['files']:
             self.assertIn(str(source / name), tracked, name)
@@ -136,7 +140,7 @@ class RetainedModeTests(unittest.TestCase):
                 self.assertNotEqual(attempted.returncode, 0, attempted.stdout)
                 self.assertIn('semantic review', attempted.stdout)
                 self.assertIn(name, attempted.stdout)
-                self.assertEqual((build / 'mtmd-overlay/clip.cpp').read_bytes(), before)
+                self.assertEqual((build / 'mtmd-source-overlay/mtmd-model.cpp').read_bytes(), before)
                 changed.write_bytes(original)
                 restored = subprocess.run(['cmake', '--build', str(build), '--target', 'help'],
                                           text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

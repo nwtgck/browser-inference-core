@@ -6,11 +6,11 @@ import prepare_webgpu_tensor_copy as tensor_copy
 
 PATCH_NAME = 'ggml-webgpu-profile-query-budget.patch'
 PATCH_SHA256 = 'a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6'
-INPUT_SHA256 = 'f4b7d396cede67ae3511dbda62bfe22f51f6c235b3e9bb12942db9f99a06e96f'
-OUTPUT_SHA256 = 'b357212a2ba089ff0a1d3efa0e86ac0818aa2643061e2037082d399f898fa132'
+INPUT_SHA256 = '6035c95aa02f9bb940ea7e67d650d078061986b7857ffa94e220406d026b47a5'
+OUTPUT_SHA256 = '8ca2a0773d6467acc35e5e56b5f74ef0e6a58379336cfe9d1b0fe8aec80314d0'
 CONTRACT_INPUTS = {
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': 'c3e627af0d18c596dd45f051c7eba612a6f8f53f458bceecd557d8704f52b8ee',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'a110a08b87a2b2768c991281e450cc0e89b5c34f67856b58138b7ca9e9aa5f17',
 }
 
 

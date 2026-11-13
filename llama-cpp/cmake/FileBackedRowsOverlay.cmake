@@ -57,5 +57,6 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${LCB_FILE_ROWS_DEPENDENCIES}
     "${LCB_FILE_ROWS_ROOT}/scripts/prepare_file_backed_rows.py"
     "${LCB_FILE_ROWS_ROOT}/bridge/file-backed-rows.h"
+    "${LCB_FILE_ROWS_ROOT}/bridge/file-backed-identity.h"
     "${LCB_FILE_ROWS_ROOT}/tests/file-backed-rows/inputs.json"
     "${LCB_FILE_ROWS_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/qwen4exp-file-backed-rows.patch")

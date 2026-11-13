@@ -1,3 +1,108 @@
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+@@ -0,0 +1,62 @@
++#pragma once
++#include "ggml-impl.h"
++#include <cstdint>
++
++struct scale_unary_plan {
++    ggml_tensor * source = nullptr;
++    ggml_tensor * output = nullptr;
++    ggml_tensor * first_scale = nullptr;
++    ggml_tensor * unary = nullptr;
++    ggml_tensor * final_scale = nullptr;
++    uint32_t elements = 0;
++    int operations = 0;
++};
++
++inline bool scale_unary_dense(const ggml_tensor * tensor) {
++    if (!tensor || tensor->type != GGML_TYPE_F32 || tensor->view_src) { return false; }
++    uint64_t bytes = 4;
++    for (int i = 0; i < GGML_MAX_DIMS; ++i) {
++        if (tensor->ne[i] <= 0 || uint64_t(tensor->ne[i]) > UINT32_MAX || tensor->nb[i] != bytes ||
++            bytes > uint64_t(UINT32_MAX) * 4 / uint64_t(tensor->ne[i])) { return false; }
++        bytes *= uint64_t(tensor->ne[i]);
++    }
++    return true;
++}
++
++inline bool plan_scale_unary(const ggml_cgraph * graph, int index, int operations, scale_unary_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || (operations != 2 && operations != 3) ||
++        operations > graph->n_nodes - index) { return false; }
++    const ggml_op ops[] = { GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE };
++    if (!ggml_can_fuse(graph, index, ops, operations)) { return false; }
++    ggml_tensor * first = graph->nodes[index];
++    ggml_tensor * unary = graph->nodes[index + 1];
++    ggml_tensor * source = first->src[0];
++    if (!scale_unary_dense(source) || !ggml_are_same_shape(source, first) ||
++        (ggml_get_unary_op(unary) != GGML_UNARY_OP_SILU && ggml_get_unary_op(unary) != GGML_UNARY_OP_SIGMOID)) {
++        return false;
++    }
++    for (int i = 0; i < operations; ++i) {
++        ggml_tensor * node = graph->nodes[index + i];
++        if (!scale_unary_dense(node) || node->src[0] != (i ? graph->nodes[index + i - 1] : source)) { return false; }
++        for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
++    }
++    plan = { source, graph->nodes[index + operations - 1], first, unary,
++             operations == 3 ? graph->nodes[index + 2] : nullptr,
++             uint32_t(ggml_nelements(source)), operations };
++    return true;
++}
++
++inline bool scale_unary_disjoint(uint64_t offset_a, uint64_t size_a, uint64_t offset_b, uint64_t size_b) {
++    return size_a && size_b && (offset_a <= offset_b ? size_a <= offset_b - offset_a : size_b <= offset_a - offset_b);
++}
++
++inline bool scale_unary_grid(uint64_t elements, uint32_t limit, uint32_t & x, uint32_t & y) {
++    x = y = 0;
++    if (!elements || !limit || elements > UINT32_MAX) { return false; }
++    const uint64_t groups = (elements + 127) / 128;
++    const uint64_t gy = (groups + limit - 1) / limit;
++    const uint64_t gx = (groups + gy - 1) / gy;
++    if (gx > limit || gy > limit || gx * gy > UINT32_MAX / 128u) { return false; }
++    x = uint32_t(gx); y = uint32_t(gy); return true;
++}
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -5,6 +5,7 @@
+ #include "ggml-wgsl-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
++#include "ggml-webgpu-scale-unary-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
+ 
+@@ -1367,6 +1368,7 @@
+     wgpu::Device           device;
+     pre_wgsl::Preprocessor preprocessor;
+ 
++    std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is whether to compute the mean
+@@ -2100,6 +2102,21 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
++        const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
++        auto it = scale_unary_pipelines.find(key);
++        if (it != scale_unary_pipelines.end()) { return it->second; }
++        std::vector<std::string> defines;
++        std::string label = sigmoid ? "scale_sigmoid" : "scale_silu";
++        if (sigmoid) { defines.push_back("SIGMOID"); }
++        if (final_scale) { defines.push_back("FINAL_SCALE"); label += "_scale"; }
++        if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
++        const auto code = preprocessor.preprocess(wgsl_scale_unary, defines);
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
++        scale_unary_pipelines[key] = pipeline;
++        return pipeline;
++    }
++
+     webgpu_pipeline get_moe_sum_pipeline(uint32_t experts) {
+         auto it = moe_sum_pipelines.find(experts);
+         if (it != moe_sum_pipelines.end()) { return it->second; }
 --- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 @@ -6,6 +6,7 @@
@@ -8,7 +113,7 @@
  
  #include "ggml-backend-impl.h"
  #include "ggml-impl.h"
-@@ -3465,6 +3466,85 @@
+@@ -3612,6 +3613,85 @@
      uint32_t total_wg = total_sum ? 1 : ggml_nrows(dst);
      compute_2d_workgroups(total_wg, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, wg_x, wg_y);
      return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
@@ -94,7 +199,7 @@
  }
  
  static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
-@@ -3676,6 +3756,7 @@
+@@ -3825,6 +3905,7 @@
          case GGML_OP_GLU:
              return ggml_webgpu_glu(ctx, src0, src1, node);
          case GGML_OP_SCALE:
@@ -102,115 +207,6 @@
              return ggml_webgpu_scale(ctx, src0, node);
          case GGML_OP_SOFT_MAX:
              return ggml_webgpu_soft_max(ctx, src0, src1, src2, node);
---- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -5,6 +5,7 @@
- #include "ggml-wgsl-shaders.hpp"
- #include "ggml-webgpu-hc-shaders.hpp"
- #include "ggml-webgpu-moe-sum-shaders.hpp"
-+#include "ggml-webgpu-scale-unary-shaders.hpp"
- #include "ggml.h"
- #include "pre_wgsl.hpp"
- 
-@@ -1336,6 +1337,7 @@
-     wgpu::Device           device;
-     pre_wgsl::Preprocessor preprocessor;
- 
-+    std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
-     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
-     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
-     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is fixed, no variants yet
-@@ -2013,6 +2015,21 @@
-         return ssm_scan_pipelines[key];
-     }
- 
-+    webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
-+        const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
-+        auto it = scale_unary_pipelines.find(key);
-+        if (it != scale_unary_pipelines.end()) { return it->second; }
-+        std::vector<std::string> defines;
-+        std::string label = sigmoid ? "scale_sigmoid" : "scale_silu";
-+        if (sigmoid) { defines.push_back("SIGMOID"); }
-+        if (final_scale) { defines.push_back("FINAL_SCALE"); label += "_scale"; }
-+        if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
-+        const auto code = preprocessor.preprocess(wgsl_scale_unary, defines);
-+        auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
-+        scale_unary_pipelines[key] = pipeline;
-+        return pipeline;
-+    }
-+
-     webgpu_pipeline get_moe_sum_pipeline(uint32_t experts) {
-         auto it = moe_sum_pipelines.find(experts);
-         if (it != moe_sum_pipelines.end()) { return it->second; }
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
-new file mode 100644
---- /dev/null
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
-@@ -0,0 +1,62 @@
-+#pragma once
-+#include "ggml-impl.h"
-+#include <cstdint>
-+
-+struct scale_unary_plan {
-+    ggml_tensor * source = nullptr;
-+    ggml_tensor * output = nullptr;
-+    ggml_tensor * first_scale = nullptr;
-+    ggml_tensor * unary = nullptr;
-+    ggml_tensor * final_scale = nullptr;
-+    uint32_t elements = 0;
-+    int operations = 0;
-+};
-+
-+inline bool scale_unary_dense(const ggml_tensor * tensor) {
-+    if (!tensor || tensor->type != GGML_TYPE_F32 || tensor->view_src) { return false; }
-+    uint64_t bytes = 4;
-+    for (int i = 0; i < GGML_MAX_DIMS; ++i) {
-+        if (tensor->ne[i] <= 0 || uint64_t(tensor->ne[i]) > UINT32_MAX || tensor->nb[i] != bytes ||
-+            bytes > uint64_t(UINT32_MAX) * 4 / uint64_t(tensor->ne[i])) { return false; }
-+        bytes *= uint64_t(tensor->ne[i]);
-+    }
-+    return true;
-+}
-+
-+inline bool plan_scale_unary(const ggml_cgraph * graph, int index, int operations, scale_unary_plan & plan) {
-+    plan = {};
-+    if (!graph || index < 0 || index >= graph->n_nodes || (operations != 2 && operations != 3) ||
-+        operations > graph->n_nodes - index) { return false; }
-+    const ggml_op ops[] = { GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE };
-+    if (!ggml_can_fuse(graph, index, ops, operations)) { return false; }
-+    ggml_tensor * first = graph->nodes[index];
-+    ggml_tensor * unary = graph->nodes[index + 1];
-+    ggml_tensor * source = first->src[0];
-+    if (!scale_unary_dense(source) || !ggml_are_same_shape(source, first) ||
-+        (ggml_get_unary_op(unary) != GGML_UNARY_OP_SILU && ggml_get_unary_op(unary) != GGML_UNARY_OP_SIGMOID)) {
-+        return false;
-+    }
-+    for (int i = 0; i < operations; ++i) {
-+        ggml_tensor * node = graph->nodes[index + i];
-+        if (!scale_unary_dense(node) || node->src[0] != (i ? graph->nodes[index + i - 1] : source)) { return false; }
-+        for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
-+    }
-+    plan = { source, graph->nodes[index + operations - 1], first, unary,
-+             operations == 3 ? graph->nodes[index + 2] : nullptr,
-+             uint32_t(ggml_nelements(source)), operations };
-+    return true;
-+}
-+
-+inline bool scale_unary_disjoint(uint64_t offset_a, uint64_t size_a, uint64_t offset_b, uint64_t size_b) {
-+    return size_a && size_b && (offset_a <= offset_b ? size_a <= offset_b - offset_a : size_b <= offset_a - offset_b);
-+}
-+
-+inline bool scale_unary_grid(uint64_t elements, uint32_t limit, uint32_t & x, uint32_t & y) {
-+    x = y = 0;
-+    if (!elements || !limit || elements > UINT32_MAX) { return false; }
-+    const uint64_t groups = (elements + 127) / 128;
-+    const uint64_t gy = (groups + limit - 1) / limit;
-+    const uint64_t gx = (groups + gy - 1) / gy;
-+    if (gx > limit || gy > limit || gx * gy > UINT32_MAX / 128u) { return false; }
-+    x = uint32_t(gx); y = uint32_t(gy); return true;
-+}
-diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
-new file mode 100644
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
 @@ -0,0 +1,45 @@

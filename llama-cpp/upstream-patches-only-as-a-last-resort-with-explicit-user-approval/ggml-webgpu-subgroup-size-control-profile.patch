@@ -1,262 +1,3 @@
---- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-@@ -325,6 +325,7 @@
- struct webgpu_capabilities {
-     wgpu::Limits limits;
-     bool         supports_subgroups       = false;
-+    bool         subgroup_size_control_enabled = false;
-     bool         supports_subgroup_matrix = false;
-     bool         supports_dot_product     = false;
- 
-@@ -343,6 +344,8 @@
-     wgpu::Instance instance;
-     wgpu::Adapter  adapter;
-     wgpu::Device   device;
-+    std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
-+    std::atomic<ggml_webgpu_optional::InitializationPhase> device_initialization{ggml_webgpu_optional::InitializationPhase::empty};
-     wgpu::Queue    queue;
-     uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
-     uint32_t       max_inflight_batches      = UINT32_MAX;
-@@ -717,6 +720,7 @@
-         num_inflight_batches = 0;
-     }
- 
-+    ctx->shader_lib->require_healthy_device();
-     ctx->global_ctx->queue.Submit(1, &commands);
-     num_inflight_batches++;
- }
-@@ -747,6 +751,7 @@
- };
- template<class Dispatch>
- static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches, size_t dispatch_count) {
-+    ctx->shader_lib->require_healthy_device();
-     webgpu_encoded_op            result = {};
-     std::vector<wgpu::BindGroup> bind_groups;
-     std::vector<size_t>          param_offsets;
-@@ -1826,6 +1831,7 @@
-     shader_lib_ctx.dst                      = dst;
-     shader_lib_ctx.max_wg_size              = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
-     shader_lib_ctx.supports_subgroups       = ctx->global_ctx->capabilities.supports_subgroups;
-+    shader_lib_ctx.subgroup_size_control_enabled = ctx->global_ctx->capabilities.subgroup_size_control_enabled;
-     shader_lib_ctx.supports_subgroup_matrix = ctx->global_ctx->capabilities.supports_subgroup_matrix;
-     shader_lib_ctx.sg_mat_m                 = ctx->global_ctx->capabilities.sg_mat_m;
-     shader_lib_ctx.sg_mat_n                 = ctx->global_ctx->capabilities.sg_mat_n;
-@@ -4359,6 +4365,7 @@
-     std::vector<std::string> profile_pipeline_names;
- #endif
- 
-+    ctx->shader_lib->require_healthy_device();
-     ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
-     if (ctx->batch_compute_passes) {
-         ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
-@@ -4389,6 +4396,7 @@
-             ggml_backend_webgpu_submit_commands(ctx, batch_commands, num_inflight_batches);
- 
-             // reset state for next batch
-+            ctx->shader_lib->require_healthy_device();
-             ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
-             if (ctx->batch_compute_passes) {
-                 ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
-@@ -4826,6 +4834,17 @@
- }
- 
- #ifdef __EMSCRIPTEN__
-+static bool ggml_webgpu_device_is_healthy(const webgpu_global_context & global) {
-+    return global->optional_device && global->optional_device->control.healthy();
-+}
-+
-+static void ggml_webgpu_require_healthy_global_device(const webgpu_global_context & global) {
-+    if (!ggml_webgpu_device_is_healthy(global)) {
-+        GGML_ABORT("ggml_webgpu: device generation %llu is unavailable",
-+                   (unsigned long long) (global->optional_device ? global->optional_device->generation : 0));
-+    }
-+}
-+
- #include "ggml-webgpu-batch-readback.hpp"
- #endif
- 
-@@ -5130,7 +5149,24 @@
-         UINT64_MAX);
- }
- 
-+struct webgpu_pending_device_request {
-+    std::atomic<bool> done{false};
-+    wgpu::RequestDeviceStatus status = wgpu::RequestDeviceStatus::Error;
-+    wgpu::Device device;
-+    std::array<char, 1024> message{};
-+};
-+
- static void create_webgpu_device(ggml_backend_webgpu_reg_context * ctx) {
-+    using phase = ggml_webgpu_optional::InitializationPhase;
-+    auto & global = *ctx->webgpu_global_ctx;
-+    auto expected = phase::empty;
-+    if (!global.device_initialization.compare_exchange_strong(expected, phase::pending, std::memory_order_acq_rel)) {
-+        if (expected == phase::ready && global.device && global.optional_device && global.optional_device->control.healthy()) { return; }
-+        GGML_ABORT("ggml_webgpu: device initialization is unavailable");
-+    }
-+    ggml_webgpu_optional::InitializationAttempt initialization{global.device_initialization};
-+    if (global.device || global.optional_device) { GGML_ABORT("ggml_webgpu: inconsistent initial device ownership"); }
-+
-     ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, ctx->webgpu_global_ctx->adapter);
-     GGML_ASSERT(ctx->webgpu_global_ctx->adapter != nullptr);
- 
-@@ -5197,13 +5233,20 @@
-     required_features.push_back(wgpu::FeatureName::TimestampQuery);
- #endif
- 
-+    const bool request_size_control = ctx->webgpu_global_ctx->capabilities.supports_subgroups &&
-+        info.subgroupMinSize != 0 && info.subgroupMinSize < info.subgroupMaxSize &&
-+        info.subgroupMinSize <= 16 && info.subgroupMaxSize >= 16 &&
-+        ctx->webgpu_global_ctx->adapter.HasFeature(wgpu::FeatureName::SubgroupSizeControl);
-+    if (request_size_control) { required_features.push_back(wgpu::FeatureName::SubgroupSizeControl); }
-+    const auto optional_device = std::make_shared<ggml_webgpu_optional::DeviceGeneration>();
-     wgpu::DeviceDescriptor dev_desc;
-     dev_desc.requiredLimits       = &ctx->webgpu_global_ctx->capabilities.limits;
-     dev_desc.requiredFeatures     = required_features.data();
-     dev_desc.requiredFeatureCount = required_features.size();
-     dev_desc.SetDeviceLostCallback(
-         wgpu::CallbackMode::AllowSpontaneous,
--        [](const wgpu::Device & device, wgpu::DeviceLostReason reason, wgpu::StringView message) {
-+        [optional_device](const wgpu::Device & device, wgpu::DeviceLostReason reason, wgpu::StringView message) {
-+            optional_device->control.lost.store(true, std::memory_order_release);
-             if (reason == wgpu::DeviceLostReason::Destroyed) {
-                 return;
-             }
-@@ -5234,18 +5277,51 @@
-     dev_desc.nextInChain = &deviceTogglesDesc;
- #endif
- 
--    ctx->webgpu_global_ctx->instance.WaitAny(
--        ctx->webgpu_global_ctx->adapter.RequestDevice(
--            &dev_desc, wgpu::CallbackMode::AllowSpontaneous,
--            [ctx](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
--                if (status != wgpu::RequestDeviceStatus::Success) {
--                    GGML_LOG_ERROR("ggml_webgpu: Failed to get a device: %s\n", std::string(message).c_str());
--                    return;
-+    auto request_owner = std::make_unique<webgpu_pending_device_request>();
-+    wgpu::WaitStatus request_wait = wgpu::WaitStatus::Error;
-+    try {
-+        const auto future = ctx->webgpu_global_ctx->adapter.RequestDevice(
-+            &dev_desc, wgpu::CallbackMode::WaitAnyOnly,
-+            [](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message,
-+               webgpu_pending_device_request * out) noexcept {
-+                out->status = status;
-+                out->device = std::move(device);
-+                size_t copied = 0;
-+                if (message.data) {
-+                    const size_t maximum = out->message.size() - 1;
-+                    if (message.length == WGPU_STRLEN) {
-+                        while (copied < maximum && message.data[copied]) { out->message[copied] = message.data[copied]; ++copied; }
-+                    } else {
-+                        const size_t length = std::min(maximum, message.length);
-+                        while (copied < length) { out->message[copied] = message.data[copied]; ++copied; }
-+                    }
-                 }
--                ctx->webgpu_global_ctx->device = std::move(device);
--            }),
--        UINT64_MAX);
--    GGML_ASSERT(ctx->webgpu_global_ctx->device != nullptr);
-+                out->message[copied] = 0;
-+                out->done.store(true, std::memory_order_release);
-+            }, request_owner.get());
-+        request_wait = ctx->webgpu_global_ctx->instance.WaitAny(future, UINT64_MAX);
-+    } catch (...) {
-+        // An SDK throw may follow registration. A late callback still borrows
-+        // this output owner. A failed initialization is never retried here.
-+        if (!request_owner->done.load(std::memory_order_acquire)) { (void) request_owner.release(); }
-+        throw;
-+    }
-+    if (request_wait != wgpu::WaitStatus::Success || !request_owner->done.load(std::memory_order_acquire)) {
-+        if (!request_owner->done.load(std::memory_order_acquire)) { (void) request_owner.release(); }
-+        GGML_ABORT("ggml_webgpu: device request did not complete");
-+    }
-+    if (request_owner->status != wgpu::RequestDeviceStatus::Success || !request_owner->device || !optional_device->control.healthy()) {
-+        GGML_ABORT("ggml_webgpu: device request failed: %s", request_owner->message.data());
-+    }
-+    // Publish only the successfully requested device and its own control.
-+    // The initialization phase stays pending until queue/buffers are complete.
-+    ctx->webgpu_global_ctx->device = std::move(request_owner->device);
-+    ctx->webgpu_global_ctx->optional_device = optional_device;
-+    initialization.published_control = &optional_device->control;
-+
-+
-+    ctx->webgpu_global_ctx->capabilities.subgroup_size_control_enabled = request_size_control &&
-+        ctx->webgpu_global_ctx->device.HasFeature(wgpu::FeatureName::SubgroupSizeControl);
- 
-     ggml_webgpu_init_memset_pipeline(ctx->webgpu_global_ctx);
-     ggml_webgpu_create_buffer(ctx->webgpu_global_ctx->device, ctx->webgpu_global_ctx->memset_params_buf,
-@@ -5258,13 +5334,14 @@
-         "device_desc: %s\n",
-         info.vendorID, std::string(info.vendor).c_str(), std::string(info.architecture).c_str(), info.deviceID,
-         std::string(info.device).c_str(), std::string(info.description).c_str());
-+    initialization.finish();
- }
- 
- static webgpu_context initialize_webgpu_context(ggml_backend_dev_t dev) {
-     ggml_backend_webgpu_device_context * dev_ctx    = (ggml_backend_webgpu_device_context *) dev->context;
-     webgpu_context                       webgpu_ctx = std::make_shared<webgpu_context_struct>();
-     webgpu_ctx->global_ctx                          = dev_ctx->webgpu_global_ctx;
--    webgpu_ctx->shader_lib = std::make_unique<ggml_webgpu_shader_lib>(dev_ctx->webgpu_global_ctx->device);
-+    webgpu_ctx->shader_lib = std::make_unique<ggml_webgpu_shader_lib>(dev_ctx->webgpu_global_ctx->device, dev_ctx->webgpu_global_ctx->instance, dev_ctx->webgpu_global_ctx->optional_device);
-     webgpu_ctx->param_arena.init(
-         webgpu_ctx->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES,
-         webgpu_ctx->global_ctx->command_submit_batch_size + WEBGPU_NUM_PARAM_SLOT_SAFETY_MARGIN,
-@@ -5943,6 +6020,8 @@
-     auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(context, false, false);
-     if (req.variant == 0 && key.use_mmvq) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
-     if (req.variant) {
-+        key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::legacy;
-+        key.requested_subgroup_size = 0;
-         key.use_mmvq = false;
-         key.workgroup_size = req.variant == 1 ? 256 : 128;
-         key.subgroup_size = req.variant >= 2 && req.variant <= 4 ? context.min_subgroup_size : 0;
-@@ -5954,24 +6033,40 @@
-         }
-     }
-     const auto & limits = ctx->global_ctx->capabilities.limits;
--    const uint32_t outputs = key.subgroup_size ? key.q8_rows_per_tile * (key.workgroup_size / key.subgroup_size) : key.q8_rows_per_tile;
-+    const uint32_t planned_subgroup_size = key.requested_subgroup_size ? key.requested_subgroup_size : key.subgroup_size;
-+    const uint32_t outputs = planned_subgroup_size ? key.q8_rows_per_tile * (key.workgroup_size / planned_subgroup_size) : key.q8_rows_per_tile;
-     const uint32_t groups = (uint32_t(dst->ne[0]) + outputs - 1) / outputs;
-     if (!limits.maxComputeWorkgroupsPerDimension || uint64_t(groups) > uint64_t(limits.maxComputeWorkgroupsPerDimension) * limits.maxComputeWorkgroupsPerDimension ||
-         limits.maxComputeInvocationsPerWorkgroup < key.workgroup_size || limits.maxComputeWorkgroupSizeX < key.workgroup_size ||
--        (!key.subgroup_size && limits.maxComputeWorkgroupStorageSize < key.q8_rows_per_tile * key.workgroup_size * 4) ||
-+        (!planned_subgroup_size && limits.maxComputeWorkgroupStorageSize < key.q8_rows_per_tile * key.workgroup_size * 4) ||
-         limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 || limits.maxUniformBuffersPerShaderStage < 1 ||
-         limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size || !ctx->global_ctx->device.HasFeature(wgpu::FeatureName::ShaderF16)) {
-         return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
-     }
--    result.actual_algorithm = key.subgroup_size ? 2 : 1;
--    result.workgroup_size = key.workgroup_size; result.logical_subgroup_size = key.subgroup_size;
-+    result.actual_algorithm = planned_subgroup_size ? 2 : 1;
-+    result.workgroup_size = key.workgroup_size; result.logical_subgroup_size = planned_subgroup_size;
-     result.real_min_subgroup_size = context.min_subgroup_size; result.real_max_subgroup_size = context.max_subgroup_size;
-     result.rows_per_tile = key.q8_rows_per_tile; result.outputs_per_workgroup = outputs;
--    result.cooperative_subgroup_reduction = !key.subgroup_size && key.subgroup_reduction;
-+    result.cooperative_subgroup_reduction = !planned_subgroup_size && key.subgroup_reduction;
-     compute_2d_workgroups(groups, limits.maxComputeWorkgroupsPerDimension, result.grid_x, result.grid_y); result.grid_z = 1;
--    result.codegen_revision = 1;
-+    result.codegen_revision = key.requested_subgroup_size ? 2 : 1;
-     auto pipeline = req.phase == 1 ? std::optional<webgpu_pipeline>(ctx->shader_lib->prepare_q8_diagnostic_pipeline(context, key)) :
-                                      ctx->shader_lib->find_q8_diagnostic_pipeline(key);
-+    auto metadata_pipeline = pipeline;
-+    if (!metadata_pipeline) { metadata_pipeline = ctx->shader_lib->find_q8_cached_fallback(context, key); }
-+    if (!metadata_pipeline) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1); }
-+    const auto * actual = static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(metadata_pipeline->context.get());
-+    const uint32_t actual_groups = (uint32_t(dst->ne[0]) + actual->outputs_per_wg - 1) / actual->outputs_per_wg;
-+    if (uint64_t(actual_groups) > uint64_t(limits.maxComputeWorkgroupsPerDimension) * limits.maxComputeWorkgroupsPerDimension) {
-+        return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
-+    }
-+    result.actual_algorithm = actual->logical_subgroup_size ? 2 : 1;
-+    result.workgroup_size = actual->wg_size; result.logical_subgroup_size = actual->logical_subgroup_size;
-+    result.real_min_subgroup_size = context.min_subgroup_size; result.real_max_subgroup_size = context.max_subgroup_size;
-+    result.rows_per_tile = actual->q8_rows_per_tile; result.outputs_per_workgroup = actual->outputs_per_wg;
-+    result.cooperative_subgroup_reduction = !actual->logical_subgroup_size && actual->subgroup_reduction;
-+    compute_2d_workgroups(actual_groups, limits.maxComputeWorkgroupsPerDimension, result.grid_x, result.grid_y); result.grid_z = 1;
-+    result.codegen_revision = actual->requested_subgroup_size ? 2 : 1;
-     if (!pipeline) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1); }
-     memcpy(result.shader_sha256, pipeline->diagnostic_sha256.data(), sizeof(result.shader_sha256));
-     if (req.phase == 1) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1); }
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 @@ -20,10 +20,12 @@
@@ -272,7 +13,7 @@
  #include <memory>
  #include <string>
  #include <unordered_map>
-@@ -108,6 +110,7 @@
+@@ -110,6 +112,7 @@
      uint64_t    indexed_buffer_remaining[4] = {};
      size_t      wg_mem_limit_bytes       = 0;
      bool        supports_subgroups       = false;
@@ -280,7 +21,7 @@
      bool        supports_subgroup_matrix = false;
      uint32_t    sg_mat_m                 = 0;
      uint32_t    sg_mat_n                 = 0;
-@@ -249,6 +252,36 @@
+@@ -251,6 +254,36 @@
          output_elements *= static_cast<uint64_t>(x->ne[axis]);
      }
      return sg;
@@ -317,7 +58,7 @@
  }
  
  // IQ3_S needs sixteen logical lanes per 256-weight block. Fixed subgroup
-@@ -365,6 +398,16 @@
+@@ -373,6 +406,16 @@
      return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
  }
  
@@ -334,7 +75,7 @@
  struct webgpu_pipeline {
      wgpu::ComputePipeline pipeline;
      std::string           name;
-@@ -1232,6 +1275,9 @@
+@@ -1265,6 +1308,9 @@
  /** Matrix Multiplication **/
  
  struct ggml_webgpu_mul_mat_vec_pipeline_key {
@@ -344,7 +85,7 @@
      ggml_webgpu_shader_lib_context::matvec_post_op epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
      ggml_type src0_type;
      ggml_type src1_type;
-@@ -1245,7 +1291,8 @@
+@@ -1278,7 +1324,8 @@
      bool      subgroup_reduction = false;
  
      bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
@@ -354,7 +95,7 @@
                 num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
                 subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap &&
                 q8_rows_per_tile == other.q8_rows_per_tile && subgroup_reduction == other.subgroup_reduction;
-@@ -1255,6 +1302,8 @@
+@@ -1288,6 +1335,8 @@
  struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
      size_t operator()(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
          size_t seed = 0;
@@ -363,7 +104,7 @@
          ggml_webgpu_hash_combine(seed, key.epilogue);
          ggml_webgpu_hash_combine(seed, key.src0_type);
          ggml_webgpu_hash_combine(seed, key.src1_type);
-@@ -1271,6 +1320,10 @@
+@@ -1304,6 +1353,10 @@
  };
  
  struct ggml_webgpu_mul_mat_vec_shader_decisions {
@@ -374,9 +115,9 @@
      uint32_t wg_size;
      uint32_t outputs_per_wg;
      uint32_t vec_size;
-@@ -1537,6 +1590,11 @@
+@@ -1574,6 +1627,11 @@
+         group_norm_pipelines;
  
- class ggml_webgpu_shader_lib {
      wgpu::Device           device;
 +    wgpu::Instance         instance;
 +    std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
@@ -386,7 +127,7 @@
      pre_wgsl::Preprocessor preprocessor;
  
      std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
-@@ -1631,7 +1689,18 @@
+@@ -1670,7 +1728,18 @@
          upscale_pipelines;
  
    public:
@@ -404,9 +145,9 @@
 +        }
 +    }
  
-     webgpu_pipeline get_sum_rows_pipeline(const ggml_webgpu_shader_lib_context & context) {
-         auto it = sum_rows_pipelines.find(1);
-@@ -2394,7 +2463,7 @@
+     webgpu_pipeline get_count_equal_pipeline(bool src_overlap) {
+         const int key = src_overlap;
+@@ -2504,7 +2573,7 @@
          return quantize_q8_pipelines[key];
      }
  
@@ -415,7 +156,7 @@
          ggml_webgpu_mul_mat_vec_pipeline_key key = {};
          key.src0_type                            = context.src0->type;
          key.src1_type                            = context.src1->type;
-@@ -2411,7 +2480,14 @@
+@@ -2521,7 +2590,14 @@
          if (!key.subgroup_size) {
              key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
          }
@@ -431,7 +172,7 @@
                                   ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
                                   ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
  
-@@ -2419,29 +2495,79 @@
+@@ -2529,29 +2605,79 @@
          return key;
      }
  
@@ -513,7 +254,7 @@
          if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
          if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none &&
              (key.src0_type != GGML_TYPE_F32 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
-@@ -2557,6 +2683,7 @@
+@@ -2667,6 +2793,7 @@
          // VEC/SCALAR controls
          defines.push_back(key.vectorized ? "VEC" : "SCALAR");
  
@@ -521,7 +262,7 @@
          uint32_t wg_size        = key.workgroup_size;
          uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
  
-@@ -2580,15 +2707,19 @@
+@@ -2690,15 +2817,19 @@
              variant += "_src_overlap";
          }
  
@@ -545,7 +286,7 @@
          } else {
              defines.push_back(key.subgroup_reduction ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
              variant += key.subgroup_reduction ? "_sg_reduce" : "_wg_reduce";
-@@ -2608,8 +2739,38 @@
+@@ -2718,8 +2849,38 @@
          decisions->wg_size        = wg_size;
          decisions->outputs_per_wg = outputs_per_wg;
          decisions->vec_size       = key.vectorized ? 4 : 1;
@@ -586,7 +327,7 @@
          pipeline.context           = decisions;
          if (key.src0_type == GGML_TYPE_Q8_0) {
              ggml_webgpu_q8_digest::sha256_ctx digest;
-@@ -2617,6 +2778,8 @@
+@@ -2727,6 +2888,8 @@
              ggml_webgpu_q8_digest::sha256_update(digest, processed.data(), processed.size());
              ggml_webgpu_q8_digest::sha256_final(digest, pipeline.diagnostic_sha256.data());
          }
@@ -595,3 +336,262 @@
          mul_mat_vec_pipelines[key] = pipeline;
          return mul_mat_vec_pipelines[key];
      }
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -325,6 +325,7 @@
+ struct webgpu_capabilities {
+     wgpu::Limits limits;
+     bool         supports_subgroups       = false;
++    bool         subgroup_size_control_enabled = false;
+     bool         supports_subgroup_matrix = false;
+     bool         supports_dot_product     = false;
+ 
+@@ -342,6 +343,8 @@
+     wgpu::Instance instance;
+     wgpu::Adapter  adapter;
+     wgpu::Device   device;
++    std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
++    std::atomic<ggml_webgpu_optional::InitializationPhase> device_initialization{ggml_webgpu_optional::InitializationPhase::empty};
+     wgpu::Queue    queue;
+     uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
+     uint32_t       max_inflight_batches      = UINT32_MAX;
+@@ -727,6 +730,7 @@
+         num_inflight_batches = 0;
+     }
+ 
++    ctx->shader_lib->require_healthy_device();
+     ctx->global_ctx->queue.Submit(1, &commands);
+     num_inflight_batches++;
+ }
+@@ -757,6 +761,7 @@
+ };
+ template<class Dispatch>
+ static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches, size_t dispatch_count) {
++    ctx->shader_lib->require_healthy_device();
+     webgpu_encoded_op            result = {};
+     std::vector<wgpu::BindGroup> bind_groups;
+     std::vector<size_t>          param_offsets;
+@@ -1878,6 +1883,7 @@
+     shader_lib_ctx.dst                      = dst;
+     shader_lib_ctx.max_wg_size              = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+     shader_lib_ctx.supports_subgroups       = ctx->global_ctx->capabilities.supports_subgroups;
++    shader_lib_ctx.subgroup_size_control_enabled = ctx->global_ctx->capabilities.subgroup_size_control_enabled;
+     shader_lib_ctx.supports_subgroup_matrix = ctx->global_ctx->capabilities.supports_subgroup_matrix;
+     shader_lib_ctx.sg_mat_m                 = ctx->global_ctx->capabilities.sg_mat_m;
+     shader_lib_ctx.sg_mat_n                 = ctx->global_ctx->capabilities.sg_mat_n;
+@@ -4507,6 +4513,7 @@
+     std::vector<std::string> profile_pipeline_names;
+ #endif
+ 
++    ctx->shader_lib->require_healthy_device();
+     ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+     if (ctx->batch_compute_passes) {
+         ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
+@@ -4537,6 +4544,7 @@
+             ggml_backend_webgpu_submit_commands(ctx, batch_commands, num_inflight_batches);
+ 
+             // reset state for next batch
++            ctx->shader_lib->require_healthy_device();
+             ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+             if (ctx->batch_compute_passes) {
+                 ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
+@@ -5191,6 +5199,17 @@
+ }
+ 
+ #ifdef __EMSCRIPTEN__
++static bool ggml_webgpu_device_is_healthy(const webgpu_global_context & global) {
++    return global->optional_device && global->optional_device->control.healthy();
++}
++
++static void ggml_webgpu_require_healthy_global_device(const webgpu_global_context & global) {
++    if (!ggml_webgpu_device_is_healthy(global)) {
++        GGML_ABORT("ggml_webgpu: device generation %llu is unavailable",
++                   (unsigned long long) (global->optional_device ? global->optional_device->generation : 0));
++    }
++}
++
+ #include "ggml-webgpu-batch-readback.hpp"
+ #endif
+ 
+@@ -5501,7 +5520,24 @@
+         UINT64_MAX);
+ }
+ 
++struct webgpu_pending_device_request {
++    std::atomic<bool> done{false};
++    wgpu::RequestDeviceStatus status = wgpu::RequestDeviceStatus::Error;
++    wgpu::Device device;
++    std::array<char, 1024> message{};
++};
++
+ static void create_webgpu_device(ggml_backend_webgpu_reg_context * ctx) {
++    using phase = ggml_webgpu_optional::InitializationPhase;
++    auto & global = *ctx->webgpu_global_ctx;
++    auto expected = phase::empty;
++    if (!global.device_initialization.compare_exchange_strong(expected, phase::pending, std::memory_order_acq_rel)) {
++        if (expected == phase::ready && global.device && global.optional_device && global.optional_device->control.healthy()) { return; }
++        GGML_ABORT("ggml_webgpu: device initialization is unavailable");
++    }
++    ggml_webgpu_optional::InitializationAttempt initialization{global.device_initialization};
++    if (global.device || global.optional_device) { GGML_ABORT("ggml_webgpu: inconsistent initial device ownership"); }
++
+     ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, ctx->webgpu_global_ctx->adapter);
+     GGML_ASSERT(ctx->webgpu_global_ctx->adapter != nullptr);
+ 
+@@ -5568,13 +5604,20 @@
+     required_features.push_back(wgpu::FeatureName::TimestampQuery);
+ #endif
+ 
++    const bool request_size_control = ctx->webgpu_global_ctx->capabilities.supports_subgroups &&
++        info.subgroupMinSize != 0 && info.subgroupMinSize < info.subgroupMaxSize &&
++        info.subgroupMinSize <= 16 && info.subgroupMaxSize >= 16 &&
++        ctx->webgpu_global_ctx->adapter.HasFeature(wgpu::FeatureName::SubgroupSizeControl);
++    if (request_size_control) { required_features.push_back(wgpu::FeatureName::SubgroupSizeControl); }
++    const auto optional_device = std::make_shared<ggml_webgpu_optional::DeviceGeneration>();
+     wgpu::DeviceDescriptor dev_desc;
+     dev_desc.requiredLimits       = &ctx->webgpu_global_ctx->capabilities.limits;
+     dev_desc.requiredFeatures     = required_features.data();
+     dev_desc.requiredFeatureCount = required_features.size();
+     dev_desc.SetDeviceLostCallback(
+         wgpu::CallbackMode::AllowSpontaneous,
+-        [](const wgpu::Device & device, wgpu::DeviceLostReason reason, wgpu::StringView message) {
++        [optional_device](const wgpu::Device & device, wgpu::DeviceLostReason reason, wgpu::StringView message) {
++            optional_device->control.lost.store(true, std::memory_order_release);
+             if (reason == wgpu::DeviceLostReason::Destroyed) {
+                 return;
+             }
+@@ -5605,18 +5648,51 @@
+     dev_desc.nextInChain = &deviceTogglesDesc;
+ #endif
+ 
+-    ctx->webgpu_global_ctx->instance.WaitAny(
+-        ctx->webgpu_global_ctx->adapter.RequestDevice(
+-            &dev_desc, wgpu::CallbackMode::AllowSpontaneous,
+-            [ctx](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+-                if (status != wgpu::RequestDeviceStatus::Success) {
+-                    GGML_LOG_ERROR("ggml_webgpu: Failed to get a device: %s\n", std::string(message).c_str());
+-                    return;
++    auto request_owner = std::make_unique<webgpu_pending_device_request>();
++    wgpu::WaitStatus request_wait = wgpu::WaitStatus::Error;
++    try {
++        const auto future = ctx->webgpu_global_ctx->adapter.RequestDevice(
++            &dev_desc, wgpu::CallbackMode::WaitAnyOnly,
++            [](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message,
++               webgpu_pending_device_request * out) noexcept {
++                out->status = status;
++                out->device = std::move(device);
++                size_t copied = 0;
++                if (message.data) {
++                    const size_t maximum = out->message.size() - 1;
++                    if (message.length == WGPU_STRLEN) {
++                        while (copied < maximum && message.data[copied]) { out->message[copied] = message.data[copied]; ++copied; }
++                    } else {
++                        const size_t length = std::min(maximum, message.length);
++                        while (copied < length) { out->message[copied] = message.data[copied]; ++copied; }
++                    }
+                 }
+-                ctx->webgpu_global_ctx->device = std::move(device);
+-            }),
+-        UINT64_MAX);
+-    GGML_ASSERT(ctx->webgpu_global_ctx->device != nullptr);
++                out->message[copied] = 0;
++                out->done.store(true, std::memory_order_release);
++            }, request_owner.get());
++        request_wait = ctx->webgpu_global_ctx->instance.WaitAny(future, UINT64_MAX);
++    } catch (...) {
++        // An SDK throw may follow registration. A late callback still borrows
++        // this output owner. A failed initialization is never retried here.
++        if (!request_owner->done.load(std::memory_order_acquire)) { (void) request_owner.release(); }
++        throw;
++    }
++    if (request_wait != wgpu::WaitStatus::Success || !request_owner->done.load(std::memory_order_acquire)) {
++        if (!request_owner->done.load(std::memory_order_acquire)) { (void) request_owner.release(); }
++        GGML_ABORT("ggml_webgpu: device request did not complete");
++    }
++    if (request_owner->status != wgpu::RequestDeviceStatus::Success || !request_owner->device || !optional_device->control.healthy()) {
++        GGML_ABORT("ggml_webgpu: device request failed: %s", request_owner->message.data());
++    }
++    // Publish only the successfully requested device and its own control.
++    // The initialization phase stays pending until queue/buffers are complete.
++    ctx->webgpu_global_ctx->device = std::move(request_owner->device);
++    ctx->webgpu_global_ctx->optional_device = optional_device;
++    initialization.published_control = &optional_device->control;
++
++
++    ctx->webgpu_global_ctx->capabilities.subgroup_size_control_enabled = request_size_control &&
++        ctx->webgpu_global_ctx->device.HasFeature(wgpu::FeatureName::SubgroupSizeControl);
+ 
+     ggml_webgpu_init_memset_pipeline(ctx->webgpu_global_ctx);
+     ggml_webgpu_init_scatter_write_pipeline(ctx->webgpu_global_ctx);
+@@ -5630,13 +5706,14 @@
+         "device_desc: %s\n",
+         info.vendorID, std::string(info.vendor).c_str(), std::string(info.architecture).c_str(), info.deviceID,
+         std::string(info.device).c_str(), std::string(info.description).c_str());
++    initialization.finish();
+ }
+ 
+ static webgpu_context initialize_webgpu_context(ggml_backend_dev_t dev) {
+     ggml_backend_webgpu_device_context * dev_ctx    = (ggml_backend_webgpu_device_context *) dev->context;
+     webgpu_context                       webgpu_ctx = std::make_shared<webgpu_context_struct>();
+     webgpu_ctx->global_ctx                          = dev_ctx->webgpu_global_ctx;
+-    webgpu_ctx->shader_lib = std::make_unique<ggml_webgpu_shader_lib>(dev_ctx->webgpu_global_ctx->device);
++    webgpu_ctx->shader_lib = std::make_unique<ggml_webgpu_shader_lib>(dev_ctx->webgpu_global_ctx->device, dev_ctx->webgpu_global_ctx->instance, dev_ctx->webgpu_global_ctx->optional_device);
+     webgpu_ctx->param_arena.init(
+         webgpu_ctx->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES,
+         webgpu_ctx->global_ctx->command_submit_batch_size + WEBGPU_NUM_PARAM_SLOT_SAFETY_MARGIN,
+@@ -6336,6 +6413,8 @@
+     auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(context, false, false);
+     if (req.variant == 0 && key.use_mmvq) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1); }
+     if (req.variant) {
++        key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::legacy;
++        key.requested_subgroup_size = 0;
+         key.use_mmvq = false;
+         key.workgroup_size = req.variant == 1 ? 256 : 128;
+         key.subgroup_size = req.variant >= 2 && req.variant <= 4 ? context.min_subgroup_size : 0;
+@@ -6347,24 +6426,40 @@
+         }
+     }
+     const auto & limits = ctx->global_ctx->capabilities.limits;
+-    const uint32_t outputs = key.subgroup_size ? key.q8_rows_per_tile * (key.workgroup_size / key.subgroup_size) : key.q8_rows_per_tile;
++    const uint32_t planned_subgroup_size = key.requested_subgroup_size ? key.requested_subgroup_size : key.subgroup_size;
++    const uint32_t outputs = planned_subgroup_size ? key.q8_rows_per_tile * (key.workgroup_size / planned_subgroup_size) : key.q8_rows_per_tile;
+     const uint32_t groups = (uint32_t(dst->ne[0]) + outputs - 1) / outputs;
+     if (!limits.maxComputeWorkgroupsPerDimension || uint64_t(groups) > uint64_t(limits.maxComputeWorkgroupsPerDimension) * limits.maxComputeWorkgroupsPerDimension ||
+         limits.maxComputeInvocationsPerWorkgroup < key.workgroup_size || limits.maxComputeWorkgroupSizeX < key.workgroup_size ||
+-        (!key.subgroup_size && limits.maxComputeWorkgroupStorageSize < key.q8_rows_per_tile * key.workgroup_size * 4) ||
++        (!planned_subgroup_size && limits.maxComputeWorkgroupStorageSize < key.q8_rows_per_tile * key.workgroup_size * 4) ||
+         limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 || limits.maxUniformBuffersPerShaderStage < 1 ||
+         limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size || !ctx->global_ctx->device.HasFeature(wgpu::FeatureName::ShaderF16)) {
+         return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
+     }
+-    result.actual_algorithm = key.subgroup_size ? 2 : 1;
+-    result.workgroup_size = key.workgroup_size; result.logical_subgroup_size = key.subgroup_size;
++    result.actual_algorithm = planned_subgroup_size ? 2 : 1;
++    result.workgroup_size = key.workgroup_size; result.logical_subgroup_size = planned_subgroup_size;
+     result.real_min_subgroup_size = context.min_subgroup_size; result.real_max_subgroup_size = context.max_subgroup_size;
+     result.rows_per_tile = key.q8_rows_per_tile; result.outputs_per_workgroup = outputs;
+-    result.cooperative_subgroup_reduction = !key.subgroup_size && key.subgroup_reduction;
++    result.cooperative_subgroup_reduction = !planned_subgroup_size && key.subgroup_reduction;
+     compute_2d_workgroups(groups, limits.maxComputeWorkgroupsPerDimension, result.grid_x, result.grid_y); result.grid_z = 1;
+-    result.codegen_revision = 1;
++    result.codegen_revision = key.requested_subgroup_size ? 2 : 1;
+     auto pipeline = req.phase == 1 ? std::optional<webgpu_pipeline>(ctx->shader_lib->prepare_q8_diagnostic_pipeline(context, key)) :
+                                      ctx->shader_lib->find_q8_diagnostic_pipeline(key);
++    auto metadata_pipeline = pipeline;
++    if (!metadata_pipeline) { metadata_pipeline = ctx->shader_lib->find_q8_cached_fallback(context, key); }
++    if (!metadata_pipeline) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1); }
++    const auto * actual = static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(metadata_pipeline->context.get());
++    const uint32_t actual_groups = (uint32_t(dst->ne[0]) + actual->outputs_per_wg - 1) / actual->outputs_per_wg;
++    if (uint64_t(actual_groups) > uint64_t(limits.maxComputeWorkgroupsPerDimension) * limits.maxComputeWorkgroupsPerDimension) {
++        return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1);
++    }
++    result.actual_algorithm = actual->logical_subgroup_size ? 2 : 1;
++    result.workgroup_size = actual->wg_size; result.logical_subgroup_size = actual->logical_subgroup_size;
++    result.real_min_subgroup_size = context.min_subgroup_size; result.real_max_subgroup_size = context.max_subgroup_size;
++    result.rows_per_tile = actual->q8_rows_per_tile; result.outputs_per_workgroup = actual->outputs_per_wg;
++    result.cooperative_subgroup_reduction = !actual->logical_subgroup_size && actual->subgroup_reduction;
++    compute_2d_workgroups(actual_groups, limits.maxComputeWorkgroupsPerDimension, result.grid_x, result.grid_y); result.grid_z = 1;
++    result.codegen_revision = actual->requested_subgroup_size ? 2 : 1;
+     if (!pipeline) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1); }
+     memcpy(result.shader_sha256, pipeline->diagnostic_sha256.data(), sizeof(result.shader_sha256));
+     if (req.phase == 1) { return finish(GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1); }

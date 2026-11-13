@@ -128,8 +128,11 @@ static void compare_rows(ggml_type type, int64_t columns, uint64_t offset) {
     const uint64_t size = offset + row_bytes * rows;
     check(ftruncate(file.fd(), off_t(size)) == 0, "sparse truncate");
     write_at(file.fd(), offset, packed.data(), row_bytes * rows);
-    lcb_file_backed_rows reader(file.fd(), 1, size, offset, type, columns, rows);
-    check(reader.shard() == 1, "shard identity");
+    lcb_file_backed_rows reader(file.fd(), size, offset, type, columns, rows);
+    rejects([&] { reader.shard(); });
+    reader.resolve_shard({}, file.fd());
+    check(reader.shard() == 0, "single descriptor source identity");
+    rejects([&] { reader.resolve_shard({}, file.fd()); });
     std::array<int32_t, 7> ids{4, 0, 4, 1, 3, 0, 2};
     std::vector<float> actual;
     // The original loader FILE and its cursor can be closed without invalidating
@@ -176,7 +179,7 @@ static void positioned_read_failures() {
     const uint64_t bytes = offset + sizeof(data);
     check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate fault fixture");
     write_at(file.fd(), offset, data.data(), sizeof(data));
-    lcb_file_backed_rows reader(file.fd(), 1, bytes, offset, GGML_TYPE_F32, columns, rows, 0);
+    lcb_file_backed_rows reader(file.fd(), bytes, offset, GGML_TYPE_F32, columns, rows, 0);
     const std::array<int32_t, 5> indices{2, 0, 2, 1, 0};
     std::vector<float> expected, output;
     reader.gather(indices.data(), indices.size(), expected);
@@ -234,10 +237,10 @@ static void persistent_cache() {
         const uint64_t bytes = offset + row_bytes * rows;
         check(ftruncate(file.fd(), off_t(bytes)) == 0, "truncate cache fixture");
         write_at(file.fd(), offset, packed.data(), row_bytes * rows);
-        lcb_file_backed_rows baseline(file.fd(), 1, bytes, offset, type, columns, rows, 0);
+        lcb_file_backed_rows baseline(file.fd(), bytes, offset, type, columns, rows, 0);
         // Exactly one four-way set, independent of the format's row stride.
         const size_t budget = 4 * (((row_bytes + 7) / 8) * 8 + 8);
-        lcb_file_backed_rows cached(file.fd(), 1, bytes, offset, type, columns, rows, budget);
+        lcb_file_backed_rows cached(file.fd(), bytes, offset, type, columns, rows, budget);
         check(cached.cache_bytes() == 0, "empty cache was allocated eagerly");
         const std::array<int32_t, 5> indices{2, 0, 2, 1, 0};
         std::vector<float> expected, output;
@@ -290,7 +293,7 @@ static void persistent_cache() {
             }
         }
         // A different model/descriptor has a different cache even for equal IDs.
-        lcb_file_backed_rows independent(file.fd(), 1, bytes, offset, type, columns, rows, budget);
+        lcb_file_backed_rows independent(file.fd(), bytes, offset, type, columns, rows, budget);
         {
             pread_faults faults;
             independent.gather(indices.data(), indices.size(), output);
@@ -327,9 +330,9 @@ static void cache_resource_bounds() {
     check(ftruncate(file.fd(), off_t(bytes)) == 0, "sparse full-size cache fixture");
     const std::array<int32_t, 2> indices{0, int32_t(rows - 1)};
     std::vector<float> expected, output;
-    lcb_file_backed_rows baseline(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 0);
+    lcb_file_backed_rows baseline(file.fd(), bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 0);
     baseline.gather(indices.data(), indices.size(), expected);
-    lcb_file_backed_rows cached(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows,
+    lcb_file_backed_rows cached(file.fd(), bytes, 0, GGML_TYPE_IQ4_NL, columns, rows,
                                 std::numeric_limits<size_t>::max());
     cached.gather(indices.data(), indices.size(), output);
     // 90 packed bytes round to 96, plus 8 metadata bytes, 65,536 slots.
@@ -344,7 +347,7 @@ static void cache_resource_bounds() {
         check(faults.calls == 2 && output == expected, "stale cached entries survived size failure");
     }
     {
-        lcb_file_backed_rows huge_row(file.fd(), 1, bytes, 0, GGML_TYPE_F32,
+        lcb_file_backed_rows huge_row(file.fd(), bytes, 0, GGML_TYPE_F32,
                                       lcb_file_backed_rows::max_staging_bytes / sizeof(float), 1);
         allocation_fault fault(lcb_file_backed_rows::max_staging_bytes);
         huge_row.gather(nullptr, 0, output);
@@ -352,7 +355,7 @@ static void cache_resource_bounds() {
               "empty gather allocated row scratch or cache");
     }
     // A budget too small for one four-way set must keep the uncached path.
-    lcb_file_backed_rows tiny(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 415);
+    lcb_file_backed_rows tiny(file.fd(), bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 415);
     {
         pread_faults faults;
         tiny.gather(indices.data(), indices.size(), output);
@@ -362,7 +365,7 @@ static void cache_resource_bounds() {
     // Fail either metadata or packed-payload allocation. A complete gather
     // must still succeed, with no partial cache and no recurring retry storm.
     for (size_t allocation : {size_t(32), size_t(384)}) {
-        lcb_file_backed_rows fallback(file.fd(), 1, bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 416);
+        lcb_file_backed_rows fallback(file.fd(), bytes, 0, GGML_TYPE_IQ4_NL, columns, rows, 416);
         std::vector<float> one;
         baseline.gather(indices.data(), 1, one);
         allocation_fault fault(allocation);
@@ -386,19 +389,22 @@ int main() {
         cache_resource_bounds();
         temporary_file f;
         check(ftruncate(f.fd(), 4096) == 0, "truncate fixture");
-        rejects([&] { lcb_file_backed_rows r(-1, 0, 4096, 0, GGML_TYPE_F32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 0, GGML_TYPE_F32, 0, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 0, GGML_TYPE_F32, 1, -1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 0, GGML_TYPE_COUNT, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 0, GGML_TYPE_IQ4_NL, 33, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 0, GGML_TYPE_I32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 4097, GGML_TYPE_F32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, 4096, 4096, GGML_TYPE_F32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, UINT64_MAX, 0, GGML_TYPE_F32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), UINT32_MAX, 4096, 0, GGML_TYPE_F32, 32, 1); });
-        rejects([&] { lcb_file_backed_rows r(f.fd(), 0, UINT64_MAX / 2, 0, GGML_TYPE_F32, INT64_MAX, 1); });
+        rejects([&] { lcb_file_backed_rows r(-1, 4096, 0, GGML_TYPE_F32, 32, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_F32, 0, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_F32, 1, -1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_COUNT, 32, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_IQ4_NL, 33, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_I32, 32, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 4097, GGML_TYPE_F32, 32, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), 4096, 4096, GGML_TYPE_F32, 32, 1); });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), UINT64_MAX, 0, GGML_TYPE_F32, 32, 1); });
+        rejects([&] {
+            lcb_file_backed_rows r(f.fd(), 4096, 0, GGML_TYPE_F32, 32, 1);
+            r.resolve_shard({});
+        });
+        rejects([&] { lcb_file_backed_rows r(f.fd(), UINT64_MAX / 2, 0, GGML_TYPE_F32, INT64_MAX, 1); });
         // A backing file truncated after successful load must fail during gather.
-        lcb_file_backed_rows reader(f.fd(), 0, 4096, 0, GGML_TYPE_F32, 32, 32);
+        lcb_file_backed_rows reader(f.fd(), 4096, 0, GGML_TYPE_F32, 32, 32);
         check(ftruncate(f.fd(), 7) == 0, "truncate after load");
         int32_t index = 0;
         std::vector<float> output;

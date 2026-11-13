@@ -16,19 +16,19 @@ BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp'
 SHADER_NAME = 'iq3s_id_subgroup.wgsl'
 INPUTS = {
-    'ggml-webgpu.cpp': '57007fb929f38738bf6ba6d1aa76d8772822d9c2aa30410ca83f4d7e9c0d1d39',
-    'ggml-webgpu-shader-lib.hpp': 'e200d33142efa3e639802f3a62e25df24e7c3a3b635a4c397bd4e167d8046a7f',
+    'ggml-webgpu.cpp': '0df1049e16051a9d3cc64178271d22fed68bcf7f4fe5459ff73f131bc5340832',
+    'ggml-webgpu-shader-lib.hpp': 'b2f898e4aab45e54f95c3166b1023c963e30c72d23ed915d0a705616b5114b3d',
 }
 OUTPUTS = {
-    'ggml-webgpu.cpp': '4975b36e1d6a8dab34f2a0fb91c0865ad66bc67b37ab2b165583a69871b0b6e0',
-    'ggml-webgpu-shader-lib.hpp': 'ade9f9485964536aa1ca390bbc768f10a9a54178ebb69bb7e002ba712d3a61cc',
+    'ggml-webgpu.cpp': '7fb3a7f254a3160ddf238a9c67fbbabfd2b5d8c4d0473da0c4a3a9b31af59b39',
+    'ggml-webgpu-shader-lib.hpp': '4920e53ecff7873774fe92c20951652aa825643aa10f683ed1170c04032b1d85',
     'wgsl-shaders/iq3s_id_subgroup.wgsl': 'a24f289e8a528e806f7d5a4fca0ef45f0588683a100da314d4a01f5da2489547',
 }
 HEADER_SHA256 = '668f7421877db1ca9675b7e3f251f2ba62964c346ffa47f4c970965a6c36e34d'
 CONTRACT_INPUTS = {
     'ggml/src/ggml-common.h': '0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c',
-    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': '617700adc9a58401414cd6828fa48b4efb3bb0563458e6ebe717360e70c77201',
-    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
+    'ggml/src/ggml-webgpu/ggml-webgpu.cpp': 'c3e627af0d18c596dd45f051c7eba612a6f8f53f458bceecd557d8704f52b8ee',
+    'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp': 'a110a08b87a2b2768c991281e450cc0e89b5c34f67856b58138b7ca9e9aa5f17',
     'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
     'ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl': '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',
     'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',

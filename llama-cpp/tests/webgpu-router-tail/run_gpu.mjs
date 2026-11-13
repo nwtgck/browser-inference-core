@@ -123,7 +123,7 @@ try {
             const gBinding = binding(buffers.gathered, gOffset, spec.used * 4), sBinding = binding(buffers.sum, sOffset, 4), cBinding = binding(buffers.clamped, cOffset, 4);
             const params = {
                 get_rows: uniform([sourceBinding.elements, idsBinding.elements, gBinding.elements, 1, spec.experts, spec.experts, 1, spec.experts, spec.experts, 1, spec.used, spec.used, 1, spec.used, 1, 1, 1, 1], 'get-rows-params'),
-                sum_rows: uniform([gBinding.elements, sBinding.elements, spec.used, spec.used, spec.used, spec.used, 1, 1], 'sum-params'),
+                sum_rows: uniform([gBinding.elements, sBinding.elements, spec.used, spec.used, spec.used, spec.used, 1, 1, 1, 0, 0, 0], 'sum-params'),
                 clamp: uniform([1, sBinding.elements, spec.clampInplace ? sBinding.elements : cBinding.elements, 1, 1, 1, 1, 1, 1, 1, bits(2 ** -14), bits(Infinity)], 'clamp-params'),
                 div: uniform([spec.used, gBinding.elements, spec.clampInplace ? sBinding.elements : cBinding.elements, destinationBinding.elements, 1, spec.used, spec.used, spec.used, 1, 1, 1, 1, spec.used, 1, 1, 1, 1, 1, 1], 'div-params'),
                 merged: uniform([disjoint ? sourceBinding.elements : (src - unionBegin) / 4, candidateIdsBinding.elements, disjoint ? destinationBinding.elements : (dst - unionBegin) / 4, spec.experts, spec.experts, spec.used, spec.used, 1, bits(2 ** -14), bits(Infinity)], 'merged-params'),

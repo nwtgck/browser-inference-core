@@ -1,3 +1,292 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -17,10 +17,12 @@
+ #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+ #include "ggml.h"
+ #include "pre_wgsl.hpp"
++#include "ggml-webgpu-optional-pipeline.hpp"
+ 
+ #include <webgpu/webgpu_cpp.h>
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <memory>
+ #include <string>
+ #include <unordered_map>
+@@ -107,6 +109,7 @@
+     uint64_t    indexed_buffer_remaining[4] = {};
+     size_t      wg_mem_limit_bytes       = 0;
+     bool        supports_subgroups       = false;
++    bool        subgroup_size_control_enabled = false;
+     bool        supports_subgroup_matrix = false;
+     uint32_t    sg_mat_m                 = 0;
+     uint32_t    sg_mat_n                 = 0;
+@@ -248,6 +251,36 @@
+         output_elements *= static_cast<uint64_t>(x->ne[axis]);
+     }
+     return sg;
++}
++// Reuse the same ordinary Q8 admission without changing the advertised range.
++inline uint32_t ggml_webgpu_q8_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                  bool use_mmvq, bool src_overlap) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    if (context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
++        !context.subgroup_size_control_enabled || context.min_subgroup_size == 0 ||
++        context.min_subgroup_size >= context.max_subgroup_size ||
++        context.min_subgroup_size > 16 || context.max_subgroup_size < 16) { return 0; }
++    if (!a || !x || !dst || context.src2 || !context.supports_subgroups ||
++        context.max_wg_size < 128 || use_mmvq || src_overlap ||
++        a->type != GGML_TYPE_Q8_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] < 2048 || a->ne[0] > 8192 || a->ne[0] % 32 != 0 ||
++        a->ne[1] < 1024 || a->ne[1] > UINT32_MAX - 127u ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
++        return 0;
++    }
++    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
++    for (int axis = 2; axis < 4; ++axis) {
++        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
++            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
++            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
++            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
++            return 0;
++        }
++        output_elements *= static_cast<uint64_t>(x->ne[axis]);
++    }
++    return 16;
+ }
+ 
+ // IQ3_S needs sixteen logical lanes per 256-weight block. Fixed subgroup
+@@ -370,6 +403,16 @@
+     return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
+ }
+ 
++// Keep the existing Q4 shape/layout admission and request a real logical width.
++inline uint32_t ggml_webgpu_q4_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                     bool use_mmvq, bool src_overlap) {
++    if (!context.supports_subgroups || !context.subgroup_size_control_enabled ||
++        context.min_subgroup_size == 0 || context.min_subgroup_size >= context.max_subgroup_size ||
++        context.min_subgroup_size > 16 || context.max_subgroup_size < 16) { return 0; }
++    return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? 16 : 0;
++}
++
++
+ struct webgpu_pipeline {
+     wgpu::ComputePipeline pipeline;
+     std::string           name;
+@@ -1261,6 +1304,9 @@
+ /** Matrix Multiplication **/
+ 
+ struct ggml_webgpu_mul_mat_vec_pipeline_key {
++    enum class subgroup_mode_kind : uint32_t { legacy, requested_size };
++    subgroup_mode_kind subgroup_mode = subgroup_mode_kind::legacy;
++    uint32_t requested_subgroup_size = 0;
+     ggml_webgpu_shader_lib_context::matvec_post_op epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
+     ggml_type src0_type;
+     ggml_type src1_type;
+@@ -1272,7 +1318,8 @@
+     bool      src_overlap;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
+-        return epilogue == other.epilogue && src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
++        return subgroup_mode == other.subgroup_mode && requested_subgroup_size == other.requested_subgroup_size &&
++               epilogue == other.epilogue && src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
+     }
+@@ -1281,6 +1328,8 @@
+ struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
+     size_t operator()(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
+         size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, key.subgroup_mode);
++        ggml_webgpu_hash_combine(seed, key.requested_subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.epilogue);
+         ggml_webgpu_hash_combine(seed, key.src0_type);
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+@@ -1295,6 +1344,10 @@
+ };
+ 
+ struct ggml_webgpu_mul_mat_vec_shader_decisions {
++    uint32_t logical_subgroup_size = 0;
++    uint32_t requested_subgroup_size = 0;
++    uint32_t q8_rows_per_tile = 4;
++    bool subgroup_reduction = false;
+     uint32_t wg_size;
+     uint32_t outputs_per_wg;
+     uint32_t vec_size;
+@@ -1565,6 +1618,11 @@
+         group_norm_pipelines;
+ 
+     wgpu::Device           device;
++    wgpu::Instance         instance;
++    std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
++    using optional_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline,
++        ggml_webgpu_mul_mat_vec_pipeline_key, ggml_webgpu_mul_mat_vec_pipeline_key_hash>;
++    std::unique_ptr<optional_cache_type> optional_matvec;
+     pre_wgsl::Preprocessor preprocessor;
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+@@ -1661,7 +1719,18 @@
+         upscale_pipelines;
+ 
+   public:
+-    ggml_webgpu_shader_lib(wgpu::Device device) { this->device = device; }
++    ggml_webgpu_shader_lib(wgpu::Device device, wgpu::Instance instance,
++        std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device)
++        : device(std::move(device)), instance(std::move(instance)), optional_device(std::move(optional_device)) {
++        require_healthy_device();
++        optional_matvec = std::make_unique<optional_cache_type>(this->optional_device->control, this->optional_device->generation);
++    }
++
++    void require_healthy_device() const {
++        if (!optional_device || !optional_device->control.healthy()) {
++            GGML_ABORT("ggml_webgpu: device generation %llu is unavailable", (unsigned long long) (optional_device ? optional_device->generation : 0));
++        }
++    }
+ 
+     webgpu_pipeline get_count_equal_pipeline(bool src_overlap) {
+         const int key = src_overlap;
+@@ -2495,8 +2564,7 @@
+         return quantize_q8_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
+-        if (!ggml_webgpu_matvec_post_supported(context, context.matvec_epilogue, src_overlap)) { return {}; }
++    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned, bool allow_requested = true) {
+         ggml_webgpu_mul_mat_vec_pipeline_key key = {};
+         key.src0_type                            = context.src0->type;
+         key.src1_type                            = context.src1->type;
+@@ -2513,10 +2581,53 @@
+         if (!key.subgroup_size) {
+             key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         }
+-        key.workgroup_size = key.subgroup_size ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
++        if (allow_requested && !key.subgroup_size) {
++            key.requested_subgroup_size = ggml_webgpu_q8_requested_subgroup_size(context, key.use_mmvq, src_overlap);
++            if (!key.requested_subgroup_size) {
++                key.requested_subgroup_size = ggml_webgpu_q4_requested_subgroup_size(context, key.use_mmvq, src_overlap);
++            }
++            if (key.requested_subgroup_size) { key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::requested_size; }
++        }
++        key.workgroup_size = (key.subgroup_size || key.requested_subgroup_size) ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
+                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
+ 
++        return key;
++    }
++
++    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
++        if (!ggml_webgpu_matvec_post_supported(context, context.matvec_epilogue, src_overlap)) { return {}; }
++        require_healthy_device();
++        return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap, vec4_aligned));
++    }
++
++    webgpu_pipeline prepare_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context,
++        const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
++        require_healthy_device();
++        if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
++        if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::requested_size) {
++            try {
++                return optional_matvec->select(key, true,
++                    [&]() {
++                        ggml_webgpu_optional::Attempt<webgpu_pipeline> attempt;
++                        prepare_mul_mat_vec_pipeline_impl(context, key, &attempt);
++                        return attempt;
++                    },
++                    [&]() {
++                        const auto canonical_key = make_mul_mat_vec_key(context, key.src_overlap, false, false);
++                        return prepare_mul_mat_vec_pipeline_impl(context, canonical_key, nullptr);
++                    }).pipeline;
++            } catch (const std::exception & error) {
++                GGML_ABORT("ggml_webgpu: optional pipeline is terminal: %s", error.what());
++            }
++        }
++        return prepare_mul_mat_vec_pipeline_impl(context, key, nullptr);
++    }
++
++    webgpu_pipeline prepare_mul_mat_vec_pipeline_impl(const ggml_webgpu_shader_lib_context & context,
++        const ggml_webgpu_mul_mat_vec_pipeline_key & key,
++        ggml_webgpu_optional::Attempt<webgpu_pipeline> * optional_result) {
++        require_healthy_device();
+         if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
+         if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none &&
+             (key.src0_type != GGML_TYPE_F32 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
+@@ -2632,6 +2743,7 @@
+         // VEC/SCALAR controls
+         defines.push_back(key.vectorized ? "VEC" : "SCALAR");
+ 
++        const uint32_t logical_subgroup_size = key.requested_subgroup_size ? key.requested_subgroup_size : key.subgroup_size;
+         uint32_t wg_size        = key.workgroup_size;
+         uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
+ 
+@@ -2653,15 +2765,19 @@
+             variant += "_src_overlap";
+         }
+ 
+-        defines.push_back(std::string("WG_SIZE=") + std::to_string(key.subgroup_size ? key.subgroup_size : wg_size));
++        defines.push_back(std::string("WG_SIZE=") + std::to_string(logical_subgroup_size ? logical_subgroup_size : wg_size));
+         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
+-        if (key.subgroup_size) {
++        if (logical_subgroup_size) {
+             shader_src = wgsl_q8_subgroup_matvec;
+             defines.push_back("Q8_SUBGROUP_WORKGROUP_SIZE=128");
+-            variant += "_independent_sg" + std::to_string(key.subgroup_size) + "_wg128";
++            if (key.requested_subgroup_size) {
++                defines.push_back("REQUESTED_SUBGROUP_SIZE=" + std::to_string(key.requested_subgroup_size));
++                variant += "_requested" + std::to_string(key.requested_subgroup_size);
++            }
++            variant += "_independent_sg" + std::to_string(logical_subgroup_size) + "_wg128";
+             // The accumulator macro describes rows per subgroup; dispatch decisions
+             // describe all output rows covered by the actual workgroup.
+-            outputs_per_wg *= wg_size / key.subgroup_size;
++            outputs_per_wg *= wg_size / logical_subgroup_size;
+         } else {
+             defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
+             variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
+@@ -2680,9 +2796,40 @@
+         decisions->wg_size        = wg_size;
+         decisions->outputs_per_wg = outputs_per_wg;
+         decisions->vec_size       = key.vectorized ? 4 : 1;
+-
+-        webgpu_pipeline pipeline   = ggml_webgpu_create_pipeline(device, processed, variant);
++        decisions->logical_subgroup_size = logical_subgroup_size;
++        decisions->requested_subgroup_size = key.requested_subgroup_size;
++        decisions->subgroup_reduction = context.supports_subgroups;
++
++
++        webgpu_pipeline pipeline;
++        if (optional_result) {
++            struct ops {
++                using Pipeline = webgpu_pipeline;
++                wgpu::Device & device;
++                wgpu::Instance & instance;
++                const std::string & source;
++                const std::string & label;
++                std::uint64_t now_ns() const noexcept {
++                    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                        std::chrono::steady_clock::now().time_since_epoch()).count());
++                }
++                void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
++                Pipeline create() { return ggml_webgpu_create_pipeline(device, source, label); }
++                wgpu::Future pop(wgpu::CallbackMode mode,
++                    void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView, ggml_webgpu_optional::Ticket*) noexcept,
++                    ggml_webgpu_optional::Ticket * ticket) { return device.PopErrorScope(mode, callback, ticket); }
++                wgpu::WaitStatus wait(wgpu::Future future, std::uint64_t timeout) { return instance.WaitAny(future, timeout); }
++                bool valid(const Pipeline & value) { return static_cast<bool>(value.pipeline); }
++            } api{device, instance, processed, variant};
++            *optional_result = ggml_webgpu_optional::create_optional(api, optional_device->control, 5000000000ull);
++            if (optional_result->outcome != ggml_webgpu_optional::Outcome::ready) { return {}; }
++            pipeline = optional_result->pipeline;
++        } else {
++            pipeline = ggml_webgpu_create_pipeline(device, processed, variant);
++        }
+         pipeline.context           = decisions;
++        require_healthy_device();
++        if (optional_result) { optional_result->pipeline = pipeline; }
+         mul_mat_vec_pipelines[key] = pipeline;
+         return mul_mat_vec_pipelines[key];
+     }
 --- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
 @@ -321,6 +321,7 @@
@@ -8,7 +297,7 @@
      bool         supports_subgroup_matrix = false;
      bool         supports_dot_product     = false;
  
-@@ -339,6 +340,8 @@
+@@ -338,6 +339,8 @@
      wgpu::Instance instance;
      wgpu::Adapter  adapter;
      wgpu::Device   device;
@@ -17,7 +306,7 @@
      wgpu::Queue    queue;
      uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
      uint32_t       max_inflight_batches      = UINT32_MAX;
-@@ -712,6 +715,7 @@
+@@ -722,6 +725,7 @@
          num_inflight_batches = 0;
      }
  
@@ -25,7 +314,7 @@
      ctx->global_ctx->queue.Submit(1, &commands);
      num_inflight_batches++;
  }
-@@ -742,6 +746,7 @@
+@@ -752,6 +756,7 @@
  };
  template<class Dispatch>
  static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches, size_t dispatch_count) {
@@ -33,7 +322,7 @@
      webgpu_encoded_op            result = {};
      std::vector<wgpu::BindGroup> bind_groups;
      std::vector<size_t>          param_offsets;
-@@ -1834,6 +1839,7 @@
+@@ -1886,6 +1891,7 @@
      shader_lib_ctx.dst                      = dst;
      shader_lib_ctx.max_wg_size              = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
      shader_lib_ctx.supports_subgroups       = ctx->global_ctx->capabilities.supports_subgroups;
@@ -41,7 +330,7 @@
      shader_lib_ctx.supports_subgroup_matrix = ctx->global_ctx->capabilities.supports_subgroup_matrix;
      shader_lib_ctx.sg_mat_m                 = ctx->global_ctx->capabilities.sg_mat_m;
      shader_lib_ctx.sg_mat_n                 = ctx->global_ctx->capabilities.sg_mat_n;
-@@ -4325,6 +4331,7 @@
+@@ -4473,6 +4479,7 @@
      std::vector<std::string> profile_pipeline_names;
  #endif
  
@@ -49,7 +338,7 @@
      ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
      if (ctx->batch_compute_passes) {
          ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
-@@ -4355,6 +4362,7 @@
+@@ -4503,6 +4510,7 @@
              ggml_backend_webgpu_submit_commands(ctx, batch_commands, num_inflight_batches);
  
              // reset state for next batch
@@ -57,7 +346,7 @@
              ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
              if (ctx->batch_compute_passes) {
                  ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
-@@ -4785,6 +4793,17 @@
+@@ -5150,6 +5158,17 @@
  }
  
  #ifdef __EMSCRIPTEN__
@@ -75,7 +364,7 @@
  #include "ggml-webgpu-batch-readback.hpp"
  #endif
  
-@@ -5089,7 +5108,24 @@
+@@ -5460,7 +5479,24 @@
          UINT64_MAX);
  }
  
@@ -100,7 +389,7 @@
      ggml_backend_webgpu_request_adapter(ctx->webgpu_global_ctx->instance, ctx->webgpu_global_ctx->adapter);
      GGML_ASSERT(ctx->webgpu_global_ctx->adapter != nullptr);
  
-@@ -5156,13 +5192,20 @@
+@@ -5527,13 +5563,20 @@
      required_features.push_back(wgpu::FeatureName::TimestampQuery);
  #endif
  
@@ -122,7 +411,7 @@
              if (reason == wgpu::DeviceLostReason::Destroyed) {
                  return;
              }
-@@ -5193,18 +5236,51 @@
+@@ -5564,18 +5607,51 @@
      dev_desc.nextInChain = &deviceTogglesDesc;
  #endif
  
@@ -184,8 +473,8 @@
 +        ctx->webgpu_global_ctx->device.HasFeature(wgpu::FeatureName::SubgroupSizeControl);
  
      ggml_webgpu_init_memset_pipeline(ctx->webgpu_global_ctx);
-     ggml_webgpu_create_buffer(ctx->webgpu_global_ctx->device, ctx->webgpu_global_ctx->memset_params_buf,
-@@ -5217,13 +5293,14 @@
+     ggml_webgpu_init_scatter_write_pipeline(ctx->webgpu_global_ctx);
+@@ -5589,13 +5665,14 @@
          "device_desc: %s\n",
          info.vendorID, std::string(info.vendor).c_str(), std::string(info.architecture).c_str(), info.deviceID,
          std::string(info.device).c_str(), std::string(info.description).c_str());
@@ -201,292 +490,3 @@
      webgpu_ctx->param_arena.init(
          webgpu_ctx->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES,
          webgpu_ctx->global_ctx->command_submit_batch_size + WEBGPU_NUM_PARAM_SLOT_SAFETY_MARGIN,
---- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -17,10 +17,12 @@
- #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
- #include "ggml.h"
- #include "pre_wgsl.hpp"
-+#include "ggml-webgpu-optional-pipeline.hpp"
- 
- #include <webgpu/webgpu_cpp.h>
- 
- #include <algorithm>
-+#include <chrono>
- #include <memory>
- #include <string>
- #include <unordered_map>
-@@ -105,6 +107,7 @@
-     uint64_t    indexed_buffer_remaining[4] = {};
-     size_t      wg_mem_limit_bytes       = 0;
-     bool        supports_subgroups       = false;
-+    bool        subgroup_size_control_enabled = false;
-     bool        supports_subgroup_matrix = false;
-     uint32_t    sg_mat_m                 = 0;
-     uint32_t    sg_mat_n                 = 0;
-@@ -246,6 +249,36 @@
-         output_elements *= static_cast<uint64_t>(x->ne[axis]);
-     }
-     return sg;
-+}
-+// Reuse the same ordinary Q8 admission without changing the advertised range.
-+inline uint32_t ggml_webgpu_q8_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
-+                                                  bool use_mmvq, bool src_overlap) {
-+    const auto * a = context.src0;
-+    const auto * x = context.src1;
-+    const auto * dst = context.dst;
-+    if (context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
-+        !context.subgroup_size_control_enabled || context.min_subgroup_size == 0 ||
-+        context.min_subgroup_size >= context.max_subgroup_size ||
-+        context.min_subgroup_size > 16 || context.max_subgroup_size < 16) { return 0; }
-+    if (!a || !x || !dst || context.src2 || !context.supports_subgroups ||
-+        context.max_wg_size < 128 || use_mmvq || src_overlap ||
-+        a->type != GGML_TYPE_Q8_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
-+        a->ne[0] < 2048 || a->ne[0] > 8192 || a->ne[0] % 32 != 0 ||
-+        a->ne[1] < 1024 || a->ne[1] > UINT32_MAX - 127u ||
-+        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
-+        return 0;
-+    }
-+    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
-+    for (int axis = 2; axis < 4; ++axis) {
-+        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
-+            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
-+            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
-+            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
-+            return 0;
-+        }
-+        output_elements *= static_cast<uint64_t>(x->ne[axis]);
-+    }
-+    return 16;
- }
- 
- // IQ3_S needs sixteen logical lanes per 256-weight block. Fixed subgroup
-@@ -362,6 +395,16 @@
-     return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
- }
- 
-+// Keep the existing Q4 shape/layout admission and request a real logical width.
-+inline uint32_t ggml_webgpu_q4_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
-+                                                     bool use_mmvq, bool src_overlap) {
-+    if (!context.supports_subgroups || !context.subgroup_size_control_enabled ||
-+        context.min_subgroup_size == 0 || context.min_subgroup_size >= context.max_subgroup_size ||
-+        context.min_subgroup_size > 16 || context.max_subgroup_size < 16) { return 0; }
-+    return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? 16 : 0;
-+}
-+
-+
- struct webgpu_pipeline {
-     wgpu::ComputePipeline pipeline;
-     std::string           name;
-@@ -1228,6 +1271,9 @@
- /** Matrix Multiplication **/
- 
- struct ggml_webgpu_mul_mat_vec_pipeline_key {
-+    enum class subgroup_mode_kind : uint32_t { legacy, requested_size };
-+    subgroup_mode_kind subgroup_mode = subgroup_mode_kind::legacy;
-+    uint32_t requested_subgroup_size = 0;
-     ggml_webgpu_shader_lib_context::matvec_post_op epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
-     ggml_type src0_type;
-     ggml_type src1_type;
-@@ -1239,7 +1285,8 @@
-     bool      src_overlap;
- 
-     bool operator==(const ggml_webgpu_mul_mat_vec_pipeline_key & other) const {
--        return epilogue == other.epilogue && src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
-+        return subgroup_mode == other.subgroup_mode && requested_subgroup_size == other.requested_subgroup_size &&
-+               epilogue == other.epilogue && src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
-                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
-                subgroup_size == other.subgroup_size && use_mmvq == other.use_mmvq && src_overlap == other.src_overlap;
-     }
-@@ -1248,6 +1295,8 @@
- struct ggml_webgpu_mul_mat_vec_pipeline_key_hash {
-     size_t operator()(const ggml_webgpu_mul_mat_vec_pipeline_key & key) const {
-         size_t seed = 0;
-+        ggml_webgpu_hash_combine(seed, key.subgroup_mode);
-+        ggml_webgpu_hash_combine(seed, key.requested_subgroup_size);
-         ggml_webgpu_hash_combine(seed, key.epilogue);
-         ggml_webgpu_hash_combine(seed, key.src0_type);
-         ggml_webgpu_hash_combine(seed, key.src1_type);
-@@ -1262,6 +1311,10 @@
- };
- 
- struct ggml_webgpu_mul_mat_vec_shader_decisions {
-+    uint32_t logical_subgroup_size = 0;
-+    uint32_t requested_subgroup_size = 0;
-+    uint32_t q8_rows_per_tile = 4;
-+    bool subgroup_reduction = false;
-     uint32_t wg_size;
-     uint32_t outputs_per_wg;
-     uint32_t vec_size;
-@@ -1528,6 +1581,11 @@
- 
- class ggml_webgpu_shader_lib {
-     wgpu::Device           device;
-+    wgpu::Instance         instance;
-+    std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
-+    using optional_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline,
-+        ggml_webgpu_mul_mat_vec_pipeline_key, ggml_webgpu_mul_mat_vec_pipeline_key_hash>;
-+    std::unique_ptr<optional_cache_type> optional_matvec;
-     pre_wgsl::Preprocessor preprocessor;
- 
-     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
-@@ -1622,7 +1680,18 @@
-         upscale_pipelines;
- 
-   public:
--    ggml_webgpu_shader_lib(wgpu::Device device) { this->device = device; }
-+    ggml_webgpu_shader_lib(wgpu::Device device, wgpu::Instance instance,
-+        std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device)
-+        : device(std::move(device)), instance(std::move(instance)), optional_device(std::move(optional_device)) {
-+        require_healthy_device();
-+        optional_matvec = std::make_unique<optional_cache_type>(this->optional_device->control, this->optional_device->generation);
-+    }
-+
-+    void require_healthy_device() const {
-+        if (!optional_device || !optional_device->control.healthy()) {
-+            GGML_ABORT("ggml_webgpu: device generation %llu is unavailable", (unsigned long long) (optional_device ? optional_device->generation : 0));
-+        }
-+    }
- 
-     webgpu_pipeline get_sum_rows_pipeline(const ggml_webgpu_shader_lib_context & context) {
-         auto it = sum_rows_pipelines.find(1);
-@@ -2385,8 +2454,7 @@
-         return quantize_q8_pipelines[key];
-     }
- 
--    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
--        if (!ggml_webgpu_matvec_post_supported(context, context.matvec_epilogue, src_overlap)) { return {}; }
-+    static ggml_webgpu_mul_mat_vec_pipeline_key make_mul_mat_vec_key(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned, bool allow_requested = true) {
-         ggml_webgpu_mul_mat_vec_pipeline_key key = {};
-         key.src0_type                            = context.src0->type;
-         key.src1_type                            = context.src1->type;
-@@ -2403,10 +2471,53 @@
-         if (!key.subgroup_size) {
-             key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
-         }
--        key.workgroup_size = key.subgroup_size ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
-+        if (allow_requested && !key.subgroup_size) {
-+            key.requested_subgroup_size = ggml_webgpu_q8_requested_subgroup_size(context, key.use_mmvq, src_overlap);
-+            if (!key.requested_subgroup_size) {
-+                key.requested_subgroup_size = ggml_webgpu_q4_requested_subgroup_size(context, key.use_mmvq, src_overlap);
-+            }
-+            if (key.requested_subgroup_size) { key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::requested_size; }
-+        }
-+        key.workgroup_size = (key.subgroup_size || key.requested_subgroup_size) ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
-                                  ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
-                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
- 
-+        return key;
-+    }
-+
-+    webgpu_pipeline get_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
-+        if (!ggml_webgpu_matvec_post_supported(context, context.matvec_epilogue, src_overlap)) { return {}; }
-+        require_healthy_device();
-+        return prepare_mul_mat_vec_pipeline(context, make_mul_mat_vec_key(context, src_overlap, vec4_aligned));
-+    }
-+
-+    webgpu_pipeline prepare_mul_mat_vec_pipeline(const ggml_webgpu_shader_lib_context & context,
-+        const ggml_webgpu_mul_mat_vec_pipeline_key & key) {
-+        require_healthy_device();
-+        if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
-+        if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::requested_size) {
-+            try {
-+                return optional_matvec->select(key, true,
-+                    [&]() {
-+                        ggml_webgpu_optional::Attempt<webgpu_pipeline> attempt;
-+                        prepare_mul_mat_vec_pipeline_impl(context, key, &attempt);
-+                        return attempt;
-+                    },
-+                    [&]() {
-+                        const auto canonical_key = make_mul_mat_vec_key(context, key.src_overlap, false, false);
-+                        return prepare_mul_mat_vec_pipeline_impl(context, canonical_key, nullptr);
-+                    }).pipeline;
-+            } catch (const std::exception & error) {
-+                GGML_ABORT("ggml_webgpu: optional pipeline is terminal: %s", error.what());
-+            }
-+        }
-+        return prepare_mul_mat_vec_pipeline_impl(context, key, nullptr);
-+    }
-+
-+    webgpu_pipeline prepare_mul_mat_vec_pipeline_impl(const ggml_webgpu_shader_lib_context & context,
-+        const ggml_webgpu_mul_mat_vec_pipeline_key & key,
-+        ggml_webgpu_optional::Attempt<webgpu_pipeline> * optional_result) {
-+        require_healthy_device();
-         if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
-         if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none &&
-             (key.src0_type != GGML_TYPE_F32 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
-@@ -2522,6 +2633,7 @@
-         // VEC/SCALAR controls
-         defines.push_back(key.vectorized ? "VEC" : "SCALAR");
- 
-+        const uint32_t logical_subgroup_size = key.requested_subgroup_size ? key.requested_subgroup_size : key.subgroup_size;
-         uint32_t wg_size        = key.workgroup_size;
-         uint32_t outputs_per_wg = WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG;
- 
-@@ -2543,15 +2655,19 @@
-             variant += "_src_overlap";
-         }
- 
--        defines.push_back(std::string("WG_SIZE=") + std::to_string(key.subgroup_size ? key.subgroup_size : wg_size));
-+        defines.push_back(std::string("WG_SIZE=") + std::to_string(logical_subgroup_size ? logical_subgroup_size : wg_size));
-         defines.push_back(std::string("OUTPUTS_PER_WG=") + std::to_string(outputs_per_wg));
--        if (key.subgroup_size) {
-+        if (logical_subgroup_size) {
-             shader_src = wgsl_q8_subgroup_matvec;
-             defines.push_back("Q8_SUBGROUP_WORKGROUP_SIZE=128");
--            variant += "_independent_sg" + std::to_string(key.subgroup_size) + "_wg128";
-+            if (key.requested_subgroup_size) {
-+                defines.push_back("REQUESTED_SUBGROUP_SIZE=" + std::to_string(key.requested_subgroup_size));
-+                variant += "_requested" + std::to_string(key.requested_subgroup_size);
-+            }
-+            variant += "_independent_sg" + std::to_string(logical_subgroup_size) + "_wg128";
-             // The accumulator macro describes rows per subgroup; dispatch decisions
-             // describe all output rows covered by the actual workgroup.
--            outputs_per_wg *= wg_size / key.subgroup_size;
-+            outputs_per_wg *= wg_size / logical_subgroup_size;
-         } else {
-             defines.push_back(context.supports_subgroups ? "USE_SUBGROUP_REDUCTION" : "USE_WORKGROUP_REDUCTION");
-             variant += context.supports_subgroups ? "_sg_reduce" : "_wg_reduce";
-@@ -2570,9 +2686,40 @@
-         decisions->wg_size        = wg_size;
-         decisions->outputs_per_wg = outputs_per_wg;
-         decisions->vec_size       = key.vectorized ? 4 : 1;
--
--        webgpu_pipeline pipeline   = ggml_webgpu_create_pipeline(device, processed, variant);
-+        decisions->logical_subgroup_size = logical_subgroup_size;
-+        decisions->requested_subgroup_size = key.requested_subgroup_size;
-+        decisions->subgroup_reduction = context.supports_subgroups;
-+
-+
-+        webgpu_pipeline pipeline;
-+        if (optional_result) {
-+            struct ops {
-+                using Pipeline = webgpu_pipeline;
-+                wgpu::Device & device;
-+                wgpu::Instance & instance;
-+                const std::string & source;
-+                const std::string & label;
-+                std::uint64_t now_ns() const noexcept {
-+                    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-+                        std::chrono::steady_clock::now().time_since_epoch()).count());
-+                }
-+                void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
-+                Pipeline create() { return ggml_webgpu_create_pipeline(device, source, label); }
-+                wgpu::Future pop(wgpu::CallbackMode mode,
-+                    void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView, ggml_webgpu_optional::Ticket*) noexcept,
-+                    ggml_webgpu_optional::Ticket * ticket) { return device.PopErrorScope(mode, callback, ticket); }
-+                wgpu::WaitStatus wait(wgpu::Future future, std::uint64_t timeout) { return instance.WaitAny(future, timeout); }
-+                bool valid(const Pipeline & value) { return static_cast<bool>(value.pipeline); }
-+            } api{device, instance, processed, variant};
-+            *optional_result = ggml_webgpu_optional::create_optional(api, optional_device->control, 5000000000ull);
-+            if (optional_result->outcome != ggml_webgpu_optional::Outcome::ready) { return {}; }
-+            pipeline = optional_result->pipeline;
-+        } else {
-+            pipeline = ggml_webgpu_create_pipeline(device, processed, variant);
-+        }
-         pipeline.context           = decisions;
-+        require_healthy_device();
-+        if (optional_result) { optional_result->pipeline = pipeline; }
-         mul_mat_vec_pipelines[key] = pipeline;
-         return mul_mat_vec_pipelines[key];
-     }

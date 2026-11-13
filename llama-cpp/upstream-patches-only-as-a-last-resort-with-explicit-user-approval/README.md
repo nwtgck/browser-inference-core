@@ -9,7 +9,7 @@ requirements justify upstream maintenance work.
 The vision/audio patches take the pristine pinned upstream tree as input;
 neither depends on a TTS-generation copy. Other accepted overlays compose only as
 specified below. The current reference pin is
-`5851a8e505f4d5fbb183f2847698eb6155d176b7`. Re-evaluate compatibility at each pin
+`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`. Re-evaluate compatibility at each pin
 update rather than treating that revision or these workarounds as permanent.
 
 ## Portable explicit subgroup matvec selection
@@ -45,8 +45,7 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 
 ## Vision BF16 compatibility/performance
 
-- **Patches:** `mtmd-webgpu-bf16.patch`, `mtmd-vision-bf16-runtime.patch`,
-  and `mtmd-vision-bf16-clip-runtime.patch`.
+- **Patches:** `mtmd-webgpu-bf16.patch` and `mtmd-vision-bf16-runtime.patch`.
 - **Accepted scope:** the owner's explicit BF16-memory request permits per-load
   immutable storage selection in the same runtime. Existing entries remain
   legacy-expand; explicit retain-checked uses original BF16 storage and rejects
@@ -59,17 +58,30 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
   upstream changes. No shader or upstream model-builder change is included;
   `legacy-expand` remains the no-new-role alternative. Native contract tests
   are not real-browser/12B model validation.
-- **Integration:** checked build-tree clip.cpp and mtmd.cpp copies, preserving
-  upstream parameter-record layouts. The thin mtmd API plumbing exists in every
-  profile; WebGPU loader handling remains under `LCB_WEBGPU_BF16_PROJECTOR`.
-  Other profiles use a minimal clip copy that rejects unsupported retained GPU
-  vision only at existing modality classification, before weight allocation;
-  audio-only loads keep their original behavior without a second metadata parse.
-  Explicit CPU loads retain upstream storage and are not WebGPU acceptance.
+- **Integration:** one checked copy of the complete mtmd source/header subtree.
+  All target translation units, including unity batches, read the same private
+  model definition. Original non-unity source properties are retained; model
+  builders are byte-identical copies. Thin API plumbing exists in every profile;
+  WebGPU loader handling remains under `LCB_WEBGPU_BF16_PROJECTOR`. Immutable
+  selection is model-owned and shared through const subcontexts. Unsupported
+  GPU-retain vision fails at existing modality classification before allocation;
+  audio-only and explicit CPU storage preserve upstream behavior.
 - **Coupling:** retained upload/graph helpers use public ggml interfaces;
-  `mtmd-retained-roles.h` explicitly uses pinned private clip_model fields. The
-  source contract, compile-target check, generated ABI and provenance expose
-  this maintenance cost. Vendor, audio, model builders and shaders stay intact.
+  `mtmd-retained-roles.h` enumerates pinned private model fields without accepting
+  new roles automatically. Because weights now load before compute subcontexts,
+  retained uploads temporarily initialize a backend from the buffer-type device.
+  The pinned WebGPU implementation shares that device's global queue with weight
+  writes, so draining it preserves the existing 32 MiB charged upload budget.
+  This same-queue property is not assumed for other backends. No-allocation,
+  legacy, CPU and rejected initial callbacks do not create that backend. Queue
+  drain precedes backend free and weight-buffer destruction on every exit.
+  Extra backend bookkeeping is not a physical peak-memory improvement claim.
+  The shared compute owner rolls back a partial constructor by resetting its
+  scheduler before freeing distinct backends. Subcontexts borrow that owner and
+  never free shared resources. Upstream shared warmup, compute locking and
+  single-count compute memory accounting remain unchanged.
+  Source contracts, compile-target checks, generated ABI and provenance expose
+  this maintenance cost. Vendor sources and upstream shaders remain intact.
 - **Compatibility:** ordinary assets contain both modes without extra variants
   or build directories. No global/TLS selector or post-load mutator is added.
   Upstream owns the graph-allocation failure check; preserve it unchanged.
@@ -84,27 +96,56 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
   contract, or the owner withdraws the requirement; retire API/plumbing/tests
   coherently without changing immutable artifacts or unrelated overlays.
 
-## Non-pthread Wasm audio preprocessing
+## Non-pthread Wasm mtmd threadpool compatibility
 
-- **Patch:** `mtmd-audio-single-thread.patch`.
-- **Retention decision:** keep the already-applied compatibility behavior during
-  this cleanup; do not silently remove reference-audio support. This retention
-  does not authorize additional audio pipelines or new model features.
-- **Scope:** shared mel preprocessing and the existing separate Parakeet worker
-  loop, only for non-pthread Emscripten builds. Parakeet is retained unchanged,
-  not claimed to be necessary for Qwen synthesis or newly approved model support.
-  Qwen synthesis without a speaker reference bypasses the affected reference
-  preprocessing. Native/pthread worker behavior is unchanged.
-- **Integration:** one independent `tools/mtmd/mtmd-audio.cpp` build-tree copy.
-  It does not change inference backend selection or add a public interface.
-- **No-patch alternatives:** omit the affected reference-audio path or redesign
-  the browser profiles for threads; neither is a silent substitute for this
-  compatibility behavior.
-- **Validation and limits:** see [audio preprocessing checks](../docs/audio-single-thread.md).
-  Host simulations do not certify real browser model execution.
-- **Removal condition:** upstream handles this single-thread configuration, or
-  the owner explicitly changes the affected feature/profile requirements.
-  Reassess the separate Parakeet scope with the owner, not as incidental cleanup.
+- **Patch:** `mtmd-non-pthread-threadpool.patch`.
+- **Scope:** only non-pthread Emscripten normalizes the private shared mtmd
+  threadpool request to one, taking the existing no-pool branch. Native and
+  pthread requests are unchanged. This preserves single-thread model loading
+  after upstream moved audio preprocessing into scheduler graphs. Public record
+  layouts, audio arithmetic and model pipelines stay upstream.
+- **Integration:** the final checked stage in the coherent mtmd subtree, applied
+  in CPU and WebGPU modes. Guard actual `mtmd_threadpool_init` and CPU pool source;
+  bridge-only normalization would miss direct generated exports.
+- **No-patch alternatives:** require a threaded runtime or omit affected loads;
+  neither preserves the existing non-pthread profile contract.
+- **Validation and limits:** actual-helper controlled registry tests distinguish
+  non-pthread, native and pthread branches. They do not establish successful
+  model loading, browser audio quality or actual pthread worker execution.
+- **Removal:** upstream safely handles the non-pthread pool request, or the owner
+  changes the affected profile requirement. Remove patch, stage and report
+  together while retaining unrelated BF16 safeguards.
+
+The former `mtmd-audio-single-thread.patch` is retired: upstream removed its
+shared and Parakeet worker loops in favor of scheduler-backed log-mel graphs.
+The new DFT/F32 graph arithmetic is preserved. The former
+`mtmd-vision-bf16-clip-runtime.patch` is also retired; its unsupported GPU-retain
+check is consolidated into the common model-policy/classification overlay.
+Retirement is recorded separately from active compiled overlays.
+
+## Emscripten WebGPU batched-write fallback
+
+- **Patch:** `ggml-webgpu-emscripten-scalar-tensor-writes.patch`.
+- **Scope:** leave only the optional buffer `set_tensor_n` hook NULL under
+  Emscripten. The public batch API uses existing generic scalar/2D fallback;
+  native hooks, upstream batch implementations, shaders and eager pipeline
+  creation remain intact.
+- **Reason:** the pinned batch shader binds the entire destination buffer and
+  packs whole inputs, which can exceed storage-binding limits even for small
+  writes into a legal larger buffer. Its parallel overlapping writes also lack
+  the generic fallback's same-buffer-type input ordering.
+- **Integration:** an independent checked final WebGPU stage after buffer-size
+  compatibility. Scalar writes retain their queue order and unaligned-edge
+  handling. This adds no global queue budget and does not replace the separate
+  loader upload bound or 256-entry/4 MiB checkpoint readback contract. Existing
+  grouping across different buffer types is unchanged.
+- **No-patch alternatives:** defer this upstream update or restrict affected
+  writes; neither preserves existing browser checkpoint behavior generally.
+- **Validation and limits:** source-bound CPU controls check the hook, generic
+  fallback, ordering and failures. Runtime build/smoke checks are recorded
+  separately; they do not establish real-browser or model correctness.
+- **Removal:** upstream batch writes meet binding, scratch, representation and
+  overlapping-write contracts, or the compatibility requirement is withdrawn.
 
 ## Removed optional generation extensions
 
@@ -268,10 +309,15 @@ commit with different bytes or invent a future artifact identity.
 - **Integration:** reuse ordinary WebGPU source preparation and its CMake hook to
   replace only `src/llama-model-loader.cpp` on `llama`. No additional options,
   variants, workflow inputs or publication gates. CPU builds stay upstream.
-- **Reviewed inputs:** 8642541b255bfb5dc39cd351a178be09013a55d6; exact loader,
-  file-reader and target-layout identities augment existing backend/API guards.
-  Copies are isolated; upstream sources are never rewritten. Updater preflight
-  and provenance use the same preparation. Input drift requires semantic review.
+- **Reviewed inputs:** the initial review used
+  `8642541b255bfb5dc39cd351a178be09013a55d6`; the current checked source pin is
+  `b1b770d90d94cad9e9ea5b993bdbc383a522fb28`. The loader and file-reader
+  implementation have since changed; `llama-model-loader.h` and `llama-mmap.h`
+  remain byte-identical to that initial revision.
+  Current exact loader, file-reader and target-layout identities augment the
+  backend/API guards. Copies are isolated; upstream sources are never rewritten.
+  Updater preflight and provenance use the same preparation. Input drift requires
+  semantic review.
 - **Behavior:** retain at most 8 MiB of explicit read-vector storage, complete
   quantization blocks and four-byte intermediate upload alignment. A loader-local
   helper carries a provisional 32 MiB charged upload budget across tensors. Each
@@ -295,7 +341,10 @@ commit with different bytes or invent a future artifact identity.
   against pinned upstream headers;
   actual overlay/target/provenance contracts remain tested. These are not full
   Wasm builds or browser/GPU tests. The 32 MiB bound covers charged loader uploads,
-  not total Wasm, process, driver or GPU memory. Actual pending peaks can rise
+  not total Wasm, process, driver or GPU memory. Upstream direct-I/O aligned
+  bounce buffers, including the Windows unbuffered-read allocation, are outside
+  both the 8 MiB read-vector and 32 MiB charged-upload bounds. The Windows branch
+  is not compiled in browser builds. Actual pending peaks can rise
   from three to four chunks within that unchanged cap; lower read-vector maxima
   do not establish unchanged physical or Wasm high-water memory. Existing
   completion/device-loss behavior is unchanged; cancellation cannot interrupt a hung wait, and graceful
@@ -337,6 +386,12 @@ commit with different bytes or invent a future artifact identity.
   before creating an incomplete output. Other weights,
   n-gram hash computation, downstream graph, GGML kernels and public llama.h
   remain unchanged. Shared model header users compile coherent build-tree copies.
+  Before publication, a retained descriptor is matched by stable filesystem
+  identity to exactly one entry in the original public file array. Missing or
+  ambiguous matches fail instead of exposing a compacted internal file index.
+  The leaf `file-backed-identity.h` is copied into that same header universe and
+  included in compiled-source, coherent-set and supporting-source provenance.
+  The private loader layout and public source-index contract are unchanged.
 - **Validation / limitations:** see `docs/file-backed-rows.md`. Synthetic native
   graph equivalence is not a real-model WebGPU inference claim.
 - **Removal condition:** pinned upstream offers a tested non-mmap bounded row
@@ -691,7 +746,7 @@ not establish target-device speed.
 - **Patch:** `ggml-webgpu-aligned-word-load.patch`.
 - **Approval and scope:** the owner approved this separate shared-loader correction after the Q4 selector change. In `load_u32_at_src` and `load_u32_at_src0`, select the containing word for both reads at a four-byte-aligned offset and the following word for the hi read otherwise. A masked left shift returns lo|lo at alignment without a control-flow branch. The previous eager following-word read is unnecessary and reaches the binding end for a complete Q4_0 final word with a minimal binding. No observed GPU failure is claimed.
 - **Contract:** keep the nonaligned two-word join, all other declarations, arithmetic, selectors, bindings, grids and ABI bytes. This correction does not establish all-dtype bounds safety or repair a nonaligned call without a complete four-byte span, including separate partial-field overreads. It adds no runtime allocation, conversion, callback or probe.
-- **Integration:** append a checked preparation stage after the Q4 selector on upstream `8642541b255bfb5dc39cd351a178be09013a55d6`. Preserve the checkout and every historical prefix pin. Regenerate the pinned upstream canonical embedding, change only the two helper bodies within its existing raw-string chunks, and include it explicitly under `ggml-webgpu-aligned-word-load-shaders.hpp`; never include both canonical symbol sets in one translation unit. Apply the same body-only correction to exactly five inventoried dedicated embeddings. Keep original safe reserve capacities and chunk boundaries. Fail on template, emitter, consumer inventory, input or output identity drift. Provenance links original/patch/prepared-template identities and consumer before/after identities to actual normal/profile compiled copies.
+- **Integration:** originally integrated after the Q4 selector on upstream `8642541b255bfb5dc39cd351a178be09013a55d6`; the current checked chain targets `b1b770d90d94cad9e9ea5b993bdbc383a522fb28`. Preserve the checkout and every historical prefix pin. Regenerate the pinned upstream canonical embedding, change only the two helper bodies within its existing raw-string chunks, and include it explicitly under `ggml-webgpu-aligned-word-load-shaders.hpp`; never include both canonical symbol sets in one translation unit. Apply the same body-only correction to exactly five inventoried dedicated embeddings. Keep original safe reserve capacities and chunk boundaries. Fail on template, emitter, consumer inventory, input or output identity drift. Provenance links original/patch/prepared-template identities and consumer before/after identities to actual normal/profile compiled copies.
 - **No-patch alternative:** retain the accepted early-return correction or wait for the equivalent upstream correction. Supported runtime settings do not change these helper statements.
 - **Validation and limits:** inverse checks preserve all nonhelper bytes; bounded scalar byte oracles cover all four offset residues, complete nonaligned spans and minimal aligned bindings. Source range traces cover the Q4_0 final word and GET_ROWS consumer. Native translation-unit/include tests and finite GPU checks remain distinct from full runtime, model-quality, performance and target-device validation.
 - **Removal:** remove this patch, final preparation stage, renamed embedding and associated build/provenance/tests when upstream supplies the same behavior or the owner drops it. Re-review all generated consumers, chunk ownership and actual include composition at each upstream update.

@@ -57,14 +57,22 @@ class ReviewedOverlay(unittest.TestCase):
         self.assertEqual(before, {p: (SOURCE / p).read_bytes() for p in before})
         self.assertEqual((source / 'models/file-backed-rows.h').read_bytes(),
                          (ROOT / 'bridge/file-backed-rows.h').read_bytes())
+        self.assertEqual((source / 'models/file-backed-identity.h').read_bytes(),
+                         (ROOT / 'bridge/file-backed-identity.h').read_bytes())
         self.assertIn('file_backed_ple', (source / 'models/models.h').read_text())
         self.assertIn('arch != LLM_ARCH_QWEN4EXP', (source / 'llama-model.cpp').read_text())
         self.assertIn('model export requires resident weights', (source / 'llama.cpp').read_text())
+        api = (source / 'llama.cpp').read_text()
+        self.assertLess(api.index('const auto supplied_paths'), api.index('llama_model_loader ml('))
+        self.assertLess(api.index('if (!model->load_tensors(ml))'), api.index('resolve_file_backed_source(model,'))
+        self.assertIn('if (lcb_qwen4exp_has_file_backed_source(model))', api)
         for original in (SOURCE / 'src/models').glob('*.cpp'):
             if original.name != 'qwen4exp.cpp':
                 self.assertEqual(original.read_bytes(), (source / 'models' / original.name).read_bytes())
         self.assertEqual((SOURCE / 'src/llama-model-loader.cpp').read_bytes(),
                          (source / 'llama-model-loader.cpp').read_bytes())
+        self.assertEqual((SOURCE / 'src/llama-model-loader.h').read_bytes(),
+                         (source / 'llama-model-loader.h').read_bytes())
 
     def test_reviewed_input_drift_fails_before_publishing(self):
         pins = json.loads(rows.INPUTS_PATH.read_text())

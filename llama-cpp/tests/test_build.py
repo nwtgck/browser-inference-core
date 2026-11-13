@@ -84,8 +84,8 @@ class BuildProvenance(unittest.TestCase):
                 runtime=' -DLCB_MTMD_WEBGPU_BF16_RUNTIME='+('1' if sys.argv[2]=='ON' else '0')
                 if os.environ.get('LCB_TEST_MODE')=='bf16-mismatch':
                     runtime=' -DLCB_MTMD_WEBGPU_BF16_RUNTIME=0'
-                commands += [{'file':'clip.cpp','command':'c++ -c clip.cpp'+runtime},
-                             {'file':'mtmd.cpp','command':'c++ -c mtmd.cpp'+runtime}]
+                commands += [{'file':name,'command':'c++ -c '+name+runtime}
+                             for name in ('mtmd-model.cpp','mtmd-subcontext.cpp','mtmd.cpp')]
                 Path('compile_commands.json').write_text(json.dumps(commands))
                 # Compiler/provenance fixture, not an actual model-graph build.
                 # build.py requires both CMake preparation outputs to exist.

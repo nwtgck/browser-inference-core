@@ -112,6 +112,20 @@ class AlignedWordLoad(unittest.TestCase):
             self.assertEqual(library.replace(word.HEADER_NAME, 'ggml-wgsl-shaders.hpp'),
                              (old / 'ggml-webgpu-shader-lib.hpp').read_text())
 
+    def test_provenance_input_identities_match_actual_generated_bytes(self):
+        inputs = [('canonical', self.canonical, word.CANONICAL_INPUT_IDENTITY)]
+        for profile in (False, True):
+            identities = word.CONSUMER_INPUT_IDENTITIES[profile]
+            self.assertEqual(set(identities),
+                             {word.HEADER_NAME, *word.EMBEDDING_INPUTS, 'ggml-webgpu-shader-lib.hpp'})
+            for name, expected in identities.items():
+                path = self.canonical if name == word.HEADER_NAME else self.before[profile] / name
+                inputs.append((f'{profile}/{name}', path, expected))
+        for label, path, expected in inputs:
+            with self.subTest(input=label):
+                raw = path.read_bytes()
+                self.assertEqual({'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}, expected)
+
     def test_complete_spans_all_residues_and_final_q4_word(self):
         for helper in word.HELPERS:
             old, new = word.definition(self.original, helper), word.definition(self.candidate, helper)

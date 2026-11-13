@@ -1,8 +1,7 @@
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 97e0cee..ad11c45 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -1511,6 +1511,14 @@ bool llama_model_base::load_tensors(llama_model_loader & ml) {
+@@ -1686,6 +1686,14 @@
  
      this->ml = &ml; // to be used by create_tensor() and load_arch_tensors()
  
@@ -18,31 +17,55 @@ index 97e0cee..ad11c45 100644
          for (const auto & dev : devices) {
              ggml_backend_dev_props props;
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 9beb148..c0700c4 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -496,7 +496,14 @@ struct llama_model * llama_model_load_from_file_ptr(FILE * file, struct llama_mo
-     return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, path_model, splits, file, params);
+@@ -312,10 +312,17 @@
+     return true;
  }
  
-+extern "C" int32_t lcb_qwen4exp_file_backed_shard(const llama_model * model);
++// Private metadata hooks; the upstream loader layout is unchanged.
++void lcb_qwen4exp_resolve_file_backed_source(llama_model * model, const std::vector<std::string> & paths, int single_source_fd);
++bool lcb_qwen4exp_has_file_backed_source(const llama_model * model);
 +
+ // Returns 0 on success, -1 on error, and -2 on cancellation via llama_progress_callback
+ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * metadata, llama_model_set_tensor_data_t set_tensor_data, void * set_tensor_data_ud,
+         const std::string & fname, std::vector<std::string> & splits, FILE * file, llama_model_params & params) {
+     try {
++        // Preserve the caller's order, independently of upstream shard discovery,
++        // replacement, reordering and skipped PLE-only files.
++        const auto supplied_paths = splits.empty() && !fname.empty() ? std::vector<std::string>{fname} : splits;
+         llama_model_loader ml(metadata, set_tensor_data, set_tensor_data_ud, fname, splits, file, params.load_mode,
+             params.check_tensors, params.no_alloc, params.load_mtp, params.kv_overrides, params.tensor_buft_overrides);
+ 
+@@ -369,6 +376,10 @@
+             return {-2, nullptr};
+         }
+ 
++        // Reader ownership is already established; resolve only its public
++        // source index before publishing the model. A failed match unwinds it.
++        lcb_qwen4exp_resolve_file_backed_source(model, supplied_paths,
++            file && ml.files.size() == 1 && supplied_paths.empty() ? ml.files.front()->file_id() : -1);
+         return {0, model_ptr.release()};
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: error loading model: %s\n", __func__, err.what());
+@@ -496,6 +507,11 @@
+ }
+ 
  void llama_model_save_to_file(const struct llama_model * model, const char * path_model) {
 +    // The PLE table is deliberately absent from resident tensor enumeration.
 +    // Refuse export before opening the destination rather than omit its weights.
-+    if (lcb_qwen4exp_file_backed_shard(model) >= 0) {
++    if (lcb_qwen4exp_has_file_backed_source(model)) {
 +        throw std::runtime_error("file-backed rows: model export requires resident weights");
 +    }
      llama_model_saver ms(model);
      ms.add_kv_from_model();
      ms.add_tensors_from_model();
 diff --git a/src/models/models.h b/src/models/models.h
-index 387a4ad..6d6a91a 100644
 --- a/src/models/models.h
 +++ b/src/models/models.h
-@@ -2484,7 +2484,12 @@ struct llama_model_clef : public llama_model_qwen35 {
+@@ -2715,7 +2715,12 @@
+     std::unique_ptr<llm_graph_context> build_arch_graph(const llm_graph_params & params) const override;
  };
- 
  
 +class lcb_file_backed_rows;
 +extern "C" int32_t lcb_qwen4exp_file_backed_shard(const llama_model * model);
@@ -54,7 +77,6 @@ index 387a4ad..6d6a91a 100644
  
      class llm_graph_input_kpool;
 diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
-index 250eb74..53a725b 100644
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
 @@ -1,4 +1,5 @@
@@ -63,7 +85,7 @@ index 250eb74..53a725b 100644
  #include "llama-impl.h"
  #include "llama-memory-hybrid-idx.h"
  #include "llama-memory-recurrent.h"
-@@ -211,8 +212,27 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
+@@ -213,8 +214,27 @@
              ple_rows = ple_w->tensor->ne[1];
          }
  
@@ -82,7 +104,7 @@ index 250eb74..53a725b 100644
 +                          { hparams.ple_head_dim, ple_rows }, TENSOR_SKIP);
 +            const auto & file = ml.files.at(ple_w->idx);
 +            file_backed_ple = std::make_shared<lcb_file_backed_rows>(
-+                file->file_id(), ple_w->idx, file->size(), ple_w->offs,
++                file->file_id(), file->size(), ple_w->offs,
 +                ple_w->tensor->type, hparams.ple_head_dim, ple_rows);
 +            LLAMA_LOG_INFO("qwen4exp_file_rows: enabled shard=%u row_bytes=%zu rows=%" PRId64 "\n",
 +                           ple_w->idx, ggml_row_size(ple_w->tensor->type, hparams.ple_head_dim), ple_rows);
@@ -93,7 +115,7 @@ index 250eb74..53a725b 100644
      }
  
      auto load_block = [&](int il, int flags) {
-@@ -1207,10 +1227,13 @@ public:
+@@ -1283,10 +1303,13 @@
  
      bool can_reuse(const llm_graph_params & params) override {
          mctx = static_cast<const llama_memory_hybrid_idx_context *>(params.mctx)->get_attn();
@@ -108,7 +130,7 @@ index 250eb74..53a725b 100644
  
      const llama_model & model;
  
-@@ -1282,6 +1305,17 @@ void llm_graph_input_qwen4exp_ple::set_input(const llama_ubatch * ubatch) {
+@@ -1358,6 +1381,17 @@
          }
      }
  
@@ -126,7 +148,7 @@ index 250eb74..53a725b 100644
      {
          ggml_tensor * ple = model.per_layer_tok_embd;
  
-@@ -1357,13 +1391,21 @@ ggml_tensor * llama_model_qwen4exp::graph::build_inp_ple(
+@@ -1408,13 +1442,21 @@
      // the attention cells see every ubatch regardless of the layer types
      auto ple_inp = std::make_unique<llm_graph_input_qwen4exp_ple>(model, mctx_hyb->get_attn());
  
@@ -153,10 +175,21 @@ index 250eb74..53a725b 100644
      emb = ggml_reshape_2d(ctx0, emb, hparams.ple_head_dim * n_heads, n_tokens);
      cb(emb, "ple_embd", -1);
  
-@@ -1459,3 +1501,10 @@ ggml_tensor * llama_model_qwen4exp::graph::build_ple(
+@@ -1510,3 +1552,21 @@
  
      return ggml_add(ctx0, hidden, ggml_add(ctx0, gated, conv_out));
  }
++
++bool lcb_qwen4exp_has_file_backed_source(const llama_model * model) {
++    return model && model->arch == LLM_ARCH_QWEN4EXP &&
++        bool(static_cast<const llama_model_qwen4exp *>(model)->file_backed_ple);
++}
++
++void lcb_qwen4exp_resolve_file_backed_source(llama_model * model, const std::vector<std::string> & paths, int single_source_fd) {
++    if (lcb_qwen4exp_has_file_backed_source(model)) {
++        static_cast<llama_model_qwen4exp *>(model)->file_backed_ple->resolve_shard(paths, single_source_fd);
++    }
++}
 +
 +// Synchronous metadata query for consumers; never touches row data or the GPU.
 +extern "C" int32_t lcb_qwen4exp_file_backed_shard(const llama_model * model) {

@@ -1,4 +1,4 @@
-"""Focused regression for the v0.8.0 allocation hunk, not a full upstream build.
+"""Focused regression for the mtmd allocation hunk, not a full upstream build.
 
 The short input below is independent of the patch under test. The separate
 real-upstream tests still apply every hunk and compile the full translation unit.
@@ -14,12 +14,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from prepare_mtmd import PATCH_DIRECTORY, prepare
+from prepare_mtmd import PATCH_DIRECTORY
+import os
+import shutil
 
-# Allocation boundary in tools/mtmd/clip.cpp at upstream v0.8.0:
-# 8642541b255bfb5dc39cd351a178be09013a55d6. Do not derive this input from the
+# Allocation boundary in tools/mtmd/mtmd-subcontext.cpp:
+# 202c1a229f5a83d1c9d758ed0f2d43760fa4bab0. Do not derive this input from the
 # patch's minus/context lines: doing so would also accept the obsolete backport.
-ALLOCATION_GUARD = r'''    if (!ggml_backend_sched_alloc_graph(ctx->sched.get(), gf)) {
+ALLOCATION_GUARD = r'''    if (!ggml_backend_sched_alloc_graph(backends.sched.get(), gf)) {
         LOG_ERR("%s: failed to allocate compute graph\n", __func__);
         return false;
     }
@@ -27,8 +29,8 @@ ALLOCATION_GUARD = r'''    if (!ggml_backend_sched_alloc_graph(ctx->sched.get(),
 UPSTREAM_FRAGMENT = (
     "// Standalone regression fragment; unrelated loader code is omitted.\n"
     "    // build the inference graph\n"
-    "    ggml_backend_sched_reset(ctx->sched.get());\n"
-    "    ggml_cgraph * gf = clip_get_graph_builder(ctx, imgs, params)->build();\n"
+    "    ggml_backend_sched_reset(backends.sched.get());\n"
+    "    ggml_cgraph * gf = mtmd_get_graph_builder(this, imgs, params)->build();\n"
     "\n"
     "    // the last node is the embedding tensor, code2wav has no out_embd\n"
     "    // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)\n"
@@ -37,7 +39,7 @@ UPSTREAM_FRAGMENT = (
     + ALLOCATION_GUARD +
     "\n"
     "    // set inputs\n"
-    "    const auto & model   = ctx->model;\n"
+    "    const auto & hparams = model.hparams;\n"
     "// End of the standalone regression fragment.\n"
 )
 
@@ -48,7 +50,7 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
         self.source = self.work / "upstream"
-        self.input = self.source / "tools/mtmd/clip.cpp"
+        self.input = self.source / "tools/mtmd/mtmd-subcontext.cpp"
         self.input.parent.mkdir(parents=True)
         self.input.write_text(UPSTREAM_FRAGMENT)
         patch = (ROOT / PATCH_DIRECTORY / "mtmd-webgpu-bf16.patch").read_text()
@@ -59,10 +61,29 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         # Run the actual production preparer and actual diagnostic hunk. This
         # fixture deliberately does not pretend to test unrelated loader hunks.
         self.patch = self.work / "placement.patch"
-        self.patch.write_text(parts[0] + self.hunk)
+        self.patch.write_text('--- a/mtmd-subcontext.cpp\n+++ b/mtmd-subcontext.cpp\n' + self.hunk)
 
     def apply(self, output=None):
-        return prepare(self.source, output or self.work / "overlay", self.patch, capture_output=True)
+        # The full production preparer checks the complete subtree in its own
+        # tests. This focused fixture applies the actual diagnostic hunk only.
+        destination = output or self.work / 'overlay'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+            tree = Path(temporary)
+            shutil.copy2(self.input, tree / 'mtmd-subcontext.cpp')
+            env = os.environ.copy()
+            for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'):
+                env.pop(key, None)
+            env['GIT_CEILING_DIRECTORIES'] = str(tree.parent)
+            for args in (['--check'], []):
+                subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *args, str(self.patch)],
+                               cwd=tree, env=env, check=True, capture_output=True)
+            target = destination / 'mtmd-subcontext.cpp'
+            raw = (tree / target.name).read_bytes()
+            destination.mkdir(exist_ok=True)
+            if not target.exists() or raw != target.read_bytes():
+                target.write_bytes(raw)
+        return target
 
     def test_upstream_guard_is_context_not_another_downstream_backport(self):
         target = self.apply()
@@ -80,11 +101,11 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         # upstream-owned allocation failure boundary.
         self.assertIn("retained_plan.verify_allocated", result)
         guard_end = result.index(ALLOCATION_GUARD) + len(ALLOCATION_GUARD)
-        diagnostic_start = result.index("    if (ctx->model.modality == CLIP_MODALITY_VISION")
+        diagnostic_start = result.index("    if (model.modality == MTMD_MODALITY_VISION")
         inputs = result.index("    // set inputs")
         self.assertLess(guard_end, diagnostic_start)
         self.assertLess(diagnostic_start, inputs)
-        self.assertIn("lcb_mtmd_is_webgpu(ctx->backend)", result)
+        self.assertIn("lcb_mtmd_is_webgpu(backends.backend)", result)
         self.assertEqual(self.input.read_text(), UPSTREAM_FRAGMENT)
 
     def test_unrelated_line_movement_still_applies(self):
@@ -100,7 +121,7 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         before = target.read_bytes()
         timestamp = target.stat().st_mtime_ns
         for guard in (
-            "    ggml_backend_sched_alloc_graph(ctx->sched.get(), gf);\n",
+            "    ggml_backend_sched_alloc_graph(backends.sched.get(), gf);\n",
             ALLOCATION_GUARD.replace("return false;", "return true;"),
             ALLOCATION_GUARD.replace("if (!ggml_backend_sched_alloc_graph", "if (ggml_backend_sched_alloc_graph"),
         ):
@@ -119,7 +140,7 @@ class MtmdAllocationGuardTests(unittest.TestCase):
         output = self.work / "second-overlay"
         with self.assertRaises(subprocess.CalledProcessError):
             self.apply(output)
-        self.assertFalse((output / "clip.cpp").exists())
+        self.assertFalse((output / "mtmd-subcontext.cpp").exists())
 
     def test_all_webgpu_profile_variants_have_independent_idempotent_copies(self):
         profiles = json.loads((ROOT / "config/profiles.json").read_text())

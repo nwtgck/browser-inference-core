@@ -59,7 +59,8 @@ class Q6Subgroup(unittest.TestCase):
         self.assertEqual(q6.INPUTS, source.subgroup_size_control.OUTPUTS)
         self.assertEqual({p: {'ggml-webgpu.cpp': values['ggml-webgpu.cpp']}
                           for p, values in q6.OUTPUTS.items()}, source.buffer_limit.INPUTS)
-        self.assertEqual({p: {**q6.OUTPUTS[p], **source.buffer_limit.OUTPUTS[p]}
+        self.assertEqual(source.buffer_limit.OUTPUTS, source.batched_write_fallback.INPUTS)
+        self.assertEqual({p: {**q6.OUTPUTS[p], **source.batched_write_fallback.OUTPUTS[p]}
                           for p in (False, True)}, source.FINAL_OUTPUTS)
         self.assertEqual(q6.EMBEDDED_HEADER_SHA256, source.subgroup_size_control.GENERATED_OUTPUTS[q6.EMBEDDED_HEADER_NAME])
         cmake = (ROOT / 'cmake/WebgpuSourceOverlay.cmake').read_text()

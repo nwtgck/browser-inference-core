@@ -34,18 +34,47 @@ class GgmlBindings(unittest.TestCase):
             functions = {entry['name'] for entry in schema['functions']}
             added = {'ggml_backend_tensor_copy_n', 'ggml_backend_tensor_get_n', 'ggml_backend_tensor_set_n',
                      'ggml_flash_attn_ext_rows', 'mtmd_bitmap_is_voice', 'mtmd_gen_audio_get_voice',
-                     'mtmd_gen_audio_voice_name', 'mtmd_gen_audio_read_tensor', 'mtmd_gen_state_set_ref'}
+                     'mtmd_gen_audio_voice_name', 'mtmd_gen_audio_read_tensor', 'mtmd_gen_state_set_ref',
+                     'mtmd_helper_resampler_init', 'mtmd_helper_resampler_process', 'mtmd_helper_resampler_free'}
+            added.add('ggml_rope_set_truncate')
+            added.update({'llama_batch_ext_add_embd_row', 'llama_batch_ext_set_embd_state_row',
+                          'llama_get_ctx_other', 'llama_get_embeddings_layer_inp',
+                          'llama_get_embeddings_nextn', 'llama_get_embeddings_nextn_ith',
+                          'llama_get_embeddings_nextn_rows', 'llama_model_dflash_selector_top_k',
+                          'llama_model_target_layer_ids', 'llama_model_target_layer_ids_n',
+                          'llama_set_ctx_state_src', 'llama_set_embeddings_layer_inp',
+                          'llama_set_embeddings_layer_inp_dev', 'llama_set_embeddings_nextn',
+                          'llama_set_embeddings_nextn_dev', 'llama_set_embeddings_nextn_rows',
+                          'llama_set_nextn_layer_offset', 'llama_supports_embd_row'})
             self.assertTrue(added <= functions)
+            for name in ('ggml_diag_mask_inf', 'ggml_diag_mask_inf_inplace',
+                         'ggml_diag_mask_zero', 'ggml_diag_mask_zero_inplace'):
+                self.assertNotIn(name, functions)
+            self.assertNotIn('ggml_rope_yarn_corr_dims', functions)
+            self.assertNotIn('llama_model_classifier_free_guidance', functions)
+            context = next(record for record in schema['records'] if record['name'] == 'llama_context_params')
+            fields = context['fields']
+            moe = next(field for field in fields if field['name'] == 'moe_cache_cpu_share')
+            self.assertEqual(moe['cType'], 'float')
+            self.assertEqual(moe['id'], 26)
+            self.assertEqual(fields[25]['name'], 'moe_cache_size')
+            self.assertNotIn('defrag_thold', {field['name'] for field in fields})
+
             records = {entry['name']: {field['name'] for field in entry['fields']} for entry in schema['records']}
             self.assertIn('n_voices', records['mtmd_gen_audio_info'])
             self.assertIn('speaker_ref', records['mtmd_helper_gen_audio_inp'])
             self.assertNotIn('voice', records['mtmd_helper_gen_audio_inp'])
+            self.assertIn('temp', records['mtmd_helper_gen_audio_inp'])
+            audio_inp = next(record for record in schema['records'] if record['name'] == 'mtmd_helper_gen_audio_inp')
+            self.assertEqual(next(field['cType'] for field in audio_inp['fields'] if field['name'] == 'temp'), 'float')
             for name in added:
                 self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
                 self.assertIn('lcb_' + name, json.loads((output / 'jspi-exports.json').read_text()))
             for name in ('GGML_TYPE_F8_E4M3', 'GGML_FTYPE_MOSTLY_F8_E4M3', 'LLAMA_FTYPE_MOSTLY_F8_E4M3',
                          'MTMD_VIDEO_TEMPLATE_QWEN3VL', 'MTMD_GEN_AUDIO_TYPE_CHATTERBOX', 'MTMD_GEN_AUDIO_TYPE_DRAMA3'):
                 self.assertIn(name, schema['constants'])
+            for name in ('GGML_OP_ADD1', 'GGML_OP_DIAG_MASK_INF', 'GGML_OP_DIAG_MASK_ZERO', 'GGML_PREC_DEFAULT'):
+                self.assertNotIn(name, schema['constants'])
 
     def test_existing_mtmd_capability_queries_survive_upstream_deprecation(self):
         existing = {

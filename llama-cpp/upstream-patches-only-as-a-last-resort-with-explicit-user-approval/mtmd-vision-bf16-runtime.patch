@@ -1,23 +1,172 @@
+--- a/mtmd-model.h
++++ b/mtmd-model.h
+@@ -3,6 +3,7 @@
+ #include "ggml.h"
+ #include "ggml-backend.h"
+ #include "mtmd-impl.h"
++#include "mtmd-vision-bf16-policy.h"
+ 
+ #include <algorithm>
+ #include <array>
+@@ -883,6 +884,7 @@
+ 
+ // the weights and hparams of one modality of an mmproj file, read-only once loaded
+ struct mtmd_model {
++    const mtmd_vision_bf16_storage vision_bf16_storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
+     mtmd_modality modality = MTMD_MODALITY_VISION;
+     projector_type proj_type = PROJECTOR_TYPE_MLP;
+     mtmd_hparams hparams;
+@@ -1305,6 +1307,8 @@
+ };
+ 
+ struct mtmd_model_params {
++    mtmd_vision_bf16_storage vision_bf16_storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
++    bool gpu_requested = false;
+     // custom value provided by user, -1 if not set
+     int32_t image_min_tokens = -1;
+     int32_t image_max_tokens = -1;
+--- a/mtmd-model.cpp
++++ b/mtmd-model.cpp
+@@ -1,5 +1,8 @@
+ #include "mtmd-impl.h"
+ #include "mtmd-model.h"
++#if LCB_MTMD_WEBGPU_BF16_RUNTIME != 0
++#error "Vision BF16 loader and compile-target capability disagree"
++#endif
+ #include "models/models.h"
+ 
+ #include "ggml.h"
+@@ -3729,8 +3732,16 @@
+         params.progress_callback,
+         params.progress_callback_user_data);
+ 
++    if (loader.has_vision) {
++        // Reject unsupported requested GPU retention before allocating weights.
++        lcb_mtmd_check_retained_backend(params.vision_bf16_storage, params.gpu_requested, false);
++    }
++
+     auto load = [&](mtmd_modality modality) {
+-        auto model = std::make_unique<mtmd_model>();
++        const auto storage = modality == MTMD_MODALITY_VISION ? params.vision_bf16_storage
++                                                            : MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
++        // Aggregate initialization preserves zero initialization of weight pointers.
++        auto model = std::unique_ptr<mtmd_model>(new mtmd_model{storage});
+         model->hparams.custom_image_min_tokens = params.image_min_tokens;
+         model->hparams.custom_image_max_tokens = params.image_max_tokens;
+         loader.load_hparams(*model, modality);
+--- a/mtmd-subcontext.cpp
++++ b/mtmd-subcontext.cpp
+@@ -65,43 +65,55 @@
+ 
+ mtmd_backends::mtmd_backends(ggml_backend_dev_t device, int n_threads, int max_nodes,
+                              ggml_backend_sched_eval_callback cb_eval, void * cb_eval_user_data) {
+-    threadpool = mtmd_threadpool_init(n_threads);
+-
+-    backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+-    if (!backend_cpu) {
+-        throw std::runtime_error("failed to initialize CPU backend");
+-    }
+-    if (threadpool) {
+-        ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend_cpu));
+-        auto * set_threadpool_fn = (decltype(ggml_backend_cpu_set_threadpool) *) ggml_backend_reg_get_proc_address(reg, "ggml_backend_cpu_set_threadpool");
+-        if (set_threadpool_fn) {
+-            set_threadpool_fn(backend_cpu, threadpool.get());
+-        }
+-    }
+-    if (device != nullptr) {
+-        backend = ggml_backend_dev_init(device, nullptr);
+-        if (!backend) {
++    try {
++        threadpool = mtmd_threadpool_init(n_threads);
++
++        backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
++        if (!backend_cpu) {
++            throw std::runtime_error("failed to initialize CPU backend");
++        }
++        if (threadpool) {
++            ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend_cpu));
++            auto * set_threadpool_fn = (decltype(ggml_backend_cpu_set_threadpool) *) ggml_backend_reg_get_proc_address(reg, "ggml_backend_cpu_set_threadpool");
++            if (set_threadpool_fn) {
++                set_threadpool_fn(backend_cpu, threadpool.get());
++            }
++        }
++        if (device != nullptr) {
++            backend = ggml_backend_dev_init(device, nullptr);
++            if (!backend) {
++                throw std::runtime_error(mtmd_format("%s: failed to initialize \"%s\" backend\n",
++                                                       __func__, ggml_backend_dev_name(device)));
++            }
++        }
++
++        if (backend) {
++            LOG_INF("%s: using %s backend\n", __func__, ggml_backend_name(backend));
++            ptrs.push_back(backend);
++            bufts.push_back(ggml_backend_get_default_buffer_type(backend));
++        } else {
++            backend = backend_cpu;
++            LOG_INF("%s: using CPU backend\n", __func__);
++        }
++
++        ptrs.push_back(backend_cpu);
++        bufts.push_back(ggml_backend_get_default_buffer_type(backend_cpu));
++
++        sched.reset(ggml_backend_sched_new(ptrs.data(), bufts.data(), ptrs.size(), max_nodes, false, true));
++        if (cb_eval != nullptr) {
++            ggml_backend_sched_set_eval_callback(sched.get(), cb_eval, cb_eval_user_data);
++        }
++    } catch (...) {
++        // Retire scheduler references before freeing a partially built owner.
++        sched.reset();
++        if (backend && backend != backend_cpu) {
++            ggml_backend_free(backend);
++        }
++        if (backend_cpu) {
+             ggml_backend_free(backend_cpu);
+-            throw std::runtime_error(mtmd_format("%s: failed to initialize \"%s\" backend\n",
+-                                                   __func__, ggml_backend_dev_name(device)));
+-        }
+-    }
+-
+-    if (backend) {
+-        LOG_INF("%s: using %s backend\n", __func__, ggml_backend_name(backend));
+-        ptrs.push_back(backend);
+-        bufts.push_back(ggml_backend_get_default_buffer_type(backend));
+-    } else {
+-        backend = backend_cpu;
+-        LOG_INF("%s: using CPU backend\n", __func__);
+-    }
+-
+-    ptrs.push_back(backend_cpu);
+-    bufts.push_back(ggml_backend_get_default_buffer_type(backend_cpu));
+-
+-    sched.reset(ggml_backend_sched_new(ptrs.data(), bufts.data(), ptrs.size(), max_nodes, false, true));
+-    if (cb_eval != nullptr) {
+-        ggml_backend_sched_set_eval_callback(sched.get(), cb_eval, cb_eval_user_data);
++        }
++        backend = backend_cpu = nullptr;
++        throw;
+     }
+ }
+ 
 --- a/mtmd.cpp
 +++ b/mtmd.cpp
-@@ -1,6 +1,8 @@
- #include "clip.h"
- #include "clip-impl.h"
+@@ -2,6 +2,7 @@
+ #include "models/models.h"
+ #include "mtmd-impl.h"
  #include "mtmd.h"
 +#include "mtmd-vision-bf16.h"
-+#include "mtmd-vision-bf16-internal.h"
  #include "mtmd-internal.h"
  #include "mtmd-audio.h"
  #include "mtmd-image.h"
-@@ -552,6 +554,7 @@
+@@ -607,6 +608,7 @@
  }
  
  struct mtmd_context {
 +    const mtmd_vision_bf16_storage vision_bf16_storage;
-     struct clip_ctx * ctx_v; // vision
-     struct clip_ctx * ctx_a; // audio
-     std::vector<float> out_embd; // image embedding vector
-@@ -606,7 +609,9 @@
+     // must outlive the subcontexts below
+     mtmd_models models;
+     std::unique_ptr<mtmd_backends> backends; // shared by the subcontexts
+@@ -674,7 +676,9 @@
      mtmd_context(const char * mmproj_fname,
                     const llama_model * text_model,
                     const mtmd_context_params & ctx_params,
@@ -28,16 +177,16 @@
          print_timings   (ctx_params.print_timings),
          n_threads       (ctx_params.n_threads),
          media_marker    (ctx_params.media_marker),
-@@ -656,7 +661,7 @@
-             /* progress_callback_user_data */ ctx_params.progress_callback_user_data,
-         };
+@@ -713,6 +717,8 @@
+         ggml_backend_dev_t device = mtmd_select_device(ctx_params.use_gpu, ctx_params.device);
  
--        auto res = clip_init(mmproj_fname, ctx_clip_params);
-+        auto res = lcb_clip_init_with_vision_bf16_storage(mmproj_fname, ctx_clip_params, storage);
-         ctx_v = res.ctx_v;
-         ctx_a = res.ctx_a;
-         ctx_gen_a = res.ctx_gen_a;
-@@ -1260,6 +1265,32 @@
+         mtmd_model_params model_params;
++        model_params.vision_bf16_storage         = storage;
++        model_params.gpu_requested               = ctx_params.use_gpu;
+         model_params.image_min_tokens            = ctx_params.image_min_tokens;
+         model_params.image_max_tokens            = ctx_params.image_max_tokens;
+         model_params.no_alloc                    = no_alloc;
+@@ -1376,6 +1382,32 @@
          LOG_ERR("%s: error: %s\n", __func__, e.what());
          return nullptr;
      }

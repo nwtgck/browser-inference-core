@@ -1,205 +1,3 @@
---- a/src/llama-context.cpp
-+++ b/src/llama-context.cpp
-@@ -1,4 +1,5 @@
- #include "llama-context.h"
-+#include "ggml-backend-tensor-get-batch.h"
- 
- #include "ggml.h"
- #include "llama-arch.h"
-@@ -3099,32 +3100,60 @@
-     llama_io_write_host(
-             uint8_t * p, size_t len) : ptr(p), base_ptr(p), buf_size(len) {}
- 
--    ~llama_io_write_host() {
--        if (winfos.empty()) {
--            return;
--        }
--
--        std::vector<ggml_tensor *> tensors;
--        std::vector<size_t> offsets;
--        std::vector<size_t> sizes;
--        std::vector<size_t> data_offsets;
--        tensors.reserve(winfos.size());
--        offsets.reserve(winfos.size());
--        sizes.reserve(winfos.size());
--        data_offsets.reserve(winfos.size());
--
--        for (const auto & winfo : winfos) {
--            tensors.push_back(winfo.tensor);
--            offsets.push_back(winfo.offset);
--            sizes.push_back(winfo.size);
--            data_offsets.push_back(winfo.data_offset);
--        }
--
--        std::vector<const ggml_tensor *> const_tensors(tensors.begin(), tensors.end());
--        ggml_backend_tensor_get_n(const_tensors.data(), base_ptr, offsets.data(), sizes.data(), data_offsets.data(), winfos.size());
-+    // Consume queued reads explicitly inside the public caller's try block.
-+    // No destructor performs I/O, including after a partially completed flush.
-+    void flush() {
-+        if (flush_started) {
-+            throw std::runtime_error("host state writer already consumed");
-+        }
-+        flush_started = true;
-+        std::vector<write_info> pending;
-+        pending.swap(winfos);
-+
-+        for (size_t first = 0; first < pending.size();) {
-+            const auto & head = pending[first];
-+            if (!batch_size_eligible(head.size)) {
-+                ggml_backend_tensor_get(head.tensor, base_ptr + head.data_offset, head.offset, head.size);
-+                ++first;
-+                continue;
-+            }
-+            const auto device = tensor_device(head.tensor);
-+            size_t last = first + 1;
-+            if (device) {
-+                while (last < pending.size() && last - first < GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS &&
-+                       batch_size_eligible(pending[last].size) && tensor_device(pending[last].tensor) == device) {
-+                    ++last;
-+                }
-+            }
-+            // A single read has no map to eliminate; keep its canonical getter.
-+            if (last - first > 1) {
-+                const auto reg = ggml_backend_dev_backend_reg(device);
-+                const auto get_batch = reg ? reinterpret_cast<ggml_backend_try_tensor_get_batch_v1_t>(
-+                    ggml_backend_reg_get_proc_address(reg, GGML_BACKEND_TENSOR_GET_BATCH_V1)) : nullptr;
-+                if (get_batch) {
-+                    ggml_backend_tensor_get_request_v1 requests[GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS];
-+                    for (size_t i = first; i < last; ++i) {
-+                        const auto & w = pending[i];
-+                        requests[i - first] = {w.tensor, base_ptr + w.data_offset, w.offset, w.size};
-+                    }
-+                    if (get_batch(requests, last - first)) {
-+                        first = last;
-+                        continue;
-+                    }
-+                }
-+            }
-+            // Unsupported means no work began. Preserve the original order.
-+            for (; first < last; ++first) {
-+                const auto & w = pending[first];
-+                ggml_backend_tensor_get(w.tensor, base_ptr + w.data_offset, w.offset, w.size);
-+            }
-+        }
-     }
- 
-     void write(const void * src, size_t size) override {
-+        if (flush_started) {
-+            throw std::runtime_error("host state writer already consumed");
-+        }
-         if (size > buf_size) {
-             throw std::runtime_error("unexpectedly reached end of buffer");
-         }
-@@ -3135,11 +3164,14 @@
-     }
- 
-     void write_tensor(ggml_tensor * tensor, size_t offset, size_t size) override {
-+        if (flush_started) {
-+            throw std::runtime_error("host state writer already consumed");
-+        }
-         if (size > buf_size) {
-             throw std::runtime_error("unexpectedly reached end of buffer");
-         }
- 
--        // save the write for later during destruction
-+        // Save the write for the explicit, one-shot flush.
-         winfos.push_back({tensor, (size_t) (ptr - base_ptr), size, offset});
- 
-         ptr += size;
-@@ -3164,6 +3196,28 @@
-         size_t offset;
-     };
-     std::vector<write_info> winfos;
-+
-+    bool flush_started = false;
-+
-+    static bool batch_size_eligible(size_t size) {
-+        // Avoid assumptions about a backend's virtual pointer encoding. Reserve
-+        // three prefix bytes before four-byte rounding to a cap divisible by four.
-+        // The few boundary sizes with no room to coalesce also keep scalar reads.
-+        return size > 0 && size <= GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_BYTES - 3;
-+    }
-+
-+    static ggml_backend_dev_t tensor_device(const ggml_tensor * tensor) {
-+        if (!tensor) {
-+            return nullptr;
-+        }
-+        const auto * root = tensor->view_src ? tensor->view_src : tensor;
-+        const auto buffer = root->buffer;
-+        if (!buffer) {
-+            return nullptr;
-+        }
-+        const auto buft = ggml_backend_buffer_get_type(buffer);
-+        return buft ? ggml_backend_buft_get_device(buft) : nullptr;
-+    }
- };
- 
- class llama_io_read_host : public llama_io_read_i {
-@@ -3618,7 +3672,9 @@
- size_t llama_context::state_get_data(uint8_t * dst, size_t size) {
-     llama_io_write_host io(dst, size);
-     try {
--        return state_write_data(io);
-+        const size_t written = state_write_data(io);
-+        io.flush();
-+        return written;
-     } catch (const std::exception & err) {
-         LLAMA_LOG_ERROR("%s: error saving state: %s\n", __func__, err.what());
-         return 0;
-@@ -3653,17 +3709,24 @@
- 
- size_t llama_context::state_seq_get_data(llama_seq_id seq_id, uint8_t * dst, size_t size, llama_state_seq_flags flags) {
-     std::unique_ptr<llama_io_write_i> io;
-+    llama_io_write_host * host_io = nullptr;
-     if (flags & LLAMA_STATE_SEQ_FLAGS_ON_DEVICE) {
-         io = std::make_unique<llama_io_write_device>(dst, size, mem_storage[seq_id]);
-     } else {
--        io = std::make_unique<llama_io_write_host>(dst, size);
-+        auto host = std::make_unique<llama_io_write_host>(dst, size);
-+        host_io = host.get();
-+        io = std::move(host);
-     }
- 
-     try {
-         io->write(&io_magic, sizeof(io_magic));
-         io->write(&seq_id, sizeof(seq_id));
- 
--        return state_seq_write_data(*io, seq_id, flags);
-+        const size_t written = state_seq_write_data(*io, seq_id, flags);
-+        if (host_io) {
-+            host_io->flush();
-+        }
-+        return written;
-     } catch (const std::exception & err) {
-         LLAMA_LOG_ERROR("%s: error saving state: %s\n", __func__, err.what());
-         return 0;
---- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-@@ -4783,6 +4783,11 @@
-     buf_ctx->global_ctx->get_tensor_staging_buf.Unmap();
-     WEBGPU_CPU_PROFILE_TOTAL_END(get_tensor, buf_ctx->global_ctx);
- }
-+
-+#ifdef __EMSCRIPTEN__
-+#include "ggml-webgpu-batch-readback.hpp"
-+#endif
-+
- 
- static bool ggml_backend_webgpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer,
-                                                  const ggml_tensor * src,
-@@ -5802,6 +5807,12 @@
- 
- static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
-     GGML_UNUSED(reg);
-+#ifdef __EMSCRIPTEN__
-+    if (name && strcmp(name, GGML_BACKEND_TENSOR_GET_BATCH_V1) == 0) {
-+        ggml_backend_try_tensor_get_batch_v1_t get = ggml_backend_webgpu_try_tensor_get_batch_v1;
-+        return reinterpret_cast<void *>(get);
-+    }
-+#endif
-     if (name && strcmp(name, GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1) == 0) {
-         // The typed assignment fixes the signature of this versioned contract.
-         ggml_backend_copy_host_input_snapshot_v1_t copy = ggml_backend_webgpu_copy_host_input_snapshot_v1;
 --- /dev/null
 +++ b/ggml/src/ggml-backend-tensor-get-batch.h
 @@ -0,0 +1,25 @@
@@ -228,107 +26,6 @@
 +// retain the ordinary single-request getter and its existing memory policy.
 +typedef bool (*ggml_backend_try_tensor_get_batch_v1_t)(
 +    const struct ggml_backend_tensor_get_request_v1 * requests, size_t count);
---- /dev/null
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu-batch-readback.hpp
-@@ -0,0 +1,98 @@
-+// Blocking checkpoint provider. Included after the getter/helpers so its
-+// buffer identity, offset, allocation and blocking MapAsync path are shared.
-+#include "ggml-backend-tensor-get-batch.h"
-+#include "ggml-webgpu-batch-readback-geometry.hpp"
-+static_assert(batch_readback::max_requests == GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS);
-+static_assert(batch_readback::staging_cap == GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_BYTES);
-+
-+static bool ggml_backend_webgpu_try_tensor_get_batch_v1(
-+    const ggml_backend_tensor_get_request_v1 * requests, size_t count) {
-+    using namespace batch_readback;
-+    if (count == 0) return true;
-+    if (!requests || count > max_requests) return false;
-+    std::array<range, max_requests> ranges{};
-+    std::array<ggml_backend_webgpu_buffer_context *, max_requests> sources{};
-+    std::array<uint8_t *, max_requests> destinations{};
-+    webgpu_global_context global;
-+    // All requests are checked before allocation, encoding or host writes.
-+    for (size_t i = 0; i < count; ++i) {
-+        const auto & request = requests[i];
-+        if (request.size == 0) continue;
-+        if (request.size > staging_cap) return false;
-+        if (!request.tensor || !request.tensor->data || !request.data || request.offset > ggml_nbytes(request.tensor) ||
-+            request.size > ggml_nbytes(request.tensor) - request.offset) return false;
-+        const uintptr_t destination = reinterpret_cast<uintptr_t>(request.data);
-+        if (request.size > std::numeric_limits<uintptr_t>::max() - destination) return false;
-+        auto * buffer = request.tensor->view_src ? request.tensor->view_src->buffer : request.tensor->buffer;
-+        if (!buffer || buffer->iface.get_tensor != ggml_backend_webgpu_buffer_get_tensor) return false;
-+        auto * source = static_cast<ggml_backend_webgpu_buffer_context *>(buffer->context);
-+        if (!source || !source->global_ctx || !source->buffer ||
-+            (source->buffer.GetUsage() & wgpu::BufferUsage::CopySrc) == wgpu::BufferUsage::None) return false;
-+        if (global && global != source->global_ctx) return false;
-+        global = source->global_ctx;
-+        const auto * root = request.tensor->view_src ? request.tensor->view_src : request.tensor;
-+        const uintptr_t root_data = reinterpret_cast<uintptr_t>(root->data);
-+        const uintptr_t pointer_base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
-+        if (root_data < pointer_base ||
-+            request.tensor->view_offs > std::numeric_limits<size_t>::max() - (root_data - pointer_base)) return false;
-+        const size_t base = ggml_webgpu_tensor_offset(request.tensor);
-+        if (request.offset > std::numeric_limits<size_t>::max() - base) return false;
-+        const size_t offset = base + request.offset, physical = source->buffer.GetSize();
-+        if (offset > physical || request.size > physical - offset) return false;
-+        const size_t copy_size = (offset % 4 + request.size + 3) & ~size_t(3);
-+        if (copy_size > staging_cap) return false;
-+        const size_t end = offset + request.size;
-+        const size_t padding = (4 - end % 4) % 4;
-+        if (padding > physical - end) return false;
-+        ranges[i] = {offset, request.size};
-+        sources[i] = source;
-+        destinations[i] = static_cast<uint8_t *>(request.data);
-+    }
-+    if (!global) return true;
-+    std::lock_guard<std::recursive_mutex> lock(global->mutex);
-+    cursor position;
-+    while (position.request < count) {
-+        const plan current = next(ranges.data(), count, position);
-+        if (!current.count) break; // The remaining requests were empty.
-+        GGML_ASSERT(current.bytes > 0 && current.bytes <= staging_cap && current.bytes % 4 == 0);
-+        if (!global->get_tensor_staging_buf || global->get_tensor_staging_buf.GetSize() < current.bytes) {
-+            if (global->get_tensor_staging_buf) global->get_tensor_staging_buf.Destroy();
-+            ggml_webgpu_create_buffer(global->device, global->get_tensor_staging_buf, current.bytes,
-+                                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead, "batch_get_staging");
-+        }
-+        auto encoder = global->device.CreateCommandEncoder();
-+        for (size_t i = 0; i < current.count; ++i) {
-+            const auto & part = current.pieces[i];
-+            encoder.CopyBufferToBuffer(sources[part.request]->buffer, part.source_offset,
-+                                      global->get_tensor_staging_buf, part.slot, part.copy_size);
-+        }
-+        auto commands = encoder.Finish();
-+        global->queue.Submit(1, &commands);
-+        ggml_backend_webgpu_map_buffer(global, global->get_tensor_staging_buf, wgpu::MapMode::Read, 0, current.bytes);
-+        bool okay = true;
-+        try {
-+            for (size_t i = 0; i < current.count && okay; ++i) {
-+                const auto & part = current.pieces[i];
-+                const auto copies = scatter(part);
-+                uint8_t scratch[8];
-+                for (size_t j = 0; j < copies.count; ++j) {
-+                    const auto & copy = copies.slices[j];
-+                    GGML_ASSERT(copy.mapped_offset % 8 == 0 && copy.mapped_size % 4 == 0);
-+                    uint8_t * final = destinations[part.request] + part.request_offset + copy.destination_offset;
-+                    void * target = copy.direct ? static_cast<void *>(final) : static_cast<void *>(scratch);
-+                    if (global->get_tensor_staging_buf.ReadMappedRange(copy.mapped_offset, target, copy.mapped_size) != wgpu::Status::Success) {
-+                        okay = false;
-+                        break;
-+                    }
-+                    if (!copy.direct) std::memcpy(final, scratch + copy.source_skip, copy.size);
-+                }
-+            }
-+        } catch (...) {
-+            global->get_tensor_staging_buf.Unmap();
-+            throw;
-+        }
-+        global->get_tensor_staging_buf.Unmap();
-+        if (!okay) GGML_ABORT("ggml_webgpu: reading mapped batch data failed");
-+    }
-+    return true;
-+}
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-batch-readback-geometry.hpp
 @@ -0,0 +1,102 @@
@@ -434,3 +131,306 @@
 +    return result;
 +}
 +} // namespace batch_readback
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-batch-readback.hpp
+@@ -0,0 +1,98 @@
++// Blocking checkpoint provider. Included after the getter/helpers so its
++// buffer identity, offset, allocation and blocking MapAsync path are shared.
++#include "ggml-backend-tensor-get-batch.h"
++#include "ggml-webgpu-batch-readback-geometry.hpp"
++static_assert(batch_readback::max_requests == GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS);
++static_assert(batch_readback::staging_cap == GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_BYTES);
++
++static bool ggml_backend_webgpu_try_tensor_get_batch_v1(
++    const ggml_backend_tensor_get_request_v1 * requests, size_t count) {
++    using namespace batch_readback;
++    if (count == 0) return true;
++    if (!requests || count > max_requests) return false;
++    std::array<range, max_requests> ranges{};
++    std::array<ggml_backend_webgpu_buffer_context *, max_requests> sources{};
++    std::array<uint8_t *, max_requests> destinations{};
++    webgpu_global_context global;
++    // All requests are checked before allocation, encoding or host writes.
++    for (size_t i = 0; i < count; ++i) {
++        const auto & request = requests[i];
++        if (request.size == 0) continue;
++        if (request.size > staging_cap) return false;
++        if (!request.tensor || !request.tensor->data || !request.data || request.offset > ggml_nbytes(request.tensor) ||
++            request.size > ggml_nbytes(request.tensor) - request.offset) return false;
++        const uintptr_t destination = reinterpret_cast<uintptr_t>(request.data);
++        if (request.size > std::numeric_limits<uintptr_t>::max() - destination) return false;
++        auto * buffer = request.tensor->view_src ? request.tensor->view_src->buffer : request.tensor->buffer;
++        if (!buffer || buffer->iface.get_tensor != ggml_backend_webgpu_buffer_get_tensor) return false;
++        auto * source = static_cast<ggml_backend_webgpu_buffer_context *>(buffer->context);
++        if (!source || !source->global_ctx || !source->buffer ||
++            (source->buffer.GetUsage() & wgpu::BufferUsage::CopySrc) == wgpu::BufferUsage::None) return false;
++        if (global && global != source->global_ctx) return false;
++        global = source->global_ctx;
++        const auto * root = request.tensor->view_src ? request.tensor->view_src : request.tensor;
++        const uintptr_t root_data = reinterpret_cast<uintptr_t>(root->data);
++        const uintptr_t pointer_base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
++        if (root_data < pointer_base ||
++            request.tensor->view_offs > std::numeric_limits<size_t>::max() - (root_data - pointer_base)) return false;
++        const size_t base = ggml_webgpu_tensor_offset(request.tensor);
++        if (request.offset > std::numeric_limits<size_t>::max() - base) return false;
++        const size_t offset = base + request.offset, physical = source->buffer.GetSize();
++        if (offset > physical || request.size > physical - offset) return false;
++        const size_t copy_size = (offset % 4 + request.size + 3) & ~size_t(3);
++        if (copy_size > staging_cap) return false;
++        const size_t end = offset + request.size;
++        const size_t padding = (4 - end % 4) % 4;
++        if (padding > physical - end) return false;
++        ranges[i] = {offset, request.size};
++        sources[i] = source;
++        destinations[i] = static_cast<uint8_t *>(request.data);
++    }
++    if (!global) return true;
++    std::lock_guard<std::recursive_mutex> lock(global->mutex);
++    cursor position;
++    while (position.request < count) {
++        const plan current = next(ranges.data(), count, position);
++        if (!current.count) break; // The remaining requests were empty.
++        GGML_ASSERT(current.bytes > 0 && current.bytes <= staging_cap && current.bytes % 4 == 0);
++        if (!global->get_tensor_staging_buf || global->get_tensor_staging_buf.GetSize() < current.bytes) {
++            if (global->get_tensor_staging_buf) global->get_tensor_staging_buf.Destroy();
++            ggml_webgpu_create_buffer(global->device, global->get_tensor_staging_buf, current.bytes,
++                                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead, "batch_get_staging");
++        }
++        auto encoder = global->device.CreateCommandEncoder();
++        for (size_t i = 0; i < current.count; ++i) {
++            const auto & part = current.pieces[i];
++            encoder.CopyBufferToBuffer(sources[part.request]->buffer, part.source_offset,
++                                      global->get_tensor_staging_buf, part.slot, part.copy_size);
++        }
++        auto commands = encoder.Finish();
++        global->queue.Submit(1, &commands);
++        ggml_backend_webgpu_map_buffer(global, global->get_tensor_staging_buf, wgpu::MapMode::Read, 0, current.bytes);
++        bool okay = true;
++        try {
++            for (size_t i = 0; i < current.count && okay; ++i) {
++                const auto & part = current.pieces[i];
++                const auto copies = scatter(part);
++                uint8_t scratch[8];
++                for (size_t j = 0; j < copies.count; ++j) {
++                    const auto & copy = copies.slices[j];
++                    GGML_ASSERT(copy.mapped_offset % 8 == 0 && copy.mapped_size % 4 == 0);
++                    uint8_t * final = destinations[part.request] + part.request_offset + copy.destination_offset;
++                    void * target = copy.direct ? static_cast<void *>(final) : static_cast<void *>(scratch);
++                    if (global->get_tensor_staging_buf.ReadMappedRange(copy.mapped_offset, target, copy.mapped_size) != wgpu::Status::Success) {
++                        okay = false;
++                        break;
++                    }
++                    if (!copy.direct) std::memcpy(final, scratch + copy.source_skip, copy.size);
++                }
++            }
++        } catch (...) {
++            global->get_tensor_staging_buf.Unmap();
++            throw;
++        }
++        global->get_tensor_staging_buf.Unmap();
++        if (!okay) GGML_ABORT("ggml_webgpu: reading mapped batch data failed");
++    }
++    return true;
++}
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5148,6 +5148,11 @@
+ 
+     WEBGPU_CPU_PROFILE_TOTAL_END(get_tensor_n, buf_ctx->global_ctx);
+ }
++
++#ifdef __EMSCRIPTEN__
++#include "ggml-webgpu-batch-readback.hpp"
++#endif
++
+ 
+ static bool ggml_backend_webgpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer,
+                                                  const ggml_tensor * src,
+@@ -6195,6 +6200,12 @@
+ 
+ static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
++#ifdef __EMSCRIPTEN__
++    if (name && strcmp(name, GGML_BACKEND_TENSOR_GET_BATCH_V1) == 0) {
++        ggml_backend_try_tensor_get_batch_v1_t get = ggml_backend_webgpu_try_tensor_get_batch_v1;
++        return reinterpret_cast<void *>(get);
++    }
++#endif
+     if (name && strcmp(name, GGML_BACKEND_HOST_INPUT_SNAPSHOT_V1) == 0) {
+         // The typed assignment fixes the signature of this versioned contract.
+         ggml_backend_copy_host_input_snapshot_v1_t copy = ggml_backend_webgpu_copy_host_input_snapshot_v1;
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-context.h"
++#include "ggml-backend-tensor-get-batch.h"
+ 
+ #include "ggml.h"
+ #include "llama-arch.h"
+@@ -3130,32 +3131,60 @@
+     llama_io_write_host(
+             uint8_t * p, size_t len) : ptr(p), base_ptr(p), buf_size(len) {}
+ 
+-    ~llama_io_write_host() {
+-        if (winfos.empty()) {
+-            return;
+-        }
+-
+-        std::vector<ggml_tensor *> tensors;
+-        std::vector<size_t> offsets;
+-        std::vector<size_t> sizes;
+-        std::vector<size_t> data_offsets;
+-        tensors.reserve(winfos.size());
+-        offsets.reserve(winfos.size());
+-        sizes.reserve(winfos.size());
+-        data_offsets.reserve(winfos.size());
+-
+-        for (const auto & winfo : winfos) {
+-            tensors.push_back(winfo.tensor);
+-            offsets.push_back(winfo.offset);
+-            sizes.push_back(winfo.size);
+-            data_offsets.push_back(winfo.data_offset);
+-        }
+-
+-        std::vector<const ggml_tensor *> const_tensors(tensors.begin(), tensors.end());
+-        ggml_backend_tensor_get_n(const_tensors.data(), base_ptr, offsets.data(), sizes.data(), data_offsets.data(), winfos.size());
++    // Consume queued reads explicitly inside the public caller's try block.
++    // No destructor performs I/O, including after a partially completed flush.
++    void flush() {
++        if (flush_started) {
++            throw std::runtime_error("host state writer already consumed");
++        }
++        flush_started = true;
++        std::vector<write_info> pending;
++        pending.swap(winfos);
++
++        for (size_t first = 0; first < pending.size();) {
++            const auto & head = pending[first];
++            if (!batch_size_eligible(head.size)) {
++                ggml_backend_tensor_get(head.tensor, base_ptr + head.data_offset, head.offset, head.size);
++                ++first;
++                continue;
++            }
++            const auto device = tensor_device(head.tensor);
++            size_t last = first + 1;
++            if (device) {
++                while (last < pending.size() && last - first < GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS &&
++                       batch_size_eligible(pending[last].size) && tensor_device(pending[last].tensor) == device) {
++                    ++last;
++                }
++            }
++            // A single read has no map to eliminate; keep its canonical getter.
++            if (last - first > 1) {
++                const auto reg = ggml_backend_dev_backend_reg(device);
++                const auto get_batch = reg ? reinterpret_cast<ggml_backend_try_tensor_get_batch_v1_t>(
++                    ggml_backend_reg_get_proc_address(reg, GGML_BACKEND_TENSOR_GET_BATCH_V1)) : nullptr;
++                if (get_batch) {
++                    ggml_backend_tensor_get_request_v1 requests[GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_REQUESTS];
++                    for (size_t i = first; i < last; ++i) {
++                        const auto & w = pending[i];
++                        requests[i - first] = {w.tensor, base_ptr + w.data_offset, w.offset, w.size};
++                    }
++                    if (get_batch(requests, last - first)) {
++                        first = last;
++                        continue;
++                    }
++                }
++            }
++            // Unsupported means no work began. Preserve the original order.
++            for (; first < last; ++first) {
++                const auto & w = pending[first];
++                ggml_backend_tensor_get(w.tensor, base_ptr + w.data_offset, w.offset, w.size);
++            }
++        }
+     }
+ 
+     void write(const void * src, size_t size) override {
++        if (flush_started) {
++            throw std::runtime_error("host state writer already consumed");
++        }
+         if (size > buf_size) {
+             throw std::runtime_error("unexpectedly reached end of buffer");
+         }
+@@ -3166,11 +3195,14 @@
+     }
+ 
+     void write_tensor(ggml_tensor * tensor, size_t offset, size_t size) override {
++        if (flush_started) {
++            throw std::runtime_error("host state writer already consumed");
++        }
+         if (size > buf_size) {
+             throw std::runtime_error("unexpectedly reached end of buffer");
+         }
+ 
+-        // save the write for later during destruction
++        // Save the write for the explicit, one-shot flush.
+         winfos.push_back({tensor, (size_t) (ptr - base_ptr), size, offset});
+ 
+         ptr += size;
+@@ -3195,6 +3227,28 @@
+         size_t offset;
+     };
+     std::vector<write_info> winfos;
++
++    bool flush_started = false;
++
++    static bool batch_size_eligible(size_t size) {
++        // Avoid assumptions about a backend's virtual pointer encoding. Reserve
++        // three prefix bytes before four-byte rounding to a cap divisible by four.
++        // The few boundary sizes with no room to coalesce also keep scalar reads.
++        return size > 0 && size <= GGML_BACKEND_TENSOR_GET_BATCH_V1_MAX_BYTES - 3;
++    }
++
++    static ggml_backend_dev_t tensor_device(const ggml_tensor * tensor) {
++        if (!tensor) {
++            return nullptr;
++        }
++        const auto * root = tensor->view_src ? tensor->view_src : tensor;
++        const auto buffer = root->buffer;
++        if (!buffer) {
++            return nullptr;
++        }
++        const auto buft = ggml_backend_buffer_get_type(buffer);
++        return buft ? ggml_backend_buft_get_device(buft) : nullptr;
++    }
+ };
+ 
+ class llama_io_read_host : public llama_io_read_i {
+@@ -3651,7 +3705,9 @@
+ size_t llama_context::state_get_data(uint8_t * dst, size_t size) {
+     llama_io_write_host io(dst, size);
+     try {
+-        return state_write_data(io);
++        const size_t written = state_write_data(io);
++        io.flush();
++        return written;
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: error saving state: %s\n", __func__, err.what());
+         return 0;
+@@ -3686,17 +3742,24 @@
+ 
+ size_t llama_context::state_seq_get_data(llama_seq_id seq_id, uint8_t * dst, size_t size, llama_state_seq_flags flags) {
+     std::unique_ptr<llama_io_write_i> io;
++    llama_io_write_host * host_io = nullptr;
+     if (flags & LLAMA_STATE_SEQ_FLAGS_ON_DEVICE) {
+         io = std::make_unique<llama_io_write_device>(dst, size, mem_storage[seq_id]);
+     } else {
+-        io = std::make_unique<llama_io_write_host>(dst, size);
++        auto host = std::make_unique<llama_io_write_host>(dst, size);
++        host_io = host.get();
++        io = std::move(host);
+     }
+ 
+     try {
+         io->write(&io_magic, sizeof(io_magic));
+         io->write(&seq_id, sizeof(seq_id));
+ 
+-        return state_seq_write_data(*io, seq_id, flags);
++        const size_t written = state_seq_write_data(*io, seq_id, flags);
++        if (host_io) {
++            host_io->flush();
++        }
++        return written;
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: error saving state: %s\n", __func__, err.what());
+         return 0;

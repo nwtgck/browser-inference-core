@@ -11,6 +11,8 @@ target_include_directories(file-rows-reader PRIVATE ../../bridge "${LCB_LLAMA_SO
 target_link_libraries(file-rows-reader PRIVATE core_under_test)
 # Keep fault injection test-only; the production reader calls the real pread.
 target_link_options(file-rows-reader PRIVATE "-Wl,--wrap=pread")
+add_executable(file-rows-identity identity.cpp)
+target_include_directories(file-rows-identity PRIVATE ../../bridge)
 add_executable(file-rows-model model.cpp)
 target_include_directories(file-rows-model PRIVATE "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/common"
     "${LCB_LLAMA_SOURCE}/ggml/include" "${LCB_LLAMA_SOURCE}/src" "${LCB_LLAMA_SOURCE}/tests")
@@ -24,6 +26,13 @@ target_link_libraries(file-rows-model PRIVATE -Wl,--start-group
     "${LCB_NATIVE_BUILD}/llama/vendor/cpp-httplib/libcpp-httplib.a"
     "${LCB_NATIVE_BUILD}/llama/vendor/hash/libvendor-hash.a"
     -Wl,--end-group dl m pthread)
+add_executable(file-rows-loader-identity loader-identity.cpp)
+get_target_property(LCB_FILE_ROWS_TEST_INCLUDES file-rows-model INCLUDE_DIRECTORIES)
+get_target_property(LCB_FILE_ROWS_TEST_LIBRARIES file-rows-model LINK_LIBRARIES)
+target_include_directories(file-rows-loader-identity PRIVATE ../../bridge ${LCB_FILE_ROWS_TEST_INCLUDES})
+target_link_libraries(file-rows-loader-identity PRIVATE ${LCB_FILE_ROWS_TEST_LIBRARIES})
 enable_testing()
 add_test(NAME reader COMMAND file-rows-reader)
+add_test(NAME identity COMMAND file-rows-identity "${CMAKE_CURRENT_BINARY_DIR}/identity-files")
+add_test(NAME loader-identity COMMAND file-rows-loader-identity "${CMAKE_CURRENT_BINARY_DIR}/loader-identity-files")
 add_test(NAME model COMMAND file-rows-model "${CMAKE_CURRENT_BINARY_DIR}")

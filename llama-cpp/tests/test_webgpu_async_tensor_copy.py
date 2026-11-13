@@ -124,6 +124,14 @@ class AsyncTensorCopy(unittest.TestCase):
             registration = re.search(r'/\* \.cpy_tensor_async\s+= \*/\s*(\w+)\s*,', actual)
             self.assertIsNotNone(registration)
             code = (HERE / 'mock-harness.cpp').read_text()
+            # This legacy fixture exercises copies without a prefetch operation.
+            # Keep the new copy_input fast-return branch intact and inactive;
+            # the combined prefetch/snapshot fixture exercises its active path.
+            marker = 'struct ggml_backend_sched {'
+            self.assertEqual(code.count(marker), 1)
+            code = code.replace(marker, marker + '\n'
+                '    ggml_backend_sched_split splits[1]{};int prefetch_split=0,prefetch_backend_id=0,n_prefetched=0;\n'
+                '    ggml_tensor* prefetched[1]{};ggml_backend_event_t prefetch_events[1]{};')
             groups = {
                 'ACTUAL_OFFSET': (actual, ['ggml_webgpu_tensor_offset']),
                 'ACTUAL_BUFFER_BASE': (actual, ['ggml_backend_webgpu_buffer_get_base']),

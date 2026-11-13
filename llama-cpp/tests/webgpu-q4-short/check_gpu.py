@@ -23,7 +23,7 @@ REFERENCE_INPUTS = {
     'ggml/src/ggml-quants.c': 'bcda33625707fdfcb1367cdd2bb1a2f017430162ec9623abc84ad17459698f73',
     'ggml/src/ggml-quants.h': 'd8ed2c13734cbbc5016011611b6acf14905a54a7d1a3b2c6c3389164dc068418',
     'ggml/src/ggml-common.h': '0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c',
-    'ggml/src/ggml-impl.h': 'c84c8f9e3c246504602f5cd388ba54e36691e46bf150e4d70ae857bb823c985f',
+    'ggml/src/ggml-impl.h': '75465b01eba2b1ecae8634898508e71294fbff0f7f96ee9ad2caf5bae5b6c5fd',
 }
 
 

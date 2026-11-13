@@ -24,10 +24,10 @@ class UpstreamPatchPolicy(unittest.TestCase):
         self.assertIn('explicit user approval', root_rules)
         self.assertIn('omitting or deferring the feature', rules)
         self.assertIn('independent', rules.lower())
-        self.assertIn('Removal condition', register)
+        self.assertIn('Removal', register)
         self.assertFalse((ROOT / 'patches').exists(), 'Do not leave a second generic patch directory')
         self.assertEqual({p.name for p in directory.glob('*.patch')}, {
-            'mtmd-webgpu-bf16.patch', 'mtmd-vision-bf16-runtime.patch', 'mtmd-vision-bf16-clip-runtime.patch', 'mtmd-audio-single-thread.patch',
+            'mtmd-webgpu-bf16.patch', 'mtmd-vision-bf16-runtime.patch', 'mtmd-non-pthread-threadpool.patch', 'ggml-webgpu-emscripten-scalar-tensor-writes.patch',
             'ggml-webgpu-same-device-tensor-copy.patch', 'ggml-webgpu-buffer-size-limit.patch',
             'ggml-webgpu-ordered-readback.patch',
             'ggml-webgpu-bind-group-cache.patch', 'ggml-webgpu-host-encode-assembly.patch',
@@ -65,25 +65,23 @@ class UpstreamPatchPolicy(unittest.TestCase):
 
     def test_cli_resolves_the_renamed_patches_for_both_components(self):
         source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp'))
-        if not (source / 'tools/mtmd/clip.cpp').is_file():
+        if not (source / 'tools/mtmd/mtmd-model.cpp').is_file():
             self.skipTest('Initialize the pinned submodule or set LCB_TEST_LLAMA_SOURCE')
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary)
-            for component, filename, patch in (
-                ('vision', 'clip.cpp', 'mtmd-webgpu-bf16.patch'),
-                ('audio', 'mtmd-audio.cpp', 'mtmd-audio-single-thread.patch'),
-                ('runtime', 'mtmd.cpp', 'mtmd-vision-bf16-runtime.patch'),
-                ('clip-runtime', 'clip.cpp', 'mtmd-vision-bf16-clip-runtime.patch'),
-            ):
-                with self.subTest(component=component):
-                    before = (source / 'tools/mtmd' / filename).read_bytes()
+            before = {p.relative_to(source / 'tools/mtmd'): p.read_bytes()
+                      for p in (source / 'tools/mtmd').rglob('*') if p.is_file()}
+            for mode in ('cpu', 'webgpu'):
+                with self.subTest(mode=mode):
                     subprocess.run([sys.executable, str(ROOT / 'scripts/prepare_mtmd.py'),
-                                    '--source', str(source), '--output', str(work / component),
-                                    '--component', component], check=True, capture_output=True)
-                    reference = prepare(source, work / (component + '-direct'),
-                                        ROOT / PATCH_DIRECTORY / patch, filename=filename)
-                    self.assertEqual((work / component / filename).read_bytes(), reference.read_bytes())
-                    self.assertEqual((source / 'tools/mtmd' / filename).read_bytes(), before)
+                                    '--source', str(source), '--output', str(work / mode),
+                                    '--mode', mode], check=True, capture_output=True)
+                    reference = prepare(source, work / (mode + '-direct'), mode=mode)
+                    files = [*before, Path('mtmd-source-manifest.json')]
+                    for name in files:
+                        self.assertEqual((work / mode / name).read_bytes(), (reference / name).read_bytes())
+            self.assertEqual(before, {p.relative_to(source / 'tools/mtmd'): p.read_bytes()
+                                     for p in (source / 'tools/mtmd').rglob('*') if p.is_file()})
 
     def test_binding_generator_uses_the_unmodified_upstream_audio_header(self):
         source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp'))
@@ -115,11 +113,13 @@ class UpstreamPatchPolicy(unittest.TestCase):
                             '-DLCB_WEBGPU=OFF', '-DLCB_LLAMA_SOURCE=' + str(source)],
                            check=True, capture_output=True, text=True)
             sources = (build / 'mtmd-sources.txt').read_text().strip().split(';')
-            clip = build / 'mtmd-runtime-overlay/clip.cpp'
-            self.assertIn(str(clip), sources)
-            self.assertIn(str(build / 'mtmd-runtime-overlay/mtmd.cpp'), sources)
-            self.assertNotIn('mtmd-retained-graph.h', clip.read_text())
-            self.assertFalse((build / 'mtmd-overlay').exists())
+            tree = build / 'mtmd-source-overlay'
+            self.assertTrue(all(Path(path).is_relative_to(tree) for path in sources))
+            self.assertIn(str(tree / 'mtmd-model.cpp'), sources)
+            self.assertIn(str(tree / 'mtmd-subcontext.cpp'), sources)
+            self.assertIn(str(tree / 'mtmd.cpp'), sources)
+            self.assertNotIn('mtmd-retained-graph.h', (tree / 'mtmd-subcontext.cpp').read_text())
+            self.assertFalse((tree / 'clip.h').exists())
 
     def test_cmake_replaces_only_the_three_accepted_translation_units(self):
         source = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE', ROOT / 'vendor/llama.cpp')).resolve()
@@ -132,13 +132,29 @@ class UpstreamPatchPolicy(unittest.TestCase):
             before = (build / 'upstream-mtmd-sources.txt').read_text().strip().split(';')
             after = (build / 'mtmd-sources.txt').read_text().strip().split(';')
             self.assertEqual(len(after), len(before))
-            replaced = {'clip.cpp', 'mtmd-audio.cpp', 'mtmd.cpp'}
-            self.assertEqual(set(before) - set(after), replaced)
-            copies = set(after) - set(before)
-            self.assertEqual({Path(p).name for p in copies}, replaced)
-            self.assertTrue(all(Path(p).is_file() for p in copies))
-            for p in copies:
-                self.assertEqual(after.count(p), 1)
+            tree = build / 'mtmd-source-overlay'
+            self.assertEqual([Path(p).relative_to(tree).as_posix() for p in after], before)
+            self.assertTrue(all(Path(p).is_file() for p in after))
+            self.assertEqual(len(set(after)), len(after))
+            manifest = json.loads((tree / 'mtmd-source-manifest.json').read_text())
+            self.assertTrue(set(before) <= manifest['preparedFiles'].keys())
+            for name, identity in manifest['preparedFiles'].items():
+                self.assertEqual(identity, __import__('prepare_mtmd').identity(tree / name))
+                if name.startswith('models/'):
+                    self.assertEqual(identity, manifest['sourceInputs'][name])
+            props = (build / 'mtmd-source-properties.txt').read_text().splitlines()
+            unity = {Path(path).relative_to(tree).as_posix(): flag for path, flag in
+                     (line.rsplit('|', 1) for line in props)}
+            for name in manifest['coreSources']:
+                self.assertEqual(unity[name], 'ON', name)
+            for name in before:
+                if name.startswith('models/') and name.endswith('.cpp'):
+                    self.assertNotEqual(unity[name], 'ON', name)
+            self.assertEqual((build / 'mtmd-unity-properties.txt').read_text().strip(), 'ON|16')
+            commands = (build / 'compile_commands.json').read_text()
+            self.assertNotIn(str(source / 'tools/mtmd') + '/mtmd-model.cpp', commands)
+            self.assertNotIn(str(source / 'tools/mtmd') + '/mtmd-subcontext.cpp', commands)
+            self.assertFalse((tree / 'clip.h').exists())
             self.assertEqual((build / 'upstream-mtmd-headers.txt').read_bytes(),
                              (build / 'mtmd-headers.txt').read_bytes())
             self.assertFalse((build / 'mtmd-tts-overlay').exists())

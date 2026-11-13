@@ -3,10 +3,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +28,34 @@ class RouterTail(unittest.TestCase):
         cls.directory = Path(cls.temporary.name)
         cls.normal = source.prepare(cls.upstream, cls.directory / 'normal').parent
         cls.profile = source.prepare(cls.upstream, cls.directory / 'profile', gpu_profile=True).parent
+
+    def test_canonical_sum_rows_uniform_and_2d_guard_match_gpu_baseline(self):
+        shader = (self.upstream / router.BASE / 'wgsl-shaders/sum_rows.wgsl').read_text()
+        params = re.search(r'struct Params \{(.*?)\};', shader, re.S).group(1)
+        fields = re.findall(r'\b(\w+)\s*:\s*u32', params)
+        self.assertEqual(fields, ['offset_src', 'offset_dst', 'stride_src1', 'stride_src2',
+                                  'stride_src3', 'ne0', 'ne1', 'ne2', 'nrows'])
+        identity = json.loads((HERE / 'inputs.json').read_text())
+        self.assertEqual(identity['sum_rows_source_sha256'], hashlib.sha256(shader.encode()).hexdigest())
+        runner = (HERE / 'run_gpu.mjs').read_text()
+        values = re.search(r'sum_rows: uniform\(\[([^]]+)\]', runner).group(1).split(', ')
+        self.assertEqual(values[8:], ['1', '0', '0', '0'])
+        self.assertEqual(len(values) * 4 % 16, 0)
+        # Evaluate the actual shader's row and guard expressions across a padded
+        # 2D grid. This is source arithmetic, not WGSL/GPU numerical execution.
+        row_expression = re.search(r'let row = ([^;]+);', shader).group(1)
+        guard = re.search(r'if \((row >= params.nrows)\) \{\s*return;', shader).group(1)
+        rows, skipped = [], []
+        for y in range(2):
+            for x in range(3):
+                context = {'wid': SimpleNamespace(x=x, y=y), 'num_wg': SimpleNamespace(x=3),
+                           'params': SimpleNamespace(nrows=5)}
+                context['row'] = eval(row_expression, {'__builtins__': {}}, context)
+                (skipped if eval(guard, {'__builtins__': {}}, context) else rows).append(context['row'])
+        self.assertEqual(rows, [0, 1, 2, 3, 4])
+        self.assertEqual(skipped, [5])
+        self.assertIn('dst[params.offset_dst + row] = shared_sum[0];', shader)
+        self.assertIn('dst[params.offset_dst + row] = shared_sum[0] / f32(params.ne0);', shader)
 
     def test_checked_stage_before_profile_and_exact_shader_headers(self):
         self.assertEqual(source.host_encode_assembly.INPUT_SHA256, router.OUTPUTS['ggml-webgpu.cpp'])

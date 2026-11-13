@@ -40,6 +40,38 @@ JavaScript filesystem `stream_ops.dup` hook must increment open ownership:
 Emscripten's `dupStream` does not call `open` on the duplicate. `close` releases
 one owner; unlink/removal remains forbidden while any owner is live.
 
+The input index is finalized once, after tensors load successfully and before
+the model is returned. It is matched against the caller's original path order,
+not upstream's compacted open-file list: upstream may skip an original PLE shard
+and load a separately supplied replacement. The matching operation uses the
+retained descriptor's POSIX `fstat` identity and each supplied path's `stat`
+identity (device, inode, and size). It does not read tensor data or run during
+token processing or metadata queries. A `FILE *` load keeps index 0 only when it
+is the sole source and its descriptor has the same identity. Metadata-only and
+vocabulary-only loads without a reader remain resident.
+
+This requires immutable regular files on a filesystem with stable, unique
+device/inode identities and nonzero inodes; device 0 is valid. The bundled
+read-only adapter uses device 1
+and its unique Emscripten node ID as inode. Keep every supplied path and source
+unchanged until loading and identity matching finish. Afterwards, unrelated
+shards can be released; keep only the selected source and its mount unchanged
+until the model and all its contexts are destroyed. Concurrent rename, rebind,
+mutation, or custom VFS metadata spoofing is outside this contract. This is not
+a guarantee for arbitrary virtual or remote filesystems. Platforms must also
+support the reader's 64-bit POSIX offsets, `pread`, and descriptor duplication;
+an unsupported or unreliable CRT inode implementation does not meet the
+identity contract.
+Unmatched sources, unreliable identities, size changes and multiple matching
+inputs (including repeated paths, hardlinks or symlinks) fail the load. There is
+no guessed index or fallback to resident metadata. Missing unselected paths
+(`ENOENT`/`ENOTDIR`) do not prevent upstream's PLE skip/replacement behavior.
+Other stat errors, including `EACCES` and `EIO`, fail closed because an alias
+cannot be excluded; this can reject an input that upstream alone would skip.
+An upstream-discovered PLE must still have exactly one matching supplied file;
+an unlisted source is rejected. Export is rejected
+whenever a reader exists, independently of whether its index is finalized.
+
 ## Algorithm and limits
 
 The existing n-gram hashing, predecessor/EOS handling, head order, graph
@@ -110,6 +142,30 @@ The reader fixture compares actual ggml get_rows output at offsets above 4 GiB.
 These checks do not establish browser WebGPU behavior, target-device speed,
 memory usage for the full 90 GB model, or uninterrupted same-context recovery
 following device loss. Those are separate artifact and hardware acceptance gates.
+
+The small `file-rows-loader-identity` fixture uses the actual upstream loader
+constructor with authored GGUF shards, without a model graph or trained weights.
+It checks numbered-PLE skip and missing-PLE replacement, compacted file indices,
+the caller's original reordered input indices, tensor offsets and gathered rows.
+`file-rows-identity` checks native descriptor/path matching, hardlink and symlink
+ambiguity, same-size replacements, sparse sizes above 4 GiB, and cursor/lifetime.
+`identity-wasm.mjs` uses a separately compiled tiny Wasm64 version of the same
+`identity.cpp` and production helper, plus the bundled read-only adapter. It
+checks actual libc `stat`/`fstat`, unique node IDs across mount directories,
+metadata-only matching and retained-dup removal protection in Node. It is not
+an actual model-load, browser, arbitrary-VFS, or GPU validation.
+
+The tiny Wasm64 syscall check can be built separately with an installed SDK:
+
+```sh
+em++ -std=c++17 -O1 -fwasm-exceptions --no-entry -Ibridge \
+  -sMEMORY64=1 -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=node \
+  -sFORCE_FILESYSTEM=1 -sASSERTIONS=1 \
+  '-sEXPORTED_RUNTIME_METHODS=["FS","ccall"]' \
+  '-sEXPORTED_FUNCTIONS=["_lcb_identity_check","_lcb_identity_again","_lcb_identity_release","_lcb_identity_errno"]' \
+  tests/file-backed-rows/identity.cpp -o /tmp/file-rows-identity.mjs
+node tests/file-backed-rows/identity-wasm.mjs /tmp/file-rows-identity.mjs
+```
 
 ## Bounded packed-row reuse
 

@@ -10,14 +10,14 @@ PATCH_SHA256 = '40823441227f42dab4e9ae1be2c61fd0fa46c693ca258a385cd3734768070952
 CONTRACT_INPUTS = dict(q8_subgroup.CONTRACT_INPUTS)
 EMBEDDED_HEADER_NAME = q8_subgroup.HEADER_NAME
 EMBEDDED_HEADER_SHA256 = q8_subgroup.HEADER_SHA256
-INPUTS = {False: {'ggml-webgpu.cpp': '34e8d902c07a8770ae473e082b01aa592b5cae486d1541cc4b0a0dfac16c1941',
-         'ggml-webgpu-shader-lib.hpp': '62e7700902bbc719cc57d3f6dc91ce4aa6dcec89b1eaf0a7af803298ec243556'},
- True: {'ggml-webgpu.cpp': '08663d3d2dde4c0345fbeb984d4e73950628365ec1e56321f873957382db7fe2',
-        'ggml-webgpu-shader-lib.hpp': '221509716c3930422fd820248fa19b0fbd935a3838e0ec772ca62ce019945364'}}
-OUTPUTS = {False: {'ggml-webgpu.cpp': '34e8d902c07a8770ae473e082b01aa592b5cae486d1541cc4b0a0dfac16c1941',
-         'ggml-webgpu-shader-lib.hpp': '7c10f05f5e67be55f5435026aeaf6ed19b89762600318ceae223f846657e9bdb'},
- True: {'ggml-webgpu.cpp': '08663d3d2dde4c0345fbeb984d4e73950628365ec1e56321f873957382db7fe2',
-        'ggml-webgpu-shader-lib.hpp': 'ba830e5dda312af69d63320d1297c652a9c01b55a3ddc95cecbf02204d40d6c6'}}
+INPUTS = {False: {'ggml-webgpu.cpp': '23873d267578c6bce435eff0f7643f2853f705ad0b46b3ed8e93cbaada2bb8a2',
+         'ggml-webgpu-shader-lib.hpp': '96e949d9e6064f82e2d63111fac3ce1240a0dfcab42e1266628eb26fe8d997fd'},
+ True: {'ggml-webgpu.cpp': 'de513ccb952c3cc1da2e42f45f4ed1acd9433f6bdea3e38a61f951f437b9c79c',
+        'ggml-webgpu-shader-lib.hpp': '2e12ecc4f59bf9ca594b21ee3240642f194ba8ea6232054e1cef09dad5b1ca1e'}}
+OUTPUTS = {False: {'ggml-webgpu.cpp': '23873d267578c6bce435eff0f7643f2853f705ad0b46b3ed8e93cbaada2bb8a2',
+         'ggml-webgpu-shader-lib.hpp': '62ee9b9d14abec20066aad94296440cbaa48df8d4a9d38aedfdb61dbd7616e2a'},
+ True: {'ggml-webgpu.cpp': 'de513ccb952c3cc1da2e42f45f4ed1acd9433f6bdea3e38a61f951f437b9c79c',
+        'ggml-webgpu-shader-lib.hpp': 'f3b638a2f2572e2a64e76270753941db056a7a0b48fec6603525af898a379bb8'}}
 
 
 def prepare(work: Path, source: Path, patch_root: Path, env: dict[str, str], *, gpu_profile: bool) -> None:
