@@ -4509,98 +4509,6 @@
       ]
     },
     {
-      "name": "ggml_diag_mask_inf",
-      "export": "_lcb_ggml_diag_mask_inf",
-      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, int)",
-      "returnKind": "pointer",
-      "parameters": [
-        {
-          "name": "ctx",
-          "cType": "struct ggml_context *",
-          "kind": "pointer"
-        },
-        {
-          "name": "a",
-          "cType": "struct ggml_tensor *",
-          "kind": "pointer"
-        },
-        {
-          "name": "n_past",
-          "cType": "int",
-          "kind": "signed"
-        }
-      ]
-    },
-    {
-      "name": "ggml_diag_mask_inf_inplace",
-      "export": "_lcb_ggml_diag_mask_inf_inplace",
-      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, int)",
-      "returnKind": "pointer",
-      "parameters": [
-        {
-          "name": "ctx",
-          "cType": "struct ggml_context *",
-          "kind": "pointer"
-        },
-        {
-          "name": "a",
-          "cType": "struct ggml_tensor *",
-          "kind": "pointer"
-        },
-        {
-          "name": "n_past",
-          "cType": "int",
-          "kind": "signed"
-        }
-      ]
-    },
-    {
-      "name": "ggml_diag_mask_zero",
-      "export": "_lcb_ggml_diag_mask_zero",
-      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, int)",
-      "returnKind": "pointer",
-      "parameters": [
-        {
-          "name": "ctx",
-          "cType": "struct ggml_context *",
-          "kind": "pointer"
-        },
-        {
-          "name": "a",
-          "cType": "struct ggml_tensor *",
-          "kind": "pointer"
-        },
-        {
-          "name": "n_past",
-          "cType": "int",
-          "kind": "signed"
-        }
-      ]
-    },
-    {
-      "name": "ggml_diag_mask_zero_inplace",
-      "export": "_lcb_ggml_diag_mask_zero_inplace",
-      "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, int)",
-      "returnKind": "pointer",
-      "parameters": [
-        {
-          "name": "ctx",
-          "cType": "struct ggml_context *",
-          "kind": "pointer"
-        },
-        {
-          "name": "a",
-          "cType": "struct ggml_tensor *",
-          "kind": "pointer"
-        },
-        {
-          "name": "n_past",
-          "cType": "int",
-          "kind": "signed"
-        }
-      ]
-    },
-    {
       "name": "ggml_div",
       "export": "_lcb_ggml_div",
       "returnType": "struct ggml_tensor *(struct ggml_context *, struct ggml_tensor *, struct ggml_tensor *)",
@@ -10681,40 +10589,20 @@
       ]
     },
     {
-      "name": "ggml_rope_yarn_corr_dims",
-      "export": "_lcb_ggml_rope_yarn_corr_dims",
-      "returnType": "void",
-      "returnKind": "void",
+      "name": "ggml_rope_set_truncate",
+      "export": "_lcb_ggml_rope_set_truncate",
+      "returnType": "struct ggml_tensor *(struct ggml_tensor *, _Bool)",
+      "returnKind": "pointer",
       "parameters": [
         {
-          "name": "n_dims",
-          "cType": "int",
-          "kind": "signed"
-        },
-        {
-          "name": "n_ctx_orig",
-          "cType": "int",
-          "kind": "signed"
-        },
-        {
-          "name": "freq_base",
-          "cType": "float",
-          "kind": "float"
-        },
-        {
-          "name": "beta_fast",
-          "cType": "float",
-          "kind": "float"
-        },
-        {
-          "name": "beta_slow",
-          "cType": "float",
-          "kind": "float"
-        },
-        {
-          "name": "dims",
-          "cType": "float *",
+          "name": "a",
+          "cType": "struct ggml_tensor *",
           "kind": "pointer"
+        },
+        {
+          "name": "truncate",
+          "cType": "_Bool",
+          "kind": "boolean"
         }
       ]
     },
@@ -14567,6 +14455,29 @@
       ]
     },
     {
+      "name": "llama_batch_ext_add_embd_row",
+      "export": "_lcb_llama_batch_ext_add_embd_row",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "seq_id",
+          "cType": "llama_seq_id",
+          "kind": "signed"
+        },
+        {
+          "name": "row",
+          "cType": "int32_t",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
       "name": "llama_batch_ext_add_seq",
       "export": "_lcb_llama_batch_ext_add_seq",
       "returnType": "_Bool",
@@ -14671,6 +14582,29 @@
           "name": "embd",
           "cType": "struct llama_embd",
           "kind": "record"
+        }
+      ]
+    },
+    {
+      "name": "llama_batch_ext_set_embd_state_row",
+      "export": "_lcb_llama_batch_ext_set_embd_state_row",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "batch",
+          "cType": "struct llama_batch_ext *",
+          "kind": "pointer"
+        },
+        {
+          "name": "idx",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "row",
+          "cType": "int32_t",
+          "kind": "signed"
         }
       ]
     },
@@ -15028,6 +14962,19 @@
       ]
     },
     {
+      "name": "llama_get_ctx_other",
+      "export": "_lcb_llama_get_ctx_other",
+      "returnType": "struct llama_context *(struct llama_context *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "llama_get_embeddings",
       "export": "_lcb_llama_get_embeddings",
       "returnType": "float *(struct llama_context *)",
@@ -15055,6 +15002,83 @@
           "name": "i",
           "cType": "int32_t",
           "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_get_embeddings_layer_inp",
+      "export": "_lcb_llama_get_embeddings_layer_inp",
+      "returnType": "float *(struct llama_context *, uint32_t)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "lid",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        }
+      ]
+    },
+    {
+      "name": "llama_get_embeddings_nextn",
+      "export": "_lcb_llama_get_embeddings_nextn",
+      "returnType": "float *(struct llama_context *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_get_embeddings_nextn_ith",
+      "export": "_lcb_llama_get_embeddings_nextn_ith",
+      "returnType": "float *(struct llama_context *, int32_t)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "i",
+          "cType": "int32_t",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_get_embeddings_nextn_rows",
+      "export": "_lcb_llama_get_embeddings_nextn_rows",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "row0",
+          "cType": "int64_t",
+          "kind": "i64"
+        },
+        {
+          "name": "n_rows",
+          "cType": "int64_t",
+          "kind": "i64"
+        },
+        {
+          "name": "out",
+          "cType": "float *",
+          "kind": "pointer"
         }
       ]
     },
@@ -15652,6 +15676,19 @@
       ]
     },
     {
+      "name": "llama_model_dflash_selector_top_k",
+      "export": "_lcb_llama_model_dflash_selector_top_k",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "llama_model_free",
       "export": "_lcb_llama_model_free",
       "returnType": "void",
@@ -16174,6 +16211,32 @@
       "export": "_lcb_llama_model_size",
       "returnType": "uint64_t",
       "returnKind": "u64",
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_model_target_layer_ids",
+      "export": "_lcb_llama_model_target_layer_ids",
+      "returnType": "const int32_t *(const struct llama_model *)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "llama_model_target_layer_ids_n",
+      "export": "_lcb_llama_model_target_layer_ids_n",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
       "parameters": [
         {
           "name": "model",
@@ -17280,6 +17343,24 @@
       ]
     },
     {
+      "name": "llama_set_ctx_state_src",
+      "export": "_lcb_llama_set_ctx_state_src",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "ctx_src",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "llama_set_embeddings",
       "export": "_lcb_llama_set_embeddings",
       "returnType": "void",
@@ -17294,6 +17375,116 @@
           "name": "embeddings",
           "cType": "_Bool",
           "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_embeddings_layer_inp",
+      "export": "_lcb_llama_set_embeddings_layer_inp",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "lid",
+          "cType": "uint32_t",
+          "kind": "unsigned"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_embeddings_layer_inp_dev",
+      "export": "_lcb_llama_set_embeddings_layer_inp_dev",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_embeddings_nextn",
+      "export": "_lcb_llama_set_embeddings_nextn",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        },
+        {
+          "name": "masked",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_embeddings_nextn_dev",
+      "export": "_lcb_llama_set_embeddings_nextn_dev",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "value",
+          "cType": "_Bool",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_embeddings_nextn_rows",
+      "export": "_lcb_llama_set_embeddings_nextn_rows",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "row0",
+          "cType": "int64_t",
+          "kind": "i64"
+        },
+        {
+          "name": "n_rows",
+          "cType": "int64_t",
+          "kind": "i64"
+        },
+        {
+          "name": "data",
+          "cType": "const float *",
+          "kind": "pointer"
         }
       ]
     },
@@ -17315,6 +17506,24 @@
         },
         {
           "name": "n_threads_batch",
+          "cType": "int32_t",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "llama_set_nextn_layer_offset",
+      "export": "_lcb_llama_set_nextn_layer_offset",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct llama_context *",
+          "kind": "pointer"
+        },
+        {
+          "name": "offset",
           "cType": "int32_t",
           "kind": "signed"
         }
@@ -17760,6 +17969,19 @@
           "name": "size",
           "cType": "size_t",
           "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "llama_supports_embd_row",
+      "export": "_lcb_llama_supports_embd_row",
+      "returnType": "_Bool",
+      "returnKind": "boolean",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const struct llama_context *",
+          "kind": "pointer"
         }
       ]
     },
@@ -19604,6 +19826,65 @@
       ]
     },
     {
+      "name": "mtmd_helper_resampler_free",
+      "export": "_lcb_mtmd_helper_resampler_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_helper_resampler *",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_helper_resampler_init",
+      "export": "_lcb_mtmd_helper_resampler_init",
+      "returnType": "mtmd_helper_resampler *(int32_t, int32_t)",
+      "returnKind": "pointer",
+      "parameters": [
+        {
+          "name": "rate_in",
+          "cType": "int32_t",
+          "kind": "signed"
+        },
+        {
+          "name": "rate_out",
+          "cType": "int32_t",
+          "kind": "signed"
+        }
+      ]
+    },
+    {
+      "name": "mtmd_helper_resampler_process",
+      "export": "_lcb_mtmd_helper_resampler_process",
+      "returnType": "int64_t",
+      "returnKind": "i64",
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_helper_resampler *",
+          "kind": "pointer"
+        },
+        {
+          "name": "in",
+          "cType": "const float *",
+          "kind": "pointer"
+        },
+        {
+          "name": "n_in",
+          "cType": "size_t",
+          "kind": "u64"
+        },
+        {
+          "name": "out",
+          "cType": "const float **",
+          "kind": "pointer"
+        }
+      ]
+    },
+    {
       "name": "mtmd_helper_support_video",
       "export": "_lcb_mtmd_helper_support_video",
       "returnType": "_Bool",
@@ -20897,39 +21178,39 @@
           "id": 20
         },
         {
-          "name": "defrag_thold",
-          "cType": "float",
-          "kind": "float",
-          "id": 21
-        },
-        {
           "name": "cb_eval",
           "cType": "ggml_backend_sched_eval_callback",
           "kind": "pointer",
-          "id": 22
+          "id": 21
         },
         {
           "name": "cb_eval_user_data",
           "cType": "void *",
           "kind": "pointer",
-          "id": 23
+          "id": 22
         },
         {
           "name": "type_k",
           "cType": "enum ggml_type",
           "kind": "signed",
-          "id": 24
+          "id": 23
         },
         {
           "name": "type_v",
           "cType": "enum ggml_type",
           "kind": "signed",
-          "id": 25
+          "id": 24
         },
         {
           "name": "moe_cache_size",
           "cType": "size_t",
           "kind": "u64",
+          "id": 25
+        },
+        {
+          "name": "moe_cache_cpu_share",
+          "cType": "float",
+          "kind": "float",
           "id": 26
         },
         {
@@ -22235,16 +22516,22 @@
           "id": 9
         },
         {
+          "name": "temp",
+          "cType": "float",
+          "kind": "float",
+          "id": 10
+        },
+        {
           "name": "seed",
           "cType": "uint32_t",
           "kind": "unsigned",
-          "id": 10
+          "id": 11
         },
         {
           "name": "out_type",
           "cType": "enum mtmd_helper_gen_audio_outtype",
           "kind": "signed",
-          "id": 11
+          "id": 12
         }
       ],
       "id": 48
@@ -22516,7 +22803,6 @@
     "GGML_OPT_OPTIMIZER_TYPE_SGD",
     "GGML_OP_ACC",
     "GGML_OP_ADD",
-    "GGML_OP_ADD1",
     "GGML_OP_ADD_ID",
     "GGML_OP_ADD_REL_POS",
     "GGML_OP_ARANGE",
@@ -22540,8 +22826,6 @@
     "GGML_OP_CUMSUM",
     "GGML_OP_CUSTOM",
     "GGML_OP_DIAG",
-    "GGML_OP_DIAG_MASK_INF",
-    "GGML_OP_DIAG_MASK_ZERO",
     "GGML_OP_DIV",
     "GGML_OP_DSV4_HC_COMB",
     "GGML_OP_DSV4_HC_POST",
@@ -22621,7 +22905,6 @@
     "GGML_OP_WIN_PART",
     "GGML_OP_WIN_UNPART",
     "GGML_PREC_BF16",
-    "GGML_PREC_DEFAULT",
     "GGML_PREC_F16",
     "GGML_PREC_F32",
     "GGML_PREC_Q4",
@@ -22874,6 +23157,7 @@
     "LLAMA_VOCAB_TYPE_UGM",
     "LLAMA_VOCAB_TYPE_WPM",
     "MTMD_GEN_AUDIO_TYPE_CHATTERBOX",
+    "MTMD_GEN_AUDIO_TYPE_DRAMA3",
     "MTMD_GEN_AUDIO_TYPE_LFM3A",
     "MTMD_GEN_AUDIO_TYPE_NONE",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS",
@@ -22908,188 +23192,12 @@
       "reason": "variadic"
     },
     {
-      "name": "ggml_type_sizef",
-      "reason": "deprecated"
-    },
-    {
       "name": "ggml_format_name",
       "reason": "variadic"
     },
     {
-      "name": "ggml_add1",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_add1_inplace",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_mul_mat_set_prec",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_rope_custom",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_rope_custom_inplace",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_upscale_ext",
-      "reason": "deprecated"
-    },
-    {
-      "name": "ggml_flash_attn_ext_set_prec",
-      "reason": "deprecated"
-    },
-    {
       "name": "ggml_threadpool_get_n_threads",
       "reason": "declared in ggml-cpu.h but not implemented by the pinned upstream"
-    },
-    {
-      "name": "llama_load_model_from_file",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_free_model",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_new_context_with_model",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_n_ctx_train",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_n_embd",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_n_layer",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_n_head",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_n_vocab",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_get_state_size",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_copy_state_data",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_set_state_data",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_load_session_file",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_save_session_file",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_set_warmup",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_get_text",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_get_score",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_get_attr",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_is_eog",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_is_control",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_bos",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_eos",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_eot",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_cls",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_sep",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_nl",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_pad",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_add_bos_token",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_add_eos_token",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_pre",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_suf",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_mid",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_pad",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_rep",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_token_fim_sep",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_vocab_cls",
-      "reason": "deprecated"
-    },
-    {
-      "name": "llama_sampler_init_grammar_lazy",
-      "reason": "deprecated"
     },
     {
       "name": "mtmd_image_tokens_get_nx",
