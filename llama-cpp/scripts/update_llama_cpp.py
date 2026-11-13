@@ -16,6 +16,7 @@ from github_api import ApiError, GitHub, full_sha, git, git_auth_env, repository
 from prepare_mtmd import PATCH_DIRECTORY, prepare
 import prepare_webgpu_source as webgpu_source
 import prepare_qsa_selection as qsa
+import prepare_model_graph_chat as model_graph
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = 'ggml-org/llama.cpp'
@@ -121,21 +122,28 @@ def change_pins(root: Path, commit: str) -> None:
         raise ValueError('Updater may change only the submodule gitlink and llamaCommit')
 
 
+def error_details(error: BaseException) -> str:
+    details = error.stderr if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
+    if isinstance(details, bytes):
+        details = details.decode('utf-8', errors='replace')
+    return details.strip()[:4000]
+
+
 def overlay_preflight(root: Path) -> dict:
     try:
         with tempfile.TemporaryDirectory(prefix='lcb-update-overlay-') as tmp:
-            prepare(root / 'vendor/llama.cpp', Path(tmp) / 'vision', root / f'{PATCH_DIRECTORY}/mtmd-webgpu-bf16.patch', capture_output=True)
-            prepare(root / 'vendor/llama.cpp', Path(tmp) / 'audio', root / f'{PATCH_DIRECTORY}/mtmd-audio-single-thread.patch',
-                    capture_output=True, filename='mtmd-audio.cpp')
+            for mode in ('cpu', 'webgpu'):
+                prepare(root / 'vendor/llama.cpp', Path(tmp) / mode,
+                        mode=mode, patch_root=root / PATCH_DIRECTORY)
             webgpu_source.prepare(root / 'vendor/llama.cpp', Path(tmp) / 'webgpu',
                                   patch_root=root / PATCH_DIRECTORY)
             qsa.preflight(root / 'vendor/llama.cpp', Path(tmp) / 'qsa')
+            model_graph.prepare(root / 'vendor/llama.cpp', Path(tmp) / 'model-graph', root=root)
         return {'status': 'passed', 'scope': 'patch application only; not compilation or inference'}
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         # A failed overlay still leaves a candidate branch for human repair.
         # No automatic PR, build dispatch, patch fuzz, or patch deletion.
-        details = error.stderr if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
-        return {'status': 'failed', 'scope': 'patch application only', 'error': details.strip()[:4000]}
+        return {'status': 'failed', 'scope': 'patch application only', 'error': error_details(error)}
 
 
 def candidate_branch(base: str, source: str, target: str) -> str:
@@ -271,8 +279,7 @@ def main() -> None:
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         # A pushed branch can survive a later reporting failure. Its identity
         # remains visible and a rerun reuses it without replacing human changes.
-        details = error.stderr if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
-        result.update({'status': 'failed', 'error': details.strip()[:4000]})
+        result.update({'status': 'failed', 'error': error_details(error)})
         failed = True
     # Report output stays outside the source index and is never a build input.
     folder = ROOT / 'build/upstream-update'

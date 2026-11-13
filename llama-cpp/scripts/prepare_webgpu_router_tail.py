@@ -10,24 +10,24 @@ PATCH_SHA256 = '55da9404bb6812184ddcbb42447610ca2d78a77d73f5083ef4a6f58700d8e9de
 BASE = Path('ggml/src/ggml-webgpu')
 HEADER_NAME = 'ggml-webgpu-router-tail-shaders.hpp'
 HEADER_SHA256 = 'a2b8efd2a9617c5685ae5e91e4f61570c519b3f787f51395e4d38e809eb62c52'
-INPUTS = {'ggml-webgpu.cpp': '972928fc0755daad4e24b2da548d2e62329d5ef474ab5ab7e5214365e88d48cf',
- 'ggml-webgpu-shader-lib.hpp': '7c5b913454691966279c65cab8953ecb19348cfd4653df94202ca60349d3e48d'}
-OUTPUTS = {'ggml-webgpu.cpp': '823653ae0049fcce555213fa95ab2efa311af5d23771391fc712feb8ed45366d',
- 'ggml-webgpu-shader-lib.hpp': 'd71825ab9ee4f7d37d1aa492c6ed2f8c01c3f35e0aa0bb8abe740c7824d3bc3d',
+INPUTS = {'ggml-webgpu.cpp': '5feda13cfe57aedfecf3a25a4b2f61757860fa22692de214e3c8f9ec3ef54800',
+ 'ggml-webgpu-shader-lib.hpp': '3ba390f7a883fa847c66a32c62fdb30d76887f222fd8bb94f5359c8e9c320404'}
+OUTPUTS = {'ggml-webgpu.cpp': '36a2bf151a18cc4b8d56547811d7aae6945462d01476ca9be3902b1a3e7078e3',
+ 'ggml-webgpu-shader-lib.hpp': 'df28317ed56afbdf2a1d0e57a020d9602dd90c5aaed2d463037d77454ef9a57c',
  'ggml-webgpu-router-tail.hpp': '9fc65ad3bf41dd4c44ad77ffcdbd3cf242144fbb4588912351c855e360aab8ed',
  'wgsl-shaders/router_tail.wgsl': '020e4829bed8e5867739a74f891ff82cd110e55fb216e6d13445d296ae8b268e',
  'wgsl-shaders/router_tail_merged.wgsl': '878c1b300af91631bfe77ae3a9c3c2b206080c308e55d39c990c7aa4d2c63ce3'}
-CONTRACT_INPUTS = {'ggml/include/ggml.h': '1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101',
- 'ggml/src/ggml.c': 'c0e81f0ba55ad76020ada29b01385a7a742c800971e7c974c425a08839750b49',
- 'ggml/src/ggml-impl.h': 'c84c8f9e3c246504602f5cd388ba54e36691e46bf150e4d70ae857bb823c985f',
- 'ggml/src/ggml-alloc.c': '9664bda3e9c4223f5c94ebfeb3c0381f0065a5091ddae707c09a800f7e419a39',
- 'ggml/src/ggml-backend.cpp': '7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e',
+CONTRACT_INPUTS = {'ggml/include/ggml.h': 'bdb0e75be8eeb1fc14a742015025505f5810d8200cbb40bda7e981101413440b',
+ 'ggml/src/ggml.c': '1008000571b896a22dd3861731ca29e6ec3615898cdc15d9cb529fb171815dfc',
+ 'ggml/src/ggml-impl.h': '75465b01eba2b1ecae8634898508e71294fbff0f7f96ee9ad2caf5bae5b6c5fd',
+ 'ggml/src/ggml-alloc.c': 'c4001b08581b87b80283953acc67d0d2ff13ef0a425179e2bf621f45333bf0fa',
+ 'ggml/src/ggml-backend.cpp': '2f724930ea53dd8f50f26706ecf10a177d56601e668f109cf1cd95052b1b9ad8',
  'ggml/src/ggml-backend-impl.h': '7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3',
- 'src/llama-graph.cpp': 'de456d5ff7b60d6404205e3451b4c804229f7fb46023ff20e996f0ad71b752d1',
+ 'src/llama-graph.cpp': '77becc9efb8b8eca7ae706dd499d137f694523725c4b849f50cd964bc32b25f8',
  'ggml/src/ggml-webgpu/pre_wgsl.hpp': '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
  'ggml/src/ggml-webgpu/wgsl-shaders/embed_wgsl.py': '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',
  'ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl': '89d5cef5182e5ce308d4a0bc77c232301836e7d7bfb0d61e46f0ca775b43640c',
- 'ggml/src/ggml-webgpu/wgsl-shaders/sum_rows.wgsl': 'e2e478cdddec955c3abab6de99afc4b012f47c0b5ae8f828e41bc8a606c88a35',
+ 'ggml/src/ggml-webgpu/wgsl-shaders/sum_rows.wgsl': '1755bf4cc3e763df644e4c5327a752c7af606960f4ac509c5919cfef40e86625',
  'ggml/src/ggml-webgpu/wgsl-shaders/unary.wgsl': '7d4d66e2b954b5d1067447bb24082cf19f5fba7e021d7101193e3edc73cefbc1',
  'ggml/src/ggml-webgpu/wgsl-shaders/binary.wgsl': 'ec26216dfd3881e6ee118103cf9bc8b2f16c22310dbd8d451442f93e7d70d726'}
 

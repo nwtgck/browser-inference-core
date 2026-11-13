@@ -1,7 +1,7 @@
 diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
-@@ -756,6 +756,9 @@
+@@ -750,6 +750,9 @@
      ggml_tensor * pool_idxs     = nullptr; // I32 [kpool, n_pool]  member cells per block, n_kv sentinel for the padded blocks
      ggml_tensor * pool_mask     = nullptr; // F16 [n_pool, n_tokens]
      ggml_tensor * tail_idxs     = nullptr; // I32 [kpool - 1, n_tokens]
@@ -11,7 +11,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
      ggml_tensor * new_pool_idxs = nullptr; // I32 [kpool, n_new]   members of the blocks to re-pool this ubatch
      ggml_tensor * new_pool_flat = nullptr; // I32 [kpool*n_new]    view of new_pool_idxs, shared by the QSA layers
      ggml_tensor * new_pool_rep  = nullptr; // I64 [n_new]          cell to write each new pooled key into
-@@ -864,48 +867,74 @@
+@@ -855,46 +858,72 @@
      // scatter the fresh pooled keys into their rep rows, then gather all n_pool of them by cell:
      // the older pools come from the rows earlier ubatches wrote
      ggml_build_forward_expand(gf, kpool_cache.scatter_pooled(pooled_new, inp_kpool->new_pool_rep));
@@ -22,9 +22,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 -    ggml_tensor * q = build_lora_mm(model.layers[il].index_q_proj, cur);
 -    q = ggml_reshape_3d(ctx0, q, idx_dim, n_idx_h, n_tokens);
 -    q = build_norm(q, model.layers[il].index_q_norm, nullptr, LLM_NORM_RMS, il);
--    q = ggml_rope_multi(ctx0, q, inp_pos, nullptr,
--            n_rot, sections, rope_type, n_ctx_orig, freq_base, freq_scale,
--            ext_factor, attn_factor, beta_fast, beta_slow);
+-    q = build_rope(q, inp_pos, il);
 -    cb(q, "indexer_q", il);
 -
 -    // the reference sums the rectified head scores unweighted, scaled by 1/sqrt(head_dim),
@@ -59,9 +57,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 +        ggml_tensor * q = build_lora_mm(model.layers[il].index_q_proj, cur);
 +        q = ggml_reshape_3d(ctx0, q, idx_dim, n_idx_h, n_tokens);
 +        q = build_norm(q, model.layers[il].index_q_norm, nullptr, LLM_NORM_RMS, il);
-+        q = ggml_rope_multi(ctx0, q, inp_pos, nullptr,
-+                n_rot, sections, rope_type, n_ctx_orig, freq_base, freq_scale,
-+                ext_factor, attn_factor, beta_fast, beta_slow);
++        q = build_rope(q, inp_pos, il);
 +        cb(q, "indexer_q", il);
 +
 +        // the reference sums the rectified head scores unweighted, scaled by 1/sqrt(head_dim),
@@ -123,7 +119,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
      sel_idx = ggml_reshape_2d(ctx0, sel_idx, kpool*n_top_pool, n_tokens);
      sel_idx = ggml_concat(ctx0, sel_idx, inp_kpool->tail_idxs, 0);
      const int64_t n_sel = sel_idx->ne[0];
-@@ -933,7 +962,6 @@
+@@ -922,7 +951,6 @@
      // top_k fills a short selection with invisible pools that can overlap the tail, so the scatter would write
      // some cells from several threads: map every dead slot to its own dump row, idx = dump + live*(idx - dump)
      // a picked pool is live when visible: a visible score is a rectified sum >= 0, an invisible one is -inf
@@ -131,7 +127,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
      ggml_tensor * live_pool = ggml_clamp(ctx0, ggml_scale_bias(ctx0, top_score, 1.0f, 1.0f), 0.0f, 1.0f);
      live_pool = ggml_reshape_2d(ctx0, ggml_repeat_4d(ctx0, live_pool, kpool, n_top_pool, n_tokens, 1), kpool*n_top_pool, n_tokens);
      // a tail cell is live unless it is the n_kv sentinel
-@@ -952,6 +980,9 @@
+@@ -941,6 +969,9 @@
      sel = ggml_view_2d(ctx0, sel, n_kv, n_tokens, sel->nb[2], 0);
      sel = ggml_cont(ctx0, sel);
      cb(sel, "indexer_sel", il);

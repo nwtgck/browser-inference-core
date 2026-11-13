@@ -54,6 +54,42 @@ class lcb_mtmd_retained_reader {
     std::unique_ptr<uint8_t[]> scratch;
 };
 
+// The model owns its weight buffers before a compute subcontext exists. Acquire
+// a temporary backend only for retained WebGPU uploads. The pinned provider uses
+// the buffer device's shared queue for tensor_set and backend synchronization.
+// Declare the upload queue after this owner so it drains before backend release.
+class lcb_mtmd_upload_backend {
+  public:
+    lcb_mtmd_upload_backend() = default;
+    lcb_mtmd_upload_backend(const lcb_mtmd_upload_backend &) = delete;
+    lcb_mtmd_upload_backend & operator=(const lcb_mtmd_upload_backend &) = delete;
+
+    ~lcb_mtmd_upload_backend() {
+        if (backend)
+            ggml_backend_free(backend);
+    }
+
+    ggml_backend_t acquire(ggml_backend_buffer_type_t buft) {
+        if (backend || !lcb_mtmd_is_webgpu_buft(buft)) {
+            throw std::runtime_error("invalid retained vision upload device");
+        }
+        ggml_backend_dev_t device = ggml_backend_buft_get_device(buft);
+        backend = ggml_backend_dev_init(device, nullptr);
+        if (!backend) {
+            throw std::runtime_error("failed to initialize retained vision upload backend");
+        }
+        if (ggml_backend_get_device(backend) != device) {
+            ggml_backend_free(backend);
+            backend = nullptr;
+            throw std::runtime_error("retained vision upload backend changed device");
+        }
+        return backend;
+    }
+
+  private:
+    ggml_backend_t backend = nullptr;
+};
+
 // This is a loader-local QUEUED-BYTE budget, not a physical memory guarantee.
 // Keep the session inside the owner's weight-buffer lifetime. On every exit,
 // retire writes before that buffer can be freed. A ggml synchronize failure is

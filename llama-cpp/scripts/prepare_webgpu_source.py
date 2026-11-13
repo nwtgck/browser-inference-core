@@ -44,24 +44,25 @@ import prepare_webgpu_subgroup_size_control as subgroup_size_control
 import prepare_webgpu_q4_subgroup as q4_subgroup
 import prepare_webgpu_q6_subgroup as q6_subgroup
 import prepare_webgpu_aligned_word_load as aligned_word_load
+import prepare_webgpu_buffer_limit as buffer_limit
+import prepare_webgpu_batched_write_fallback as batched_write_fallback
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = tensor_copy.SOURCE_PATH
 PATCH_DIRECTORY = tensor_copy.PATCH_DIRECTORY
 PARAM_PATCH_NAME = 'ggml-webgpu-batch-param-uploads.patch'
 PARAM_PATCH_SHA256 = 'f1fee64844addb636621412ef7227d6d5fd3ac4210cf7e001689550a321a8a26'
-OUTPUT_SHA256 = '67940a20bba8d06205ad2f6cf1e909450c4fbb6805b5eba59f574c3576d69779'
+OUTPUT_SHA256 = '6035c95aa02f9bb940ea7e67d650d078061986b7857ffa94e220406d026b47a5'
 SSM_HEADER_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'
 SSM_SHADER_PATH = 'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv.wgsl'
 SSM_SHADER_SHA256 = '868a7284cb858811b5ac70f466550340dba0df356b3b9ac1e7568053b7b9c809'
 SSM_PATCH_NAME = 'ggml-webgpu-ssm-conv-single-token.patch'
 SSM_PATCH_SHA256 = '632d0fb83a903b5005ceb061dffbb06a59a4d5d5d18e1eb6d947511981937ceb'
 # Historical name retained for consumers of the final shared shader library.
-SSM_HEADER_OUTPUT_SHA256 = '7756a6ef0fb1521dd896fbb1a34b7431dac71ef52db93003c0db70527dff3536'
+SSM_HEADER_OUTPUT_SHA256 = '392fb81ddddb2ea569a7d6220704831ee975f96ee2a2131f4d17f2a629ebef56'
 # OUTPUT_SHA256/SSM_HEADER_OUTPUT_SHA256 above pin the historical normal prefix.
 # Later stages keep their own contracts; these identities describe compiled files.
-FINAL_OUTPUTS = {profile: {name: q6_subgroup.OUTPUTS[profile][name]
-                           for name in ('ggml-webgpu.cpp', 'ggml-webgpu-shader-lib.hpp')}
+FINAL_OUTPUTS = {profile: {**q6_subgroup.OUTPUTS[profile], **batched_write_fallback.OUTPUTS[profile]}
                  for profile in (False, True)}
 
 # Why: bound read staging and queued model-load work across tensors.
@@ -70,12 +71,12 @@ FINAL_OUTPUTS = {profile: {name: q6_subgroup.OUTPUTS[profile][name]
 LOADER_PATH = 'src/llama-model-loader.cpp'
 LOADER_PATCH_NAME = 'llama-model-loader-webgpu-chunked-upload.patch'
 LOADER_PATCH_SHA256 = '6b1edd9a6a14e1b70d8cc79e548484b75db47d20c68d3a87a73c5a2be757eb2b'
-LOADER_OUTPUT_SHA256 = '6bbfef6f691c432101e4eb1df6cea489c489c89940767c39b191ab955c8053af'
+LOADER_OUTPUT_SHA256 = '2c090f254fe3662bea039db1b19b9a4c992ab910ac9320bd5d1d7c90ae18bbe9'
 LOADER_INPUTS = {
-    "src/llama-model-loader.cpp": "b856b513340e9e86ab81e2d8d110fedd07b60f508e0e4f8513690150f8efd7e1",
-    "src/llama-mmap.cpp": "130601ff8c2b6e16668b70a1dca07cc09ae84328d91bbd5bd259aea5658103e7",
+    "src/llama-model-loader.cpp": "5cce872907839dfaf90db8deafd162fae0a339d6a322add04f55f77de65b6e73",
+    "src/llama-mmap.cpp": "216548a6d625ed4bc6ac2197cfa155ff9dc102851f3d43d20f7bc7e4a1362f80",
     "src/llama-mmap.h": "0fff03ce62bc51b1649833f6017fbd84dc0aac7fce3b38484439153fc13ba8f5",
-    "src/CMakeLists.txt": "802f9f3eced47f2396f2e8b7534050361e72882cffe2619fed6653d11b1f474d",
+    "src/CMakeLists.txt": "3ad358fcd78137c551bdcd0b79698881d1515026ff2585693e898e3b85b3bec3",
     "src/llama-model-loader.h": "4eb5318f7b70333015386d612738f507153770e4e5635895b2c1d8355ff22103",
     "ggml/src/ggml-quants.c": "bcda33625707fdfcb1367cdd2bb1a2f017430162ec9623abc84ad17459698f73"
 }
@@ -191,6 +192,8 @@ def prepare(source: Path, output: Path, *, patch_root: Path = ROOT / PATCH_DIREC
         hc_headers.update(subgroup_size_control.prepare(work, source, patch_root, env,
                                                        gpu_profile=gpu_profile, headers=hc_headers))
         q6_subgroup.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        buffer_limit.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
+        batched_write_fallback.prepare(work, source, patch_root, env, gpu_profile=gpu_profile)
         if not gpu_profile:
             for name in ('ggml-webgpu-q8-diagnostic.h', 'ggml-webgpu-q8-diagnostic-sha256.hpp'):
                 (output / name).unlink(missing_ok=True)

@@ -116,12 +116,7 @@ endif()
 
 # All browser profiles are single-threaded, including CPU and WebGPU.
 # The overlay retains upstream behavior in native/pthread builds.
-include(cmake/MtmdAudioOverlay.cmake)
-include(cmake/MtmdBf16Runtime.cmake)
-
-if(LCB_WEBGPU AND LCB_WEBGPU_BF16_PROJECTOR)
-    include(cmake/MtmdOverlay.cmake)
-endif()
+include(cmake/MtmdOverlay.cmake)
 
 if(EMSCRIPTEN AND LCB_ASYNCIFY)
     # The pinned backend misspells -fexceptions as -exceptions in its link interface.

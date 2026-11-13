@@ -6,6 +6,15 @@ The build publishes llama.cpp, selected backends, generated C bindings, and Embi
 
 The `lcb_` prefix identifies normalized C bindings while retaining upstream function names. There is no application-specific JSON command dispatcher. Deprecated, variadic, and unsupported video declarations are listed with exclusion reasons in the C schema. GGML graph-building declarations accepted by the C binding generator are exposed with generated types and schema checks. The published schema is the inventory for that build; this is not a guarantee that every upstream helper is exported or that every backend implements every operation. See [native chat and multimodal bindings](chat-and-multimodal.md) for the separate Embind surface and generated `mtmd` APIs. The conventions below describe the C bindings and optional reference wrapper.
 
+Upstream v1.0.0 removes `ggml_diag_mask_inf`, `ggml_diag_mask_inf_inplace`,
+`ggml_diag_mask_zero`, and `ggml_diag_mask_zero_inplace` from the generated C
+surface. It also removes `llama_context_params.defrag_thold`, the ADD1 and
+DIAG_MASK operation constants, and the old `GGML_PREC_DEFAULT` alias. Read the
+current schema and record metadata before using these APIs; do not reuse field
+IDs or offsets from an older artifact. The newly public embedding-row and
+context-state helpers are generated from the upstream public headers. Private
+helpers outside that header collection remain outside the generated surface.
+
 ## Calling convention
 
 | Native type | Normalized binding | JavaScript type |

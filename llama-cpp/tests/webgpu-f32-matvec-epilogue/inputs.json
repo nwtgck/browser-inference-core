@@ -1,5 +1,5 @@
 {
-  "module_sha256": "fc93d40123552c97f66b21d07f75d977b3b56658ceeda95fdc8e33282b2322ed",
+  "module_sha256": "b6240736416ca5bb87342b8987da3e4a0ca188ba8e5ba802a1b782a00522a8f8",
   "processed_sha256": {
     "sg-scalar-none.wgsl": "9368ae45e8cccba08d94614688652b6e3e970397e0bf625f9ba85d522d9ca868",
     "sg-scalar-post.wgsl": "c7ee4bd1b841259e374a70b5daa0cc748a03dd8b65f11389a721cec1308ae17e",

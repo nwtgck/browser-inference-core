@@ -1,10 +1,10 @@
 // Pinned upstream model graph builders + synthetic metadata. Checks the real
 // retained-role/graph contracts on CPU-backed ggml storage; not model inference,
 // image preprocessing, WebGPU placement or performance acceptance.
-#include "clip.h"
-#include "clip-impl.h"
-#include "clip-model.h"
-#include "clip-graph.h"
+#include "mtmd.h"
+#include "mtmd-impl.h"
+#include "mtmd-model.h"
+#include "mtmd-graph.h"
 #include "models/models.h"
 #include <algorithm>
 #include <cassert>
@@ -14,21 +14,14 @@
 #include <unordered_map>
 #include <functional>
 #include <limits>
-// Minimal context supplies the exact fields used by upstream clip_graph constructors.
-// It deliberately does not pretend to be a real clip_ctx/backend/scheduler.
-struct clip_ctx {
-    clip_model model{};
-    std::vector<uint8_t> buf_compute_meta;
-    int max_nodes = 8192;
-    clip_flash_attn_type flash_attn_type = CLIP_FLASH_ATTN_TYPE_DISABLED;
-    projector_type proj_type() const {
-        return model.proj_type;
-    }
-};
-int clip_n_mmproj_embd(const clip_ctx * ctx) {
-    return ctx->model.hparams.projection_dim;
-}
-#include "clip-graph-base.inc"
+// Use the real private class definition across every TU. This fixture-only
+// constructor supplies metadata without model I/O, backends or scheduling.
+mtmd_backends::mtmd_backends(ggml_backend_dev_t, int, int, ggml_backend_sched_eval_callback, void *) {}
+mtmd_backends::~mtmd_backends() = default;
+mtmd_subcontext::mtmd_subcontext(const mtmd_model & model, mtmd_backends & shared, const mtmd_subctx_params & params)
+    : model(model), backends(shared), max_nodes(model.max_nodes), flash_attn_type(params.flash_attn_type) {}
+#include "mtmd-model-embedding.inc"
+#include "mtmd-graph-base.inc"
 #include "mtmd-retained-graph.h"
 #include "mtmd-retained-roles.h"
 #include "ggml-alloc.h"
@@ -48,10 +41,13 @@ static void probe(std::string kind, int side, int height) {
             throw std::runtime_error("unreviewed Gemma4UV fixture dimensions");
     } else if ((side != 32 && side != 48) || height != side)
         throw std::runtime_error("unreviewed fixture image side");
-    clip_ctx ctx;
+    mtmd_model model{};
+    mtmd_subctx_params params{};
+    params.flash_attn_type = MTMD_FLASH_ATTN_TYPE_DISABLED;
+    mtmd_backends shared(nullptr, 1, model.max_nodes, nullptr, nullptr);
+    mtmd_subcontext ctx(model, shared, params);
     ctx.buf_compute_meta.resize(ggml_tensor_overhead() * ctx.max_nodes +
                                 ggml_graph_overhead_custom(ctx.max_nodes, false));
-    auto & model = ctx.model;
     auto & h = model.hparams;
     const int e = real_shape ? 3840 : 32, ff = unified ? 0 : 64, p = real_shape ? 48 : 8;
     const int proj = real_shape ? 3840 : 64, l = unified ? 0 : 2, np = (side / p) * (height / p);
@@ -121,8 +117,8 @@ static void probe(std::string kind, int side, int height) {
         b.ff_up_b = vec(n + "ffn_up.bias", ff);
         b.ff_down_b = vec(n + "ffn_down.bias", e);
     }
-    std::unique_ptr<clip_graph> graph;
-    clip_image_f32 image;
+    std::unique_ptr<mtmd_graph> graph;
+    mtmd_image_f32 image;
     image.set_size({side, height}, true, false);
     if (kind == "llava") {
         model.proj_type = PROJECTOR_TYPE_MLP;
@@ -132,7 +128,7 @@ static void probe(std::string kind, int side, int height) {
         model.mm_0_b = vec("mm.0.bias", proj);
         model.mm_2_w = mat("mm.2.weight", proj, proj);
         model.mm_2_b = vec("mm.2.bias", proj);
-        graph = std::make_unique<clip_graph_llava>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_llava>(&ctx, image);
     } else if (kind == "qwen2vl" || kind == "qwen3vl") {
         model.proj_type = kind == "qwen2vl" ? PROJECTOR_TYPE_QWEN2VL : PROJECTOR_TYPE_QWEN3VL;
         model.patch_embeddings_1 = tensor("v.patch_embd.weight.1", GGML_TYPE_F32, {p, p, 3, e});
@@ -141,16 +137,16 @@ static void probe(std::string kind, int side, int height) {
         model.mm_1_w = mat("mm.1.weight", e * 4, proj);
         model.mm_1_b = vec("mm.1.bias", proj);
         if (kind == "qwen2vl")
-            graph = std::make_unique<clip_graph_qwen2vl>(&ctx, image);
+            graph = std::make_unique<mtmd_graph_qwen2vl>(&ctx, image);
         else {
             model.patch_bias = vec("v.patch_embd.bias", e);
-            graph = std::make_unique<clip_graph_qwen3vl>(&ctx, image);
+            graph = std::make_unique<mtmd_graph_qwen3vl>(&ctx, image);
         }
     } else if (kind == "gemma3") {
         model.proj_type = PROJECTOR_TYPE_GEMMA3;
         model.mm_soft_emb_norm_w = vec("mm.soft_emb_norm.weight", e);
         model.mm_input_proj_w = tensor("mm.input_projection.weight", GGML_TYPE_F16, {proj, e});
-        graph = std::make_unique<clip_graph_siglip>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_siglip>(&ctx, image);
     } else if (unified) {
         model.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         model.patch_bias = vec("v.patch_embd.bias", e);
@@ -161,11 +157,11 @@ static void probe(std::string kind, int side, int height) {
         model.patch_norm_3_w = vec("v.patch_norm.3.weight", e);
         model.patch_norm_3_b = vec("v.patch_norm.3.bias", e);
         model.mm_input_proj_w = mat("mm.input_projection.weight", e, proj);
-        graph = std::make_unique<clip_graph_gemma4uv>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_gemma4uv>(&ctx, image);
     } else if (kind == "gemma4v") {
         model.proj_type = PROJECTOR_TYPE_GEMMA4V;
         model.mm_input_proj_w = mat("mm.input_projection.weight", e, proj);
-        graph = std::make_unique<clip_graph_gemma4v>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_gemma4v>(&ctx, image);
     } else if (kind == "lfm3vl") {
         model.proj_type = PROJECTOR_TYPE_LFM3VL;
         model.lfm3vl_embedding_norm_w = vec("v.embedding_norm.weight", e);
@@ -181,14 +177,14 @@ static void probe(std::string kind, int side, int height) {
         b.conv2d_in_proj_w = mat("v.blk.0.conv2d_in_proj.weight", e, e * 3);
         b.conv2d_spatial_w = tensor("v.blk.0.conv2d_spatial.weight", GGML_TYPE_F32, {3, 3, 1, e});
         b.conv2d_out_proj_w = mat("v.blk.0.conv2d_out_proj.weight", e, e);
-        graph = std::make_unique<clip_graph_lfm3vl>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_lfm3vl>(&ctx, image);
     } else if (kind == "lfm2") {
         model.proj_type = PROJECTOR_TYPE_LFM2;
         model.mm_1_w = mat("mm.1.weight", e * 4, proj);
         model.mm_1_b = vec("mm.1.bias", proj);
         model.mm_2_w = mat("mm.2.weight", proj, proj);
         model.mm_2_b = vec("mm.2.bias", proj);
-        graph = std::make_unique<clip_graph_siglip>(&ctx, image);
+        graph = std::make_unique<mtmd_graph_siglip>(&ctx, image);
     } else
         throw std::runtime_error("bad model kind");
     // Roles are checked before graph construction so custom BF16 position

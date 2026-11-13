@@ -129,6 +129,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_LLAMA_SOURCE}/src/llama-sampler.h"
     "${LCB_LLAMA_SOURCE}/src/llama-context.cpp"
     "${LCB_LLAMA_SOURCE}/src/llama-context.h"
+    "${LCB_LLAMA_SOURCE}/src/llama-graph.cpp"
+    "${LCB_LLAMA_SOURCE}/src/llama-graph.h"
     "${LCB_LLAMA_SOURCE}/src/llama-vocab.h"
     "${LCB_LLAMA_SOURCE}/src/llama-model.cpp"
     "${LCB_LLAMA_SOURCE}/src/llama-vocab.cpp"
@@ -436,3 +438,12 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control.patch"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control-profile.patch"
     "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-subgroup-size-control-shared.patch")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_buffer_limit.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-buffer-size-limit.patch")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LCB_SOURCE_ROOT}/scripts/prepare_webgpu_batched_write_fallback.py"
+    "${LCB_SOURCE_ROOT}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-emscripten-scalar-tensor-writes.patch"
+    "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu/wgsl-shaders/set_tensor_n.wgsl")

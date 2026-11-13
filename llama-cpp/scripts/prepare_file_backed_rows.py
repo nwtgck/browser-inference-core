@@ -52,6 +52,7 @@ def prepare(source: Path, output: Path) -> Path:
             subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(patch)],
                            cwd=work, env=env, check=True, capture_output=True)
         shutil.copyfile(ROOT / 'bridge/file-backed-rows.h', work / 'src/models/file-backed-rows.h')
+        shutil.copyfile(ROOT / 'bridge/file-backed-identity.h', work / 'src/models/file-backed-identity.h')
         desired = set()
         for path in (work / 'src').rglob('*'):
             if not path.is_file():

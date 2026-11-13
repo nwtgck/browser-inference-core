@@ -13,7 +13,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch'
+PATCH_RELATIVE = Path('upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch')
+PATCH = ROOT / PATCH_RELATIVE
 
 
 def sha(path: Path) -> str:
@@ -22,17 +23,18 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(source: Path, output: Path) -> dict:
-    if source.is_symlink() or output.is_symlink():
+def prepare(source: Path, output: Path, *, root: Path = ROOT) -> dict:
+    if source.is_symlink() or output.is_symlink() or root.is_symlink():
         raise ValueError('Linked model graph paths are not accepted')
-    source, output = source.resolve(), output.resolve()
+    source, output, root = source.resolve(), output.resolve(), root.resolve()
     if source == output or source in output.parents or output in source.parents:
         raise ValueError('Model graph overlay must be outside the upstream checkout')
-    reviewed = json.loads((ROOT / 'tests/model-graph/inputs.json').read_text())
+    reviewed = json.loads((root / 'tests/model-graph/inputs.json').read_text())
+    patch = root / PATCH_RELATIVE
     for relative, expected in reviewed['upstream'].items():
         if sha(source / relative) != expected:
             raise ValueError('Independent vocabulary requires upstream semantic review: ' + relative)
-    if sha(PATCH) != reviewed['patchSha256']:
+    if sha(patch) != reviewed['patchSha256']:
         raise ValueError('Independent vocabulary patch identity changed')
     output.mkdir(parents=True, exist_ok=True)
     # Never shadow upstream's pragma-once chat header with a second file.
@@ -52,7 +54,7 @@ def prepare(source: Path, output: Path) -> dict:
             env.pop(name, None)
         env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
         for flags in (['--check'], []):
-            subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(PATCH)], cwd=work, env=env, check=True, capture_output=True)
+            subprocess.run(['git', 'apply', '--no-index', '--whitespace=error', *flags, str(patch)], cwd=work, env=env, check=True, capture_output=True)
         for relative, expected in reviewed['outputs'].items():
             if sha(work / relative) != expected:
                 raise ValueError('Unexpected independent vocabulary output: ' + relative)
@@ -63,7 +65,7 @@ def prepare(source: Path, output: Path) -> dict:
             data = (work / relative).read_bytes()
             if not target.exists() or target.read_bytes() != data:
                 target.write_bytes(data)
-    provenance = {'patch': PATCH.name, 'patchSha256': reviewed['patchSha256'], 'upstream': reviewed['upstream'], 'outputs': reviewed['outputs']}
+    provenance = {'patch': patch.name, 'patchSha256': reviewed['patchSha256'], 'upstream': reviewed['upstream'], 'outputs': reviewed['outputs']}
     (output / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
     return provenance
 

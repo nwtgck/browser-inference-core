@@ -21,7 +21,7 @@ def validate_metadata(info: dict) -> None:
 
 def verify(database: Path, *, webgpu: bool) -> None:
     entries = json.loads(database.read_text())
-    for filename in ('clip.cpp', 'mtmd.cpp'):
+    for filename in ('mtmd-model.cpp', 'mtmd-subcontext.cpp', 'mtmd.cpp'):
         selected = [entry for entry in entries if Path(entry['file']).name == filename]
         if len(selected) != 1:
             raise ValueError('Expected exactly one ' + filename + ' translation unit')

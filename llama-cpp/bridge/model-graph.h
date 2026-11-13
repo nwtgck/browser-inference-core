@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-/* Optional, versioned leaf capability. No Naidan policy or graph interpreter.
+/* Optional, versioned leaf capability. No application policy or graph interpreter.
  * Handles/pointers always cross the boundary as uint64_t on wasm32 and wasm64.
  * These calls are synchronous and must not overlap a suspended core call. */
 uint32_t lcb_model_graph_version(void);

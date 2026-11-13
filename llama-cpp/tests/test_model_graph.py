@@ -162,6 +162,36 @@ class ModelGraphOverlay(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'semantic review'):
             overlay.prepare(self.source, self.output)
 
+    def test_explicit_root_checks_its_own_manifest_and_patch(self):
+        root = self.root / 'other-root'
+        inputs = root / 'tests/model-graph/inputs.json'
+        inputs.parent.mkdir(parents=True)
+        inputs.write_text(json.dumps(self.inputs))
+        patch = root / overlay.PATCH_RELATIVE
+        patch.parent.mkdir(parents=True)
+        original = overlay.PATCH.read_bytes()
+        patch.write_bytes(original)
+        result = overlay.prepare(self.source, self.output, root=root)
+        self.assertEqual(result['outputs'], self.inputs['outputs'])
+        patch.write_bytes(original + b'\n')
+        rejected = self.root / 'bad-patch-output'
+        with self.assertRaisesRegex(ValueError, 'patch identity'):
+            overlay.prepare(self.source, rejected, root=root)
+        self.assertFalse(rejected.exists())
+        patch.write_bytes(original)
+        changed = copy.deepcopy(self.inputs)
+        changed['upstream']['common/chat.cpp'] = '0' * 64
+        inputs.write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, 'semantic review'):
+            overlay.prepare(self.source, self.root / 'bad-input-output', root=root)
+
+    def test_report_rejects_the_target_roots_tampered_patch(self):
+        root, manifest = self.reporting_fixture()
+        patch = root / overlay.PATCH_RELATIVE
+        patch.write_bytes(patch.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'patch identity'):
+            provenance.model_graph_preparations(root, manifest)
+
     def test_output_inside_pristine_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'outside'):
             overlay.prepare(self.source, self.source / 'new')

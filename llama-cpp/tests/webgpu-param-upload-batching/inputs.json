@@ -1,7 +1,7 @@
 {
-  "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
+  "upstream_commit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "source": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
-  "sha256": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
+  "sha256": "c3e627af0d18c596dd45f051c7eba612a6f8f53f458bceecd557d8704f52b8ee",
   "dawn_release": "v20260908.214631",
   "dawn_revision": "94c3c9cc0d5fb2e85aebb370fa8d37b71aa34655",
   "dawn_archive_sha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
@@ -12,11 +12,11 @@
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
   "ggml_header_sha256": {
-    "ggml/include/ggml.h": "1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101",
+    "ggml/include/ggml.h": "bdb0e75be8eeb1fc14a742015025505f5810d8200cbb40bda7e981101413440b",
     "ggml/include/ggml-backend.h": "34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a",
     "ggml/include/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
     "ggml/include/gguf.h": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
     "ggml/src/ggml-backend-impl.h": "7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3",
-    "ggml/src/ggml-impl.h": "c84c8f9e3c246504602f5cd388ba54e36691e46bf150e4d70ae857bb823c985f"
+    "ggml/src/ggml-impl.h": "75465b01eba2b1ecae8634898508e71294fbff0f7f96ee9ad2caf5bae5b6c5fd"
   }
 }

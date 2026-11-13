@@ -1,5 +1,5 @@
 {
-  "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
+  "upstream_commit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
@@ -7,20 +7,20 @@
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
   "base_generated_normalized_sha256": {
-    "bindings.cpp": "5700df3e2a5de37415316efe5f40af78945f5645e15823d0c4ccbd12bd4d7bb2",
-    "schema.json": "480b21ea1edb4dc1e882bfd2e76b8800e79763bdcfebd9468c40bdc91352926d",
-    "schema.mjs": "8dcfa54d7fdd2b68298fa298c7990ad324e481828c8c93756d92797cd76f2646",
-    "exports.json": "7266f1d6e417f55d9ef36352c87b7459d8cf2660b81c20eb1acc0eab78f59ee6",
-    "jspi-exports.json": "59792f83c8e7e263aaeedbb259990953ecb624b8d42702a989c34e847761fd85",
-    "functions.d.ts": "9badfd1135297f8445c2e09f04ad7d9b1457c69720a5485cf956ec4be43ce3b5",
+    "bindings.cpp": "95cfa1328d5769796f88bd11a17ecfff6a08ce2c92acce387ad3e09787c41dde",
+    "schema.json": "d186500c4a8cfa2f7853e4b0afe23ab8d8d10520e049461718a66175a8015563",
+    "schema.mjs": "1a8e101181de0aaa14e8b9e36ae6de3a35e34c70f693719319b9bfa360b14ecb",
+    "exports.json": "583a9b22ad3cc6f392ced19a37aabfe152f31d43dc0bb0f51459a56b3cb01502",
+    "jspi-exports.json": "9f23e6e4c9bf03769e1612c7a016f61629158f67d3c8b6616f6343160394fb06",
+    "functions.d.ts": "fa889d470b715680884d7044a9c92874b49a5a0aff17d3a2a15264fea5fb6c0a",
     "headers.c": "1f8041a40a5aca44ca125782d4459d9a624bc0003b891b6aabf4536ec33070e0"
   },
   "public_source_sha256": {
-    "scripts/prepare_webgpu_q8_diagnostic.py": "8cd37775a0ab5b49d4cb97f4ee263191af8a1c60ebe3a01ee7e8f7685f52a25f",
+    "scripts/prepare_webgpu_q8_diagnostic.py": "fc04dde6840cab881e10d451e669e99d5bfc35cd1a4d9674983a8b5dff44c813",
     "scripts/generate_webgpu_q8_diagnostic.py": "9f6a5e6a15f5edf4666f1ae6470653834c52b981dd94920987168b6211129e57",
     "bridge/webgpu-q8-diagnostic.h": "c676709290b2fc562ff19fc91607b9c008560501975372c6f37b2f41e1d143ea",
     "bridge/webgpu-q8-diagnostic.cpp": "880142c7e4f1fde972921afd7752b5c870496cd5980e7bfee13fbf517e2dfc8a",
-    "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch": "7ea4f73ba8a9bb59f84f98b66d754983f19d0ef5b8bc9855d740481cdd3cdbb6"
+    "upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q8-diagnostic.patch": "2d79f1d00ba106bdff3d943b3e5c3dbceef2689c4bf4daa0344a46ab655ad1e8"
   },
   "base_generated_normalization": "Only the known ggml_opt_optimizer_params adamw/sgd anonymous struct cType locations use <upstream> and common unnamed spelling; relative header path, line and column remain exact. Raw schema fingerprints must match bindings.cpp and schema.mjs before normalization."
 }

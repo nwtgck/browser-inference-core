@@ -362,16 +362,24 @@ static void test_rejections() {
 }
 
 static void test_roles() {
+    {
+        fixture f;
+        mtmd_model m{};
+        m.proj_type = PROJECTOR_TYPE_DRAMA3_GEN;
+        m.drama3_layers.emplace_back();
+        m.drama3_layers.back().enorm_w = ggml_new_tensor_1d(f.weights, GGML_TYPE_BF16, 16);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "projector roles");
+    }
     for (projector_type kind : {PROJECTOR_TYPE_CHATTERBOX, PROJECTOR_TYPE_CHATTERBOX_SPKENC}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = kind;
         m.cbx.input_embedding_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
         rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "projector roles");
     }
     for (bool query : {false, true}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_MLP;
         m.layers.resize(1);
         auto * bias = ggml_new_tensor_1d(f.weights, GGML_TYPE_BF16, 16);
@@ -385,7 +393,7 @@ static void test_roles() {
                                 PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2,
                                 PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3, PROJECTOR_TYPE_GEMMA4V}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = kind;
         m.layers.resize(1);
         m.layers[0].q_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
@@ -397,7 +405,7 @@ static void test_roles() {
     }
     for (ggml_type type : {GGML_TYPE_F16, GGML_TYPE_F32, GGML_TYPE_BF16}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA3;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, type, 16, 16);
         if (type == GGML_TYPE_BF16)
@@ -409,7 +417,7 @@ static void test_roles() {
     }
     {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA4V;
         m.position_embeddings = ggml_new_tensor_3d(f.weights, GGML_TYPE_BF16, 16, 8, 2);
         lcb_mtmd_check_retained_roles(m, f.weights);
@@ -423,31 +431,31 @@ static void test_roles() {
 static void test_gemma4uv_roles() {
     for (ggml_type type : {GGML_TYPE_BF16, GGML_TYPE_F16, GGML_TYPE_F32}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, type, 3840, 3840);
         lcb_mtmd_check_retained_roles(m, f.weights);
         ++checks;
     }
     // Every other image role stays excluded, even with a valid BF16 projection.
-    for (auto member : {&clip_model::patch_embeddings_0, &clip_model::patch_bias, &clip_model::position_embeddings,
-                        &clip_model::patch_norm_1_w, &clip_model::patch_norm_1_b, &clip_model::patch_norm_2_w,
-                        &clip_model::patch_norm_2_b, &clip_model::patch_norm_3_w, &clip_model::patch_norm_3_b}) {
+    for (auto member : {&mtmd_model::patch_embeddings_0, &mtmd_model::patch_bias, &mtmd_model::position_embeddings,
+                        &mtmd_model::patch_norm_1_w, &mtmd_model::patch_norm_1_b, &mtmd_model::patch_norm_2_w,
+                        &mtmd_model::patch_norm_2_b, &mtmd_model::patch_norm_3_w, &mtmd_model::patch_norm_3_b}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
         // Match Gemma4V's allowed position shape to catch accidental inheritance.
-        m.*member = member == &clip_model::position_embeddings
+        m.*member = member == &mtmd_model::position_embeddings
                         ? ggml_new_tensor_3d(f.weights, GGML_TYPE_BF16, 32, 16, 2)
                         : ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
         rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "unsupported weight role or layout");
     }
     // Do not inherit the common transformer layer allowlist from Gemma4V.
-    for (auto member : {&clip_layer::q_w, &clip_layer::k_w, &clip_layer::v_w, &clip_layer::o_w, &clip_layer::qkv_w,
-                        &clip_layer::ff_up_w, &clip_layer::ff_down_w, &clip_layer::ff_gate_w}) {
+    for (auto member : {&mtmd_layer::q_w, &mtmd_layer::k_w, &mtmd_layer::v_w, &mtmd_layer::o_w, &mtmd_layer::qkv_w,
+                        &mtmd_layer::ff_up_w, &mtmd_layer::ff_down_w, &mtmd_layer::ff_gate_w}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
         m.layers.resize(1);
@@ -456,7 +464,7 @@ static void test_gemma4uv_roles() {
     }
     {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = PROJECTOR_TYPE_GEMMA4UV;
         auto * w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 32, 32);
         ggml_set_name(w, "mm.input_projection.weight");
@@ -480,7 +488,7 @@ static void test_gemma4uv_roles() {
     }
     for (bool mixed : {false, true}) {
         fixture f;
-        clip_model m{};
+        mtmd_model m{};
         m.proj_type = mixed ? PROJECTOR_TYPE_GEMMA4UV : PROJECTOR_TYPE_GEMMA4UA;
         m.mm_input_proj_w = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 3840, 3840);
         if (mixed) {

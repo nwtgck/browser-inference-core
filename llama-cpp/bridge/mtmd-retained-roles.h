@@ -1,6 +1,6 @@
 #pragma once
 
-#include "clip-model.h"
+#include "mtmd-model.h"
 #include "ggml.h"
 
 #include <stdexcept>
@@ -11,7 +11,7 @@
 // interpolated, and Gemma 3's input projection is transposed/CONT'ed. Reject such
 // custom BF16 files BEFORE their graph builders can assert on an invalid type.
 // A second guard checks the actual graph and scheduler on every shape.
-inline void lcb_mtmd_check_retained_roles(const clip_model & model, ggml_context * weights) {
+inline void lcb_mtmd_check_retained_roles(const mtmd_model & model, ggml_context * weights) {
     bool has_bf16 = false;
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
         has_bf16 = has_bf16 || t->type == GGML_TYPE_BF16;
@@ -55,7 +55,7 @@ inline void lcb_mtmd_check_retained_roles(const clip_model & model, ggml_context
         throw std::runtime_error("retain-checked BF16: projector roles have not been reviewed");
     }
     if (model.proj_type != PROJECTOR_TYPE_GEMMA4UV) {
-        for (const clip_layer & layer : model.layers) {
+        for (const mtmd_layer & layer : model.layers) {
             for (const ggml_tensor * t : {layer.q_w, layer.k_w, layer.v_w, layer.o_w, layer.qkv_w, layer.ff_up_w,
                                           layer.ff_down_w, layer.ff_gate_w}) {
                 matrices.insert(t);

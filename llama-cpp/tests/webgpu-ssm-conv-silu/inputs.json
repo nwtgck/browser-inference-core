@@ -1,10 +1,10 @@
 {
-  "upstream_commit": "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c",
+  "upstream_commit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "dawn_header_sha256": {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
     "webgpu_cpp/include/webgpu/webgpu_cpp.h": "dbad68fcf60e9b9948331bf388cfbe0317e7628ff3bb28246c8b6bb1ce4e9701",
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
   },
-  "module_sha256": "58a096224ecc3ab9c57472219396621476f29f96f5d8d792a5ef88fcd05e8bf5"
+  "module_sha256": "1de70127d370d5bcfce1aaf5e317c00fb3db22d1c5133ea33510f2924cd6f3b5"
 }

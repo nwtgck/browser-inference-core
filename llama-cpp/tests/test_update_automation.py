@@ -1,5 +1,7 @@
 """Offline release selection and real local-Git branch handoff tests."""
 import json
+import contextlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -13,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from github_api import ApiError, full_sha, repository_name
 import update_llama_cpp as update
+from mtmd_fixture_support import CheckedMtmdFixture
 
 A, B, C = 'a' * 40, 'b' * 40, 'c' * 40
 
@@ -144,6 +147,50 @@ class ProposalApi:
         return {'status': self.relation}
 
 
+class ErrorReports(unittest.TestCase):
+    def errors(self):
+        return [subprocess.CalledProcessError(1, ['git', 'apply'], stderr=value)
+                for value in (b'bad utf8 \xff\n', ' text diagnostic\n', b'', '', None,
+                              ('é' * 5000).encode('utf-8'))] + [OSError('fixture error')]
+
+    def test_preflight_errors_are_bounded_text_for_json_and_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for error in self.errors():
+                with self.subTest(stderr=getattr(error, 'stderr', None)), \
+                     patch.object(update, 'prepare', side_effect=error):
+                    result = update.overlay_preflight(Path(temporary))
+                    self.assertEqual(result['status'], 'failed')
+                    self.assertIsInstance(result['error'], str)
+                    self.assertLessEqual(len(result['error']), 4000)
+                    self.assertEqual(json.loads(json.dumps(result)), result)
+                    self.assertIn('```json', update.render_summary({'preflight': result}))
+                    if getattr(error, 'stderr', None) == b'bad utf8 \xff\n':
+                        self.assertEqual(result['error'], 'bad utf8 \ufffd')
+                    if not getattr(error, 'stderr', None):
+                        self.assertEqual(result['error'], str(error))
+
+    def test_main_writes_failed_json_reports_for_bytes_text_and_empty_stderr(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for error in self.errors():
+                output = io.StringIO()
+                with self.subTest(stderr=getattr(error, 'stderr', None)), \
+                     patch.object(update, 'ROOT', root), \
+                     patch.object(update, 'GitHub'), \
+                     patch.object(update, 'resolve_target', side_effect=error), \
+                     patch.object(sys, 'argv', ['update_llama_cpp.py', '--base', 'develop']), \
+                     patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': ''}), \
+                     contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as caught:
+                    update.main()
+                self.assertEqual(caught.exception.code, 1)
+                report = json.loads((root / 'build/upstream-update/report.json').read_text())
+                self.assertEqual(report['status'], 'failed')
+                self.assertIsInstance(report['error'], str)
+                self.assertLessEqual(len(report['error']), 4000)
+                self.assertEqual(report['error'], update.error_details(error))
+                self.assertIn('```json', output.getvalue())
+
+
 class LocalGitProposal(unittest.TestCase):
     def setUp(self):
         webgpu = patch.object(update.webgpu_source, 'prepare')
@@ -152,6 +199,9 @@ class LocalGitProposal(unittest.TestCase):
         qsa = patch.object(update.qsa, 'preflight')
         self.qsa_preflight = qsa.start()
         self.addCleanup(qsa.stop)
+        model_graph = patch.object(update.model_graph, 'prepare')
+        self.model_graph_prepare = model_graph.start()
+        self.addCleanup(model_graph.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
@@ -161,10 +211,8 @@ class LocalGitProposal(unittest.TestCase):
             self.git('init', '-q', cwd=directory)
             self.git('config', 'user.name', 'Fixture', cwd=directory)
             self.git('config', 'user.email', 'fixture@example.invalid', cwd=directory)
-        clip = self.upstream / 'tools/mtmd/clip.cpp'
-        clip.parent.mkdir(parents=True)
-        clip.write_text('before\noriginal\nafter\n')
-        (clip.parent / 'mtmd-audio.cpp').write_text('before\noriginal\nafter\n')
+        fixture = CheckedMtmdFixture(self.upstream, self.root / update.PATCH_DIRECTORY)
+        fixture.install(self)
         self.git('add', '.', cwd=self.upstream)
         self.git('commit', '-qm', 'Upstream A', cwd=self.upstream)
         self.old = self.git('rev-parse', 'HEAD', cwd=self.upstream)
@@ -176,9 +224,6 @@ class LocalGitProposal(unittest.TestCase):
         self.git('checkout', '--detach', self.old, cwd=self.root / 'vendor/llama.cpp')
         (self.root / 'config').mkdir()
         (self.root / 'config/toolchain.json').write_text(json.dumps({'llamaCommit': self.old, 'otherPin': 'unchanged'}, indent=2) + '\n')
-        (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval').mkdir()
-        (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').write_text('--- a/clip.cpp\n+++ b/clip.cpp\n@@ -1,3 +1,3 @@\n before\n-original\n+patched\n after\n')
-        (self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-audio-single-thread.patch').write_text((self.root / 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval/mtmd-webgpu-bf16.patch').read_text().replace('clip.cpp', 'mtmd-audio.cpp'))
         self.git('add', '.', cwd=self.root)
         self.git('commit', '-qm', 'Core base', cwd=self.root)
         self.base = self.git('rev-parse', 'HEAD', cwd=self.root)
@@ -225,12 +270,31 @@ class LocalGitProposal(unittest.TestCase):
         self.assertIn('QSA selection', result['error'])
 
     def test_preflight_also_fails_closed_on_audio_patch_conflicts(self):
-        audio = self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-audio.cpp'
+        audio = self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-subcontext.cpp'
         audio.write_text('upstream audio changed\n')
         result = update.overlay_preflight(self.root)
         self.assertEqual(result['status'], 'failed')
-        self.assertIn('mtmd-audio.cpp', result['error'])
+        self.assertIn('mtmd-subcontext.cpp', result['error'])
         self.assertEqual(audio.read_text(), 'upstream audio changed\n')
+
+    def test_preflight_covers_the_target_roots_model_graph_and_propagates_drift(self):
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'passed')
+        self.model_graph_prepare.assert_called_once()
+        self.assertEqual(self.model_graph_prepare.call_args.args[0], self.root / 'vendor/llama.cpp')
+        self.assertEqual(self.model_graph_prepare.call_args.kwargs['root'], self.root)
+        self.model_graph_prepare.side_effect = ValueError('Independent vocabulary patch identity changed')
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('Independent vocabulary', result['error'])
+
+    def test_preflight_checks_the_target_roots_threadpool_patch(self):
+        path = self.root / update.PATCH_DIRECTORY / 'mtmd-non-pthread-threadpool.patch'
+        path.write_bytes(path.read_bytes() + b'\n')
+        result = update.overlay_preflight(self.root)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('mtmd-non-pthread-threadpool.patch', result['error'])
+        self.assertNotIn('preflight', [call.args[0] for call in self.webgpu_prepare.call_args_list])
 
     def test_unrelated_tts_changes_do_not_expand_preflight_dependencies(self):
         # These internal files were dependencies of the removed optional overlay.
@@ -251,7 +315,7 @@ class LocalGitProposal(unittest.TestCase):
         self.assertEqual(result['preflight']['status'], 'passed')
         self.assertEqual(set(self.git('diff', '--name-only', self.base, 'HEAD', cwd=self.root).splitlines()), update.PINS)
         self.assertEqual(json.loads((self.root / 'config/toolchain.json').read_text())['otherPin'], 'unchanged')
-        self.assertEqual((self.root / 'vendor/llama.cpp/tools/mtmd/clip.cpp').read_text(), 'before\noriginal\nafter\n')
+        self.assertEqual((self.root / 'vendor/llama.cpp/tools/mtmd/mtmd-model.cpp').read_text(), 'before\noriginal\nafter\n')
         remote = self.git('ls-remote', str(self.remote), 'refs/heads/' + result['branch'], cwd=self.home)
         self.assertEqual(remote.split()[0], result['sourceCommit'])
         self.assertEqual(self.api.calls, [('compare_commits', update.UPSTREAM, self.old, self.new)])

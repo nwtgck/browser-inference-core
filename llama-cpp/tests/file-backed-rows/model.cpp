@@ -71,6 +71,113 @@ static std::vector<std::string> split_fixture(const std::string & path) {
     }
     return paths;
 }
+// These names exercise upstream's own backbone discovery/reordering. The
+// extension must map the selected descriptor back to the original input order.
+static std::vector<std::string> replacement_fixture(const std::string & path, const std::vector<std::string> & shards) {
+    std::vector<std::string> result;
+    const auto copy = [](const std::string & source, const std::string & destination) {
+        std::ifstream input(source, std::ios::binary);
+        std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+        output << input.rdbuf();
+        require(bool(input) && bool(output), "copy replacement fixture");
+    };
+    for (size_t i = 0; i < shards.size(); ++i) {
+        char suffix[64];
+        std::snprintf(suffix, sizeof(suffix), ".replacement-%05zu-of-%05zu.gguf", i + 1, shards.size());
+        result.push_back(path + suffix);
+        copy(shards[i], result.back());
+    }
+    result.push_back(path + ".extra-ple.gguf");
+    copy(shards[1], result.back());
+    std::filesystem::remove(result[1]);
+    return result;
+}
+static size_t open_descriptors() {
+    return size_t(
+        std::distance(std::filesystem::directory_iterator("/proc/self/fd"), std::filesystem::directory_iterator{}));
+}
+struct source_match_log {
+    ggml_log_callback previous = nullptr;
+    void * previous_data = nullptr;
+    bool reader_created = false;
+    bool ambiguous_match = false;
+    source_match_log() {
+        llama_log_get(&previous, &previous_data);
+        llama_log_set(
+            [](ggml_log_level level, const char * text, void * data) {
+                auto & self = *static_cast<source_match_log *>(data);
+                self.reader_created |= std::strstr(text, "qwen4exp_file_rows: enabled") != nullptr;
+                self.ambiguous_match |= std::strstr(text, "file-backed rows: ambiguous supplied source") != nullptr;
+                if (self.previous)
+                    self.previous(level, text, self.previous_data);
+            },
+            this);
+    }
+    ~source_match_log() {
+        llama_log_set(previous, previous_data);
+    }
+};
+static void source_identity_controls(const std::string & path, const std::vector<std::string> & replacement) {
+    auto params = llama_model_default_params();
+    params.n_gpu_layers = 0;
+    params.load_mode = LLAMA_LOAD_MODE_NONE;
+    params.lazy_mode = LLAMA_LAZY_MODE_ON;
+    params.no_alloc = true;
+    std::vector<const char *> paths;
+    for (const auto & item : replacement)
+        paths.push_back(item.c_str());
+    {
+        llama_model_ptr model(llama_model_load_from_splits(paths.data(), paths.size(), params));
+        require(bool(model) && lcb_qwen4exp_file_backed_shard(model.get()) == 3, "no_alloc finalized input index");
+    }
+    {
+        params.vocab_only = true;
+        llama_model_ptr model(llama_model_load_from_splits(paths.data(), paths.size(), params));
+        require(bool(model) && lcb_qwen4exp_file_backed_shard(model.get()) == -1, "vocabulary-only has no reader");
+        params.vocab_only = false;
+    }
+    {
+        const auto close_file = [](FILE * value) { std::fclose(value); };
+        std::unique_ptr<FILE, decltype(close_file)> file(std::fopen(path.c_str(), "rb"), close_file);
+        require(bool(file), "FILE source open");
+        llama_model_ptr model(llama_model_load_from_file_ptr(file.get(), params));
+        require(bool(model) && lcb_qwen4exp_file_backed_shard(model.get()) == 0, "single FILE source index");
+        file.reset();
+        require(lcb_qwen4exp_file_backed_shard(model.get()) == 0, "index immutable after original FILE closes");
+    }
+    // A second extra PLE would fail upstream's duplicate-tensor check before
+    // reader creation. Same-basename backbone aliases are normalized to one
+    // upstream file, but both remain in the caller's identity candidates.
+    {
+        std::ifstream input(replacement.back(), std::ios::binary);
+        std::ofstream output(replacement[1], std::ios::binary | std::ios::trunc);
+        output << input.rdbuf();
+        require(bool(input) && bool(output), "restore numbered PLE for ambiguity control");
+    }
+    const auto alias_dir = path + ".alias-dir";
+    std::filesystem::create_directories(alias_dir);
+    const auto alias = (std::filesystem::path(alias_dir) / std::filesystem::path(replacement[1]).filename()).string();
+    std::filesystem::remove(alias);
+    std::filesystem::create_hard_link(replacement[1], alias);
+    std::vector<const char *> aliases{replacement[0].c_str(), replacement[1].c_str(), replacement[2].c_str(),
+                                      alias.c_str()};
+    const auto before = open_descriptors();
+    {
+        source_match_log observed;
+        llama_model_ptr ambiguous(llama_model_load_from_splits(aliases.data(), aliases.size(), params));
+        require(!ambiguous, "multiple supplied aliases must not publish a model");
+        require(observed.reader_created && observed.ambiguous_match, "ambiguity control must reach reader resolution");
+    }
+    require(open_descriptors() == before, "failed source matching leaked descriptors");
+    std::filesystem::remove(replacement[1]);
+    params.no_alloc = false;
+    params.progress_callback = [](float, void *) { return false; };
+    {
+        llama_model_ptr cancelled(llama_model_load_from_splits(paths.data(), paths.size(), params));
+        require(!cancelled, "cancelled load must not publish a model");
+    }
+    require(open_descriptors() == before, "cancelled load leaked descriptors");
+}
 static std::vector<float> continuation(llama_model * model, llama_context * context) {
     common_batch batch(context);
     batch.add(3, 16, 0, true);
@@ -91,18 +198,26 @@ int main(int argc, char ** argv) {
             llama_model_save_to_file(fixture.first.get(), path.c_str());
         }
         const auto shards = split_fixture(path);
+        const auto replacement = replacement_fixture(path, shards);
+        source_identity_controls(path, replacement);
+        std::vector<const char *> replacement_paths;
+        for (const auto & item : replacement)
+            replacement_paths.push_back(item.c_str());
+        auto reordered_paths = replacement_paths;
+        std::swap(reordered_paths[1], reordered_paths[3]);
         std::vector<const char *> shard_paths;
         for (const auto & item : shards)
             shard_paths.push_back(item.c_str());
         std::vector<std::pair<llama_model_ptr, llama_context_ptr>> sessions;
-        for (int scenario = 0; scenario < 3; ++scenario) {
+        for (int scenario = 0; scenario < 5; ++scenario) {
             const auto lazy = scenario == 0 ? LLAMA_LAZY_MODE_OFF : LLAMA_LAZY_MODE_ON;
             auto mp = llama_model_default_params();
             mp.n_gpu_layers = 0;
             mp.load_mode = LLAMA_LOAD_MODE_NONE;
             mp.lazy_mode = lazy;
-            llama_model_ptr model(scenario == 2
-                                      ? llama_model_load_from_splits(shard_paths.data(), shard_paths.size(), mp)
+            auto & input_paths = scenario == 4 ? reordered_paths : scenario == 3 ? replacement_paths : shard_paths;
+            llama_model_ptr model(scenario >= 2
+                                      ? llama_model_load_from_splits(input_paths.data(), input_paths.size(), mp)
                                       : llama_model_load_from_file(path.c_str(), mp));
             require(bool(model), "model load");
             if (!sessions.empty()) {
@@ -111,7 +226,9 @@ int main(int argc, char ** argv) {
                 require(llama_model_n_params(model.get()) == llama_model_n_params(sessions[0].first.get()),
                         "logical parameter count must include the backing table");
             }
-            require(lcb_qwen4exp_file_backed_shard(model.get()) == (scenario == 2   ? 1
+            require(lcb_qwen4exp_file_backed_shard(model.get()) == (scenario == 4   ? 1
+                                                                    : scenario == 3 ? 3
+                                                                    : scenario == 2 ? 1
                                                                     : scenario == 1 ? 0
                                                                                     : -1),
                     "retained shard query");
@@ -201,14 +318,7 @@ int main(int argc, char ** argv) {
         const auto gemma_path = path + ".gemma4.gguf";
         {
             auto gemma_metadata = get_gguf_ctx(LLM_ARCH_GEMMA4, false);
-            // The generic upstream fixture still writes a legacy scalar here;
-            // Gemma4 requires a per-layer boolean pattern.
-            const auto layers =
-                gguf_get_val_u32(gemma_metadata.get(), gguf_find_key(gemma_metadata.get(), "gemma4.block_count"));
-            std::vector<uint8_t> sliding(layers, 1);
-            sliding.back() = 0;
-            gguf_set_arr_data(gemma_metadata.get(), "gemma4.attention.sliding_window_pattern", GGUF_TYPE_BOOL,
-                              sliding.data(), sliding.size());
+            // Preserve upstream's SWA pattern for its shared-KV layer layout.
             auto fixture = get_model_and_ctx(gemma_metadata.get(), nullptr, 42, 0.02f, {});
             // Use the complete fixture metadata and live tensor map: the
             // generic upstream saver omits some Gemma4 keys and tensors.
@@ -241,7 +351,7 @@ int main(int argc, char ** argv) {
         sessions.clear();
         llama_backend_free();
         std::cout
-            << "PASS synthetic Qwen4Exp resident/file-backed logits, prefill, EOS, graph reuse, mixed batches, IQ4_NL, metadata-only first of three shards, state restore, read-failure recovery and whole-tensor validation guard\n";
+            << "PASS synthetic Qwen4Exp resident/file-backed logits, prefill, EOS, graph reuse, mixed batches, IQ4_NL, metadata-only first of three shards, skipped/replaced/reordered PLE input indices, no_alloc/FILE/vocab/cancel/alias ownership, state restore, read-failure recovery and whole-tensor validation guard\n";
     } catch (const std::exception & e) {
         std::cerr << e.what() << '\n';
         return 1;

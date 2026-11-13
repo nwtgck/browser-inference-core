@@ -19,17 +19,17 @@ ACCUMULATOR_INPUT_SHA256 = '23ebdf701a4ed2aff8b101acee31496b3bbad75c1ff0f32924cf
 ACCUMULATOR_OUTPUT_SHA256 = '6f37bd58a3f66b8e2e09b3c6fba91c5609b8d770e8ac984e30830bd6d5c2f5f1'
 ROWS_PER_SUBGROUP = 4
 INPUTS = {
-    False: {'ggml-webgpu.cpp': '8e5058d5729d74d4fa6b871b7e5bdbb5abfbeef51234df157064059561b5039a',
-            'ggml-webgpu-shader-lib.hpp': 'f8bb0bd001ff26226393d6118ebc5666978e0247a266427a967050d89e9f7399'},
-    True: {'ggml-webgpu.cpp': '9f60948e2e9cf75ea538f9907a389a00a7d1ee100559daae3e1465108d9971e0',
-           'ggml-webgpu-shader-lib.hpp': 'e5a3811a965acf9b681efc6af3f06183ec9c9a90c0d6abb48a743dd3493d74a3'},
+    False: {'ggml-webgpu.cpp': 'c42e621e1318a2c70e6a6e651d6abdfac0197415fcdf8f0745c26fc082888232',
+            'ggml-webgpu-shader-lib.hpp': '29e31f71751110558ce8718c6f421b3673a6cadc512de0c05817aa166ec1492f'},
+    True: {'ggml-webgpu.cpp': '75f2fcdec2e53eade6c9a008c9e1b86e707a0a37d0064e38e3d513ab07c5a92c',
+           'ggml-webgpu-shader-lib.hpp': 'f9f39dfcd8b94c44effbf09451af951dc4cc4cd5504ceb1a7b20cb42e348a6b7'},
 }
 CONTRACT_INPUTS = {
     str(BASE / 'wgsl-shaders/common_decls.tmpl'): '1cfe6cae3ab4a4ccac963a1a68ea9ddf373f4b4beefe7c933807f37969bf5555',
     ACCUMULATOR_PATH: '9421bdb7ac569e03e8483365653c28b95e659702f8ff849310b2c077ee64290f',
     str(BASE / 'wgsl-shaders/embed_wgsl.py'): '37d4a93bb46b0ff417c31a0c1d3fa4b9db52556556138cb2eaedae9daa8dcbea',
     str(BASE / 'pre_wgsl.hpp'): '0d6f781eb5723311cf856e585566c70ddcc779f0e97fcfe6d0e3f636c35688e5',
-    str(BASE / 'ggml-webgpu-shader-lib.hpp'): '34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d',
+    str(BASE / 'ggml-webgpu-shader-lib.hpp'): 'a110a08b87a2b2768c991281e450cc0e89b5c34f67856b58138b7ca9e9aa5f17',
 }
 
 

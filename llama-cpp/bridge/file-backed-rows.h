@@ -4,6 +4,7 @@
 // The immutable model owns a bounded packed-row cache; contexts never share
 // mutable gather buffers. No mmap, worker pool, or file cursor is used.
 #include "ggml.h"
+#include "file-backed-identity.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -24,13 +25,13 @@ class lcb_file_backed_rows {
     static constexpr size_t max_gather_rows = 1024u * 1024;
     static constexpr size_t max_cache_bytes = 8u * 1024 * 1024;
 
-    lcb_file_backed_rows(int fd, uint32_t shard, uint64_t file_bytes, uint64_t offset, ggml_type type, int64_t columns,
-                         int64_t rows, size_t cache_bytes = max_cache_bytes)
-        : shard_(shard), file_bytes_(file_bytes), offset_(offset), columns_(columns), rows_(rows), type_(type),
+    lcb_file_backed_rows(int fd, uint64_t file_bytes, uint64_t offset, ggml_type type, int64_t columns, int64_t rows,
+                         size_t cache_bytes = max_cache_bytes)
+        : file_bytes_(file_bytes), offset_(offset), columns_(columns), rows_(rows), type_(type),
           cache_budget_(std::min(cache_bytes, max_cache_bytes)) {
         static_assert(sizeof(void *) == 8, "file-backed rows require 64-bit pointers");
         static_assert(sizeof(off_t) >= 8, "file-backed rows require 64-bit file offsets");
-        if (columns <= 0 || rows <= 0 || shard > INT32_MAX || type < 0 || type >= GGML_TYPE_COUNT) {
+        if (columns <= 0 || rows <= 0 || type < 0 || type >= GGML_TYPE_COUNT) {
             throw std::runtime_error("file-backed rows: invalid geometry");
         }
         const auto * traits = ggml_get_type_traits(type);
@@ -64,7 +65,14 @@ class lcb_file_backed_rows {
     lcb_file_backed_rows & operator=(const lcb_file_backed_rows &) = delete;
 
     int32_t shard() const {
-        return int32_t(shard_);
+        if (shard_ < 0)
+            throw std::runtime_error("file-backed rows: source index not finalized");
+        return shard_;
+    }
+    void resolve_shard(const std::vector<std::string> & paths, int single_source_fd = -1) {
+        if (shard_ >= 0)
+            throw std::runtime_error("file-backed rows: source index already finalized");
+        shard_ = lcb_file_backed_source_index(fd_, file_bytes_, paths, single_source_fd);
     }
     int64_t columns() const {
         return columns_;
@@ -229,7 +237,7 @@ class lcb_file_backed_rows {
     }
 
     int fd_ = -1;
-    uint32_t shard_;
+    int32_t shard_ = -1;
     uint64_t file_bytes_;
     uint64_t offset_;
     int64_t columns_;

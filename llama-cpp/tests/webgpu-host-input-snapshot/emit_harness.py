@@ -47,6 +47,7 @@ def emit(upstream: Path, prepared: Path) -> str:
     cpu = (upstream / 'ggml/src/ggml-cpu/ggml-cpu.cpp').read_text()
     code = (ROOT / 'tests/webgpu-async-tensor-copy/mock-harness.cpp').read_text()
     code = before_main(code)
+    code = '#include <unordered_map>\n' + code
     contract = (prepared / 'ggml-backend-host-snapshot.h').read_text()
     contract = contract.replace('#pragma once\n', '').replace('#include "ggml-backend.h"\n', '')
     code = replace_once(code, 'struct ggml_backend;using ggml_backend_t=ggml_backend*;',
@@ -54,11 +55,27 @@ def emit(upstream: Path, prepared: Path) -> str:
         'struct ggml_backend_reg;using ggml_backend_reg_t=ggml_backend_reg*;\n' + contract)
     code = replace_once(code, 'GGML_BACKEND_DEVICE_TYPE_CPU,GGML_BACKEND_DEVICE_TYPE_GPU',
         'GGML_BACKEND_DEVICE_TYPE_CPU,GGML_BACKEND_DEVICE_TYPE_GPU,GGML_BACKEND_DEVICE_TYPE_ACCEL')
+    code = replace_once(code,
+        'enum ggml_backend_buffer_usage {GGML_BACKEND_BUFFER_USAGE_ANY,GGML_BACKEND_BUFFER_USAGE_WEIGHTS};',
+        'enum ggml_backend_buffer_usage {GGML_BACKEND_BUFFER_USAGE_ANY,GGML_BACKEND_BUFFER_USAGE_WEIGHTS,GGML_BACKEND_BUFFER_USAGE_COMPUTE};')
     code = replace_once(code, 'device_iface iface;enum ggml_backend_dev_type type;',
         'device_iface iface;enum ggml_backend_dev_type type;ggml_backend_reg_t reg=nullptr;')
     code = replace_once(code,
         'struct ggml_backend_sched_split { int backend_id=0;ggml_cgraph graph; };',
         'struct ggml_backend_sched_split { int backend_id=0;ggml_cgraph graph;int n_inputs=0;ggml_tensor* inputs[4]{}; };')
+    code = replace_once(code, 'struct ggml_cgraph {};',
+        'struct ggml_cgraph {int n_nodes=0;ggml_tensor* nodes[4]{};};')
+    # Explicitly controlled scheduler flags; legacy cases default to required.
+    # Production split_graph allocation is outside this CPU queue model.
+    code = replace_once(code, 'struct ggml_backend_sched {',
+        'struct ControlledRequiresCopy {std::unordered_map<ggml_tensor*,bool> flags;'
+        'bool& operator[](ggml_tensor* t){return flags.try_emplace(t,true).first->second;}};\n'
+        '#define hash_id(t) (t)\n'
+        'struct ggml_backend_sched {\nControlledRequiresCopy hv_tensor_requires_copy;\n')
+    code = replace_once(code, 'int layout=0,flags=0;', 'int layout=0,flags=0,op=0;')
+    code = replace_once(code, 'void (*synchronize)(ggml_backend_t)=nullptr;',
+        'void (*synchronize)(ggml_backend_t)=nullptr;\n'
+        'void (*get_tensor_async)(ggml_backend_t,const ggml_tensor*,void*,size_t,size_t)=nullptr;')
     # Observe retained host snapshots in the existing queue model. Counts are
     # independent of the scheduler guard and decrease only when work executes.
     code = replace_once(code, 'std::vector<std::function<void()>> pending;',
@@ -70,7 +87,21 @@ def emit(upstream: Path, prepared: Path) -> str:
     code = replace_once(code, 'ggml_backend_t backends[1]{};ggml_backend_event_t events[1][1]{};int cur_copy=0;',
         'ggml_backend_t backends[8]{};ggml_backend_event_t events[8][4]{};int cur_copy=0;\n'
         '    int n_copies=1;ggml_backend_copy_host_input_snapshot_v1_t host_input_snapshot[8]{};\n'
-        '    ggml_backend_buffer_type_t bufts[8]{};')
+        '    ggml_backend_buffer_type_t bufts[8]{};\n'
+        '    ggml_backend_sched_split splits[3]{};int n_splits=0;int prefetch_split=2,prefetch_backend_id=0,n_prefetched=0;\n'
+        '    bool prefetch_tried[8]{};ggml_backend_event_t prefetch_events[8]{};ggml_tensor* prefetched[4]{};\n'
+        '    std::unordered_map<ggml_tensor*,int> backend_ids;std::unordered_map<ggml_tensor*,ggml_tensor*> copies;')
+    code = replace_once(code,
+        'static ggml_backend_t ggml_backend_sched_get_tensor_backend(ggml_backend_sched_t s,ggml_tensor*){return s->source;}',
+        'static ggml_backend_t ggml_backend_sched_get_tensor_backend(ggml_backend_sched_t s,ggml_tensor* t){\n'
+        'auto i=s->backend_ids.find(t);return i==s->backend_ids.end()?s->source:s->backends[i->second];}')
+    code = replace_once(code,
+        'static ggml_tensor* scheduler_tensor_copy(ggml_backend_sched_t s,ggml_tensor*,int,int){return s->copy;}',
+        'static ggml_tensor* scheduler_tensor_copy(ggml_backend_sched_t s,ggml_tensor* t,int,int){\n'
+        'auto i=s->copies.find(t);return i==s->copies.end()?s->copy:i->second;}\n'
+        '#define tensor_backend_id(t) (sched->backend_ids.at(t))\n'
+        'constexpr int GGML_SCHED_MAX_SPLIT_INPUTS=4;\n'
+        'static bool ggml_is_view_op(int op){return op==99;}')
     code = replace_once(code,
         'bool host_copy(){return ggml_backend_webgpu_cpy_tensor_async(&cpu,&gpu,&src,&dst);}',
         '''bool host_copy(){
@@ -102,7 +133,7 @@ def emit(upstream: Path, prepared: Path) -> str:
         'ACTUAL_WEBGPU_SYNCHRONIZE': (actual, ['ggml_backend_webgpu_synchronize']),
         'ACTUAL_SYNCHRONIZE': (generic, ['ggml_backend_synchronize']),
         'ACTUAL_WEBGPU_SET': (actual, ['ggml_backend_webgpu_buffer_set_tensor']),
-        'ACTUAL_GENERIC_SET_GET': (generic, ['ggml_backend_tensor_set', 'ggml_backend_tensor_get']),
+        'ACTUAL_GENERIC_SET_GET': (generic, ['ggml_backend_tensor_set', 'ggml_backend_tensor_get', 'ggml_backend_tensor_get_async']),
         'ACTUAL_BUFFER_COPY': (actual, ['ggml_backend_webgpu_buffer_cpy_tensor']),
         'ACTUAL_GENERIC_BUFFER_COPY': (generic, ['ggml_backend_buffer_copy_tensor']),
         'ACTUAL_HOOK': (actual, ['ggml_backend_webgpu_cpy_tensor_async']),
@@ -124,10 +155,24 @@ def emit(upstream: Path, prepared: Path) -> str:
     constructor = generic[generic.index('ggml_backend_sched_t ggml_backend_sched_new('):]
     discovery = block(constructor, '    for (int b = 0; b < n_backends; b++) {')
     code = replace_once(code, '// @ACTUAL_CONSTRUCTOR_DISCOVERY@', discovery)
+    phase = function(generic, 'ggml_backend_sched_compute_splits')
+    start = phase.index('        // copy the input tensors to the split backend')
+    end = phase.index('        if (!sched->callback_eval)', start)
+    phase = ('static void actual_input_phase(ggml_backend_sched_t sched,int split_id){\n'
+             'auto* split=&sched->splits[split_id];\n' + phase[start:end] + '}\n')
+    code = replace_once(code, '// @ACTUAL_PREFETCH@',
+        function(generic, 'ggml_backend_sched_prefetch_inputs') + phase)
     registration = re.search(r'/\* \.cpy_tensor_async\s+= \*/\s*(\w+)\s*,', actual)
     if not registration:
         raise ValueError('Missing registered async hook')
     code = replace_once(code, '// @REGISTERED_HOOK@', registration.group(1) + ',')
     if '// @' in code:
         raise ValueError('Unexpanded production helper placeholder')
-    return code + '\n' + (here / 'cases.cpp').read_text()
+    cases = (here / 'cases.cpp').read_text()
+    cases = cases.replace('int main() {', (here / 'prefetch-cases.cpp').read_text() + '\n' +
+                          (here / 'requires-copy-cases.cpp').read_text() + '\nint main() {', 1)
+    cases = cases.replace('    provider_boundary_and_failures();',
+                          '    provider_boundary_and_failures();\n    prefetch_and_snapshot_order();\n'
+                          '    prefetch_excludes_callback_owned_buffers();\n'
+                          '    requires_copy_case_matrix();', 1)
+    return code + '\n' + cases

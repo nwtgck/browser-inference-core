@@ -24,6 +24,35 @@ class StorageRuntimeTests(unittest.TestCase):
         if not (self.source / 'tools/mtmd/mtmd.cpp').is_file():
             self.skipTest('Initialize the pinned upstream checkout')
 
+    def test_actual_formatter_excludes_only_the_added_terminator(self):
+        code = (self.source / 'tools/mtmd/mtmd.cpp').read_text()
+        start = code.index('std::string mtmd_format(')
+        end = code.index('\n}\n', start) + 3
+        fixture = self.work / 'formatter.cpp'
+        fixture.write_text(r'''
+#include <cassert>
+#include <climits>
+#include <cstdarg>
+#include <cstdio>
+#include <string>
+#include <vector>
+#define GGML_ASSERT(value) assert(value)
+''' + code[start:end] + r'''
+int main() {
+    assert(mtmd_format("").empty());
+    assert(mtmd_format("plain") == "plain");
+    const auto prompt = mtmd_format("image %ux%u<|media_content|>", 480u, 336u);
+    assert(prompt == "image 480x336<|media_content|>");
+    assert(prompt.size() == std::string("image 480x336<|media_content|>").size());
+    const auto embedded = mtmd_format("%c", 0);
+    assert(embedded.size() == 1 && embedded[0] == '\0');
+}
+''')
+        binary = self.work / 'formatter'
+        subprocess.run(['g++', '-std=c++17', '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        str(fixture), '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+
     def test_generated_api_uses_raw_i32_and_keeps_existing_parameter_layout(self):
         generated = self.work / 'generated'
         generate(self.source, generated, 'clang')
@@ -55,9 +84,8 @@ class StorageRuntimeTests(unittest.TestCase):
         # The constructor below is an explicit no-I/O double. The production
         # init/query/version bodies are extracted verbatim, including their
         # validation and exception boundary; this does not exercise the loader.
-        patched = prepare(self.source, self.work / 'overlay',
-                          ROOT / PATCH_DIRECTORY / 'mtmd-vision-bf16-runtime.patch', filename='mtmd.cpp')
-        code = patched.read_text()
+        tree = prepare(self.source, self.work / 'overlay', mode='cpu')
+        code = (tree / 'mtmd.cpp').read_text()
         start = code.index('mtmd_context * mtmd_init_from_file(')
         end = code.index('void mtmd_free(mtmd_context * ctx)', start)
         entries = code[start:end]
@@ -119,103 +147,106 @@ int main() {
         subprocess.run([str(binary)], check=True)
 
     def test_cpu_loader_boundary_keeps_audio_and_rejects_only_gpu_requested_vision(self):
-        # Execute the actual minimal clip init body with a metadata-only loader
-        # double. This fixes modality/cleanup control flow, not GGUF execution.
-        patched = prepare(self.source, self.work / 'cpu-clip',
-                          ROOT / PATCH_DIRECTORY / 'mtmd-vision-bf16-clip-runtime.patch')
-        code = patched.read_text()
-        start = code.index('struct clip_init_result clip_init(')
-        end = code.index('struct clip_cap clip_get_cap(', start)
+        # Execute the actual model-load orchestration with metadata-only doubles.
+        # It proves classification/policy/cleanup, not GGUF or model execution.
+        tree = prepare(self.source, self.work / 'cpu-model', mode='cpu')
+        code = (tree / 'mtmd-model.cpp').read_text()
+        start = code.index('mtmd_models mtmd_model_load(')
+        end = code.index('mtmd_model_caps mtmd_model_get_caps(', start)
         entries = code[start:end]
         fixture = self.work / 'modality.cpp'
         fixture.write_text(r'''
-#include "mtmd-vision-bf16-internal.h"
+#include "mtmd-vision-bf16-policy.h"
 #include <cassert>
+#include <memory>
+#include <stdexcept>
 #include <string>
-#include <vector>
-#define LOG_ERR(...) ((void)0)
-static int allocated = 0;
-static int weight_loads = 0;
-static int classifications = 0;
-static int schedulers = 0;
-static int callback_sets = 0;
-static void * callback_data = nullptr;
-enum projector_type { PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_GEMMA3NV,
-                      PROJECTOR_TYPE_LFM3A_GEN, PROJECTOR_TYPE_SOPRANO, PROJECTOR_TYPE_CHATTERBOX };
-struct fixture_model { projector_type proj_type = PROJECTOR_TYPE_MLP; };
-struct scheduler_owner {
-    ggml_backend_sched_t value = nullptr;
-    void reset(ggml_backend_sched_t next) { value = next; }
-    ggml_backend_sched_t get() const { return value; }
+static int classifications = 0, weight_loads = 0, live_weights = 0;
+enum mtmd_modality { MTMD_MODALITY_VISION, MTMD_MODALITY_AUDIO, MTMD_MODALITY_GEN_AUDIO };
+enum projector_type { PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_GEMMA3NV, PROJECTOR_TYPE_CHATTERBOX };
+struct mtmd_model {
+    const mtmd_vision_bf16_storage vision_bf16_storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
+    mtmd_modality modality = MTMD_MODALITY_VISION;
+    projector_type proj_type = PROJECTOR_TYPE_MLP;
+    struct { int custom_image_min_tokens = -1, custom_image_max_tokens = -1; } hparams;
+    void * zero_pointer;
+    bool weights = false;
+    ~mtmd_model() { if (weights) --live_weights; }
 };
-struct clip_ctx {
-    const mtmd_vision_bf16_storage vision_bf16_storage;
-    fixture_model model;
-    clip_flash_attn_type flash_attn_type = CLIP_FLASH_ATTN_TYPE_AUTO;
-    std::vector<uint8_t> buf_compute_meta;
-    std::vector<ggml_backend_t> backend_ptrs;
-    std::vector<ggml_backend_buffer_type_t> backend_buft;
-    scheduler_owner sched;
-    int max_nodes = 1;
-    clip_ctx(clip_context_params &, mtmd_vision_bf16_storage mode = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND) :
-        vision_bf16_storage(mode) { ++allocated; }
-    ~clip_ctx() { --allocated; }
+struct mtmd_model_params {
+    mtmd_vision_bf16_storage vision_bf16_storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
+    bool gpu_requested = false;
+    int image_min_tokens = -1, image_max_tokens = -1;
+    bool no_alloc = false;
+    mtmd_progress_callback progress_callback = nullptr;
+    void * progress_callback_user_data = nullptr;
 };
-projector_type clip_get_projector_type(const clip_ctx * ctx) { return ctx->model.proj_type; }
-extern "C" size_t ggml_tensor_overhead(void) { return 1; }
-extern "C" size_t ggml_graph_overhead_custom(size_t nodes, bool) { return nodes; }
-extern "C" ggml_backend_sched_t ggml_backend_sched_new(ggml_backend_t *, ggml_backend_buffer_type_t *,
-                                                        int, size_t nodes, bool parallel, bool offload) {
-    assert(nodes == 65536 && !parallel && offload); ++schedulers;
-    return reinterpret_cast<ggml_backend_sched_t>(uintptr_t(1));
-}
-extern "C" void ggml_backend_sched_set_eval_callback(ggml_backend_sched_t sched,
-                                                       ggml_backend_sched_eval_callback callback, void * data) {
-    assert(sched && callback && data == callback_data); ++callback_sets;
-}
-struct clip_model_loader {
-    bool has_vision;
-    bool has_audio;
-    bool has_gen_audio;
-    clip_model_loader(const char * path, bool, mtmd_progress_callback, void *) :
-        has_vision(std::string(path) == "vision"), has_audio(std::string(path) == "audio"),
-        has_gen_audio(std::string(path) == "gen") {
-        ++classifications;
+struct mtmd_models { std::unique_ptr<mtmd_model> v, a, gen_a; };
+struct mtmd_model_loader {
+    std::string path;
+    bool has_vision, has_audio, has_gen_audio;
+    mtmd_model_loader(const char * p, bool, mtmd_progress_callback, void *) : path(p),
+        has_vision(path == "vision" || path == "mixed" || path == "gemma3n"),
+        has_audio(path == "audio" || path == "mixed" || path == "gemma3n"),
+        has_gen_audio(path == "gen" || path == "mixed") { ++classifications; }
+    void load_hparams(mtmd_model & model, mtmd_modality modality) {
+        model.modality = modality;
+        if (path == "gemma3n" && modality == MTMD_MODALITY_VISION) model.proj_type = PROJECTOR_TYPE_GEMMA3NV;
+        if (modality == MTMD_MODALITY_GEN_AUDIO) model.proj_type = PROJECTOR_TYPE_CHATTERBOX;
     }
-    void load_hparams(fixture_model & model, clip_modality) {
-        if (has_gen_audio) model.proj_type = PROJECTOR_TYPE_CHATTERBOX;
+    void load_tensors(mtmd_model & model, ggml_backend_buffer_type_t, bool no_alloc) {
+        assert(model.zero_pointer == nullptr);
+        assert(model.hparams.custom_image_min_tokens == 3 && model.hparams.custom_image_max_tokens == 7);
+        if (!no_alloc) { ++weight_loads; ++live_weights; model.weights = true; }
     }
-    void load_tensors(clip_ctx &) { ++weight_loads; }
-    void init_ctx(clip_ctx &) {}
-    void warmup(clip_ctx &) {}
 };
 ''' + entries + r'''
 int main() {
-    clip_context_params params{};
-    params.use_gpu = true;
-    auto audio = lcb_clip_init_with_vision_bf16_storage("audio", params, MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
-    assert(audio.ctx_a && !audio.ctx_v && classifications == 1 && weight_loads == 1);
-    assert(audio.ctx_a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
-    delete audio.ctx_a;
-    auto rejected = lcb_clip_init_with_vision_bf16_storage("vision", params, MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
-    assert(!rejected.ctx_a && !rejected.ctx_v && allocated == 0);
-    assert(classifications == 2 && weight_loads == 1);
-    auto legacy = clip_init("vision", params);
-    assert(legacy.ctx_v && legacy.ctx_v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
-    delete legacy.ctx_v;
-    params.use_gpu = false;
-    auto cpu = lcb_clip_init_with_vision_bf16_storage("vision", params, MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
-    assert(cpu.ctx_v && cpu.ctx_v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
-    delete cpu.ctx_v;
-    assert(allocated == 0 && weight_loads == 3 && classifications == 4);
-    params.cb_eval = [](ggml_tensor *, bool, void *) { return false; };
-    params.cb_eval_user_data = callback_data = &params;
-    auto gen = lcb_clip_init_with_vision_bf16_storage("gen", params, MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
-    assert(gen.ctx_gen_a && !gen.ctx_v && !gen.ctx_a && gen.ctx_gen_a->max_nodes == 65536);
-    assert(gen.ctx_gen_a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
-    assert(schedulers == 1 && callback_sets == 1 && gen.ctx_gen_a->buf_compute_meta.size() == 131072);
-    delete gen.ctx_gen_a;
-    assert(allocated == 0 && weight_loads == 4 && classifications == 5);
+    mtmd_model_params params;
+    params.image_min_tokens = 3; params.image_max_tokens = 7;
+    params.gpu_requested = true;
+    params.vision_bf16_storage = MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED;
+    {
+        auto audio = mtmd_model_load("audio", params, nullptr);
+        assert(audio.a && !audio.v && classifications == 1 && weight_loads == 1);
+        assert(audio.a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
+    }
+    assert(live_weights == 0);
+    const int before = weight_loads;
+    try { mtmd_model_load("vision", params, nullptr); assert(false); }
+    catch (const std::runtime_error &) {}
+    assert(classifications == 2 && weight_loads == before && live_weights == 0);
+    params.no_alloc = true;
+    try { mtmd_model_load("vision", params, nullptr); assert(false); }
+    catch (const std::runtime_error &) {}
+    assert(weight_loads == before);
+    params.gpu_requested = false;
+    {
+        auto cpu = mtmd_model_load("vision", params, nullptr);
+        assert(cpu.v && cpu.v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
+        assert(weight_loads == before && live_weights == 0);
+    }
+    params.no_alloc = false;
+    {
+        auto mixed = mtmd_model_load("mixed", params, nullptr);
+        assert(mixed.v && mixed.a && mixed.gen_a);
+        assert(mixed.v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED);
+        assert(mixed.a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
+        assert(mixed.gen_a->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
+        assert(mixed.gen_a->proj_type == PROJECTOR_TYPE_CHATTERBOX && live_weights == 3);
+    }
+    assert(live_weights == 0);
+    {
+        auto gemma = mtmd_model_load("gemma3n", params, nullptr);
+        assert(gemma.v && !gemma.a && !gemma.gen_a && live_weights == 1);
+    }
+    params.gpu_requested = true;
+    params.vision_bf16_storage = MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND;
+    {
+        auto legacy = mtmd_model_load("vision", params, nullptr);
+        assert(legacy.v && legacy.v->vision_bf16_storage == MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND);
+    }
+    assert(live_weights == 0);
 }
 ''')
         binary = self.work / 'modality'
@@ -225,6 +256,30 @@ int main() {
                         str(fixture), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
 
+    def test_constructor_exceptions_release_scheduler_before_distinct_backends(self):
+        template = (ROOT / 'tests/mtmd-constructor/main.cpp.in').read_text()
+        self.assertEqual(template.count('@ACTUAL_BODIES@'), 1)
+        for mode in ('cpu', 'webgpu'):
+            with self.subTest(mode=mode):
+                tree = prepare(self.source, self.work / ('constructor-' + mode), mode=mode)
+                source = (tree / 'mtmd-subcontext.cpp').read_text()
+                start = source.index('mtmd_backends::mtmd_backends(')
+                end = source.index('std::map<ggml_backend_dev_t, size_t> mtmd_backends::get_mem_compute()', start)
+                borrowed = source.index('mtmd_subcontext::mtmd_subcontext(', end)
+                borrowed_end = source.index('mtmd_image_f32_batch mtmd_subcontext::get_dummy_batch()', borrowed)
+                code = template.replace('@ACTUAL_BODIES@', source[start:end] + source[borrowed:borrowed_end])
+                fixture = self.work / (mode + '-constructor.cpp')
+                fixture.write_text(code)
+                binary = self.work / (mode + '-constructor')
+                subprocess.run(['g++', '-std=c++17', '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                                str(fixture), '-o', str(binary)], check=True, capture_output=True, text=True)
+                subprocess.run([str(binary)], check=True, capture_output=True, text=True)
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_upload_backend_public_api_failures_and_drain_lifetime(self):
+        binary = self.work / 'upload-backend'
+        subprocess.run(['g++', '-std=c++17', '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        '-I' + str(ROOT / 'bridge'), '-I' + str(self.source / 'include'),
+                        '-I' + str(self.source / 'ggml/include'), '-I' + str(self.source / 'tools/mtmd'),
+                        str(ROOT / 'tests/mtmd-upload-backend/main.cpp'), '-o', str(binary)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run([str(binary)], check=True, capture_output=True, text=True)

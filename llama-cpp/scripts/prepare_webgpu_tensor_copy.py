@@ -13,17 +13,17 @@ PATCH_DIRECTORY = 'upstream-patches-only-as-a-last-resort-with-explicit-user-app
 PATCH_NAME = 'ggml-webgpu-same-device-tensor-copy.patch'
 SOURCE_PATH = 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'
 REVIEWED_REVISIONS = {
-    "9309bf1bcfe8d52b0fb7ef906474db94041a5e0c": {
-        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "7fa5eca8734b7d31bf467281c698b3356c5750c2f923008c179a4dae426cffe5",
-        "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e",
-        "ggml/include/ggml.h": "1aef7a5f465b1c19de305dd6f9a0c303f88e485133a94b9a0ee1cce6345c9101",
+    "b1b770d90d94cad9e9ea5b993bdbc383a522fb28": {
+        "ggml/src/ggml-webgpu/ggml-webgpu.cpp": "c3e627af0d18c596dd45f051c7eba612a6f8f53f458bceecd557d8704f52b8ee",
+        "ggml/src/ggml-backend.cpp": "2f724930ea53dd8f50f26706ecf10a177d56601e668f109cf1cd95052b1b9ad8",
+        "ggml/include/ggml.h": "bdb0e75be8eeb1fc14a742015025505f5810d8200cbb40bda7e981101413440b",
         "ggml/include/ggml-backend.h": "34464da4b46314c710cd634626578c6f2a6811431d41eddaf5e8aa77082fea2a",
         "ggml/src/ggml-backend-impl.h": "7693def12dcc79a10dd2152e7cb659278756dba7622ebe41937f951dc94944e3",
         "ggml/src/ggml-webgpu/CMakeLists.txt": "aa19125326050c3e0ae768f31f43a61b8150805a4b330853662b955e8ef34b2a",
-        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "34522d61990406ddc1e46c55da4531e6aa2ad1561bf5bf512ebbb38843dbd49d"
+        "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": "a110a08b87a2b2768c991281e450cc0e89b5c34f67856b58138b7ca9e9aa5f17"
     }
 }
-PATCH_SHA256 = '0a23030dd2504b3c9c7436c77b65ed2000f08c68e17f6e7c2276f2d5737bc8e8'
+PATCH_SHA256 = 'e7a9cf739fba7c75e38590f18d9b04f3520835a70a0d66e92abf117bb783c939'
 DAWN_RELEASE = 'v20260908.214631'
 DAWN_HEADERS = {
     "webgpu/include/webgpu/webgpu.h": "da1bbcb1c6e0f65d917c4829b465454914b44ea16fa49c3146fc44e606ac989a",
@@ -31,7 +31,7 @@ DAWN_HEADERS = {
     "webgpu_cpp/include/webgpu/webgpu_cpp_chained_struct.h": "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
     "webgpu_cpp/include/webgpu/webgpu_enum_class_bitmasks.h": "fd436dc17d050e156ac073b6148d90d388e2585de924ae0274b6aed3067c2a96"
 }
-PATCHED_SOURCE_SHA256 = 'af7aab21df671b5a95685ef0d5cdfe79d534844c5eac80bfe965be166809389d'
+PATCHED_SOURCE_SHA256 = 'aec98ba4fb3996bb944de8554370ce2cc487dcc87be2f2f004a0eb0a78f20742'
 
 
 def digest(path: Path) -> str:

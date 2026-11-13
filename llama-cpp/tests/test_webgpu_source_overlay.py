@@ -123,6 +123,65 @@ class WebgpuSourceOverlay(unittest.TestCase):
                 for hook in ('set_tensor_n', 'get_tensor_n', 'cpy_tensor_n'):
                     self.assertIn('/* .' + hook, text)
 
+    @unittest.skipUnless(shutil.which('c++'), 'native compiler required')
+    def test_rope_truncate_and_final_matmul_precision_rejection_survive_composition(self):
+        from test_webgpu_buffer_limit import definition
+        original = (self.upstream / source.SOURCE_PATH).read_text()
+        for profile in (False, True):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                text = source.prepare(self.upstream, directory / 'prepared', gpu_profile=profile).read_text()
+                self.assertEqual(definition(text, 'static webgpu_encoded_op ggml_webgpu_rope('),
+                                 definition(original, 'static webgpu_encoded_op ggml_webgpu_rope('))
+                self.assertIn('ggml_rope_get_truncate(dst)', definition(text, 'static webgpu_encoded_op ggml_webgpu_rope('))
+                support = definition(text, 'static bool ggml_backend_webgpu_device_supports_op(')
+                raw_support = definition(original, 'static bool ggml_backend_webgpu_device_supports_op(')
+                functions = []
+                for operation in ('MUL_MAT', 'MUL_MAT_ID'):
+                    marker = 'case GGML_OP_' + operation + ':'
+                    block = support.split(marker, 1)[1].split('\n        case ', 1)[0]
+                    raw_block = raw_support.split(marker, 1)[1].split('\n        case ', 1)[0]
+                    guard_marker = 'if (ggml_prec_get_src(op, 1)'
+                    guard = definition(block, guard_marker)
+                    self.assertEqual(guard, definition(raw_block, guard_marker))
+                    self.assertNotIn('return true;', block)
+                    self.assertRegex(block.split(guard, 1)[1], r'^\s*break;\s*\}?\s*$')
+                    functions.append('bool supports_' + operation + '(bool initial,int precision){\n'
+                        'ggml_tensor value{precision,0};const auto* op=&value;bool supports_op=initial;\n' +
+                        guard + '\nreturn supports_op;}\n')
+                rope = support.split('case GGML_OP_ROPE:', 1)[1].split('break;', 1)[0]
+                raw_rope = raw_support.split('case GGML_OP_ROPE:', 1)[1].split('break;', 1)[0]
+                self.assertEqual(rope, raw_rope)
+                functions.append('bool supports_rope(int type,bool truncate){\n'
+                    'ggml_tensor value{0,type};const auto* op=&value;bool supports_op=false;(void)truncate;\n' +
+                    rope + '\nreturn supports_op;}\n')
+                # Execute the actual terminal guards after either selector result.
+                # Tensor bookkeeping is modeled; no backend or GPU is created.
+                precision_enum = definition((self.upstream / 'ggml/include/ggml.h').read_text(),
+                                            'enum ggml_prec {') + ';\n'
+                code = '''#include <cassert>
+struct ggml_tensor {int precision,type;};
+''' + precision_enum + '''
+enum {GGML_TYPE_F32,GGML_TYPE_F16,GGML_TYPE_Q8_0};
+int ggml_prec_get_src(const ggml_tensor* op,int index){assert(index==1);return op->precision;}
+''' + ''.join(functions) + '''
+int main(){
+for(bool initial:{false,true})for(int precision:{GGML_PREC_UNDEFINED,GGML_PREC_F16,GGML_PREC_BF16,GGML_PREC_F32}){
+bool expected=initial && precision!=GGML_PREC_BF16 && precision!=GGML_PREC_F32;
+assert(supports_MUL_MAT(initial,precision)==expected);
+assert(supports_MUL_MAT_ID(initial,precision)==expected);
+}
+for(bool truncate:{false,true})for(int type:{GGML_TYPE_F32,GGML_TYPE_F16,GGML_TYPE_Q8_0})
+assert(supports_rope(type,truncate)==(type==GGML_TYPE_F32 || type==GGML_TYPE_F16));
+}
+'''
+                code = '#include <initializer_list>\n' + code
+                native = directory / 'admission.cpp'
+                native.write_text(code)
+                binary = directory / 'admission'
+                subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', str(native), '-o', str(binary)], check=True)
+                subprocess.run([str(binary)], check=True)
+
     def test_patch_result_and_overlap_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); patches = root / 'patches'; patches.mkdir()
@@ -195,8 +254,12 @@ class WebgpuSourceOverlay(unittest.TestCase):
                                  [name for name in after_names if name != 'llama-model-loader.cpp'])
                 self.assertNotIn('moe-direct-slot-overlay', (build / 'includes.txt').read_text())
                 self.assertNotIn('moe-direct-slot-overlay', (build / 'compile_commands.json').read_text())
-                self.assertTrue((build / 'mtmd-overlay/clip.cpp').is_file())
-                self.assertTrue((build / 'mtmd-audio-overlay/mtmd-audio.cpp').is_file())
+                mtmd_overlay = build / 'mtmd-source-overlay'
+                manifest = json.loads((mtmd_overlay / 'mtmd-source-manifest.json').read_text())
+                self.assertEqual(manifest['reviewedCommit'], next(iter(copy.REVIEWED_REVISIONS)))
+                for name in ('mtmd-model.cpp', 'mtmd-subcontext.cpp', 'mtmd-audio.cpp', 'mtmd.cpp'):
+                    self.assertTrue((mtmd_overlay / name).is_file())
+                    self.assertEqual(copy.digest(mtmd_overlay / name), manifest['preparedFiles'][name]['sha256'])
         self.assertEqual(before, (self.upstream / source.SOURCE_PATH).read_bytes())
         self.assertEqual(loader_before, (self.upstream / source.LOADER_PATH).read_bytes())
 
