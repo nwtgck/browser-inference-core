@@ -1,8 +1,10 @@
 # Publication validation and packing
 
-The runtime payload, manifests, package exports, source checks, provenance,
-license checks, size guards and append-only history are unchanged. This is a
-publication-pipeline optimization, not a compiler or runtime optimization.
+Publication keeps full source, provenance, license, size and payload validation
+while packing the private publication snapshot once. The aggregate package is
+`browser-inference-core`, with manifest format 4 and the two independent runtime
+trees beneath `runtimes/`. It contains runtime assets and public type declarations;
+development tools and intermediate build trees are excluded.
 
 `npm pack --dry-run --json` still compresses the package to obtain its file list.
 The pipeline therefore assigns npm packing to one boundary instead of repeating
@@ -13,33 +15,48 @@ is introduced, and no compression settings are changed.
 
 | Boundary in the publish job | Full payload/provenance checks | npm packing |
 | --- | --- | --- |
-| Inputs, assembled temporary tree and assembly destination | Every time | Deferred explicitly by `--defer-npm-pack` |
+| Inputs and assembled temporary tree | Every time | Deferred explicitly by `--defer-npm-pack` |
 | Publisher input | Yes, before copying can dereference links | Deferred to the private snapshot |
 | Publisher's private snapshot | Yes, before Git initialization or remote access | Each runtime separately, then the root package (3 calls) |
 | Staged immutable Git tree | Every raw blob and root manifest, before remote access | Not repeated |
-| Report input, before lock resolution | Yes | Reused only with this publication's matching manifest digest |
+| Lock fixture preparation and report input | Yes | Reused only with this publication's matching manifest digest |
 | Report input, after lock resolution and provenance collection | Yes again, against the same digest | Not repeated |
 | End of metadata construction, before report writes | Bound metadata snapshots and another full payload check | Not repeated |
 
 The default assembly/verification commands and each runtime's validator still
 perform npm packing. The publisher has **no skip-packing option**. Standalone
 report generation without a publisher digest runs all three pack checks before
-resolving the lock; it revalidates the same payload afterward without compressing
+reading the separately resolved lock; it revalidates the same payload afterward without compressing
 it again.
 
-The publish job previously invoked npm packing 8 times during assembly, 3 times
-during publication, and 6 times during reporting. It now invokes it 0 + 3 + 0
-times. This count does **not** include npm's separate work to generate the consumer
+The publish job invokes npm packing 0 + 3 + 0 times across aggregate assembly,
+publication snapshot validation and consumer reporting. This count does **not** include npm's separate work to generate the consumer
 lock. Timings depend on actual payloads, runner capacity, Git transfer and npm's
 network resolution, so the call-count reduction is not a wall-clock guarantee.
 
 ## Exact-tree handoff to reporting
 
-`publish_artifacts.py` records `commit` and `manifest-sha256` in `GITHUB_OUTPUT`
-only after a successful push. The digest is checked against both the private
-snapshot that passed all three npm checks and the immutable Git tree actually
-committed, not simply read from potentially changed files after publication. The workflow passes both outputs from that same step to the
-reporter. No evidence file is added to the distributed package.
+The offline `build_tools.publication.artifacts freeze` command validates and
+copies the package, performs all three npm checks and verifies every immutable
+Git blob. Its required `--source-repo` input also checks the captured source and
+prepared-source receipts before Git initialization. The nested llama manifest is
+read from the private snapshot, and its exact parsed bytes must match the root
+manifest before the collector reproduces the selected source preparation.
+It writes a private receipt containing the frozen tree, source commit
+and manifest identity. The literal online push loop in `build.yml` extends the
+fetched artifact tip using this tree; it never force-pushes or re-packs on a retry.
+
+After a reported push failure, the workflow checks remote ancestry before
+classifying the failure. If the server accepted the commit but lost its response,
+that original commit is recognized even when another publication has already
+advanced the branch. Conflicting ordinary pushes retry against the new parent.
+A permission or unrelated transport failure does not authorize a rewritten branch.
+
+The offline `confirm` command checks the returned commit's tree and manifest
+against the frozen receipt, then records the paired `commit` and
+`manifest-sha256` outputs and the early installation summary. Those same-job
+outputs feed the npm fixture and reporter. No receipt is added to the distributed
+package. Later worktree changes cannot alter the already verified Git tree.
 
 `--published-manifest-sha256` is a trusted same-job handoff, **not** a signature or
 an independently verifiable proof of remote publication. Do not compute it from
@@ -63,27 +80,35 @@ published commit and its job output intact; it never rewrites history.
 ## Checkout and diagnostic scope
 
 Only the publish job changes its submodule checkout. It initializes
-`llama-cpp/vendor/llama.cpp` at the source commit's gitlink, shallowly and without
-recursion. Consumer provenance reads the two llama source overlays from this
-checkout; image provenance comes from the downloaded, fully checked manifests.
+`runtimes/llama-cpp/vendor/llama.cpp` at the source commit's gitlink, shallowly and without
+recursion. The pre-publication receipt gate and consumer provenance read the
+selected llama source and source-preparation inputs from this checkout; image
+provenance comes from the downloaded, fully checked manifests.
 Compilation and test jobs retain their existing recursive checkouts. No upstream
 pin or patch changes.
 
 Wasm header checks read exactly eight bytes instead of loading the entire Wasm
 file to slice its first eight bytes. Full streaming SHA-256 checks are retained.
 
-Publication stderr separates `stage-and-validate`, `git-stage-and-verify` and
-`git-publish` time; reporting separates `report-input-validation` from `npm-lock-resolution`. These
-logs do not alter stdout commit output, distributed files or report schemas.
+The publication and reporting Python stages run in explicit offline containers.
+The fresh npm fixture is prepared offline; the exact `npm install
+--package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3`
+command and its isolated cache/configuration are visible in YAML. Reading and
+validating npm's resulting lockfile is offline. No Python report helper acquires
+packages or calls GitHub.
 
 ## Local regression coverage
 
-`python3 -m unittest discover -s tests -p 'test_publish_optimization.py'` exercises
+`python3 -m unittest tests.build_tools.packaging.test_publish_optimization` exercises
 real npm packing, the workflow's selective Git checkout, local bare-Git pushes,
 append-only history, old-commit installation and an empty-cache `npm ci`.
 Fixtures contain synthetic Wasm headers: these tests do not establish compilation
-or real-model inference. GitHub lock resolution and upstream overlay collection
-are mocked only in report tests; the production implementations are unchanged.
+or real-model inference. The byte-publication harness uses local Git remotes and
+does not initialize real upstream sources. Focused gate tests inject a failing
+source collector and a mutation during source verification, and prove that neither
+can emit a publication receipt. Report tests substitute lock and provenance data;
+the source collector has separate capture and preparation tests. The workflow
+performs actual remote acquisition in its explicit online steps.
 
 ## Adversarial review of the publication boundaries
 
@@ -112,13 +137,13 @@ files before opening JSON metadata. A file-only listing previously ignored
 these entries. Peer dependency and bundled dependency declarations (including
 both bundle field spellings) are rejected alongside the existing dependency and
 lifecycle-hook checks. Ordinary packages produced by this repository have none
-of these fields, so their bytes and metadata formats are unchanged.
+of these fields, so their dependency-free installation behavior is retained.
 
-`tests/test_publish_adversarial.py` injects faults into Git staging, the final npm
+`tests/build_tools/packaging/test_publish_adversarial.py` injects faults into Git staging, the final npm
 check and report construction. It also checks real local Git push conflicts,
 permission/packing failures, immutable-tree reuse, unusual filenames and bounded
 blob reads. These checks defend the content handoffs of this trusted job, not a
 runner where an attacker controls the Python/Git/npm executables, environment,
 credentials or arbitrary concurrent code. The receipt remains a trusted same-job
-handoff, not a signature. Network lock generation is unchanged; fault tests use
+handoff, not a signature. Lock acquisition remains an npm operation in YAML; fault tests use
 fixed lock data and make no GitHub publication or inference claim.

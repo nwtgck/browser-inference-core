@@ -1,9 +1,9 @@
 [submodule "vendor/llama.cpp"]
-	path = llama-cpp/vendor/llama.cpp
+	path = runtimes/llama-cpp/vendor/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp.git
 [submodule "stable-diffusion-cpp/vendor/stable-diffusion.cpp"]
-	path = stable-diffusion-cpp/vendor/stable-diffusion.cpp
+	path = runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp
 	url = https://github.com/leejet/stable-diffusion.cpp.git
 [submodule "stable-diffusion-cpp/vendor/ggml-webgpu-source"]
-	path = stable-diffusion-cpp/vendor/ggml-webgpu-source
+	path = runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source
 	url = https://github.com/ggml-org/llama.cpp.git

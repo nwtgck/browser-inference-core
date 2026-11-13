@@ -10,7 +10,10 @@ on:
 
 defaults:
   run:
-    working-directory: llama-cpp
+    working-directory: .
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
 
 permissions:
   contents: read
@@ -37,7 +40,305 @@ jobs:
           # dependencies, evaluates its YAML, or executes downloaded artifacts.
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - name: Reconcile source-bound runtime comments
+      - name: Acquire offline automation image (online)
+        shell: bash
+        run: |
+
+          # This context contains only the inline image recipe, never repository code.
+          image_context="$(mktemp -d "$RUNNER_TEMP/bicore-automation.XXXXXX")"
+          cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
+          FROM ubuntu:24.04
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 jq \
+              && rm -rf /var/lib/apt/lists/*
+          BICORE_DOCKERFILE
+          docker build --pull --tag "bicore-automation:$GITHUB_JOB" "$image_context"
+          printf 'BIC_OFFLINE_IMAGE=bicore-automation:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
+      - name: Acquire open pull requests (online)
+        shell: bash
         env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/runtime_comments.py
+        run: |
+
+          # All invocations reconcile the same-repository open set, including PRs opened
+          # after a push build. API pages are bounded and never silently truncated.
+          mkdir -p "$REPORT_STATE"
+          directory="$REPORT_STATE"
+          printf '[]\n' > "$REPORT_STATE/pulls.json"
+          complete=false
+          for page in $(seq 1 100); do
+            gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/pulls" -f per_page=100 -f page="$page" -f state=open > "$directory/page.json"
+            jq -e '. | type == "array" and length <= 100' "$directory/page.json" > /dev/null
+            jq -s '.[0] + (.[1])' "$REPORT_STATE/pulls.json" "$directory/page.json" > "$directory/next.json"
+            mv "$directory/next.json" "$REPORT_STATE/pulls.json"
+            count="$(jq '. | length' "$directory/page.json")"
+            if [[ "$count" -lt 100 ]]; then complete=true; break; fi
+          done
+          if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
+      - name: Validate the same-repository pull request set
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
+            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
+            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
+            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e REPORT_STATE \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+
+          python3 -m build_tools.publication.comments plan-pulls --state "$REPORT_STATE"
+          BICORE_OFFLINE
+      - name: Acquire matching workflow histories (online)
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          jq -r '.[]' "$REPORT_STATE/requests.json" > "$REPORT_STATE/request-numbers"
+          while IFS= read -r number; do
+            directory="$REPORT_STATE/$number"
+            branch="$(jq -r '.head.ref' "$directory/pr.json")"
+            head="$(jq -r '.head.sha' "$directory/pr.json")"
+            printf '[]\n' > "$directory/runs.json"
+            complete=false
+            for page in $(seq 1 10); do
+              gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs" -f per_page=100 -f page="$page" -f branch="$branch" -f head_sha="$head" > "$directory/page.json"
+              jq -e '(.total_count | type == "number" and . >= 0 and . <= 1000) and (.workflow_runs | type == "array" and length <= 100)' "$directory/page.json" > /dev/null
+              jq -s '.[0] + (.[1].workflow_runs)' "$directory/runs.json" "$directory/page.json" > "$directory/next.json"
+              mv "$directory/next.json" "$directory/runs.json"
+              count="$(jq '.workflow_runs | length' "$directory/page.json")"
+              total="$(jq '.total_count' "$directory/page.json")"
+              received="$(jq 'length' "$directory/runs.json")"
+              if [[ "$received" -ge "$total" ]]; then complete=true; break; fi
+              if [[ "$count" -lt 100 ]]; then echo 'Incomplete workflow run history.' >&2; exit 1; fi
+            done
+            if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
+
+          done < "$REPORT_STATE/request-numbers"
+      - name: Select the newest attempt for each head
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
+            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
+            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
+            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e REPORT_STATE \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+
+          python3 -m build_tools.publication.comments plan-runs --state "$REPORT_STATE"
+          BICORE_OFFLINE
+      - name: Acquire attempt-bound report artifact listings (online)
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          jq -r '.[]' "$REPORT_STATE/requests.json" > "$REPORT_STATE/request-numbers"
+          while IFS= read -r number; do
+            directory="$REPORT_STATE/$number"
+            if [[ "$(jq -r '.download' "$directory/plan.json")" != true ]]; then continue; fi
+            export COMMENT_DIRECTORY="$directory"
+            # Each archive failure is local to this PR and preserves the previous report.
+            if bash -euo pipefail <<'BICORE_ARTIFACT_LIST'
+            directory="$COMMENT_DIRECTORY"
+            run="$(jq -r '.run.id' "$directory/plan.json")"
+            name="consumer-update-$(jq -r '.run.run_attempt' "$directory/plan.json")"
+          printf '[]\n' > "$directory/artifacts.json"
+          complete=false
+          for page in $(seq 1 100); do
+            gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" -f per_page=100 -f page="$page" -f name="$name" > "$directory/page.json"
+            jq -e '.artifacts | type == "array" and length <= 100' "$directory/page.json" > /dev/null
+            jq -s '.[0] + (.[1].artifacts)' "$directory/artifacts.json" "$directory/page.json" > "$directory/next.json"
+            mv "$directory/next.json" "$directory/artifacts.json"
+            count="$(jq '.artifacts | length' "$directory/page.json")"
+            if [[ "$count" -lt 100 ]]; then complete=true; break; fi
+          done
+          if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
+
+          BICORE_ARTIFACT_LIST
+            then :
+            else printf '{"error":"Report artifact listing failed; inspect the workflow log."}\n' > "$directory/error.json"
+            fi
+          done < "$REPORT_STATE/request-numbers"
+      - name: Validate unique unexpired report archives
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
+            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
+            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
+            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e REPORT_STATE \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+
+          python3 -m build_tools.publication.comments select-artifacts --state "$REPORT_STATE"
+          BICORE_OFFLINE
+      - name: Request report archive locations (online)
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          jq -r '.[]' "$REPORT_STATE/requests.json" > "$REPORT_STATE/request-numbers"
+          while IFS= read -r number; do
+            directory="$REPORT_STATE/$number"
+            if [[ ! -f "$directory/archive.json" || -f "$directory/error.json" ]]; then continue; fi
+            artifact="$(jq -r '.artifactId' "$directory/archive.json")"
+            # This authenticated API request never follows a redirect. Signed storage
+            # downloads happen in the separate step below, without the API credential.
+            if ! curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-filesize 262144 \
+              -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              --dump-header "$directory/archive-headers" --output "$directory/archive-initial" \
+              --write-out '%{http_code}' "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact/zip" \
+              > "$directory/archive-status"; then
+              printf '{"error":"Report archive request failed; inspect the workflow log."}\n' > "$directory/error.json"
+            fi
+          done < "$REPORT_STATE/request-numbers"
+      - name: Validate report archive redirects
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
+            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
+            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
+            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e REPORT_STATE \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+
+          python3 -m build_tools.publication.comments archive-urls --state "$REPORT_STATE"
+          BICORE_OFFLINE
+      - name: Download report data without API credentials (online)
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+        run: |
+
+          # No GH_TOKEN is provided to this step. Only the validated signed HTTPS URL is
+          # used; no report content is executed, extracted into source, or installed.
+          jq -r '.[]' "$REPORT_STATE/requests.json" > "$REPORT_STATE/request-numbers"
+          while IFS= read -r number; do
+            directory="$REPORT_STATE/$number"
+            if [[ ! -f "$directory/download.json" || -f "$directory/error.json" ]]; then continue; fi
+            url="$(jq -r '.url' "$directory/download.json")"
+            if ! curl --fail --silent --show-error --location --max-redirs 3 --proto '=https' --proto-redir '=https' \
+              --max-filesize 262144 --output "$directory/report.zip" "$url"; then
+              printf '{"error":"Signed report download failed; inspect the workflow log."}\n' > "$directory/error.json"
+            fi
+          done < "$REPORT_STATE/request-numbers"
+      - name: Refresh and reconcile source-bound runtime comments
+        shell: bash
+        env:
+          REPORT_STATE: ${{ runner.temp }}/runtime-comments
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          # Refresh one PR and its newest attempt immediately before its write. Repository
+          # concurrency serializes reporters; stale event/run payloads never authorize a write.
+          jq -r '.[]' "$REPORT_STATE/requests.json" > "$REPORT_STATE/request-numbers"
+          while IFS= read -r number; do
+            directory="$REPORT_STATE/$number"
+            gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/pulls/$number" > "$directory/current-pr.json"
+            branch="$(jq -r '.head.ref' "$directory/current-pr.json")"
+            head="$(jq -r '.head.sha' "$directory/current-pr.json")"
+            printf '[]\n' > "$directory/current-runs.json"
+            complete=false
+            for page in $(seq 1 10); do
+              gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs" -f per_page=100 -f page="$page" -f branch="$branch" -f head_sha="$head" > "$directory/page.json"
+              jq -e '(.total_count | type == "number" and . >= 0 and . <= 1000) and (.workflow_runs | type == "array" and length <= 100)' "$directory/page.json" > /dev/null
+              jq -s '.[0] + (.[1].workflow_runs)' "$directory/current-runs.json" "$directory/page.json" > "$directory/next.json"
+              mv "$directory/next.json" "$directory/current-runs.json"
+              count="$(jq '.workflow_runs | length' "$directory/page.json")"
+              total="$(jq '.total_count' "$directory/page.json")"
+              received="$(jq 'length' "$directory/current-runs.json")"
+              if [[ "$received" -ge "$total" ]]; then complete=true; break; fi
+              if [[ "$count" -lt 100 ]]; then echo 'Incomplete workflow run history.' >&2; exit 1; fi
+            done
+            if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
+            printf '[]\n' > "$directory/current-comments.json"
+            complete=false
+            for page in $(seq 1 100); do
+              gh api --hostname github.com --method GET "repos/$GITHUB_REPOSITORY/issues/$number/comments" -f per_page=100 -f page="$page"  > "$directory/page.json"
+              jq -e '. | type == "array" and length <= 100' "$directory/page.json" > /dev/null
+              jq -s '.[0] + (.[1])' "$directory/current-comments.json" "$directory/page.json" > "$directory/next.json"
+              mv "$directory/next.json" "$directory/current-comments.json"
+              count="$(jq '. | length' "$directory/page.json")"
+              if [[ "$count" -lt 100 ]]; then complete=true; break; fi
+            done
+            if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
+            export COMMENT_NUMBER="$number"
+            docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+              -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+              -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
+              -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
+              -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+              -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+              -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
+              -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+              -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+              -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
+              -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
+              -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+              -e REPORT_STATE -e COMMENT_NUMBER \
+              "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+          python3 -m build_tools.publication.comments write-plan --state "$REPORT_STATE" --number "$COMMENT_NUMBER"
+          BICORE_OFFLINE
+
+            if [[ "$(jq -r '.write' "$directory/write.json")" != true ]]; then continue; fi
+            comment="$(jq -r '.commentId' "$directory/write.json")"
+            # Conversation comments use the issues API. No retries of POST/PATCH: a lost
+            # response must not create a duplicate comment. A later reconciliation checks it.
+            if [[ "$comment" == null ]]; then
+              gh api --hostname github.com --method POST "repos/$GITHUB_REPOSITORY/issues/$number/comments" \
+                --input "$directory/body.json" > "$directory/write-response.json"
+            else
+              [[ "$comment" =~ ^[1-9][0-9]*$ ]]
+              gh api --hostname github.com --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" \
+                --input "$directory/body.json" > "$directory/write-response.json"
+            fi
+          done < "$REPORT_STATE/request-numbers"

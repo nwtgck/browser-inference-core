@@ -1,0 +1,20 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
+@@ -1,4 +1,7 @@
+ enable subgroups;
++#ifdef REQUESTED_SUBGROUP_SIZE
++enable subgroup_size_control;
++#endif
+ enable f16;
+ 
+ // WG_SIZE is the checked fixed subgroup width for the unchanged accumulator.
+@@ -32,6 +35,9 @@
+ @group(0) @binding(3) var<uniform> params: MulMatParams;
+ 
+ @compute @workgroup_size(Q8_SUBGROUP_WORKGROUP_SIZE)
++#ifdef REQUESTED_SUBGROUP_SIZE
++@subgroup_size(REQUESTED_SUBGROUP_SIZE)
++#endif
+ fn main(
+     @builtin(workgroup_id) wg_id: vec3<u32>,
+     @builtin(num_workgroups) num_wg: vec3<u32>,

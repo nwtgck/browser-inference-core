@@ -1,0 +1,59 @@
+{
+  "origin": "Compiler-decoded 044 dedicated shaders, using the unchanged upstream v0.9.0 generator and approved patch bytes. C++ chunk boundaries are not part of this contract.",
+  "stages": {
+    "aligned": {
+      "ggml-webgpu-f32-matvec-epilogue-shaders.hpp": {
+        "symbol": "mul_mat_vec_f32_epilogue",
+        "bytes": 173908,
+        "sha256": "871ae632d1787be01c9102bb71de2fb39c5b08e3969103d0f19374979184e654"
+      },
+      "ggml-webgpu-iq3s-id-subgroup-shaders.hpp": {
+        "symbol": "iq3s_id_subgroup",
+        "bytes": 155258,
+        "sha256": "c69fa61ef9e50f0b822b29310cf05289b5521682925015c56283609eb828e86a"
+      },
+      "ggml-webgpu-mul-mat-id-group-shaders.hpp": {
+        "symbol": "mul_mat_id_group",
+        "bytes": 129876,
+        "sha256": "a845350753ae3ac2bec3e7406d18643f7158c15069b47a4659d5ad00eb61eb2a"
+      },
+      "ggml-webgpu-q8-subgroup-shaders.hpp": {
+        "symbol": "q8_subgroup_matvec",
+        "bytes": 152477,
+        "sha256": "5ae3ff2804126aecaf24356c18fcc4e29a29d056c8137d6c48bf1e99bc731cf9"
+      },
+      "ggml-webgpu-quant-half-pairs-shaders.hpp": {
+        "symbol": "mul_mat_reg_tile_half_pairs",
+        "bytes": 128847,
+        "sha256": "e9edaaca787189d51371f60736d5843f125d0961c22e67f578e9973416093568"
+      }
+    },
+    "optional": {
+      "ggml-webgpu-f32-matvec-epilogue-shaders.hpp": {
+        "symbol": "mul_mat_vec_f32_epilogue",
+        "bytes": 173908,
+        "sha256": "871ae632d1787be01c9102bb71de2fb39c5b08e3969103d0f19374979184e654"
+      },
+      "ggml-webgpu-iq3s-id-subgroup-shaders.hpp": {
+        "symbol": "iq3s_id_subgroup",
+        "bytes": 155258,
+        "sha256": "c69fa61ef9e50f0b822b29310cf05289b5521682925015c56283609eb828e86a"
+      },
+      "ggml-webgpu-mul-mat-id-group-shaders.hpp": {
+        "symbol": "mul_mat_id_group",
+        "bytes": 129876,
+        "sha256": "a845350753ae3ac2bec3e7406d18643f7158c15069b47a4659d5ad00eb61eb2a"
+      },
+      "ggml-webgpu-q8-subgroup-shaders.hpp": {
+        "symbol": "q8_subgroup_matvec",
+        "bytes": 152623,
+        "sha256": "dead890cc22565ba93bc93e4d6022ca1ebf20dcceaabdececd0aafd6719c956d"
+      },
+      "ggml-webgpu-quant-half-pairs-shaders.hpp": {
+        "symbol": "mul_mat_reg_tile_half_pairs",
+        "bytes": 128847,
+        "sha256": "e9edaaca787189d51371f60736d5843f125d0961c22e67f578e9973416093568"
+      }
+    }
+  }
+}

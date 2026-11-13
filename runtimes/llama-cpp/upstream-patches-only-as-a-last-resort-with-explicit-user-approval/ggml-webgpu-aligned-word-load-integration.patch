@@ -1,0 +1,9 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2,5 +2,5 @@
+ #define GGML_WEBGPU_SHADER_LIB_HPP
+ 
+ #include "ggml-impl.h"
+-#include "ggml-wgsl-shaders.hpp"
++#include "ggml-webgpu-aligned-word-load-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"

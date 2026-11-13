@@ -1,0 +1,359 @@
+{
+  "formatVersion": 1,
+  "features": [
+    {
+      "id": "webgpu-same-device-tensor-copy",
+      "patches": {
+        "patch": "ggml-webgpu-same-device-tensor-copy.patch"
+      },
+      "documentation": [
+        "docs/webgpu-tensor-copy.md"
+      ],
+      "behavior": "Eligible same-device aligned copies use the existing optional buffer hook and common GPU queue. Unsupported cases retain generic fallback. No checkpoint policy or capability API change."
+    },
+    {
+      "id": "webgpu-parameter-upload-batching",
+      "patches": {
+        "patch": "ggml-webgpu-batch-param-uploads.patch"
+      },
+      "documentation": [
+        "docs/webgpu-param-upload-batching.md"
+      ],
+      "behavior": "Coalesce parameter writes only at existing graph submission boundaries. Slot padding increases transferred bytes; no measured performance claim. The WebGPU overlays compose into one translation unit."
+    },
+    {
+      "id": "webgpu-ordered-readback",
+      "patches": {
+        "patch": "ggml-webgpu-ordered-readback.patch"
+      },
+      "documentation": [],
+      "behavior": "For nonempty reads from the same WebGPU queue, skip the redundant preliminary queue wait and use the existing blocking copy and map; foreign and zero-byte reads retain the generic synchronization behavior. No measured speedup is claimed."
+    },
+    {
+      "id": "webgpu-host-encode-assembly",
+      "patches": {
+        "patch": "ggml-webgpu-host-encode-assembly.patch"
+      },
+      "documentation": [],
+      "behavior": "Borrow single-dispatch inputs only during synchronous encoding and reserve bounded temporary vectors. Preserve parameter staging, exact binding identity, profile-owned names, API order, queue ownership and batching. No GPU or target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-bind-group-cache",
+      "patches": {
+        "patch": "ggml-webgpu-bind-group-cache.patch"
+      },
+      "documentation": [],
+      "behavior": "Reuse exact buffer-only bind groups at matching dispatch positions across graph encodes; retain at most 8192 positions and 16 buffer entries per group, bypass unsupported entries and invalidate on buffer destruction. This bounds object counts, not retained resource bytes or VRAM; no target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-async-tensor-copy",
+      "patches": {
+        "patch": "ggml-webgpu-async-tensor-copy.patch"
+      },
+      "documentation": [],
+      "behavior": "Use the existing optional async copy hook for checked same-queue WebGPU copies and CPU-to-WebGPU uploads after synchronizing the CPU producer; unsupported cases retain the generic fallback. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-checkpoint-batch-readback",
+      "patches": {
+        "patch": "ggml-webgpu-checkpoint-batch-readback.patch"
+      },
+      "documentation": [],
+      "behavior": "Group consecutive small host-checkpoint tensor reads through the versioned optional registry hook. Bound each staging batch to 4 MiB and 256 whole requests, preserve request and destination alias order, and retain scalar reads for single or large requests. Decline only before enqueue or host writes; operational failures are terminal. Explicit host flush stays inside existing state API error handling, with destination lifetime and context synchronization unchanged. The Emscripten-only context replacement preserves original quoted-header lookup; native context, ON_DEVICE and file writers remain upstream. No target-model or target-device speedup is established."
+    },
+    {
+      "id": "webgpu-host-input-snapshot",
+      "patches": {
+        "patch": "ggml-webgpu-host-input-snapshot.patch"
+      },
+      "documentation": [],
+      "behavior": "The scheduler optionally discovers a versioned host-input snapshot callback for eligible single-copy, event-free, non-weight inputs after the first input in each split. The first input retains the original wait path to bound queued work across repeated prefill calls without output readback. The WebGPU provider synchronizes the CPU producer and snapshots host bytes before return, ordering upload with destination work on the same queue. Other cases retain their existing paths; no target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-sampler-single-sync",
+      "patches": {
+        "patch": "llama-sampler-single-sync.patch"
+      },
+      "documentation": [],
+      "behavior": "Synchronize the context once at the start of sampler_sample before reading internal host outputs; retain the ordinary logits fallback and public getter behavior. Enabled for WebGPU profiles, without a target-device speedup claim."
+    },
+    {
+      "id": "webgpu-chunked-model-upload",
+      "patches": {
+        "patch": "llama-model-loader-webgpu-chunked-upload.patch"
+      },
+      "documentation": [],
+      "behavior": "Bound the synchronous default-WebGPU-buffer tensor read vector to 8 MiB and charged outstanding model uploads to a provisional 32 MiB per load_all_data call, including 24 bytes per upload for auxiliary parameters. Synchronize the actual destination device before exceeding the budget, on device handoff and on scope exit. Other backends retain whole-tensor uploads. This is not a browser RAM limit or graceful device-loss recovery; target-device model-load throughput effects are unmeasured."
+    },
+    {
+      "id": "webgpu-ssm-conv-single-token",
+      "patches": {
+        "patch": "ggml-webgpu-ssm-conv-single-token.patch"
+      },
+      "documentation": [],
+      "behavior": "Use one token lane only for single-token SSM_CONV, retaining eight lanes otherwise. Cache key, shader define and dispatch decisions share the selected width; arithmetic and MoE embedded shaders remain unchanged. Software-adapter correctness is not a Mac performance claim."
+    },
+    {
+      "id": "webgpu-hc-pre-post",
+      "patches": {
+        "patch": "ggml-webgpu-hc-pre-post.patch"
+      },
+      "documentation": [
+        "docs/webgpu-hc-pre-post.md"
+      ],
+      "behavior": "Support upstream gated HC PRE and identity-combination POST for contiguous F32 HC4 tensors. Use the upstream support probe and fallback; do not change graph construction, model weights, variants or sampling."
+    },
+    {
+      "id": "webgpu-q8-short-workgroup",
+      "patches": {
+        "patch": "ggml-webgpu-q8-short-workgroup.patch"
+      },
+      "documentation": [
+        "docs/webgpu-q8-short-workgroup.md"
+      ],
+      "behavior": "Use 32/64/128-lane workgroups for subgroup Q8_0 x F32 single-column matvecs with K <= 1024 and at least 1024 output rows. Upstream WGSL, quantization, tiling and lane-to-block mapping are unchanged. Include the workgroup size in the pipeline cache key; other paths retain 256 lanes. No target-device speed guarantee."
+    },
+    {
+      "id": "webgpu-scale-unary-fusion",
+      "patches": {
+        "patch": "ggml-webgpu-scale-unary.patch"
+      },
+      "documentation": [],
+      "behavior": "Fuse eligible contiguous F32 scale, SILU or sigmoid, and optional final scale operations into one dispatch, retaining guarded fallback and upstream graph semantics. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-f32-small-m-prefill",
+      "patches": {
+        "patch": "ggml-webgpu-f32-small-m.patch"
+      },
+      "documentation": [],
+      "behavior": "Use narrower register tiles for F32/F32 small-M matrices with K>=128 and N>=5, excluding subgroup matrices and source overlap. Preserve canonical TK8 arithmetic, parameter bytes, binding layout and dispatch grid; cache keys and profile labels distinguish effective geometries. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-moe-gather-logical32",
+      "patches": {
+        "patch": "ggml-webgpu-moe-gather-logical32.patch"
+      },
+      "documentation": [],
+      "behavior": "Distribute only skipped-slot zeroing across logical groups of at most 32 lanes in the existing MoE gather. Preserve shared-memory capacity, atomics, barriers, keys, parameters, bindings, grid and matrix arithmetic. No hardware subgroup feature or target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-matmul-vec4-layout",
+      "patches": {
+        "patch": "ggml-webgpu-matmul-vec4-layout.patch",
+        "profilePatch": "ggml-webgpu-matmul-vec4-layout-profile.patch"
+      },
+      "documentation": [],
+      "behavior": "Require actual binding-relative input offsets and active strides to align to floating-point vec4 loads; check matrix output offsets too. Otherwise use the existing scalar shader. Preserve aligned keys and WGSL, uniform/binding ABI, dispatch geometry, quantized paths and gather semantics. Historical prefix pins remain distinct from final compiled identities."
+    },
+    {
+      "id": "webgpu-aligned-word-load",
+      "patches": {
+        "patch": "ggml-webgpu-aligned-word-load.patch",
+        "integrationPatch": "ggml-webgpu-aligned-word-load-integration.patch"
+      },
+      "documentation": [],
+      "behavior": "For load_u32_at_src and load_u32_at_src0, select the containing word as the hi source for four-byte-aligned offsets, otherwise select the following word. Join with a masked left shift so aligned loads return lo|lo without a control-flow branch. Keep complete nonaligned joining and all other shader, selector, binding, grid and ABI behavior. Patch the canonical WGSL template before invoking the upstream embedding generator; C++ chunks are not a semantic contract. Explicitly include a renamed canonical embedding. Generate all five dedicated helpers from retained WGSL source inputs and the same patched template through the unchanged upstream generator. This does not validate incomplete four-byte spans, partial-field overreads, all dtype bounds, or target-device behavior."
+    },
+    {
+      "id": "webgpu-subgroup-size-control-matvec",
+      "patches": {
+        "patch": "ggml-webgpu-subgroup-size-control.patch",
+        "profilePatch": "ggml-webgpu-subgroup-size-control-profile.patch",
+        "sharedPatch": "ggml-webgpu-subgroup-size-control-shared.patch",
+        "sourceEquivalentPatch": "ggml-webgpu-subgroup-size-control-wgsl.patch"
+      },
+      "documentation": [],
+      "behavior": "Keep fixed-width AUTO unchanged. For guarded ordinary Q8_0 or Q4_0/Q4_K matvecs on variable advertised ranges containing16, request the real subgroup-size-control device feature and S16. Preserve shader arithmetic, input types and advertised capabilities. Cache requested keys separately; healthy typed pipeline errors return whole canonical pipelines, while loss/unknown/timeout terminate the generation before cache or encode reuse. Scope callbacks retain pure CPU data across SDK waits; checkpoint reads check the same generation before GPU APIs and after waits. Profile AUTO requestedS16 reports codegen revision2 without changing diagnostic ABI. No variable-adapter or target-model speed is established."
+    },
+    {
+      "id": "webgpu-q6-subgroup-matvec",
+      "patches": {
+        "patch": "ggml-webgpu-q6-subgroup-matvec.patch"
+      },
+      "documentation": [],
+      "behavior": "For ordinary Q6_K x F32 to F32 N1 matvecs with complete K256 blocks, K1536..10752 and M>=2048, preserve tensor-shape/broadcast/u32 guards and exclude indexed inputs, MMVQ, overlap and epilogues. Reuse unchanged Q6 accumulation and the existing independent full/partial main at WG128 for fixed S16/S32, or request S16 through the existing real-feature optional-pipeline contract. Canonical fallback rebuilds the key and complete decisions from the current context, preserving short-K cooperative geometry. No new shader, public ABI, device feature, allocation or measurement is added. Finite software checks and hot timings do not establish unmeasured shapes, full vocabulary, physical memory peak or target-device/model speed."
+    },
+    {
+      "id": "webgpu-q4-fixed-subgroup-matvec",
+      "patches": {
+        "patch": "ggml-webgpu-q4-subgroup-matvec.patch"
+      },
+      "documentation": [],
+      "behavior": "For ordinary Q4_0/Q4_K x F32 single-column F32 matvecs, admit complete blocks K1024..4096 and M>=4096 with checked broadcast/u32 bounds, or 4096<K<=17408 and M>=2560 with all six input/output batch axes equal to one, without indexed inputs, overlap, MMVQ or epilogue. Only fixed advertised subgroup widths16/32 select WG128 and four rows per subgroup. Reuse the unchanged independent full/partial main, accumulator, bindings and uniform ABI; existing subgroup-size keys and decisions determine cache and per-arm geometry. Other types, widths and fallbacks retain canonical selection. Floating-point lane partition and reduction may differ; software hot timings do not establish target-device or model speed."
+    },
+    {
+      "id": "webgpu-quant-wide-m",
+      "patches": {
+        "patch": "ggml-webgpu-quant-wide-m.patch"
+      },
+      "documentation": [],
+      "behavior": "Within the existing paired-half Q4 prefill guard, use TM8/TN4 register tiles when M is a positive multiple of 64 and N is at least 32; otherwise preserve TM4. Resolve the typed mode before lookup and use it for the existing key/hash, label, shader defines, decisions and 64x32 output geometry. Reuse the same embedding, TK32, WG64, global access expressions and uniform ABI; shared storage is 6144 bytes and each invocation has 32 scalar accumulators. For Q6_K only, admit the same C8 mode for complete K256 blocks and a positive total C8 output grid of at least eight; otherwise retain scalar, with no Q6 C4 admission. Saturate the grid predicate at eight after checking both batch axes positive. Small-K, unmeasured intermediate grids and target-device speed remain unproven."
+    },
+    {
+      "id": "webgpu-direct-mapped-read",
+      "patches": {
+        "patch": "ggml-webgpu-direct-mapped-read.patch"
+      },
+      "documentation": [],
+      "behavior": "For aligned Emscripten tensor reads, copy mapped bytes directly into the caller destination with the pinned Emdawn API. Native and unaligned reads keep the existing pointer/memcpy path; map completion, queue ordering, mutex ownership and successful Unmap are unchanged. Read failure unmaps and aborts without retry. No shader or public ABI changes, and no target-device latency claim."
+    },
+    {
+      "id": "webgpu-quant-half-pairs",
+      "patches": {
+        "patch": "ggml-webgpu-quant-half-pairs.patch"
+      },
+      "documentation": [],
+      "behavior": "Use paired-half workgroup storage for ordinary Q4_0/Q4_K x F32 prefill at the reviewed TK32, 4x4 register-tile, 8x8 workgroup geometry. Preserve K-order accumulation, 4096-byte shared storage, barriers, global loads/stores, uniform ABI and dispatch. Other types, overlap, subgroup matrices and geometry retain canonical kernels. No target-device or real-model speed guarantee."
+    },
+    {
+      "id": "webgpu-q6-short-workgroup",
+      "patches": {
+        "patch": "ggml-webgpu-q6-short-workgroup.patch"
+      },
+      "documentation": [],
+      "behavior": "Reuse existing subgroup workgroups for ordinary single-column Q6_K x F32 matvecs with complete K blocks through 4096. Preserve indexed Q6, multi-column, overlap, MMVQ and unsupported-device fallbacks; canonical WGSL, four-row output tiling, uniform ABI and dispatch grid are unchanged. Target-device and real-model speed are unmeasured."
+    },
+    {
+      "id": "webgpu-f32-matvec-epilogue",
+      "patches": {
+        "patch": "ggml-webgpu-f32-matvec-epilogue.patch",
+        "profilePatch": "ggml-webgpu-f32-matvec-epilogue-profile.patch"
+      },
+      "documentation": [],
+      "behavior": "Fuse only guarded dense F32 four-row single-column matvec followed by scale, sigmoid and scale. Retain original accumulation, reduction and geometry, use a distinct default-none pipeline key, copy four coefficients into 80-byte parameters and reject all live input/output payload and aligned binding overlaps. Existing graph, callback and scale-unary fallbacks remain. No model or target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-moe-tight-tile-bound",
+      "patches": {
+        "patch": "ggml-webgpu-moe-tight-tile-bound.patch"
+      },
+      "documentation": [],
+      "behavior": "Tighten only the shared host tile-count upper bound to A+floor((S-A)/L), A=min(E,S), with the existing L=32. Allocation, descriptor binding and direct dispatch use the same helper. Preserve all shaders, parameters, cache keys and mathematical outputs. No indirect work or runtime probe is added. Savings count provably empty workgroups and descriptor capacity; target-device speed is not established."
+    },
+    {
+      "id": "webgpu-profile-query-budget",
+      "patches": {
+        "patch": "ggml-webgpu-profile-query-budget.patch"
+      },
+      "documentation": [],
+      "behavior": "Reserve timestamp queries for the actual arena slot capacity, including multi-dispatch overshoot. Check that a fresh query set can hold that capacity. Preserve normal source, shaders, ABI, graph submission and parameter staging; only profile collection boundaries may move."
+    },
+    {
+      "id": "webgpu-q8-kernel-diagnostic-v1",
+      "patches": {
+        "patch": "ggml-webgpu-q8-diagnostic.patch"
+      },
+      "documentation": [],
+      "behavior": "Expose a typed optional Q8 kernel diagnostic only in the existing GPU-profile build. Reuse actual matvec factories, params/bindings/grid and graph submission. PREPARE caches actual processed-WGSL SHA-256; EXECUTE only looks up prepared keys. Normal source and base binding outputs remain unchanged. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-ssm-conv-silu-fusion",
+      "patches": {
+        "patch": "ggml-webgpu-ssm-conv-silu.patch"
+      },
+      "documentation": [],
+      "behavior": "Fuse eligible F32 SSM convolution followed by SiLU, preserving scalar/vec4 accumulation and single-token workgroup selection. Guard graph visibility, layout, physical buffers and aligned binding overlap; retain staged fallback. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-moe-matrix-group-skip",
+      "patches": {
+        "patch": "ggml-webgpu-moe-group-skip.patch"
+      },
+      "documentation": [],
+      "behavior": "Skip inactive four-column groups only in the MoE matrix register-tile calculation. Preserve constant column loops, shared initialization, barriers, gather, parameters, grid, valid F16 arithmetic and final stores. Canonical matvec remains unchanged. No target-device or model speedup is claimed."
+    },
+    {
+      "id": "webgpu-router-tail-fusion",
+      "patches": {
+        "patch": "ggml-webgpu-router-tail.patch"
+      },
+      "documentation": [],
+      "behavior": "Fuse eligible contiguous F32 gather/reshape/sum/clamp/div/reshape subgraphs. Preserve the sum tree, clamp and direct division. Permit overlapping probability/output bindings only for one token and one workgroup through a merged storage binding and full-lane storage barrier; keep IDs disjoint and retain fallback elsewhere. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-rms-scale-fusion",
+      "patches": {
+        "patch": "ggml-webgpu-rms-scale.patch"
+      },
+      "documentation": [],
+      "behavior": "Fuse guarded F32 RMS normalization followed by scale into one dispatch, retaining existing RMS-multiply priority and eligible three-operation scale-unary-scale fusion. Unsupported graph and binding cases fall back. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-iq3s-indexed-subgroup-matvec",
+      "patches": {
+        "patch": "ggml-webgpu-iq3s-id-subgroup.patch"
+      },
+      "documentation": [],
+      "behavior": "Use independent fixed-width subgroups for guarded single-token IQ3_S indexed matvecs, preserving the upstream decoder and accumulator; cover missing logical lanes when subgroups are partial and fall back for unsupported shapes, device limits or ranges. Geometry probes are test-only and add no production CPU readback. Reduction order differs; target model quality and performance are not established."
+    },
+    {
+      "id": "webgpu-iq3s-indexed-field-loads",
+      "patches": {
+        "patch": "ggml-webgpu-iq3s-field-loads.patch"
+      },
+      "documentation": [],
+      "behavior": "Replace only the existing independent indexed IQ3_S embedding with lane-selected qs and aligned-containing-word metadata loads. Preserve the decoder arithmetic, main/reduction, selector, cache key, parameter/binding layout and all fallback paths. The original embedding hash is an intermediate stage contract; compiled copies describe the final header. No model or target-device speedup is established."
+    },
+    {
+      "id": "webgpu-iq3s-indexed-row-split",
+      "patches": {
+        "patch": "ggml-webgpu-iq3s-row-split.patch"
+      },
+      "documentation": [],
+      "behavior": "Split the dedicated four-row independent IQ3_S accumulator loop into rows 0..1 and 2..3, retaining the four accumulators, per-row arithmetic and K order, main, partial-subgroup completion, reduction, selection and dispatch contracts. Canonical accumulators and fallback shaders remain upstream. Private software hot-only measurements are not model, streaming or target-device performance evidence."
+    },
+    {
+      "id": "webgpu-q8-fixed-subgroup-matvec",
+      "patches": {
+        "patch": "ggml-webgpu-q8-subgroup-matvec.patch"
+      },
+      "documentation": [],
+      "behavior": "For guarded long-K Q8_0 single-column matvecs with fixed reported subgroup width, process rows independently per subgroup, reusing the pinned upstream decoder and accumulator; cover missing logical lanes when subgroups are partial and retain upstream fallback elsewhere. Geometry probes are test-only and add no production CPU readback. Numerical order changes and target-device speed or model quality are not established."
+    },
+    {
+      "id": "webgpu-q4-short-workgroup",
+      "patches": {
+        "patch": "ggml-webgpu-q4-short-workgroup.patch"
+      },
+      "documentation": [],
+      "behavior": "Select existing 32, 64, 128 or 256 lane subgroup Q4_K single-column ordinary and indexed matvec workgroups when the shape, device and alias guards permit. Preserve upstream shader arithmetic, output tiling and dispatch grid; otherwise use the upstream workgroup. No target-device speedup is claimed."
+    },
+    {
+      "id": "webgpu-expert-short-workgroup",
+      "patches": {
+        "patch": "ggml-webgpu-expert-short-workgroup.patch"
+      },
+      "documentation": [
+        "docs/webgpu-expert-short-workgroup.md"
+      ],
+      "behavior": "Use 128 lanes for subgroup Q5_1/IQ4_NL x F32 single-token expert matvecs with K <= 1024 and at least 256 rows. Preserve upstream WGSL, selected-slot dispatch, quantization and per-lane block ownership. Forward actual subgroup limits and key pipelines by workgroup size; unsupported paths retain 256 lanes. No target-device speed guarantee."
+    },
+    {
+      "id": "webgpu-moe-expert-sum",
+      "patches": {
+        "patch": "ggml-webgpu-moe-expert-sum.patch"
+      },
+      "documentation": [
+        "docs/webgpu-moe-expert-sum.md"
+      ],
+      "behavior": "Fuse complete slot-ordered contiguous F32 expert-output ADD chains, preserving accumulation order. Reject external intermediate users, unsupported device limits and overlapping aligned bindings; retain staged fallback. No new variants or model graph changes."
+    },
+    {
+      "id": "webgpu-buffer-size-limit",
+      "patches": {
+        "patch": "ggml-webgpu-buffer-size-limit.patch"
+      },
+      "documentation": [],
+      "behavior": "Bound the advertised maximum backend buffer size by the device maxBufferSize and maxStorageBufferBindingSize. Reject oversize allocations and out-of-range memset operations without changing tensor dispatch, shader arithmetic or layout."
+    },
+    {
+      "id": "webgpu-batched-write-scalar-fallback",
+      "patches": {
+        "patch": "ggml-webgpu-emscripten-scalar-tensor-writes.patch"
+      },
+      "documentation": [],
+      "behavior": "Leave the optional WebGPU set_tensor_n hook NULL in Emscripten so the public batch API uses the existing generic scalar/2D fallback. Native hooks, upstream set/get_n bodies, shaders and eager pipeline creation are unchanged; this is not a global upload budget."
+    }
+  ]
+}

@@ -1,0 +1,675 @@
+"""Synthetic payloads and mocked smoke only; actual npm final packing is exercised."""
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from tests.support import runtime_package as fixtures
+
+from build_tools.project import REPOSITORY_ROOT as ROOT
+sys.path.insert(0, str(ROOT / 'scripts'))
+from build_tools.validation import runtime as snapshot
+from build_tools.packaging.files import copy_regular, copy_regular_tree, tree_identity, regular_path, read_regular
+
+
+class PackageInputs(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.source = self.root / 'source'; self.source.mkdir()
+        (self.source / 'file').write_bytes(b'abcdef')
+
+    def test_regular_copy_keeps_tree_and_executable_bits(self):
+        (self.source / 'file').chmod(0o755)
+        copy_regular_tree(self.source, self.root / 'out')
+        self.assertEqual(tree_identity(self.source), tree_identity(self.root / 'out'))
+
+    def test_root_parent_file_directory_and_broken_links_are_rejected(self):
+        for target in (self.source, self.source / 'file', self.root / 'missing'):
+            link = self.source / 'link'; link.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, 'Linked'):
+                tree_identity(self.source)
+            link.unlink()
+        (self.root / 'parent-link').symlink_to(self.source, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'parent'):
+            read_regular(self.root / 'parent-link/file')
+        with self.assertRaisesRegex(ValueError, 'Linked'):
+            tree_identity(self.root / 'parent-link')
+
+    @unittest.skipUnless(hasattr(os, 'mkfifo'), 'requires named pipes')
+    def test_fifo_is_rejected_without_opening_or_blocking(self):
+        os.mkfifo(self.source / 'pipe')
+        with self.assertRaisesRegex(ValueError, 'non-regular'):
+            tree_identity(self.source)
+        with self.assertRaisesRegex(ValueError, 'non-regular'):
+            read_regular(self.source / 'pipe')
+
+    def test_case_collision_and_backslash_are_rejected(self):
+        for name in ('FILE', 'bad\\path'):
+            path = self.source / name; path.write_text('test')
+            with self.assertRaisesRegex(ValueError, 'Unsafe'):
+                tree_identity(self.source)
+            path.unlink()
+
+    def test_copy_time_same_size_change_is_detected(self):
+        original = shutil.copytree
+        def changed(*args, **kwargs):
+            value = original(*args, **kwargs)
+            (args[1] / 'file').write_bytes(b'ghijkl')
+            return value
+        with patch('build_tools.packaging.files.shutil.copytree', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'changed'):
+                copy_regular_tree(self.source, self.root / 'out')
+
+    def test_copy_time_link_is_rejected_not_followed(self):
+        original = shutil.copytree
+        def linked(source, target, **kwargs):
+            (source / 'file').unlink()
+            (source / 'file').symlink_to(self.root / 'secret')
+            return original(source, target, **kwargs)
+        (self.root / 'secret').write_text('never dereference')
+        with patch('build_tools.packaging.files.shutil.copytree', side_effect=linked):
+            with self.assertRaisesRegex(ValueError, 'Linked'):
+                copy_regular_tree(self.source, self.root / 'out')
+        self.assertTrue((self.root / 'out/file').is_symlink())
+
+    def test_copy_never_overwrites_existing_destination_link(self):
+        target = self.root / 'target'; target.write_bytes(b'unchanged')
+        link = self.root / 'destination'; link.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, 'Linked'):
+            copy_regular(self.source / 'file', link)
+        self.assertEqual(target.read_bytes(), b'unchanged')
+
+    def test_linked_destination_parent_is_rejected_before_copy(self):
+        target = self.root / 'target'; target.mkdir()
+        link = self.root / 'linked-parent'; link.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Linked'):
+            copy_regular_tree(self.source, link / 'copy')
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_metadata_reads_are_bounded(self):
+        with self.assertRaisesRegex(ValueError, 'Oversized'):
+            read_regular(self.source / 'file', limit=5)
+
+
+class ImageSmokeResults(unittest.TestCase):
+    def setUp(self):
+        runtime = ROOT / 'runtimes/stable-diffusion-cpp'
+        self.profiles = json.loads((runtime / 'config/profiles.json').read_text())
+        self.variants = json.loads((runtime / 'config/variants.json').read_text())
+
+    def results(self, test_webgpu):
+        # Invoke the same JS scope function used by the actual smoke producer.
+        # A second hand-maintained scope literal hid the 004 producer/consumer drift.
+        module = (ROOT / 'tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.mjs').as_uri()
+        script = f"import {{ imageSmokeScope }} from {json.dumps(module)};" + \
+                 f"console.log(JSON.stringify(imageSmokeScope({json.dumps(test_webgpu)})));"
+        scope = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], text=True))
+        backends = ['CPU', 'WebGPU'] if test_webgpu else ['CPU']
+        return [{'profile': profile, 'variant': variant, 'passed': True, 'scope': scope,
+                 'timestep': [{'backend': backend, 'passed': True} for backend in backends] if variant == 'test' else [],
+                 'bf16Weights': [{'backend': backend, 'passed': True} for backend in backends] if variant == 'test' else [],
+                 **({'graphWalk': True, 'conv3dBias': [
+                     {'backend': backend, 'passed': True} for backend in backends
+                 ], 'webgpuPerformance': [
+                     {'backend': backend, 'passed': True} for backend in backends
+                 ]} if variant == 'test' else {})}
+                for profile in self.profiles for variant in self.variants]
+
+    def check(self, results, test_webgpu):
+        return snapshot.checked_results('stable-diffusion-cpp', self.profiles, self.variants,
+                                        results, test_webgpu=test_webgpu)
+
+    def test_accepts_cpu_and_webgpu_scopes_with_test_only_graph_evidence(self):
+        for test_webgpu in (False, True):
+            with self.subTest(test_webgpu=test_webgpu):
+                results = self.results(test_webgpu)
+                self.assertEqual(self.check(results, test_webgpu), results)
+
+    def test_rejects_old_scope_and_wrong_backend_scope(self):
+        for test_webgpu in (False, True):
+            results = self.results(test_webgpu)
+            current_scope = results[0]['scope']
+            results[0]['scope'] = current_scope.replace('deep graph construction/selection', '')
+            self.assertNotEqual(results[0]['scope'], current_scope, 'negative fixture did not change the scope')
+            with self.subTest(old_scope=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(results, test_webgpu)
+            # This is intentionally old evidence, not a second producer for the
+            # positive case: 009 did not cover large rows or live registry queries.
+            results[0]['scope'] = current_scope.split(', plus ', 1)[0] + \
+                ', plus deep graph construction/selection; no trained-model image generation'
+            self.assertNotEqual(results[0]['scope'], current_scope)
+            with self.subTest(pre_011_evidence=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(results, test_webgpu)
+            with self.subTest(wrong_backend=test_webgpu), self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+                self.check(self.results(not test_webgpu), test_webgpu)
+
+    def test_requires_true_graph_walk_for_every_test_profile(self):
+        for profile in self.profiles:
+            for value in (False, None, 0, 1, 'true'):
+                results = self.results(False)
+                result = next(item for item in results if item['profile'] == profile and item['variant'] == 'test')
+                result['graphWalk'] = value
+                with self.subTest(profile=profile, value=value), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                    self.check(results, False)
+            results = self.results(False)
+            result = next(item for item in results if item['profile'] == profile and item['variant'] == 'test')
+            result.pop('graphWalk')
+            with self.subTest(profile=profile, missing=True), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                self.check(results, False)
+
+    def test_rejects_graph_walk_key_on_every_browser_profile(self):
+        for profile in self.profiles:
+            for value in (True, False, None):
+                results = self.results(False)
+                result = next(item for item in results if item['profile'] == profile and item['variant'] == 'browser')
+                result['graphWalk'] = value
+                with self.subTest(profile=profile, value=value), self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+                    self.check(results, False)
+
+    def test_requires_convolution_evidence_from_every_expected_backend(self):
+        for test_webgpu in (False, True):
+            for value in (None, [], [{'backend': 'CPU', 'passed': False}],
+                          [{'backend': 'CPU', 'passed': 1}], [{'backend': 'WebGPU', 'passed': True}]):
+                results = self.results(test_webgpu)
+                result = next(item for item in results if item['variant'] == 'test')
+                result['conv3dBias'] = value
+                with self.subTest(test_webgpu=test_webgpu, value=value), self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
+                    self.check(results, test_webgpu)
+            results = self.results(test_webgpu)
+            result = next(item for item in results if item['variant'] == 'test')
+            result.pop('conv3dBias')
+            with self.subTest(test_webgpu=test_webgpu, missing=True), self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
+                self.check(results, test_webgpu)
+        results = self.results(True)
+        result = next(item for item in results if item['variant'] == 'test')
+        result['conv3dBias'] = [{'backend': 'CPU', 'passed': True}]
+        with self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
+            self.check(results, True)
+
+    def test_rejects_convolution_probe_in_browser_variants_and_old_scope(self):
+        results = self.results(False)
+        result = next(item for item in results if item['variant'] == 'browser')
+        result['conv3dBias'] = None
+        with self.assertRaisesRegex(ValueError, 'conv3dBias evidence'):
+            self.check(results, False)
+        results = self.results(False)
+        results[0]['scope'] = results[0]['scope'].replace(' and 3D convolution bias', '')
+        with self.assertRaisesRegex(ValueError, 'Wrong image smoke scope'):
+            self.check(results, False)
+
+    def test_contract_cannot_drop_probes_or_use_an_unknown_schema(self):
+        contract = snapshot.image_contract()
+        variants = []
+        for version in [None, True, 0, 2, '1']:
+            variants.append({**contract, 'schemaVersion': version})
+        variants.extend([{**contract, 'testOnlyProbes': ['conv3dBias']},
+                         {**contract, 'sharedProbes': []},
+                         {**contract, 'scopePrefix': None}])
+        for invalid in variants:
+            with self.subTest(contract=invalid), patch.object(snapshot, 'read_regular', return_value=json.dumps(invalid).encode()):
+                with self.assertRaisesRegex(ValueError, 'Invalid image smoke contract'):
+                    snapshot.image_contract()
+
+    def test_requires_all_probe_results_on_every_profile_and_backend(self):
+        keys = ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']
+        for gpu in (False, True):
+            template = self.results(gpu)
+            for index, item in enumerate(template):
+                if item['variant'] != 'test':
+                    continue
+                for key in keys:
+                    valid = item[key]
+                    invalid = [None, [], 'passed', [{'backend': 'CPU', 'passed': 1}],
+                               valid + valid, list(reversed(valid)) if gpu else [{'backend': 'WebGPU', 'passed': True}],
+                               [{'backend': entry['backend'], 'passed': False} for entry in valid]]
+                    if gpu:
+                        invalid.extend([valid[:1], valid[1:]])
+                    for value in invalid:
+                        results = copy.deepcopy(template)
+                        results[index][key] = value
+                        with self.subTest(gpu=gpu, profile=item['profile'], key=key, value=value):
+                            with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                                self.check(results, gpu)
+                    results = copy.deepcopy(template)
+                    results[index].pop(key)
+                    with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                        self.check(results, gpu)
+
+    def test_browser_probe_evidence_cannot_claim_unexecuted_arithmetic(self):
+        for gpu in (False, True):
+            template = self.results(gpu)
+            for index, item in enumerate(template):
+                if item['variant'] != 'browser':
+                    continue
+                for key in ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']:
+                    for value in [None, [{'backend': 'CPU', 'passed': True}]]:
+                        results = copy.deepcopy(template)
+                        results[index][key] = value
+                        with self.subTest(gpu=gpu, profile=item['profile'], key=key):
+                            with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                                self.check(results, gpu)
+                    if key in ['timestep', 'bf16Weights']:
+                        results = copy.deepcopy(template)
+                        results[index].pop(key)
+                        with self.assertRaisesRegex(ValueError, key + ' evidence'):
+                            self.check(results, gpu)
+
+    def test_verified_probe_evidence_is_preserved_without_aliasing(self):
+        results = self.results(True)
+        self.check(results, True)
+        manifest = {'profiles': {profile: {'variants': {variant: {'validation': {
+            'realModelInference': False}} for variant in self.variants}} for profile in self.profiles}}
+        updated = snapshot.add_validation(manifest, 'stable-diffusion-cpp', results)
+        for result in results:
+            validation = updated['profiles'][result['profile']]['variants'][result['variant']]['validation']
+            self.assertIs(validation['realModelInference'], False)
+            expected = {key: result[key] for key in ['graphWalk', 'timestep', 'bf16Weights',
+                        'conv3dBias', 'webgpuPerformance'] if key in result}
+            self.assertEqual(validation['browserSmokeEvidence'], expected)
+            if result['variant'] == 'test':
+                result['webgpuPerformance'][0]['passed'] = False
+                self.assertIs(validation['browserSmokeEvidence']['webgpuPerformance'][0]['passed'], True)
+        self.assertNotIn('browserSmokeEvidence', next(iter(manifest['profiles'].values()))['variants']['test']['validation'])
+
+
+class RuntimeSnapshot(unittest.TestCase):
+    def setUp(self):
+        self.fixture = fixtures.RuntimePackageFixture(); self.fixture.setUp()
+        self.addCleanup(self.fixture.tearDown)
+        self.root = self.fixture.root
+        self.repo = self.root / 'repo'
+        for runtime in snapshot.RUNTIMES:
+            rr = self.repo / 'runtimes' / runtime
+            (rr / 'config').mkdir(parents=True)
+            for name in ('profiles.json', 'variants.json'):
+                shutil.copy2(ROOT / 'runtimes' / runtime / 'config' / name, rr / 'config' / name)
+            for name in snapshot.TEST_INPUTS[runtime]:
+                p = self.repo / name; p.parent.mkdir(parents=True, exist_ok=True)
+                if name.endswith('/browser-smoke-contract.json'):
+                    shutil.copy2(ROOT / name, p)
+                else:
+                    p.write_text('Synthetic test-input identity fixture, NOT executable smoke code.\n')
+        # Expand the root's intentionally tiny llama fixture to all configured profiles.
+        llama = self.fixture.inputs / 'llama-cpp'
+        manifest = json.loads((llama / 'manifest.json').read_text())
+        profiles = json.loads((ROOT / 'runtimes/llama-cpp/config/profiles.json').read_text())
+        for profile in profiles:
+            if profile == 'cpu-wasm32': continue
+            shutil.copytree(llama / 'profiles/cpu-wasm32', llama / 'profiles' / profile)
+            data = copy.deepcopy(manifest['profiles']['cpu-wasm32'])
+            for item in data['variants'].values(): item['profile'] = profile
+            manifest['profiles'][profile] = data
+        fixtures.write_manifest(llama, manifest)
+        self.env = patch.dict(os.environ, {'LCB_SOURCE_COMMIT': fixtures.SOURCE,
+            'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_JOB': 'fixture',
+            'BIC_METRICS_MODE': 'off', 'SDCB_TEST_WEBGPU': '0'})
+        self.env.start(); self.addCleanup(self.env.stop)
+        self.root_patch = patch.object(snapshot, 'ROOT', self.repo)
+        self.root_patch.start(); self.addCleanup(self.root_patch.stop)
+        self.runtime = 'stable-diffusion-cpp'
+        self.result_mutator = None; self.after_command = None; self.commands = []
+
+    def package(self): return self.fixture.inputs / self.runtime
+    def receipt(self): return self.root / (self.runtime + '-receipt.json')
+
+    def results(self):
+        rr = self.repo / 'runtimes' / self.runtime
+        profiles = json.loads((rr / 'config/profiles.json').read_text())
+        variants = json.loads((rr / 'config/variants.json').read_text())
+        result = []
+        for profile in profiles:
+            for variant in variants:
+                item = {'profile': profile, 'variant': variant, 'passed': True}
+                if self.runtime == 'stable-diffusion-cpp':
+                    item['scope'] = snapshot.image_scope(False)
+                    if variant == 'test':
+                        item['graphWalk'] = True
+                        for key in ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance']:
+                            item[key] = [{'backend': 'CPU', 'passed': True}]
+                    else:
+                        item.update(timestep=[], bf16Weights=[])
+                elif profile.startswith('cpu-'): item['syntheticModel'] = True
+                else:
+                    item.update(mockedAdapter=True, suspension=True,
+                                hostNavigatorInjection=variant == 'browser',
+                                defaultNavigatorFallback=True, independentFactories=variant == 'browser')
+                result.append(item)
+        return result
+
+    def fake_run(self, command, phase, cwd, env=None):
+        self.commands.append((phase, command))
+        if phase == 'test.generate_fixture':
+            p = cwd / 'build/fixture.gguf'; p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b'GGUF synthetic identity only')
+        if phase == 'test.chromium_smoke':
+            envelope = {'session': json.loads(env['BIC_BROWSER_SESSION_JSON']), 'results': self.results()}
+            if self.result_mutator: self.result_mutator(envelope)
+            Path(env['BIC_BROWSER_RESULTS_FILE']).write_text(json.dumps(envelope))
+        if self.after_command: self.after_command(phase)
+
+    def validate(self):
+        with patch.object(snapshot, '_run', side_effect=self.fake_run):
+            return snapshot.validate_package(self.runtime, self.package(), self.receipt())
+
+    def test_both_runtimes_pack_once_and_only_change_validation_fields(self):
+        for runtime in snapshot.RUNTIMES:
+            self.runtime = runtime
+            (self.package() / 'manifest.json').chmod(0o640)
+            before = tree_identity(self.package())
+            manifest = json.loads((self.package() / 'manifest.json').read_text())
+            original = subprocess.check_output
+            with patch('subprocess.check_output', wraps=original) as calls:
+                receipt = self.validate()
+            packs = [call for call in calls.call_args_list if call.args[0][:2] == ['npm', 'pack']]
+            self.assertEqual(len(packs), 1)
+            after = tree_identity(self.package())
+            self.assertEqual({k:v for k,v in before.items() if k != 'manifest.json'},
+                             {k:v for k,v in after.items() if k != 'manifest.json'})
+            final = json.loads((self.package() / 'manifest.json').read_text())
+            self.assertEqual(final, snapshot.add_validation(manifest, runtime, self.results()))
+            self.assertEqual(receipt['status'], 'complete')
+            self.assertTrue(self.receipt().is_file())
+            self.assertEqual(stat.S_IMODE((self.package() / 'manifest.json').stat().st_mode), 0o640)
+            self.assertEqual(list(self.package().parent.glob('.bic-validation-*')), [])
+            if runtime == 'llama-cpp':
+                self.assertTrue(any(p == 'test.node_asyncify' for p, _ in self.commands))
+                self.assertIn(('test.generate_fixture',
+                               [sys.executable, str(self.repo / 'tests/runtimes/llama_cpp/make_test_model.py'), 'build/fixture.gguf']), self.commands)
+            for info in final['profiles'].values():
+                for data in info['variants'].values(): self.assertIs(data['validation']['realModelInference'], False)
+
+    def test_missing_performance_evidence_blocks_pack_and_clears_stale_receipt(self):
+        self.receipt().write_text('stale success')
+        def remove(envelope):
+            next(item for item in envelope['results'] if item['variant'] == 'test').pop('webgpuPerformance')
+        self.result_mutator = remove
+        original = subprocess.check_output
+        with patch('subprocess.check_output', wraps=original) as calls:
+            with self.assertRaisesRegex(ValueError, 'webgpuPerformance evidence'):
+                self.validate()
+        self.assertFalse(any(call.args[0][:2] == ['npm', 'pack'] for call in calls.call_args_list))
+        self.assertFalse(self.receipt().exists())
+
+    def test_shared_smoke_contract_is_part_of_the_source_bound_test_identity(self):
+        identity = snapshot.test_identity(self.repo / 'runtimes' / self.runtime, self.runtime)
+        for name in ['tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.mjs',
+                     'tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.json']:
+            self.assertIn(name, identity)
+        def mutate(phase):
+            if phase == 'test.chromium_smoke':
+                path = self.repo / 'tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.json'
+                path.write_text(path.read_text().replace('no trained-model', 'xx trained-model'))
+        self.after_command = mutate
+        with self.assertRaisesRegex(ValueError, 'Test implementation or fixture changed'):
+            self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_file_mount_harness_is_bound_to_the_llama_snapshot(self):
+        self.runtime = 'llama-cpp'
+        name = 'tests/runtimes/llama_cpp/file-mount-lifetime.mjs'
+        self.assertIn(name, snapshot.test_identity(self.repo / 'runtimes' / self.runtime, self.runtime, fixture=False))
+        def mutate(phase):
+            if phase == 'test.chromium_smoke':
+                path = self.repo / name
+                path.write_bytes(b'X' * path.stat().st_size)
+        self.after_command = mutate
+        with self.assertRaisesRegex(ValueError, 'Test implementation or fixture changed'):
+            self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_shared_arithmetic_runner_changes_block_final_pack(self):
+        name = 'tests/runtimes/stable_diffusion_cpp/arithmetic-probes.mjs'
+        identity = snapshot.test_identity(self.repo / 'runtimes' / self.runtime, self.runtime)
+        self.assertIn(name, identity)
+        self.assertNotIn(name, snapshot.TEST_INPUTS['llama-cpp'])
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('stale success')
+        def mutate(phase):
+            if phase == 'test.chromium_smoke':
+                path = self.repo / name
+                path.write_bytes(b'X' * path.stat().st_size)
+        self.after_command = mutate
+        original = subprocess.check_output
+        with patch('subprocess.check_output', wraps=original) as calls:
+            with self.assertRaisesRegex(ValueError, 'Test implementation or fixture changed'):
+                self.validate()
+        self.assertFalse(any(call.args[0][:2] == ['npm', 'pack'] for call in calls.call_args_list))
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
+
+    def test_owned_temporary_directory_resolves_system_alias_before_use(self):
+        actual = self.root / 'temporary-root'; actual.mkdir()
+        alias = self.root / 'system-temp-alias'; alias.symlink_to(actual, target_is_directory=True)
+        with patch.object(tempfile, 'tempdir', str(alias)):
+            self.validate()
+        self.assertTrue(self.receipt().is_file())
+
+    def test_source_build_mutation_is_not_reimported(self):
+        def mutate(_):
+            path = self.repo / 'runtimes' / self.runtime / 'build/unused/core.mjs'
+            path.parent.mkdir(parents=True, exist_ok=True); path.write_text('changed build, must not be copied')
+        self.after_command = mutate
+        self.validate()
+        self.assertNotIn('unused', ''.join(tree_identity(self.package())))
+
+    def test_same_size_payload_change_after_smoke_blocks_final_pack(self):
+        file = next(self.package().glob('profiles/*/*/core.mjs'))
+        self.after_command = lambda phase: file.write_bytes(b'X' * file.stat().st_size)
+        with self.assertRaisesRegex(ValueError, 'snapshot changed'):
+            self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_modified_manifest_with_recomputed_hashes_is_still_rejected(self):
+        def mutate(_):
+            file = next(self.package().glob('profiles/*/*/core.mjs')); file.write_text('changed')
+            manifest = json.loads((self.package() / 'manifest.json').read_text())
+            fixtures.write_manifest(self.package(), manifest)
+        self.after_command = mutate
+        with self.assertRaisesRegex(ValueError, 'snapshot changed'):
+            self.validate()
+
+    def test_test_implementation_change_is_rejected(self):
+        self.after_command = lambda _: (self.repo / 'tests/runtimes' / self.runtime.replace('-', '_') / 'browser-smoke.mjs').write_text('changed')
+        with self.assertRaisesRegex(ValueError, 'implementation or fixture'):
+            self.validate()
+
+    def test_previous_run_attempt_and_context_types_cannot_be_replayed(self):
+        for key, value in [('runId', '999'), ('runAttempt', '1'), ('sessionId', 'a' * 32),
+                           ('sourceCommit', 'b'*40), ('testWebGpu', 0)]:
+            self.result_mutator = lambda env, k=key, v=value: env['session'].__setitem__(k, v)
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'not bound'):
+                self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_string_or_integer_success_and_missing_duplicate_or_extra_results_fail(self):
+        mutations = [lambda env, v=value: env['results'][0].__setitem__('passed', v)
+                     for value in ('false', 'true', 1, 0, False, None)]
+        mutations += [lambda env: env['results'].pop(),
+                      lambda env: env['results'].append(env['results'][0]),
+                      lambda env: env['results'].__setitem__(1, env['results'][0]),
+                      lambda env: env['results'][0].__setitem__('scope', 'real model inference')]
+        for change in mutations:
+            self.result_mutator = change
+            with self.assertRaises(ValueError): self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_wrong_llama_scope_fails(self):
+        self.runtime = 'llama-cpp'
+        self.result_mutator = lambda env: env['results'][0].__setitem__('syntheticModel', 'true')
+        with self.assertRaisesRegex(ValueError, 'scope'): self.validate()
+
+    def test_gpu_host_routing_evidence_cannot_finalize_without_matching_variant_scope(self):
+        self.runtime = 'llama-cpp'
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('{"status":"complete"}')
+        def mutate(envelope):
+            next(item for item in envelope['results']
+                 if item['profile'].startswith('webgpu-') and item['variant'] == 'browser').pop('hostNavigatorInjection')
+        self.result_mutator = mutate
+        with self.assertRaisesRegex(ValueError, 'host navigator smoke scope'):
+            self.validate()
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
+
+    def test_gpu_host_routing_flags_are_strict_booleans_with_test_variant_fallback(self):
+        self.runtime = 'llama-cpp'
+        root = self.repo / 'runtimes' / self.runtime
+        profiles = json.loads((root / 'config/profiles.json').read_text())
+        variants = json.loads((root / 'config/variants.json').read_text())
+        for variant in variants:
+            for flag in ('hostNavigatorInjection', 'defaultNavigatorFallback', 'independentFactories'):
+                results = self.results()
+                result = next(item for item in results
+                              if item['profile'].startswith('webgpu-') and item['variant'] == variant)
+                valid = result[flag]
+                for value in (not valid, int(valid), 'true', None):
+                    result[flag] = value
+                    with self.subTest(variant=variant, flag=flag, value=value), \
+                         self.assertRaisesRegex(ValueError, 'host navigator smoke scope'):
+                        snapshot.checked_results(self.runtime, profiles, variants, results)
+
+    def test_missing_graph_walk_evidence_cannot_finalize_or_leave_a_receipt(self):
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('{"status":"complete"}')
+        def mutate(envelope):
+            next(item for item in envelope['results'] if item['variant'] == 'test').pop('graphWalk')
+        self.result_mutator = mutate
+        with self.assertRaisesRegex(ValueError, 'graph walk evidence'):
+            self.validate()
+        self.assertEqual((self.package() / 'manifest.json').read_bytes(), before)
+        self.assertFalse(self.receipt().exists())
+
+    def test_failed_child_preserves_failure_and_removes_old_success_receipt(self):
+        self.receipt().write_text('{"status":"complete"}')
+        with patch.object(snapshot, '_run', side_effect=subprocess.CalledProcessError(7, ['fixture'])):
+            with self.assertRaises(subprocess.CalledProcessError) as error:
+                snapshot.validate_package(self.runtime, self.package(), self.receipt())
+        self.assertEqual(error.exception.returncode, 7)
+        self.assertFalse(self.receipt().exists())
+
+    def test_missing_new_result_does_not_reuse_build_result(self):
+        rr = self.repo / 'runtimes' / self.runtime / 'build'; rr.mkdir(exist_ok=True)
+        (rr / 'browser-results.json').write_text(json.dumps(self.results()))
+        with patch.object(snapshot, '_run'):
+            with self.assertRaises(FileNotFoundError):
+                snapshot.validate_package(self.runtime, self.package(), self.receipt())
+
+    def test_npm_failure_restores_unvalidated_manifest(self):
+        before = (self.package() / 'manifest.json').read_bytes()
+        original_write = Path.write_bytes
+        def private_write(path, value):
+            self.assertNotEqual(path, self.package() / 'manifest.json', 'Live metadata must never be truncated')
+            return original_write(path, value)
+        with patch('subprocess.check_output', side_effect=subprocess.CalledProcessError(6, ['npm'])), \
+                patch.object(Path, 'write_bytes', private_write):
+            with self.assertRaises(subprocess.CalledProcessError): self.validate()
+        self.assertEqual(before, (self.package() / 'manifest.json').read_bytes())
+        self.assertFalse(self.receipt().exists())
+        self.assertEqual(list(self.package().parent.glob('.bic-validation-*')), [])
+
+    def test_partial_backup_or_candidate_write_cannot_truncate_live_manifest(self):
+        original_write = Path.write_bytes
+        for failure in ('manifest.original.json', 'manifest.next.json'):
+            before = tree_identity(self.package())
+            identity = (self.package() / 'manifest.json').stat().st_ino
+            self.receipt().write_text('stale success')
+            def interrupted(path, value):
+                if path.name == failure:
+                    original_write(path, value[:len(value) // 2])
+                    raise OSError('Injected partial metadata write')
+                return original_write(path, value)
+            with self.subTest(failure=failure), patch.object(Path, 'write_bytes', interrupted), \
+                    patch('subprocess.check_output') as pack:
+                with self.assertRaisesRegex(OSError, 'partial metadata write'):
+                    self.validate()
+            pack.assert_not_called()
+            self.assertEqual(tree_identity(self.package()), before)
+            self.assertEqual((self.package() / 'manifest.json').stat().st_ino, identity)
+            self.assertFalse(self.receipt().exists())
+            self.assertEqual(list(self.package().parent.glob('.bic-validation-*')), [])
+
+    def test_manifest_activation_failure_preserves_the_previous_complete_file(self):
+        before = tree_identity(self.package())
+        identity = (self.package() / 'manifest.json').stat().st_ino
+        self.receipt().write_text('stale success')
+        original_replace = Path.replace
+        def interrupted(path, target):
+            if path.name == 'manifest.next.json':
+                raise OSError('Injected manifest activation failure')
+            return original_replace(path, target)
+        with patch.object(Path, 'replace', interrupted), patch('subprocess.check_output') as pack:
+            with self.assertRaisesRegex(OSError, 'manifest activation failure'):
+                self.validate()
+        pack.assert_not_called()
+        self.assertEqual(tree_identity(self.package()), before)
+        self.assertEqual((self.package() / 'manifest.json').stat().st_ino, identity)
+        self.assertFalse(self.receipt().exists())
+        self.assertEqual(list(self.package().parent.glob('.bic-validation-*')), [])
+
+    def test_failed_recovery_retains_and_names_the_original_outside_the_package(self):
+        before = (self.package() / 'manifest.json').read_bytes()
+        self.receipt().write_text('stale success')
+        original_replace = Path.replace
+        def interrupted(path, target):
+            if path.name == 'manifest.original.json':
+                raise OSError('Injected recovery failure')
+            return original_replace(path, target)
+        with patch.object(Path, 'replace', interrupted), \
+                patch('subprocess.check_output', side_effect=subprocess.CalledProcessError(6, ['npm'])):
+            with self.assertRaisesRegex(RuntimeError, 'original is retained at') as raised:
+                self.validate()
+        backups = list(self.package().parent.glob('.bic-validation-*/manifest.original.json'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), before)
+        self.assertIn(str(backups[0]), str(raised.exception))
+        self.assertFalse(backups[0].is_relative_to(self.package()))
+        self.assertEqual(list(backups[0].parent.iterdir()), backups)
+        # The activated file is complete, although failed validation cannot issue a receipt.
+        actual = json.loads((self.package() / 'manifest.json').read_bytes())
+        self.assertEqual(actual, snapshot.add_validation(json.loads(before), self.runtime, self.results()))
+        self.assertFalse(self.receipt().exists())
+
+    def test_modification_by_npm_blocks_success_receipt(self):
+        original = subprocess.check_output
+        def changed(*args, **kwargs):
+            value = original(*args, **kwargs)
+            if args[0][:2] == ['npm', 'pack']:
+                file = next(self.package().glob('profiles/*/*/core.mjs'))
+                file.write_bytes(b'Y' * file.stat().st_size)
+            return value
+        with patch('subprocess.check_output', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'snapshot changed'): self.validate()
+        self.assertFalse(self.receipt().exists())
+
+    def test_dirty_source_and_source_mismatch_fail_before_tests(self):
+        with patch.dict(os.environ, LCB_SOURCE_COMMIT='b'*40):
+            with self.assertRaisesRegex(ValueError, 'selected source'): self.validate()
+        file = self.package() / 'manifest.json'
+        data = json.loads(file.read_text())
+        next(iter(next(iter(data['profiles'].values()))['variants'].values()))['sourceDirty'] = True
+        file.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'dirty'): self.validate()
+        self.assertEqual(self.commands, [])
+
+    def test_receipt_cannot_delete_manifest(self):
+        before = (self.package() / 'manifest.json').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'outside'):
+            snapshot.validate_package(self.runtime, self.package(), self.package() / 'manifest.json')
+        self.assertEqual(before, (self.package() / 'manifest.json').read_bytes())
+
+    def test_json_rejects_duplicates_and_nonstandard_numbers(self):
+        for raw in (b'{"passed":false,"passed":true}', b'{"value":NaN}'):
+            with self.assertRaises(ValueError): snapshot.parse_json(raw)
+
+
+if __name__ == '__main__': unittest.main()

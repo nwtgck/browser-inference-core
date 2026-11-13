@@ -5,12 +5,34 @@ Asyncify/BigInt correction. Both runtimes use these common pins. Their upstream
 source revisions remain independent. Moving the setup and patch helper here does
 not upgrade the compiler or expand the approved correction.
 
-From the repository root:
+Acquisition is explicit in `.github/workflows/build.yml`: the compiler's fixed
+GitHub repository, pinned release, Dawn download URL and archive checksum are
+visible in the compile jobs. The same YAML shows the online Docker image build,
+TypeScript acquisition and browser installation. Docker image build contexts
+contain only their inline recipe, without repository source. Local preparation
+never downloads missing inputs.
+Use those acquisition commands when provisioning a development environment; an
+offline environment must receive the same installed SDK and pinned Dawn archive.
+
+After acquisition, from the repository root:
 
 ```sh
-python3 scripts/setup_toolchain.py
+python3 -m build_tools.toolchain.prepare
 source .tools/emsdk/emsdk_env.sh
 ```
+
+In CI, local source preparation, cache admission, compilation, packaging, tests
+and metric processing run through literal `docker run --network none` commands
+in YAML. Each command uses the runner's user ID, explicit workspace and temporary
+directory mounts, an explicit writable `HOME`, `--cap-drop=ALL` and
+`--security-opt=no-new-privileges:true`. No offline wrapper or extra isolation
+policy is involved. Git/npm/download and Actions cache transfers stay visible
+outside those containers. Playwright browser binaries are acquired into
+`.tools/browser-binaries`, so the same path is available in the offline container.
+
+The host-code job acquires the pinned `typescriptVersion` into `.tools/typescript`
+and passes its compiler path through `BICORE_TYPESCRIPT_COMPILER`; type tests never
+install dependencies themselves.
 
 Normal local builds do not require ccache. Cache configuration is an opt-in CI
 step; without it, the same build scripts compile normally. The CI `--fresh` flag
@@ -40,9 +62,13 @@ header corner cases. The final link still runs in a freshly configured tree.
 
 ## Keys and concurrency
 
-`scripts/ci_cache.py` hashes common pins and setup/cache implementation files,
+`build_tools/toolchain/cache.py` hashes common pins and setup/cache implementation files,
 runner operating system, architecture and image version, Python and ccache
-versions, and absolute workspace. Profile/variant settings form another partition.
+versions, and absolute workspace. It also hashes the offline execution
+environment fingerprint: the public base image identities, exact Dockerfile
+recipe, installed apt package versions and Node/npm/Python versions. The final
+image build ID is not used because creation timestamps would defeat reuse even
+when the execution environment is identical. Profile/variant settings form another partition.
 Runtime CMake/build configuration, upstream pins and patch inventories are also
 part of the Emscripten cache key. Object-cache restore scope deliberately survives
 an upstream/source change; ccache decides which individual translations match.
@@ -63,9 +89,9 @@ repository cache storage and eviction policies still apply.
 
 ## Trust boundary
 
-The restore and save actions are split. Save steps run only after a successful
+The restore and save steps are explicit in the workflow. Save steps run only after a successful
 compile/upload on a push to the repository's current default branch, excluding
-Dependabot. This guard exists both at the caller and inside the save composite.
+Dependabot. Each live-data check and each remote save has this guard.
 PR, non-default source-branch and manual builds do not invoke the configured save
 steps. They can read caches GitHub makes accessible to their ref. Neither the
 publication job nor the privileged report workflow restores compiler caches.
@@ -79,10 +105,9 @@ isolation remains part of this security assumption; do not grant lower-trust
 code a cross-ref cache-write mechanism. A malicious default-branch change can
 also change the build itself and is outside a cache-integrity guarantee.
 
-A corrupt Dawn archive fails before extraction; it is not silently accepted or
+A corrupt or unsafe Dawn archive fails before the existing unpacked port is replaced; it is not silently accepted or
 allowed to publish. Delete that cache entry (or change the policy key after
-review) and rerun from a cold cache. To troubleshoot other intermediates, disable
-the two composite action calls for a cold run or bump the cache policy prefix.
+review) and rerun from a cold cache. To troubleshoot other intermediates, select the explicit `cold` cache mode or bump the cache policy prefix.
 Do not bypass provenance or license validation to accommodate a cache hit.
 
 ## References

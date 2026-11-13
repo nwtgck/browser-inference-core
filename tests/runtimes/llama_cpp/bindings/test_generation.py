@@ -1,0 +1,235 @@
+"""Exercise public GGML binding generation without configuring a runtime build."""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from build_tools.project import runtime_root
+from build_tools.runtimes.llama_cpp import bindings as generate_bindings
+
+ROOT = runtime_root('llama-cpp')
+SOURCE = Path(os.environ.get('LCB_TEST_UPSTREAM_SOURCE', str(ROOT / 'vendor/llama.cpp')))
+
+
+def function(name, result, *parameters, variadic=False):
+    return {
+        'kind': 'FunctionDecl', 'name': name,
+        'type': {'qualType': result + ' ('},
+        'inner': [
+            {'kind': 'ParmVarDecl', 'name': f'arg{i}', 'type': {'qualType': typ}}
+            for i, typ in enumerate(parameters)
+        ],
+        'variadic': variadic,
+    }
+
+
+class GgmlBindings(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('clang'), 'Clang is required for public header generation')
+    def test_pinned_upstream_batch_and_audio_metadata(self):
+        with tempfile.TemporaryDirectory(prefix='lcb-upstream-api-') as temp:
+            output = Path(temp)
+            schema = generate_bindings.generate(SOURCE, output, 'clang')
+            functions = {entry['name'] for entry in schema['functions']}
+            added = {'ggml_backend_tensor_copy_n', 'ggml_backend_tensor_get_n', 'ggml_backend_tensor_set_n',
+                     'ggml_flash_attn_ext_rows', 'mtmd_bitmap_is_voice', 'mtmd_gen_audio_get_voice',
+                     'mtmd_gen_audio_voice_name', 'mtmd_gen_audio_read_tensor', 'mtmd_gen_state_set_ref',
+                     'mtmd_helper_resampler_init', 'mtmd_helper_resampler_process', 'mtmd_helper_resampler_free'}
+            added.add('ggml_rope_set_truncate')
+            added.update({'llama_batch_ext_add_embd_row', 'llama_batch_ext_set_embd_state_row',
+                          'llama_get_ctx_other', 'llama_get_embeddings_layer_inp',
+                          'llama_get_embeddings_nextn', 'llama_get_embeddings_nextn_ith',
+                          'llama_get_embeddings_nextn_rows', 'llama_model_dflash_selector_top_k',
+                          'llama_model_target_layer_ids', 'llama_model_target_layer_ids_n',
+                          'llama_set_ctx_state_src', 'llama_set_embeddings_layer_inp',
+                          'llama_set_embeddings_layer_inp_dev', 'llama_set_embeddings_nextn',
+                          'llama_set_embeddings_nextn_dev', 'llama_set_embeddings_nextn_rows',
+                          'llama_set_nextn_layer_offset', 'llama_supports_embd_row'})
+            self.assertTrue(added <= functions)
+            for name in ('ggml_diag_mask_inf', 'ggml_diag_mask_inf_inplace',
+                         'ggml_diag_mask_zero', 'ggml_diag_mask_zero_inplace'):
+                self.assertNotIn(name, functions)
+            self.assertNotIn('ggml_rope_yarn_corr_dims', functions)
+            self.assertNotIn('llama_model_classifier_free_guidance', functions)
+            context = next(record for record in schema['records'] if record['name'] == 'llama_context_params')
+            fields = context['fields']
+            moe = next(field for field in fields if field['name'] == 'moe_cache_cpu_share')
+            self.assertEqual(moe['cType'], 'float')
+            self.assertEqual(moe['id'], 26)
+            self.assertEqual(fields[25]['name'], 'moe_cache_size')
+            self.assertNotIn('defrag_thold', {field['name'] for field in fields})
+
+            records = {entry['name']: {field['name'] for field in entry['fields']} for entry in schema['records']}
+            self.assertIn('n_voices', records['mtmd_gen_audio_info'])
+            self.assertIn('speaker_ref', records['mtmd_helper_gen_audio_inp'])
+            self.assertNotIn('voice', records['mtmd_helper_gen_audio_inp'])
+            self.assertIn('temp', records['mtmd_helper_gen_audio_inp'])
+            audio_inp = next(record for record in schema['records'] if record['name'] == 'mtmd_helper_gen_audio_inp')
+            self.assertEqual(next(field['cType'] for field in audio_inp['fields'] if field['name'] == 'temp'), 'float')
+            for name in added:
+                self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
+                self.assertIn('lcb_' + name, json.loads((output / 'jspi-exports.json').read_text()))
+            for name in ('GGML_TYPE_F8_E4M3', 'GGML_FTYPE_MOSTLY_F8_E4M3', 'LLAMA_FTYPE_MOSTLY_F8_E4M3',
+                         'MTMD_VIDEO_TEMPLATE_QWEN3VL', 'MTMD_GEN_AUDIO_TYPE_CHATTERBOX', 'MTMD_GEN_AUDIO_TYPE_DRAMA3'):
+                self.assertIn(name, schema['constants'])
+            for name in ('GGML_OP_ADD1', 'GGML_OP_DIAG_MASK_INF', 'GGML_OP_DIAG_MASK_ZERO', 'GGML_PREC_DEFAULT'):
+                self.assertNotIn(name, schema['constants'])
+
+    def test_existing_mtmd_capability_queries_survive_upstream_deprecation(self):
+        existing = {
+            'mtmd_helper_support_video': ('const struct mtmd_context *',),
+            'mtmd_helper_model_can_chat': ('const struct llama_context *', 'const struct mtmd_context *'),
+        }
+        declarations = []
+        for name, parameters in existing.items():
+            declaration = function(name, 'bool', *parameters)
+            declaration['inner'].append({'kind': 'DeprecatedAttr'})
+            declarations.append(declaration)
+        ignored = function('mtmd_other_deprecated_query', 'bool')
+        ignored['inner'].append({'kind': 'DeprecatedAttr'})
+        variadic = function('mtmd_helper_support_video', 'bool', 'mtmd_context *', variadic=True)
+        # Preserve only the existing direct exports. Deprecation elsewhere and
+        # unsafe variadic declarations still have their original exclusions.
+        with tempfile.TemporaryDirectory(prefix='lcb-deprecated-mtmd-') as temp, \
+             patch.object(generate_bindings.subprocess, 'check_output',
+                          return_value=json.dumps({'inner': declarations + [ignored]})), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
+            output = Path(temp)
+            schema = generate_bindings.generate(SOURCE, output, 'clang')
+            self.assertEqual({item['name'] for item in schema['functions']}, set(existing))
+            self.assertEqual(schema['excluded'], [{'name': ignored['name'], 'reason': 'deprecated'}])
+            for name in existing:
+                for filename, prefix in {'exports.json': '_lcb_', 'jspi-exports.json': 'lcb_',
+                                         'bindings.cpp': 'lcb_', 'functions.d.ts': ''}.items():
+                    self.assertIn(prefix + name, (output / filename).read_text(), filename)
+            with patch.object(generate_bindings.subprocess, 'check_output',
+                              return_value=json.dumps({'inner': [variadic]})):
+                variadic_schema = generate_bindings.generate(SOURCE, output, 'clang')
+            self.assertEqual(variadic_schema['functions'], [])
+            self.assertEqual(variadic_schema['excluded'], [{'name': variadic['name'], 'reason': 'variadic'}])
+
+    def test_unimplemented_threadpool_query_is_explained_and_not_exported(self):
+        source = SOURCE
+        missing = 'ggml_threadpool_get_n_threads'
+        ast = {'inner': [
+            function(missing, 'int', 'struct ggml_threadpool *'),
+            function('ggml_threadpool_pause', 'void', 'struct ggml_threadpool *'),
+            function('ggml_threadpool_resume', 'void', 'struct ggml_threadpool *'),
+        ]}
+        with tempfile.TemporaryDirectory(prefix='lcb-unimplemented-binding-') as temp, \
+             patch.object(generate_bindings.subprocess, 'check_output', return_value=json.dumps(ast)), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
+            output = Path(temp)
+            schema = generate_bindings.generate(source, output, 'clang')
+            self.assertEqual({entry['name'] for entry in schema['functions']},
+                             {'ggml_threadpool_pause', 'ggml_threadpool_resume'})
+            self.assertEqual(schema['excluded'], [{
+                'name': missing,
+                'reason': 'declared in ggml-cpu.h but not implemented by the pinned upstream',
+            }])
+            for name in ('exports.json', 'jspi-exports.json', 'bindings.cpp', 'functions.d.ts'):
+                self.assertNotIn(missing, (output / name).read_text(), name)
+            for name in ('ggml_threadpool_pause', 'ggml_threadpool_resume'):
+                self.assertIn('_lcb_' + name, json.loads((output / 'exports.json').read_text()))
+                self.assertIn('_' + name, json.loads((output / 'exports.json').read_text()))
+            if shutil.which('g++'):
+                subprocess.run([
+                    'g++', '-std=c++17', '-fsyntax-only',
+                    '-I' + str(source / 'include'),
+                    '-I' + str(source / 'ggml/include'),
+                    '-I' + str(source / 'tools/mtmd'), str(output / 'bindings.cpp'),
+                    '-I' + str(ROOT / 'native/vision'),
+                ], check=True, capture_output=True, text=True)
+
+    def test_public_ggml_functions_records_and_exports(self):
+        source = SOURCE
+        ast = {'inner': [
+            {'kind': 'TypedefDecl', 'name': 'ggml_backend_buffer_t',
+             'type': {'qualType': 'ggml_backend_buffer_t',
+                      'desugaredQualType': 'struct ggml_backend_buffer *'}},
+            {'kind': 'TypedefDecl', 'name': 'ggml_backend_buffer_type_t',
+             'type': {'qualType': 'ggml_backend_buffer_type_t',
+                      'desugaredQualType': 'struct ggml_backend_buffer_type *'}},
+            {'kind': 'TypedefDecl', 'name': 'ggml_gallocr_t',
+             'type': {'qualType': 'ggml_gallocr_t',
+                      'desugaredQualType': 'struct ggml_gallocr *'}},
+            {'kind': 'TypedefDecl', 'name': 'ggml_fp16_t',
+             'type': {'qualType': 'ggml_fp16_t', 'desugaredQualType': 'unsigned short'}},
+            {'kind': 'TypedefDecl', 'name': 'ggml_bf16_t',
+             'type': {'qualType': 'ggml_bf16_t',
+                      'desugaredQualType': 'struct (unnamed struct at ggml.h:377:13)'}},
+            {'kind': 'TypedefDecl', 'name': 'ggml_abort_callback_t',
+             'type': {'qualType': 'ggml_abort_callback_t',
+                      'desugaredQualType': 'void (*)(const char *)'}},
+            function('ggml_used_mem', 'size_t', 'const struct ggml_context *'),
+            function('ggml_init', 'struct ggml_context *', 'struct ggml_init_params'),
+            function('ggml_add', 'struct ggml_tensor *', 'struct ggml_context *',
+                     'struct ggml_tensor *', 'struct ggml_tensor *'),
+            function('ggml_fp16_to_fp32', 'float', 'ggml_fp16_t'),
+            function('ggml_fp32_to_bf16', 'ggml_bf16_t', 'float'),
+            function('ggml_bf16_to_fp32', 'float', 'ggml_bf16_t'),
+            function('ggml_set_abort_callback', 'ggml_abort_callback_t',
+                     'ggml_abort_callback_t'),
+            function('ggml_tallocr_new', 'struct ggml_tallocr', 'ggml_backend_buffer_t'),
+            function('ggml_gallocr_get_buffer_size', 'size_t', 'ggml_gallocr_t', 'int'),
+            function('ggml_backend_alloc_ctx_tensors_from_buft_size', 'size_t',
+                     'struct ggml_context *', 'ggml_backend_buffer_type_t'),
+            function('ggml_format_name', 'struct ggml_tensor *', 'struct ggml_tensor *',
+                     'const char *', variadic=True),
+            {'kind': 'RecordDecl', 'name': 'ggml_init_params', 'tagUsed': 'struct',
+             'completeDefinition': True, 'inner': [
+                 {'kind': 'FieldDecl', 'name': 'mem_size', 'type': {'qualType': 'size_t'}},
+                 {'kind': 'FieldDecl', 'name': 'no_alloc', 'type': {'qualType': 'bool'}},
+             ]},
+            {'kind': 'RecordDecl', 'name': 'ggml_tallocr', 'tagUsed': 'struct',
+             'completeDefinition': True, 'inner': [
+                 {'kind': 'FieldDecl', 'name': 'alignment', 'type': {'qualType': 'size_t'}},
+             ]},
+        ]}
+        with tempfile.TemporaryDirectory(prefix='lcb-ggml-bindings-') as temp, \
+             patch.object(generate_bindings.subprocess, 'check_output',
+                          return_value=json.dumps(ast)), \
+             patch.object(generate_bindings, 'CALLBACK_METADATA_GETTERS', {}):
+            output = Path(temp)
+            schema = generate_bindings.generate(source, output, 'clang')
+            names = {entry['name'] for entry in schema['functions']}
+            self.assertEqual(names, {
+                'ggml_used_mem', 'ggml_init', 'ggml_add',
+                'ggml_fp16_to_fp32', 'ggml_fp32_to_bf16', 'ggml_bf16_to_fp32',
+                'ggml_set_abort_callback', 'ggml_tallocr_new',
+                'ggml_gallocr_get_buffer_size',
+                'ggml_backend_alloc_ctx_tensors_from_buft_size',
+            })
+            self.assertEqual(schema['excluded'], [
+                {'name': 'ggml_format_name', 'reason': 'variadic'},
+            ])
+            self.assertEqual({entry['name'] for entry in schema['records']},
+                             {'ggml_bf16_t', 'ggml_init_params', 'ggml_tallocr'})
+            self.assertIn('GGML_MAX_DIMS', schema['constants'])
+            self.assertIn('GGML_MEM_ALIGN', schema['constants'])
+            exports = json.loads((output / 'exports.json').read_text())
+            jspi = json.loads((output / 'jspi-exports.json').read_text())
+            for name in names:
+                self.assertIn('_lcb_' + name, exports)
+                self.assertIn('_' + name, exports)
+                self.assertIn('lcb_' + name, jspi)
+                self.assertIn(name, jspi)
+                self.assertIn(name + '(', (output / 'functions.d.ts').read_text())
+            self.assertIn('#include "ggml-alloc.h"', (output / 'headers.c').read_text())
+            if shutil.which('g++'):
+                subprocess.run([
+                    'g++', '-std=c++17', '-fsyntax-only',
+                    '-I' + str(source / 'include'),
+                    '-I' + str(source / 'ggml/include'),
+                    '-I' + str(source / 'tools/mtmd'),
+                    '-I' + str(ROOT / 'native/vision'),
+                    str(output / 'bindings.cpp'),
+                ], check=True, capture_output=True, text=True)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -7,5 +7,6 @@
   },
   "nodeVersion": "22.16.0",
   "dawnTag": "v20260908.214631",
-  "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"
+  "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c",
+  "typescriptVersion": "6.0.3"
 }

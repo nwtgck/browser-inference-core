@@ -1,0 +1,15 @@
+{
+  "upstream": {
+    "src/llama-sampler.cpp": "6313214bf0a4146036f3d62846299cba4fa9804757c353140a04de52130cf496",
+    "src/llama-sampler.h": "d39c6bfd6c966acde7bfaeb55f08c176b3d9078bc5e8e8de2eee504fc66c258b",
+    "src/llama-context.cpp": "4d137ded28efc44c8b471f6c056bee9444a24deb7b42d1e04c64728c25e5c822",
+    "src/llama-context.h": "c0ed1f0e8b47d2f001a4a8ba61d01f05b16c2972d693780ac1cc09a6d9a05d88",
+    "src/llama-vocab.h": "b201040378716d004b2ded39165f92c1cffc129a361d8c6a42d8b4a1a2fd65f4",
+    "src/llama-model.cpp": "4a05742afc09dc89873e40c8b47a97826f95c4cb90fb32ba48271b4d8f4a14de",
+    "src/llama-vocab.cpp": "ac6fd43eca27c67a213a98e27b87e8ca1f26d8d82a63e79543a06ca64ef10a95",
+    "include/llama.h": "f07ffbabd3fbe9ef21d97b4d4ce8328d9c2a123ccbf5266f04a3146d70ce4f91",
+    "ggml/src/ggml-backend.cpp": "7ea26359e7eda6957227d6e4c2a24a96aed622cbbca300b066580f7f3d95df5e"
+  },
+  "outputSha256": "3fcfceade964ab4cad60621acca0f69f3eb54272cb2ca6d17f7d8b92c51ee410",
+  "note": "Historical v0.9.0 semantic fixture identities; production accepts a selected source commit and applies the unchanged patch."
+}
