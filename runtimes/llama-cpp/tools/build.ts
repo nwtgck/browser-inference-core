@@ -152,6 +152,23 @@ async function runBuildCommand({ command, args, cwd, env, log }: { command: stri
   }
 }
 
+/** --emit-tsd uses the SDK's npm compiler, independently of project tooling. */
+export async function checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env }: { emscriptenRoot: string; buildRoot: string; env: NodeJS.ProcessEnv }): Promise<void> {
+  // emcmake records config.NODE_JS[0] here; reuse its selected executable rather
+  // than guessing an SDK Node version or using a global TypeScript compiler.
+  const cache = await readFile(join(buildRoot, 'CMakeCache.txt'), 'utf8');
+  const node = /^CMAKE_CROSSCOMPILING_EMULATOR:[^=]+=([^\r\n]+)$/mu.exec(cache)?.[1];
+  if (node === undefined) {
+    throw new Error('Configured Emscripten Node executable is missing from CMakeCache.txt');
+  }
+  try {
+    // The package entry is JavaScript; npm's .bin entry can be a shell shim.
+    await runBuildCommand({ command: node, args: [join(emscriptenRoot, 'node_modules/typescript/bin/tsc'), '--version'], cwd: buildRoot, env, log: join(buildRoot, 'declaration-compiler.log') });
+  } catch (error) {
+    throw new Error(`Emscripten --emit-tsd requires its SDK npm dependencies. Run npm ci --prefix "${emscriptenRoot}" --include=dev --ignore-scripts --no-audit --no-fund before building.\n${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export async function buildPrepared({ context, source, prepared, selection, configuration, chosen }: { context: BuildContext; source: CapturedSources; prepared: PreparedSources; selection: BuildSelection; configuration: Configuration; chosen: { profile: Profile; variant: Variant } }): Promise<BuiltProfile | ConfiguredProfile> {
   const buildRoot = buildDirectory({ context, selection });
   await directory({ path: buildRoot, create: true });
@@ -224,6 +241,15 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   verifyCompileConfiguration({ entries, profile: chosen.profile });
   if (selection.configureOnly) {
     return { kind: 'configured', buildDirectory: buildRoot, compilationDatabase };
+  }
+  switch (selection.kind) {
+  case 'wasm': await checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env });
+    break;
+  case 'native': break;
+  default: {
+    const _ex: never = selection.kind;
+    throw new Error(`Unknown build kind: ${String(_ex)}`);
+  }
   }
   await runBuildCommand({ command: 'cmake', args: ['--build', buildRoot, '--target', 'core', '-j', String(selection.jobs)], cwd: buildRoot, env, log: join(buildRoot, 'compile.log') });
   const runtimeDirectory = join(buildRoot, 'runtime');

@@ -22,7 +22,7 @@ the numerical result of a shader.
 | `cases/expert.hpp` | Q5_1/IQ4_NL short and fallback factories, distinct cache entries and warm revisit | Four current shapes emit `{type}-{128,256}.wgsl` and `cases.json` to `webgpu-provider-shaders` for an optional external GPU experiment; the WG256 output is the current fallback, not a historical provider |
 | `hc-admission.cpp` | Actual HC header/type admission, layout/shape/mode/device-limit rejection and shared-root conservatism | Normal-only target shares the prepared tree; checks remain active in Release without a second preparation job |
 | `cases/q8-diagnostic.hpp` | Execute-before-prepare rejection, warm prepare/execute without pipeline creation, actual diagnostic reentry BUSY, undersized report without writes, copied bridge request and CPU/foreign registry rejection; SHA-256 known vectors and padding/block boundaries | Profile-only complete provider plus the ordinary production diagnostic bridge TU; controlled typed registry and recorded WebGPU C API, native pointer bounds rather than Wasm heap execution |
-| `checkpoint-writer.cpp` | Host offsets, batch/fallback counts, repeated flush and exception lifetime | Complete wasm-selected `llama-context.cpp`; actual ggml types with controlled backend callbacks |
+| `checkpoint-writer.cpp` | Host offsets, batch/fallback counts, repeated flush and exception lifetime; file writer byte round-trip | Complete wasm-selected `llama-context.cpp` plus its real file/utility sources; actual ggml types with controlled backend callbacks |
 | `cases/copy.hpp` | CPU producer synchronization before caller-byte snapshot, storage lifetime after return, checked no-side-effect rejection, same-device copy and alias, generic fallback between devices | Complete provider and public ggml calls; deferred C API queue. `transfer.cpp` exercises the real scheduler integration |
 | `cases/subgroup.hpp` | Current Q4/Q6/Q8 fixed/requested factories, optional validation rejection memo, shape-dependent canonical fallback, Q6 admission/broadcast/cache and actual grid, C8 grid7/8 | Shared C API observer; emitted normal/profile shader comparison is host/source evidence |
 | `cases/matrix.hpp` | Current half-pairs/wide-M/canonical mode, tile/cache separation in both shape orders, Q6 parallelism threshold and overflow-safe independent oracle, real provider dtype admission and actual matmul grid | Complete factory/provider; invalid layout inputs exercise factory admission only. Shader arithmetic and historical output bytes remain separate guarantees |
@@ -43,6 +43,9 @@ public header list before and after runtime include wiring.
 Linker section collection discards unexercised functions after the complete
 translation units have compiled. Successful execution establishes the assertions
 above; it does not establish linkage or GPU behavior for discarded functions.
+The checkpoint target explicitly compiles the prepared `llama-mmap.cpp` and
+`llama-impl.cpp` dependencies. Its file round-trip keeps that dependency exercised
+regardless of how a compiler retains sibling virtual serializers.
 Select retained tests by their useful feature, API, performance or ownership
 guarantee and maintenance cost. Obsolete composer, source-text and historical
 implementation checks do not require replacement machinery.

@@ -471,6 +471,7 @@ jobs:
           cd .tools/emsdk
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
+          npm ci --prefix "$PWD/upstream/emscripten" --include=dev --ignore-scripts --no-audit --no-fund
       - name: Acquire pinned Dawn archive (online on cache miss)
         env:
           DAWN_TAG: ${{ steps.plan.outputs.dawn-tag }}

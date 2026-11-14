@@ -82,7 +82,7 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'npm
   assert.deepEqual((await readCalls({ root })).map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund']]);
 });
 
-test('each job actually installs the lock and emits tooling exactly once', async () => {
+test('each job installs its root tooling lock and emits tools once', async () => {
   for (const name of Object.keys(jobs)) {
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
@@ -91,7 +91,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const args=process.argv.slice(2);
 const command=path.basename(process.argv[1]);
-fs.appendFileSync(process.env.CALLS,JSON.stringify({command,args})+'\\n');
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command,args,environment:{cwd:process.cwd()}})+'\\n');
 if(command==='git') process.stdout.write(process.env.LCB_SOURCE_COMMIT+'\\n');
 if(command==='ccache') process.stdout.write('ccache fixture\\n');
 if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
@@ -112,6 +112,7 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
     await executeShell({ root, script: offlineScript({ step: emit }), environment });
     const calls = await readCalls({ root });
     const npm = calls.filter(call => call.command === 'npm');
+    assert.ok(npm.every(call => call.environment?.cwd === root));
     const compiler = calls.filter(call => call.command === 'node' && call.args[0] === 'node_modules/typescript/bin/tsc');
     if (name === 'compile' || name === 'image-compile') {
       assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund']]);
@@ -391,14 +392,19 @@ fs.writeFileSync(args[args.indexOf('--output')+1],'archive');
   }
 });
 
-test('the SDK acquisition checks the immutable release before install and activation', async () => {
-  const script = text({ value: namedStep({ job: 'compile', name: 'Acquire pinned compiler (online)' }).run });
-  for (const matches of [true, false]) {
+test('SDK acquisition checks the release, installs LL SDK development dependencies and precedes offline builds', async () => {
+  for (const scenario of [
+    { job: 'compile', matches: true, npmExit: 0 },
+    { job: 'compile', matches: false, npmExit: 0 },
+    { job: 'compile', matches: true, npmExit: 7 },
+    { job: 'image-compile', matches: true, npmExit: 0 },
+    { job: 'image-compile', matches: false, npmExit: 0 },
+  ]) {
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
     const sdk = join(root, '.tools/emsdk');
     await mkdir(sdk, { recursive: true });
-    await writeFile(join(sdk, 'emscripten-releases-tags.json'), JSON.stringify({ releases: { '6.0.9': (matches ? 'a' : 'b').repeat(40) } }));
+    await writeFile(join(sdk, 'emscripten-releases-tags.json'), JSON.stringify({ releases: { '6.0.9': (scenario.matches ? 'a' : 'b').repeat(40) } }));
     const binary = await executable({
       root,
       name: 'emsdk',
@@ -407,13 +413,44 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'ems
 `,
     });
     await cp(binary, join(sdk, 'emsdk'));
-    const environment = { EMSDK_VERSION: '6.0.9', EMSCRIPTEN_RELEASE: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl') };
-    if (matches) {
+    for (const command of ['npm', 'docker']) {
+      await executable({
+        root,
+        name: command,
+        source: `\
+const fs=require('node:fs');
+const command=require('node:path').basename(process.argv[1]);
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command,args:process.argv.slice(2),environment:{cwd:process.cwd()}})+'\\n');
+if(command==='npm') process.exit(Number(process.env.NPM_EXIT));
+`,
+      });
+    }
+    const steps = jobSteps({ name: scenario.job });
+    const acquisition = namedStep({ job: scenario.job, name: 'Acquire pinned compiler (online)' });
+    const build = namedStep({ job: scenario.job, name: 'Prepare, build and stage the selected runtime' });
+    assert.ok(steps.indexOf(namedStep({ job: scenario.job, name: 'Acquire locked development dependencies (online)' })) < steps.indexOf(acquisition));
+    assert.ok(steps.indexOf(acquisition) < steps.indexOf(build));
+    const script = text({ value: acquisition.run });
+    const environment = { EMSDK_VERSION: '6.0.9', EMSCRIPTEN_RELEASE: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), NPM_EXIT: String(scenario.npmExit), GITHUB_WORKSPACE: root, RUNNER_TEMP: root, BIC_OFFLINE_IMAGE: 'fixture' };
+    if (scenario.matches && scenario.npmExit === 0) {
       await executeShell({ root, script, environment });
-      assert.deepEqual((await readCalls({ root })).map(call => call.args), [['install', '6.0.9'], ['activate', '6.0.9']]);
+      await executeShell({ root, script: text({ value: build.run }), environment });
     } else {
       await assert.rejects(executeShell({ root, script, environment }));
+    }
+    if (!scenario.matches) {
       await assert.rejects(readFile(join(root, 'calls.jsonl')));
+      continue;
+    }
+    const calls = await readCalls({ root });
+    const buildCall = scenario.npmExit === 0 ? calls.pop() : undefined;
+    assert.deepEqual(calls.slice(0, 2).map(({ command, args }) => ({ command, args })), [{ command: 'emsdk', args: ['install', '6.0.9'] }, { command: 'emsdk', args: ['activate', '6.0.9'] }]);
+    assert.deepEqual(calls.slice(2), scenario.job === 'compile' ? [{ command: 'npm', args: ['ci', '--prefix', join(sdk, 'upstream/emscripten'), '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'], environment: { cwd: sdk } }] : []);
+    if (scenario.npmExit === 0) {
+      assert.ok(buildCall);
+      assert.equal(buildCall.command, 'docker');
+      assert.equal(buildCall.args[buildCall.args.indexOf('--network') + 1], 'none');
+      assert.ok(buildCall.args.includes('NPM_CONFIG_OFFLINE=true'));
     }
   }
 });

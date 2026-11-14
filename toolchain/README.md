@@ -2,8 +2,8 @@
 
 `config.json` selects the Emscripten release and Dawn WebGPU archive shared by
 both runtimes. Each runtime still owns its upstream Git links and produces its
-own Wasm instance. The TypeScript compiler version belongs to the private root
-`package.json` and its lockfile, not this configuration. Tool metadata records
+own Wasm instance. The TypeScript version used by project tooling belongs to the
+private root `package.json` and its lockfile, not this configuration. Tool metadata records
 the version of the TypeScript module actually loaded; dependency installation
 is responsible for keeping the installed packages consistent with the lockfile.
 
@@ -21,6 +21,20 @@ Acquire the pinned SDK and Dawn archive first. CI performs downloads, cache
 transfers, and Git operations explicitly in workflow YAML. The local preparation
 tool does not access the network. It requires Node.js, the private tool
 packages from the root lockfile, `patch`, `unzip`, and `zipinfo`.
+
+When preparing a llama Wasm build, also acquire the SDK's npm development
+dependencies before the offline phase:
+
+```sh
+npm ci --prefix "$PWD/.tools/emsdk/upstream/emscripten" \
+  --include=dev --ignore-scripts --no-audit --no-fund
+```
+
+Emscripten's `--emit-tsd` uses its own TypeScript dependency and SDK Node. The
+SDK's `package-lock.json` owns that compiler version; the root lockfile owns the
+compiler used by project tooling. The llama build checks the SDK compiler's
+availability before compiling runtime sources. Offline builds never install or
+download these dependencies.
 
 After compiling the private tools with `npm run tooling:build`, run this from
 the repository root:

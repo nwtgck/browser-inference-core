@@ -3,7 +3,7 @@ project(llama_cpu_contracts LANGUAGES C CXX)
 enable_testing()
 set(CMAKE_CXX_STANDARD 20)
 include("../support/ggml.cmake")
-option(LCB_NATIVE_CHECKPOINT_WRITER "Validate the wasm-selected context's ordinary host writer" OFF)
+option(LCB_NATIVE_CHECKPOINT_WRITER "Validate the wasm-selected context's host and file writers" OFF)
 if(NOT DEFINED LCB_NATIVE_MTMD_CAPABILITY)
     set(LCB_NATIVE_MTMD_CAPABILITY 0)
 endif()
@@ -26,7 +26,11 @@ function(mtmd_contract target)
     target_link_options(${target} PRIVATE -Wl,--gc-sections)
 endfunction()
 if(LCB_NATIVE_CHECKPOINT_WRITER)
-    mtmd_contract(checkpoint-writer "../checkpoint-writer.cpp")
+    # The complete context also defines file-backed serializers. Link their
+    # real file/utility implementations instead of relying on compiler removal.
+    mtmd_contract(checkpoint-writer "../checkpoint-writer.cpp"
+        "${LCB_PREPARED_SOURCE}/src/llama-mmap.cpp"
+        "${LCB_PREPARED_SOURCE}/src/llama-impl.cpp")
     target_include_directories(checkpoint-writer PRIVATE "${LCB_PREPARED_SOURCE}/src")
     add_test(NAME checkpoint-writer COMMAND checkpoint-writer)
 endif()

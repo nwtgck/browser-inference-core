@@ -4,6 +4,8 @@
 #include "ggml-backend-impl.h"
 #include "support/check.hpp"
 #include <array>
+#include <cstdio>
+#include <memory>
 
 static unsigned batches, scalars;
 static bool accept = true, fail_write;
@@ -102,4 +104,24 @@ int main() {
         writer.flush();
     }
     BICORE_CHECK(batches == 0 && scalars == 1);
+    {
+        // Exercise the context's file writer too: its out-of-line dependency
+        // must link even when a compiler discards other serialization paths.
+        const auto temporary = std::unique_ptr<FILE, int (*)(FILE *)>(std::tmpfile(), std::fclose);
+        BICORE_CHECK(temporary);
+        {
+            llama_file file(temporary.get());
+            llama_io_write_file writer(&file);
+            batches = scalars = 0;
+            writer.write(header.data(), header.size());
+            writer.write_tensor(&tensor, 7, 5);
+            BICORE_CHECK(writer.n_bytes() == header.size() + 5 && batches == 0 && scalars == 1);
+        }
+        llama_file reader(temporary.get());
+        std::array<uint8_t, 8> restored{};
+        BICORE_CHECK(reader.size() == restored.size());
+        reader.read_raw(restored.data(), restored.size());
+        BICORE_CHECK(std::equal(header.begin(), header.end(), restored.begin()));
+        BICORE_CHECK(std::equal(bytes.begin() + 7, bytes.begin() + 12, restored.begin() + header.size()));
+    }
 }
