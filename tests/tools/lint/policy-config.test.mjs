@@ -11,7 +11,13 @@ const root = resolve(import.meta.dirname, '../../..');
 const ruleId = 'local-rules-test-resource/test-resource-management';
 const importRuleId = 'local-rules-test-imports/no-test-support-imports';
 const namedRuleId = 'local-rules-named-args/require-named-args';
-const eslint = new ESLint({ cwd: root, overrideConfigFile: resolve(root, 'eslint.config.js') });
+const eslint = new ESLint({
+  cwd: root,
+  overrideConfigFile: resolve(root, 'eslint.config.js'),
+  // Repeated lintText calls use virtual text at real project paths. Keep typed
+  // watch programs rather than CI's immutable single-run project source files.
+  overrideConfig: { languageOptions: { parserOptions: { disallowAutomaticSingleRunInference: true } } },
+});
 
 test('test permissions depend on exact physical suffixes across platforms', () => {
   assert.equal(isTestFile({ filename: 'C:\\runtime\\example.test.ts' }), true);

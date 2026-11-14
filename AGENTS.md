@@ -127,6 +127,10 @@ sources, platform branches or include paths. If prerequisites prevent this check
 identify the unverified path and missing inputs explicitly. Choose representative
 configurations for the changed behavior; a full local matrix is not required.
 
+When CI environment variables select a different parser or test execution path,
+run the affected tests locally under those variables as well. A default local
+pass does not establish coverage of a CI-selected path.
+
 - Use `npm run lint -- --fix <affected paths...>` for owned JS/TS changes.
 - Use `npm run tooling:build` when emitting TypeScript for Node tests; it also
   performs strict type checking. Use `npm run tooling:check` when only checking
