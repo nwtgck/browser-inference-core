@@ -5,7 +5,7 @@ export type ObservedCommandResult = { exitCode: number | null; signal: NodeJS.Si
 
 /** Run a real external command with inherited streams and bounded signal cleanup. */
 export async function runObservedCommand({ metrics, phase, command, args, cwd, env }: {
-  metrics: Metrics; phase: string; command: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv;
+  metrics: Metrics; phase: string; command: string; args: readonly string[]; cwd: string; env: Readonly<NodeJS.ProcessEnv> | undefined;
 }): Promise<ObservedCommandResult> {
   const span = await metrics.begin({ phase, packageKind: undefined });
   let child: ChildProcess | undefined;

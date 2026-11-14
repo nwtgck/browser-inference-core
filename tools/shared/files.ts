@@ -74,30 +74,26 @@ export async function regularFile({ path }: { path: string }): Promise<string> {
 
 export async function fileIdentity({ path }: { path: string }): Promise<FileIdentity> {
   const absolute = await regularFile({ path });
-  const file = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const before = await file.stat({ bigint: true });
-    if (!before.isFile()) {
-      throw new Error(`Non-regular opened source file: ${absolute}`);
-    }
-    const hash = createHash('sha256');
-    let bytes = 0;
-    for await (const value of file.createReadStream({ autoClose: false, start: 0 })) {
-      const chunk: unknown = value;
-      if (!Buffer.isBuffer(chunk)) {
-        throw new Error('Expected a binary file stream');
-      }
-      bytes += chunk.length;
-      hash.update(chunk);
-    }
-    const after = await file.stat({ bigint: true });
-    if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || BigInt(bytes) !== after.size) {
-      throw new Error(`Source file changed while reading: ${absolute}`);
-    }
-    return { bytes, sha256: hash.digest('hex') };
-  } finally {
-    await file.close();
+  await using file = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const before = await file.stat({ bigint: true });
+  if (!before.isFile()) {
+    throw new Error(`Non-regular opened source file: ${absolute}`);
   }
+  const hash = createHash('sha256');
+  let bytes = 0;
+  for await (const value of file.createReadStream({ autoClose: false, start: 0 })) {
+    const chunk: unknown = value;
+    if (!Buffer.isBuffer(chunk)) {
+      throw new Error('Expected a binary file stream');
+    }
+    bytes += chunk.length;
+    hash.update(chunk);
+  }
+  const after = await file.stat({ bigint: true });
+  if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || BigInt(bytes) !== after.size) {
+    throw new Error(`Source file changed while reading: ${absolute}`);
+  }
+  return { bytes, sha256: hash.digest('hex') };
 }
 
 export async function fileIdentities({ root, exclude }: { root: string; exclude?: readonly string[] }): Promise<Record<string, SourceIdentity>> {

@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { StableDiffusionProvenance } from '#dto/stable-diffusion-cpp';
 import { directory, fileIdentities, regularFile } from '#tools/shared/files';
 import { runProcess } from '#tools/shared/process';
+import { READ_ENV_BIC_CACHE_ID, READ_ENV_EM_COMPILER_WRAPPER } from '#tools/shared/node-env';
 import { observeSource, snapshotCompileInputs, type SourceMode, type SourceSnapshot } from '#tools/source/capture';
 import { stageProfile } from '#tools/package/stage';
 import { recordCompilerInputs } from '#tools/shared/compiler-inputs';
@@ -145,13 +146,15 @@ export async function buildPrepared({ context, selection, selected, snapshot, pr
   }
   const command = cmakeArguments({ context, inputs: prepared.inputs, buildRoot, preparedRoot: prepared.root, profile: selected.profile, variant: selection.variant, nativeCheck, dawnRoot });
   await resetCmakeSource({ buildRoot, compileRoot: snapshot.compileRoot });
-  await runProcess({ command: nativeCheck ? 'cmake' : path.join(emscriptenRoot, 'emcmake'), args: nativeCheck ? command.slice(1) : command, cwd: buildRoot });
-  await runProcess({ command: 'cmake', args: ['--build', buildRoot, '--parallel', String(selection.jobs), ...(nativeCheck ? [] : ['--target', 'core'])], cwd: buildRoot });
+  await runProcess({ command: nativeCheck ? 'cmake' : path.join(emscriptenRoot, 'emcmake'), args: nativeCheck ? command.slice(1) : command, cwd: buildRoot, capture: 'tee' });
+  await runProcess({ command: 'cmake', args: ['--build', buildRoot, '--parallel', String(selection.jobs), ...(nativeCheck ? [] : ['--target', 'core'])], cwd: buildRoot, capture: 'tee' });
   await verifyPreparedSources({ preparedRoot: prepared.root, facts: prepared.facts });
   if (!isDeepStrictEqual(snapshot.files, await fileIdentities({ root: snapshot.compileRoot }))) {
     throw new Error('Image-runtime compiler inputs changed during build');
   }
   const compiledInputs = await recordCompilerInputs({ buildRoot, roots: { compile: snapshot.compileRoot, prepared: prepared.root, build: buildRoot, tooling: context.toolingRoot, emscripten: emscriptenRoot } });
+  const cacheIdentity = READ_ENV_BIC_CACHE_ID();
+  const compilerWrapper = READ_ENV_EM_COMPILER_WRAPPER();
   const provenance: StableDiffusionProvenance = {
     runtime: 'stable-diffusion-cpp',
     profile: selection.profile,
@@ -169,7 +172,7 @@ export async function buildPrepared({ context, selection, selected, snapshot, pr
     nativeCheck,
     toolchain,
     ...(emccVersion === undefined ? {} : { emccVersion }),
-    buildCache: { ...(process.env.BIC_CACHE_ID === undefined ? {} : { identity: process.env.BIC_CACHE_ID }), ...(process.env.EM_COMPILER_WRAPPER === undefined ? {} : { compilerWrapper: process.env.EM_COMPILER_WRAPPER }) },
+    buildCache: { ...(cacheIdentity === undefined ? {} : { identity: cacheIdentity }), ...(compilerWrapper === undefined ? {} : { compilerWrapper }) },
     validation: { compiled: true, browserSmoke: false, realModelInference: false },
   };
   return { buildRoot, runtimeRoot: path.join(buildRoot, 'runtime'), generatedRoot: path.join(buildRoot, 'generated'), provenance };

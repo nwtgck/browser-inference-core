@@ -1,3 +1,4 @@
+import { READ_ENV_PATH } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -121,7 +122,7 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
       assert.ok(cache);
       const args = [...cache.args];
       args[args.indexOf('--checkout-root') + 1] = checkoutRoot;
-      await runProcess({ command: process.execPath, args, cwd: checkoutRoot, env: { ...process.env, BIC_METRICS_MODE: 'off' } });
+      await runProcess({ command: process.execPath, args, cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'off' } } });
       const planned = object({ value: JSON.parse(await readFile(join(root, 'build/cache-plan.json'), 'utf8')) });
       assert.equal(object({ value: planned.environment }).EM_CACHE, join(root, '.tools/emsdk/upstream/emscripten/cache'));
       assert.equal(planned.ccStagingPath, `.cache/restored/${environment.BIC_METRICS_RUNTIME}/${environment.BIC_METRICS_PROFILE}/browser/cc`);
@@ -375,7 +376,7 @@ process.exit(Number(process.env.DOCKER_EXIT));
   const input = 'literal $GH_TOKEN and spaces\n';
   const args = ['.github/scripts/run-offline.sh', '-e', 'HOME=/tmp', '-e', 'EXTRA=value with spaces', 'fixture:tag', 'bash', '-euo', 'pipefail', '-c', 'printf "%s" "$EXTRA"'];
   for (const code of [0, 7]) {
-    const operation = runProcess({ command: 'bash', args, cwd: root, input, capture: 'file', env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, GH_TOKEN: 'private-token', GITHUB_TOKEN: 'private-token', CALLS: join(root, 'call.json'), DOCKER_EXIT: String(code) } });
+    const operation = runProcess({ command: 'bash', args, cwd: root, input, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, GH_TOKEN: 'private-token', GITHUB_TOKEN: 'private-token', CALLS: join(root, 'call.json'), DOCKER_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
       assert.equal(result.stdout.toString(), 'original stdout\n');
@@ -619,7 +620,7 @@ if(args[1]==='publication'&&args[2]==='freeze'){
 process.stdout.write('assembly ready\\n');
 `,
     });
-    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, LCB_SOURCE_COMMIT: source, TREE: tree, FREEZE_EXIT: String(code) } });
+    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, LCB_SOURCE_COMMIT: source, TREE: tree, FREEZE_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
       assert.equal(result.stdout.toString(), 'assembly ready\n');
@@ -728,7 +729,7 @@ process.stdout.write('feat: runtime <one> & "two"\\n');
   }
 });
 
-test('the publication report forwards its run identity and appends the install guide to the job summary', async () => {
+test('the publication report forwards its run identity and appends only integration details to the job summary', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
   const summary = join(root, 'job summary.md');
@@ -739,6 +740,13 @@ test('the publication report forwards its run identity and appends the install g
 \`\`\`sh
 npm install github:owner/repo#${'a'.repeat(40)}
 \`\`\`
+`;
+  const integrationDetails = `\
+## Consumer integration details
+
+| Runtime | ABI | Profiles |
+| --- | --- | --- |
+| llama-cpp | 3 | cpu-wasm32 |
 `;
   await writeFile(summary, previousSummary);
   await executable({
@@ -753,11 +761,12 @@ if (process.env.FAIL_REPORT === 'true') process.exit(7);
 const output = args[args.indexOf('--output') + 1];
 fs.mkdirSync(output, {recursive:true});
 fs.writeFileSync(path.join(output, 'report.md'), process.env.REPORT_MARKDOWN);
+fs.appendFileSync(args[args.indexOf('--summary') + 1], process.env.INTEGRATION_DETAILS);
 `,
   });
   const step = namedStep({ job: 'publish', name: 'Generate consumer integration metadata from the confirmed receipt' });
-  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), REPORT_MARKDOWN: markdown };
-  const result = await executeShell({ root, script: offlineScript({ step }), environment });
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), REPORT_MARKDOWN: markdown, INTEGRATION_DETAILS: integrationDetails };
+  await executeShell({ root, script: offlineScript({ step }), environment });
   const calls = await readCalls({ root });
   assert.equal(calls.length, 1);
   const args = calls[0]?.args;
@@ -766,11 +775,12 @@ fs.writeFileSync(path.join(output, 'report.md'), process.env.REPORT_MARKDOWN);
   assert.equal(args[args.indexOf('--run-id') + 1], '1234');
   assert.equal(args[args.indexOf('--run-attempt') + 1], '7');
   assert.equal(args[args.indexOf('--commit') + 1], 'a'.repeat(40));
-  assert.equal(await readFile(summary, 'utf8'), previousSummary + markdown);
-  assert.equal(result.stdout.toString('utf8'), markdown);
+  assert.equal(args[args.indexOf('--summary') + 1], summary);
+  assert.equal(await readFile(summary, 'utf8'), previousSummary + integrationDetails);
+  assert.equal(await readFile(join(root, 'build/consumer-update/report.md'), 'utf8'), markdown);
 
   await assert.rejects(executeShell({ root, script: offlineScript({ step }), environment: { ...environment, FAIL_REPORT: 'true' } }));
-  assert.equal(await readFile(summary, 'utf8'), previousSummary + markdown);
+  assert.equal(await readFile(summary, 'utf8'), previousSummary + integrationDetails);
 });
 
 test('the actions lock covers every workflow usage through an existing resolved action', async () => {

@@ -1,12 +1,13 @@
+import { READ_ENV_LCB_TEST_WEBGPU_MODULE, READ_ENV_MOE_SUM_BENCHMARKS, READ_ENV_MOE_SUM_NEGATIVE } from '#tools/shared/node-env';
 // Supplied expert-sum WGSL versus a supplied binary ADD chain.
 // Standalone GPU check, not compiled-runtime/model validation.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 const [referenceDir, reportPath] = process.argv.slice(2);
-if (!referenceDir || !reportPath || process.argv.length !== 4 || !process.env.LCB_TEST_WEBGPU_MODULE) {
+if (!referenceDir || !reportPath || process.argv.length !== 4 || !READ_ENV_LCB_TEST_WEBGPU_MODULE()) {
   throw new Error('Usage: LCB_TEST_WEBGPU_MODULE=... node check_gpu.mjs REFERENCE_DIR REPORT.json');
 }
-const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
+const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
 const { GPUBufferUsage, GPUMapMode } = globals;
 const owner = Symbol('experimental MoE Dawn lifetime');
 const report = { version: 1, scope: 'supplied shader parity and optional GPU timestamps; not production-factory or model validation', cases: [], benchmarks: [], errors: [], ok: false };
@@ -33,7 +34,7 @@ try {
   const adapter = await globalThis[owner].requestAdapter();
   if (!adapter || !adapter.features.has('shader-f16')) throw new Error('Required shader-f16 adapter unavailable');
   report.adapter = Object.fromEntries(['vendor', 'architecture', 'device', 'description'].map(k => [k, adapter.info[k]]));
-  const benchmark = process.env.MOE_SUM_BENCHMARKS === '1';
+  const benchmark = READ_ENV_MOE_SUM_BENCHMARKS() === '1';
   if (benchmark && !adapter.features.has('timestamp-query')) throw new Error('timestamp-query unavailable');
   device = await adapter.requestDevice({ requiredFeatures: ['shader-f16', ...(benchmark ? ['timestamp-query'] : [])] });
   device.addEventListener('uncapturederror', e => report.errors.push(e.error.message));
@@ -42,7 +43,7 @@ try {
   const variants = new Map();
   for (const experts of [3, 4, 8, 10, 16, 32]) {
     let code = await readFile(join(referenceDir, `moe-${experts}.wgsl`), 'utf8');
-    if (process.env.MOE_SUM_NEGATIVE === '1') code = code.replace('= sum;', '= sum + vec4<f32>(1.0);');
+    if (READ_ENV_MOE_SUM_NEGATIVE() === '1') code = code.replace('= sum;', '= sum + vec4<f32>(1.0);');
     variants.set(experts, await pipeline(code, `supplied-${experts}`));
   }
   for (const width of [4, 12, 128, 512, 1024, 2560, 3072, 4096]) for (const experts of [3, 4, 8, 10, 16, 32]) for (const tokens of [1, 3, 31]) for (const shared of [false, true]) {

@@ -1,3 +1,4 @@
+import { READ_ENV_LCB_Q8_FORCE_GC, READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Standalone numerical checker over supplied WGSL and experiment metadata.
 // Usage: node check_gpu.mjs SHADER_DIRECTORY REPORT.json MANIFEST.json
 // Set LCB_TEST_WEBGPU_MODULE to the local node-webgpu module's file: URL.
@@ -87,7 +88,7 @@ async function releaseBuffers() {
   await device.queue.onSubmittedWorkDone();
   for (const buffer of buffers) buffer.destroy();
   buffers.clear();
-  if (process.env.LCB_Q8_FORCE_GC === '1') global.gc();
+  if (READ_ENV_LCB_Q8_FORCE_GC() === '1') global.gc();
 }
 
 function bind({ pipeline, sources }) {
@@ -312,10 +313,10 @@ try {
   if (!cases.length || new Set(cases.map(value => value.name)).size !== cases.length) throw new Error('Cases must be nonempty and named uniquely');
   const benchmark = manifest.benchmarks ?? false;
   if (benchmark !== false && (typeof benchmark !== 'object' || Array.isArray(benchmark) || benchmark === null)) throw new Error('benchmarks must be false or an object');
-  const forcedGc = process.env.LCB_Q8_FORCE_GC === '1';
+  const forcedGc = READ_ENV_LCB_Q8_FORCE_GC() === '1';
   if (forcedGc && typeof global.gc !== 'function') throw new Error('Forced GC requested without --expose-gc');
-  if (!process.env.LCB_TEST_WEBGPU_MODULE) throw new Error('LCB_TEST_WEBGPU_MODULE is required');
-  const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
+  if (!READ_ENV_LCB_TEST_WEBGPU_MODULE()) throw new Error('LCB_TEST_WEBGPU_MODULE is required');
+  const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
   ({ GPUBufferUsage, GPUMapMode } = globals);
   globalThis[ownerKey] = create([]);
   const adapter = await globalThis[ownerKey].requestAdapter();

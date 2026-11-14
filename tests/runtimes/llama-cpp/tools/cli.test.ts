@@ -15,7 +15,7 @@ test('runtime CLI prints a complete long failure once', async () => {
         '--output-root', join(checkoutRoot, 'build/unused-cli-failure'), '--toolchain-root', join(checkoutRoot, 'unused-toolchain'),
         '--profile', profile, '--local'],
       cwd: checkoutRoot,
-      env: { ...process.env, BIC_METRICS_MODE: 'off' },
+      env: { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'off' } },
       capture: 'file',
     });
     assert.fail('An unknown profile must fail');

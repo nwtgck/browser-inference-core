@@ -167,15 +167,26 @@ behavior creates unintended coupling: a local change can then break otherwise
 independent features. Before extracting shared code, inspect its consumers and
 identify which changes should, and should not, propagate between them.
 
-## Test resource management
+## Resource management
 
-Actively use `using` and `await using` in Node.js-only `*.test.ts` files when a
-resource's lifetime matches its lexical scope. These declarations are forbidden
-in all other files, including `*.test-support.ts` and development/build tools.
-Definitions and uses of `Symbol.dispose`, `Symbol.asyncDispose`, and disposal
-runtime APIs are allowed only in `*.test.ts` and `*.test-support.ts`. Use the
-exact `*.test-support.ts` suffix for test-only helpers, and never import test-only
-modules from production code.
+Use `using` and `await using` in Node-only TypeScript tools (`tools/**/*.ts` and
+`runtimes/*/tools/**/*.ts`) and Node.js-only `*.test.ts` files when a resource's
+lifetime matches its lexical scope. These directories are emitted for Node by
+the tooling TypeScript projects. Disposal symbols are allowed there and in
+`*.test-support.ts`; using declarations remain forbidden in test support. Use
+the exact `*.test-support.ts` suffix for test-only helpers, and never import
+test-only modules from production code.
+
+Node-owned `tests/**/*.test.mjs` may consume a typed helper directly with
+`resource[Symbol.dispose]()` or `resource[Symbol.asyncDispose]()` in their
+existing cleanup scope. This does not permit using declarations, protocol
+definitions or symbol extraction in MJS, or disposal access in browser modules.
+
+The supported Node 22 tooling runtime provides `Symbol.dispose` and
+`Symbol.asyncDispose`; TypeScript emits resource cleanup for the ES2023 target.
+Do not use the unsupported native `DisposableStack`, `AsyncDisposableStack` or
+`SuppressedError` globals in tools. Compiler-local cleanup helpers do not install
+global APIs and are not resource-management polyfills.
 
 Do not use these declarations or disposal symbols in `.js`, `.mjs`, or `.cjs`
 source files, browser-targeted TypeScript, or modules shared between Node.js and

@@ -4,13 +4,14 @@ import { readFile, writeFile, symlink, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validatePackage } from '#tools/package/aggregate';
 import { artifactDirectories } from '#tools/shared/contracts';
-import { wasmExports } from '#tools/package/runtime';
+import { wasmExports, readWasmExports } from '#tools/package/runtime';
 import { embeddedComments } from '#tools/package/licenses';
 import { runProcess } from '#tools/shared/process';
 import { hostFiles } from '#tools/package/runtime';
 import { fileIdentity } from '#tools/shared/files';
 import { packageFixture, sourceRoot, rehashRuntime, fixtureWasm, fixtureAbi, rewriteLlamaTargetMetadata } from './fixtures.test-support.js';
 import { imageManifestCapabilities } from '#runtimes/stable-diffusion-cpp/tools/verify';
+import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 
 async function validate({ directory }: { directory: string }) {
   return validatePackage({ sourceRoot, directory, requireClean: true, checkNpmPack: false });
@@ -227,9 +228,16 @@ test('rehashing a package cannot conceal changed ABI, declaration, patch or lice
   }
 });
 
-test('Wasm export inspection rejects truncation and preserves the actual symbol name', () => {
-  assert.deepEqual(wasmExports({ data: fixtureWasm({ names: ['fixture_fn'] }) }), new Set(['fixture_fn']));
-  assert.throws(() => wasmExports({ data: fixtureWasm({ names: ['fixture_fn'] }).subarray(0, 12) }), /Truncated/u);
+test('Wasm export inspection rejects truncation and preserves the actual symbol name', async () => {
+  await using temporary = await temporaryDirectory();
+  const path = join(temporary.root, 'fixture.wasm');
+  const data = fixtureWasm({ names: ['fixture_fn'] });
+  assert.deepEqual(wasmExports({ data }), new Set(['fixture_fn']));
+  assert.throws(() => wasmExports({ data: data.subarray(0, 12) }), /Truncated/u);
+  await writeFile(path, data);
+  assert.deepEqual(await readWasmExports({ path }), new Set(['fixture_fn']));
+  await writeFile(path, data.subarray(0, 12));
+  await assert.rejects(readWasmExports({ path }), /Truncated/u);
 });
 
 test('retention capability depends on the native unsigned32 signature, independently of its C typedef spelling', () => {

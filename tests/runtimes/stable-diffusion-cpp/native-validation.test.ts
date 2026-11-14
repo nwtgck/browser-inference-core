@@ -1,3 +1,4 @@
+import { READ_ENV_BICORE_CHECKOUT_ROOT, READ_ENV_BICORE_TOOLING_ROOT, READ_ENV_BICORE_TOOLCHAIN_ROOT, READ_ENV_SDCB_TEST_DAWN_PACKAGE } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -9,10 +10,10 @@ import { regularFile } from '#tools/shared/files';
 import { runProcess } from '#tools/shared/process';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 
-const checkoutRoot = path.resolve(process.env.BICORE_CHECKOUT_ROOT ?? process.cwd());
-const toolingRoot = path.resolve(process.env.BICORE_TOOLING_ROOT ?? path.join(checkoutRoot, 'build/tooling'));
-const toolchainRoot = path.resolve(process.env.BICORE_TOOLCHAIN_ROOT ?? path.join(checkoutRoot, '.tools'));
-const dawnRoot = path.resolve(process.env.SDCB_TEST_DAWN_PACKAGE ?? path.join(toolchainRoot, 'emdawnwebgpu_pkg'));
+const checkoutRoot = path.resolve(READ_ENV_BICORE_CHECKOUT_ROOT() ?? process.cwd());
+const toolingRoot = path.resolve(READ_ENV_BICORE_TOOLING_ROOT() ?? path.join(checkoutRoot, 'build/tooling'));
+const toolchainRoot = path.resolve(READ_ENV_BICORE_TOOLCHAIN_ROOT() ?? path.join(checkoutRoot, '.tools'));
+const dawnRoot = path.resolve(READ_ENV_SDCB_TEST_DAWN_PACKAGE() ?? path.join(toolchainRoot, 'emdawnwebgpu_pkg'));
 
 // Native correctness and complete-TU compilation do not establish the generated
 // JS/Wasm ABI or real shader execution. Those remain separate integration checks.

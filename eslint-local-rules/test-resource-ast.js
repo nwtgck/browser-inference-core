@@ -1,3 +1,8 @@
+import { relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
+
 // Small, non-evaluating helpers shared by the resource and import boundaries.
 // Only lexical constants are followed; arbitrary JavaScript is never executed.
 export function unwrap({ node }) {
@@ -136,6 +141,17 @@ export function isTestFile({ filename }) {
 
 export function isTestSupportFile({ filename }) {
   return filename.replaceAll('\\', '/').endsWith('.test-support.ts');
+}
+
+/** Only the physical TypeScript directories emitted for Node tools grant permission. */
+export function isNodeToolFile({ filename }) {
+  const name = relative(repositoryRoot, resolve(filename)).split(sep).join('/');
+  return name.endsWith('.ts') && (name.startsWith('tools/') || /^runtimes\/[^/]+\/tools\//u.test(name));
+}
+
+export function isNodeMjsTestFile({ filename }) {
+  const name = relative(repositoryRoot, resolve(filename)).split(sep).join('/');
+  return name.startsWith('tests/') && name.endsWith('.test.mjs');
 }
 
 export function isTestOnlyModule({ value }) {

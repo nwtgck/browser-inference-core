@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { applyPatch, applyRecipe, type Patch } from '#tools/source/patches';
 import { git, initializeRepository, temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 
 const patchText = `\
 diff --git a/a.txt b/a.txt
@@ -30,24 +31,15 @@ test('transparent patches observe actual bytes, preserve declared order and igno
     await writeFile(join(sourceRoot, name), 'one\nbefore\n');
   }
   await writeFile(join(patchRoot, 'fix.patch'), patchText + patchText.replaceAll('a.txt', 'b.txt'));
-  const saved = process.env.GIT_DIR;
-  try {
-    process.env.GIT_DIR = join(temporary.root, '.git');
-    const receipt = await applyPatch({ sourceRoot, patchRoot, patch: { ...declaration, files: ['b.txt', 'a.txt'] } });
-    assert.deepEqual(receipt.files.map((file) => file.path), ['b.txt', 'a.txt']);
-    assert.notEqual(receipt.files[0]?.beforeSha256, receipt.files[0]?.afterSha256);
-    assert.equal(await readFile(join(sourceRoot, 'a.txt'), 'utf8'), 'one\nafter\n');
-    assert.equal(await readFile(join(temporary.root, 'a.txt'), 'utf8'), 'parent must not change');
-    assert.deepEqual(await readFile(join(temporary.root, '.git', 'index')), index);
-    await applyPatch({ sourceRoot, patchRoot, patch: { ...declaration, files: ['b.txt', 'a.txt'], mode: 'reverse' } });
-    assert.equal(await readFile(join(sourceRoot, 'a.txt'), 'utf8'), 'one\nbefore\n');
-  } finally {
-    if (saved === undefined) {
-      delete process.env.GIT_DIR;
-    } else {
-      process.env.GIT_DIR = saved;
-    }
-  }
+  using environment = stubEnvironment({ values: { GIT_DIR: join(temporary.root, '.git') } });
+  const receipt = await applyPatch({ sourceRoot, patchRoot, patch: { ...declaration, files: ['b.txt', 'a.txt'] } });
+  assert.deepEqual(receipt.files.map((file) => file.path), ['b.txt', 'a.txt']);
+  assert.notEqual(receipt.files[0]?.beforeSha256, receipt.files[0]?.afterSha256);
+  assert.equal(await readFile(join(sourceRoot, 'a.txt'), 'utf8'), 'one\nafter\n');
+  assert.equal(await readFile(join(temporary.root, 'a.txt'), 'utf8'), 'parent must not change');
+  assert.deepEqual(await readFile(join(temporary.root, '.git', 'index')), index);
+  await applyPatch({ sourceRoot, patchRoot, patch: { ...declaration, files: ['b.txt', 'a.txt'], mode: 'reverse' } });
+  assert.equal(await readFile(join(sourceRoot, 'a.txt'), 'utf8'), 'one\nbefore\n');
 });
 
 test('scope mismatch, linked inputs and context errors fail without changing the source', async () => {

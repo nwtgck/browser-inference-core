@@ -1,3 +1,4 @@
+import { READ_ENV_PATH } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -58,7 +59,7 @@ async function serviceEnvironment({ root, value }: { root: string; value: Scenar
   for (const name of ['gh', 'curl', 'docker', 'git']) {
     await symlink(service, join(bin, name));
   }
-  return { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}`, BICORE_FIXTURE_ORIGINAL_PATH: process.env['PATH'], BICORE_AUTOMATION_FIXTURE: root, GITHUB_WORKSPACE: checkoutRoot, GITHUB_REPOSITORY: repository, RUNNER_TEMP: root, REPORT_STATE: join(root, 'state'), UPDATE_STATE: join(root, 'update'), GITHUB_OUTPUT: join(root, 'outputs'), GITHUB_STEP_SUMMARY: join(root, 'summary'), BIC_OFFLINE_IMAGE: 'test-stand-in-with-no-isolation-claim' };
+  return { PATH: `${bin}:${READ_ENV_PATH() ?? ''}`, BICORE_FIXTURE_ORIGINAL_PATH: READ_ENV_PATH(), BICORE_AUTOMATION_FIXTURE: root, GITHUB_WORKSPACE: checkoutRoot, GITHUB_REPOSITORY: repository, RUNNER_TEMP: root, REPORT_STATE: join(root, 'state'), UPDATE_STATE: join(root, 'update'), GITHUB_OUTPUT: join(root, 'outputs'), GITHUB_STEP_SUMMARY: join(root, 'summary'), BIC_OFFLINE_IMAGE: 'test-stand-in-with-no-isolation-claim' };
 }
 
 async function recorded({ root, name }: { root: string; name: string }): Promise<Call[]> {
@@ -76,11 +77,11 @@ async function executeReporter({ root, value }: { root: string; value: Scenario 
       continue;
     }
     const environment = { ...env };
-    delete environment['GH_TOKEN'];
+    environment['GH_TOKEN'] = undefined;
     if (step.env['GH_TOKEN'] !== undefined) {
       environment['GH_TOKEN'] = 'fixture-token';
     }
-    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', step.run], cwd: checkoutRoot, env: environment });
+    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', step.run], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: environment } });
   }
 }
 
@@ -233,14 +234,14 @@ test('literal updater acquisition peels annotated tags, rejects ambiguity and bi
   const fetch = steps.find(step => step.name === 'Fetch the exact upstream and comparison (online)');
   assert.ok(fetch?.run);
   for (const ref of ['refs/tags/v1.0.0', target]) {
-    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { ...env, SELECTED_REF: ref } });
+    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, SELECTED_REF: ref } } });
     assert.match(await readFile(join(temporary.root, 'outputs'), 'utf8'), new RegExp(`commit=${target}`, 'u'));
     assert.equal(await git({ root: vendor, args: ['rev-parse', 'HEAD'] }), old);
   }
-  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { ...env, SELECTED_REF: 'shared' } }), /missing or ambiguous/u);
+  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, SELECTED_REF: 'shared' } } }), /missing or ambiguous/u);
   const blob = await git({ root: upstream, args: ['rev-parse', `${target}:source`] });
   await git({ root: upstream, args: ['tag', 'not-a-commit', blob] });
-  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { ...env, SELECTED_REF: 'refs/tags/not-a-commit' } }));
+  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', fetch.run], cwd: sourceRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, SELECTED_REF: 'refs/tags/not-a-commit' } } }));
 });
 
 test('literal nightly pagination stops at the first published match and stable failures have no fallback', async () => {
@@ -252,15 +253,15 @@ test('literal nightly pagination stops at the first published match and stable f
   const { steps } = await workflow({ name: 'update-llama-cpp.yml', job: 'update' });
   const release = steps.find(step => step.name === 'Acquire the requested release metadata (online)');
   assert.ok(release?.run);
-  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', release.run], cwd: checkoutRoot, env: { ...env, TARGET: 'latest-unstable' } });
+  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', release.run], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, TARGET: 'latest-unstable' } } });
   const releases = await readJson({ path: join(temporary.root, 'update/releases.json'), decode: decodeGitHubReleases });
   assert.equal(selectUpstream({ target: { kind: 'latest_unstable' }, releases }).ref, 'refs/tags/b99');
   assert.equal((await recorded({ root: temporary.root, name: 'calls.jsonl' })).length, 2);
   value.failRelease = true;
   await writeFile(join(temporary.root, 'scenario.json'), JSON.stringify(value));
-  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', release.run], cwd: checkoutRoot, env: { ...env, TARGET: 'latest' } }));
+  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', release.run], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, TARGET: 'latest' } } }));
   assert.equal((await recorded({ root: temporary.root, name: 'calls.jsonl' })).length, 3);
-  await assert.rejects(main({ args: ['upstream-select', '--state', join(temporary.root, 'failed'), '--repository', repository, '--checkout-root', checkoutRoot, '--base', 'feature/base', '--target', 'custom', '--custom-ref', 'bad..ref'], env: {} }));
+  await assert.rejects(main({ args: ['upstream-select', '--state', join(temporary.root, 'failed'), '--repository', repository, '--checkout-root', checkoutRoot, '--base', 'feature/base', '--target', 'custom', '--custom-ref', 'bad..ref'], outputPath: undefined }));
   assert.match(await readFile(join(temporary.root, 'failed/details.md'), 'utf8'), /Upstream update failed/u);
 });
 
@@ -277,7 +278,7 @@ test('literal final updater reporting exposes the push outcome without reading i
   assert.ok(final?.run);
   for (const [status, outcome, changed, handoff] of [['candidate_prepared', 'success', 'true', true], ['branch_exists', 'skipped', 'true', true], ['candidate_prepared', 'failure', 'true', false], ['', 'skipped', 'false', false]] as const) {
     const summary = join(temporary.root, `summary-${outcome}-${changed}`);
-    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', final.run], cwd: checkoutRoot, env: { ...process.env, UPDATE_STATE: state, GITHUB_STEP_SUMMARY: summary, CANDIDATE_STATUS: status, PUSH_OUTCOME: outcome, CHANGED: changed } });
+    await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', final.run], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { UPDATE_STATE: state, GITHUB_STEP_SUMMARY: summary, CANDIDATE_STATUS: status, PUSH_OUTCOME: outcome, CHANGED: changed } } });
     const text = await readFile(summary, 'utf8');
     assert.equal(text.includes('Reviewable handoff link'), handoff);
     assert.match(text, /Candidate source identity/u);
@@ -310,7 +311,7 @@ test('the first literal offline phase rejects invalid requests before any releas
 test "$#" = 2 && test "$1" = run && test "$2" = tooling:build
 `);
     await chmod(join(offlineBin, 'npm'), 0o755);
-    await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', first.run + '\n' + release.run], cwd: checkoutRoot, env: { ...env, TARGET: target, CUSTOM_REF: customRef, BASE: base, GH_TOKEN: 'fixture-token', BICORE_FIXTURE_ORIGINAL_PATH: `${offlineBin}:${process.env['PATH'] ?? ''}` } }), (error: unknown) => error instanceof ProcessError && message.test(error.message));
+    await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', first.run + '\n' + release.run], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, TARGET: target, CUSTOM_REF: customRef, BASE: base, GH_TOKEN: 'fixture-token', BICORE_FIXTURE_ORIGINAL_PATH: `${offlineBin}:${READ_ENV_PATH() ?? ''}` } } }), (error: unknown) => error instanceof ProcessError && message.test(error.message));
     const calls = await recorded({ root: temporary.root, name: 'calls.jsonl' });
     assert.equal(calls.filter(call => call.tool === 'docker').length, 1);
     assert.equal(calls.filter(call => call.tool === 'gh' || call.tool === 'curl').length, 0);
@@ -344,7 +345,7 @@ test('literal branch inspection preserves the fetched repair tip when a branch a
   const { steps } = await workflow({ name: 'update-llama-cpp.yml', job: 'update' });
   const inspection = steps.find(step => step.name === 'Inspect the existing candidate branch (online)');
   assert.ok(inspection?.run);
-  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', inspection.run], cwd: value.checkoutRoot, env });
+  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', inspection.run], cwd: value.checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: env } });
   const output = await readFile(join(temporary.root, 'outputs'), 'utf8');
   assert.match(output, /exists=true/u);
   assert.match(output, new RegExp(`commit=${repair}`, 'u'));
@@ -359,7 +360,7 @@ test('literal branch inspection preserves the fetched repair tip when a branch a
   assert.equal(candidate.sourceCommit, repair);
   assert.equal(candidate.status, 'branch_exists');
   assert.equal(await git({ root: value.checkoutRoot, args: ['rev-parse', 'HEAD'] }), value.source);
-  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', inspection.run], cwd: value.checkoutRoot, env: { ...env, BICORE_FIXTURE_ADVANCE: value.source } });
+  await runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', inspection.run], cwd: value.checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { ...env, BICORE_FIXTURE_ADVANCE: value.source } } });
   const changedOutput = await readFile(join(temporary.root, 'outputs'), 'utf8');
   assert.match(changedOutput, new RegExp(`commit=${value.source}`, 'u'));
   await assert.rejects(prepareCandidate({

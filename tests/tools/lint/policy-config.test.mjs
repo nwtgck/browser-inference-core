@@ -37,9 +37,19 @@ test('the real configuration enforces the boundary without requiring a TS projec
   for (const filePath of ['tools/future.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts']) {
     const [result] = await eslint.lintText('using resource = make(); Symbol.dispose; import "./helper.test-support";', { filePath });
     assert.equal(result.messages.some(message => message.fatal), false, JSON.stringify(result.messages));
-    for (const id of ['usingOnlyInTest', 'protocolOnlyInTest', 'forbidden']) {
+    for (const id of ['usingOnlyInNode', 'protocolOnlyInNode', 'forbidden']) {
       assert.ok(result.messages.some(message => message.messageId === id), `${filePath}: ${id}`);
     }
+  }
+});
+
+test('the real configuration permits Node tooling cleanup while rejecting unsupported native globals', async () => {
+  for (const filePath of ['tools/shared/streams.ts', 'runtimes/llama-cpp/tools/cli.ts', 'runtimes/stable-diffusion-cpp/tools/cli.ts']) {
+    const [allowed] = await eslint.lintText('async function run() { using resource = make(); await using other = make(); } Symbol.dispose; Symbol.asyncDispose;', { filePath });
+    assert.equal(allowed.messages.some(message => message.fatal || message.ruleId === ruleId), false, JSON.stringify(allowed.messages));
+    const [blocked] = await eslint.lintText('new DisposableStack();', { filePath });
+    assert.equal(blocked.messages.some(message => message.fatal), false, JSON.stringify(blocked.messages));
+    assert.ok(blocked.messages.some(message => message.ruleId === ruleId && message.messageId === 'unsupportedNodeRuntime'), filePath);
   }
 });
 
@@ -65,9 +75,9 @@ test('virtual *.test.ts filenames do not grant production or support using permi
       rules: { 'policy/resource': 'error', 'policy/imports': 'error' },
     }], { filename, filterCodeBlock: () => true });
     assert.equal(messages.some(message => message.fatal), false, JSON.stringify(messages));
-    assert.ok(messages.some(message => message.messageId === 'usingOnlyInTest'), filename);
+    assert.ok(messages.some(message => message.messageId === 'usingOnlyInNode'), filename);
     if (!filename.endsWith('.test-support.ts')) {
-      assert.ok(messages.some(message => message.messageId === 'protocolOnlyInTest'), filename);
+      assert.ok(messages.some(message => message.messageId === 'protocolOnlyInNode'), filename);
       assert.ok(messages.some(message => message.messageId === 'forbidden'), filename);
     }
   }

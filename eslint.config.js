@@ -8,6 +8,7 @@ import objectLayout from '#lint/object-layout';
 import functionSpacing from '#lint/function-spacing';
 import statementLayout from '#lint/statement-layout';
 import forceSwitchForUnion from '#lint/force-switch-for-union';
+import nodeEnvironment from '#lint/node-env-policy';
 
 const typedSources = ['00-dto/**/*.ts', 'tools/**/*.ts', 'runtimes/*/tools/**/*.ts', 'tests/tools/**/*.ts', 'tests/runtimes/*/**/*.ts'];
 const parentImports = {
@@ -72,6 +73,7 @@ export default defineConfig([
   },
   resourceManagement,
   testSupportImports,
+  nodeEnvironment,
   {
     files: typedSources,
     extends: [eslint.configs.recommended, ...tseslint.configs.recommended],
@@ -131,5 +133,9 @@ export default defineConfig([
   forceSwitchForUnion,
   objectLayout,
   functionSpacing,
+  {
+    files: ['tools/shared/node-env.ts'],
+    rules: { 'local-rules-function-spacing/function-spacing': 'off' },
+  },
   statementLayout,
 ]);

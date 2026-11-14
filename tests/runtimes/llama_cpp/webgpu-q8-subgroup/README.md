@@ -1,5 +1,8 @@
 # Optional Q8 subgroup Dawn experiment
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 This experiment consumes supplied WGSL and a manifest. It compares every output
 with an independent Float64 Q8_0 reference and the chosen baseline, checks buffer
 guards and input mutation, and optionally records GPU timestamp pairs. Input

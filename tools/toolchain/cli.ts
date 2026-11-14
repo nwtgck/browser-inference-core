@@ -3,16 +3,17 @@ import { fileURLToPath } from 'node:url';
 import yargs from 'yargs';
 import { requiredString } from '#tools/toolchain/cli-options';
 import { prepareToolchain } from '#tools/toolchain/prepare';
+import { READ_ENV_BIC_METRICS_MODE } from '#tools/shared/node-env';
 
 /** Only the optional observer may fail open; the preparation error is preserved. */
 async function measuredPreparation({ checkoutRoot, operation }: { checkoutRoot: string; operation: () => Promise<void> }): Promise<void> {
-  if (process.env['BIC_METRICS_MODE'] !== 'basic') {
+  if (READ_ENV_BIC_METRICS_MODE() !== 'basic') {
     return operation();
   }
   let observer: ReturnType<typeof import('#tools/ci/metrics').createMetrics>;
   try {
     const { createMetrics } = await import('#tools/ci/metrics');
-    observer = createMetrics({ env: process.env, checkoutRoot });
+    observer = createMetrics({ checkoutRoot });
   } catch {
     try {
       process.stderr.write('[pipeline-metrics] Optional telemetry unavailable.\n');

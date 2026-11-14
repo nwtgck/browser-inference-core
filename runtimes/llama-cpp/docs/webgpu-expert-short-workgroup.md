@@ -64,6 +64,7 @@ selector. Keep input identities and any factory comparison as separate evidence.
 From the repository root, with local Dawn and compatible inputs:
 
 ```sh
+npm run tooling:build
 LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
 LCB_EXPERT_BENCHMARKS=1 \
 node tests/runtimes/llama_cpp/webgpu-expert-short/check_gpu.mjs \

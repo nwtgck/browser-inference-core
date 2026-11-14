@@ -40,11 +40,35 @@ test('freeze validates source once and reuses the same report after immutable Gi
   // Reports read the confirmed Git-bound private receipt, with no payload scan.
   await rm(join(work, 'runtimes'), { recursive: true });
   const resolution = extractNpmResolution({ repository: 'fixture/browser-inference-core', commit, version: '0.1.0', lock: { lockfileVersion: 3, packages: { '': { dependencies: { 'browser-inference-core': `github:fixture/browser-inference-core#${commit}` } }, 'node_modules/browser-inference-core': { version: '0.1.0', resolved: `git+https://github.com/fixture/browser-inference-core.git#${commit}` } } } });
-  const result = await writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution, output: join(fixture.root, 'report'), run: { id: 123, attempt: 2 } });
+  const summary = join(fixture.root, 'job summary.md');
+  const initialGuide = `\
+## Runtime artifact commit
+
+\`\`\`sh
+npm install github:fixture/browser-inference-core#${commit}
+\`\`\`
+
+\`\`\`sh
+npm install llama-cpp-browser-core@github:fixture/browser-inference-core#${commit}
+\`\`\`
+
+\`\`\`sh
+npm install stable-diffusion-cpp-browser-core@github:fixture/browser-inference-core#${commit}
+\`\`\`
+`;
+  await writeFile(summary, initialGuide);
+  const result = await writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution, output: join(fixture.root, 'report'), run: { id: 123, attempt: 2 }, summary });
   assert(result.markdown.includes(commit));
   assert.ok(result.markdown.includes(`npm install github:fixture/browser-inference-core#${commit}`));
   assert.ok(result.markdown.includes(`npm install llama-cpp-browser-core@github:fixture/browser-inference-core#${commit}`));
   assert.ok(result.markdown.includes(`npm install stable-diffusion-cpp-browser-core@github:fixture/browser-inference-core#${commit}`));
+  const displayed = await readFile(summary, 'utf8');
+  assert.ok(displayed.startsWith(initialGuide));
+  const details = displayed.slice(initialGuide.length);
+  assert.ok(details.includes('## Consumer integration details'));
+  assert.ok(details.includes('| llama-cpp |'));
+  assert.ok(details.includes('| stable-diffusion-cpp |'));
+  assert.ok(!details.includes('npm install'));
   const markdown = await readFile(join(fixture.root, 'report/consumer-update.md'));
   const envelope = decodeConsumerReportEnvelope({ input: JSON.parse(await readFile(join(fixture.root, 'report/report.json'), 'utf8')) });
   assert.deepEqual(envelope, { schemaVersion: 1, repository: 'fixture/browser-inference-core', sourceCommit: fixtureSource, artifactCommit: commit, runId: 123, runAttempt: 2, markdownSha256: bytesIdentity({ data: markdown }).sha256 });
@@ -53,7 +77,7 @@ test('freeze validates source once and reuses the same report after immutable Gi
   await runProcess({ command: 'zip', args: ['-q', archive, 'report.json', 'consumer-update.md', 'consumer-update.yaml', 'metadata.json', 'report.md', 'package-lock-entry.json'], cwd: join(fixture.root, 'report') });
   const decoded = await readConsumerReport({ path: archive, repository: 'fixture/browser-inference-core', run: { id: 123, run_attempt: 2, head_sha: fixtureSource, head_branch: 'feature/runtime', head_repository: { full_name: 'fixture/browser-inference-core' }, event: 'push', status: 'completed', conclusion: 'success', html_url: 'https://github.com/fixture/browser-inference-core/actions/runs/123' } });
   assert.equal(decoded, result.markdown);
-  await writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution, output: join(fixture.root, 'report'), run: undefined });
+  await writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution, output: join(fixture.root, 'report'), run: undefined, summary: undefined });
   await assert.rejects(readFile(join(fixture.root, 'report/report.json')), { code: 'ENOENT' });
   assert.equal(await readFile(join(fixture.root, 'report/report.md'), 'utf8'), result.markdown);
   assert.equal(checks, 1);
@@ -66,7 +90,8 @@ test('freeze validates source once and reuses the same report after immutable Gi
   const wrongCommit = (await localGit({ cwd: work, args: ['commit-tree', frozen.tree], input: 'Another commit, same validated bytes\n' })).toString('utf8').trim();
   const wrongResolution = { ...resolution, specifier: `github:fixture/browser-inference-core#${wrongCommit}` };
   if (wrongCommit !== commit) {
-    await assert.rejects(writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution: wrongResolution, output: join(fixture.root, 'bad-report'), run: undefined }), /npm resolution/u);
+    await assert.rejects(writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution: wrongResolution, output: join(fixture.root, 'bad-report'), run: undefined, summary }), /npm resolution/u);
+    assert.equal(await readFile(summary, 'utf8'), displayed);
   }
 });
 

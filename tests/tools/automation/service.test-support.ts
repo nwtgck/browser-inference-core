@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { READ_ENV_BICORE_AUTOMATION_FIXTURE, READ_ENV_GH_TOKEN, READ_ENV_BICORE_FIXTURE_ORIGINAL_PATH, READ_ENV_BICORE_FIXTURE_REAL_GIT, READ_ENV_BICORE_FIXTURE_UPSTREAM, READ_ENV_BICORE_FIXTURE_REPOSITORY, READ_ENV_BICORE_FIXTURE_ADVANCE, READ_ENV_BRANCH } from '#tools/shared/node-env';
 import { spawn } from 'node:child_process';
 import { appendFile, copyFile, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -23,7 +24,7 @@ export type Scenario = {
 };
 
 async function fixtureService(): Promise<void> {
-  const root = process.env['BICORE_AUTOMATION_FIXTURE'];
+  const root = READ_ENV_BICORE_AUTOMATION_FIXTURE();
   if (!root) {
     throw new Error('This test service requires a local fixture root');
   }
@@ -31,7 +32,7 @@ async function fixtureService(): Promise<void> {
   const scenario = JSON.parse(await readFile(join(root, 'scenario.json'), 'utf8')) as Scenario;
   const tool = basename(process.argv[1] ?? '');
   const args = process.argv.slice(2);
-  await appendFile(join(root, 'calls.jsonl'), JSON.stringify({ tool, args, hasToken: !!process.env['GH_TOKEN'] }) + '\n');
+  await appendFile(join(root, 'calls.jsonl'), JSON.stringify({ tool, args, hasToken: !!READ_ENV_GH_TOKEN() }) + '\n');
   function argument({ name }: { name: string }): string {
     const index = args.indexOf(name);
     const value = index < 0 ? undefined : args[index + 1];
@@ -107,7 +108,7 @@ async function fixtureService(): Promise<void> {
   case 'curl': {
     const url = args.at(-1) ?? '';
     if (url.startsWith('https://api.github.com/repos/example/core/actions/artifacts/')) {
-      if (!process.env['GH_TOKEN'] || args.includes('--location')) {
+      if (!READ_ENV_GH_TOKEN() || args.includes('--location')) {
         throw new Error('Authenticated artifact requests must not follow redirects');
       }
       await writeFile(argument({ name: '--dump-header' }), `HTTP/2 ${scenario.directArchive ? '200' : '302'}\r\nLocation: ${scenario.redirect}\r\n`);
@@ -118,7 +119,7 @@ async function fixtureService(): Promise<void> {
       }
       process.stdout.write(scenario.directArchive ? '200' : '302');
     } else {
-      if (process.env['GH_TOKEN'] || url !== scenario.redirect || !url.startsWith('https://')) {
+      if (READ_ENV_GH_TOKEN() || url !== scenario.redirect || !url.startsWith('https://')) {
         throw new Error('Signed storage must be HTTPS and credential-free');
       }
       await copyFile(join(root, 'report.zip'), argument({ name: '--output' }));
@@ -129,7 +130,7 @@ async function fixtureService(): Promise<void> {
     if (!args.includes('--network') || argument({ name: '--network' }) !== 'none') {
       throw new Error('Expected a literal network-none boundary');
     }
-    const environment: NodeJS.ProcessEnv = { PATH: process.env['BICORE_FIXTURE_ORIGINAL_PATH'] };
+    const environment: NodeJS.ProcessEnv = { PATH: READ_ENV_BICORE_FIXTURE_ORIGINAL_PATH() };
     let cwd = process.cwd();
     if (args[0] !== 'run') {
       throw new Error('Only a local docker-run stand-in is supported');
@@ -141,6 +142,7 @@ async function fixtureService(): Promise<void> {
         const field = args[++index] ?? '';
         const separator = field.indexOf('=');
         const name = separator < 0 ? field : field.slice(0, separator);
+        // eslint-disable-next-line local-rules-node-env/node-env-policy -- The Docker test stand-in transparently transfers unknown -e NAME values; it does not interpret application settings.
         const value = separator < 0 ? process.env[name] : field.slice(separator + 1);
         if (value !== undefined) {
           environment[name] = value;
@@ -175,16 +177,16 @@ async function fixtureService(): Promise<void> {
     break;
   }
   case 'git': {
-    const realGit = process.env['BICORE_FIXTURE_REAL_GIT'];
-    const localUpstream = process.env['BICORE_FIXTURE_UPSTREAM'];
-    const localRepository = process.env['BICORE_FIXTURE_REPOSITORY'];
+    const realGit = READ_ENV_BICORE_FIXTURE_REAL_GIT();
+    const localUpstream = READ_ENV_BICORE_FIXTURE_UPSTREAM();
+    const localRepository = READ_ENV_BICORE_FIXTURE_REPOSITORY();
     if (!realGit) {
       throw new Error('Missing local Git fixture');
     }
     const sourceRemote = 'https://github.com/example/core.git';
-    const advance = process.env['BICORE_FIXTURE_ADVANCE'];
+    const advance = READ_ENV_BICORE_FIXTURE_ADVANCE();
     if (localRepository && advance && args.includes('fetch') && args.includes(sourceRemote)) {
-      const branch = process.env['BRANCH'];
+      const branch = READ_ENV_BRANCH();
       if (!branch?.startsWith('feature/')) {
         throw new Error('The local race fixture requires a feature branch');
       }
@@ -201,7 +203,7 @@ async function fixtureService(): Promise<void> {
     if (redirected.some(value => /^https?:/u.test(value))) {
       throw new Error('The local Git fixture cannot contact a remote service');
     }
-    const child = spawn(realGit, ['-c', 'protocol.file.allow=always', ...redirected], { env: process.env, stdio: 'inherit' });
+    const child = spawn(realGit, ['-c', 'protocol.file.allow=always', ...redirected], { stdio: 'inherit' });
     process.exitCode = await new Promise<number>((resolve, reject) => {
       child.on('error', reject);
       child.on('exit', code => resolve(code ?? 1));
@@ -213,6 +215,6 @@ async function fixtureService(): Promise<void> {
   }
 }
 
-if (process.env['BICORE_AUTOMATION_FIXTURE']) {
+if (READ_ENV_BICORE_AUTOMATION_FIXTURE()) {
   await fixtureService();
 }

@@ -1,5 +1,8 @@
 # MoE gather and matrix WGSL comparison
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 This optional Dawn experiment executes supplied gather, baseline and candidate
 WGSL over caller-supplied synthetic fixtures. It checks routing, skipped-slot
 zeros, decoded-weight Float64 dot references, exact baseline/candidate output

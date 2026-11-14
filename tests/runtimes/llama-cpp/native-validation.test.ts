@@ -1,3 +1,4 @@
+import { READ_ENV_BICORE_SOURCE_ROOT, READ_ENV_LCB_TEST_DAWN_PACKAGE } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,8 +11,8 @@ import { directory, regularFile } from '#tools/shared/files';
 import { runProcess } from '#tools/shared/process';
 import { observeSource } from '#tools/source/capture';
 
-const sourceRoot = resolve(process.env['BICORE_SOURCE_ROOT'] ?? process.cwd());
-const dawn = resolve(process.env['LCB_TEST_DAWN_PACKAGE'] ?? join(sourceRoot, '.tools/emdawnwebgpu_pkg'));
+const sourceRoot = resolve(READ_ENV_BICORE_SOURCE_ROOT() ?? process.cwd());
+const dawn = resolve(READ_ENV_LCB_TEST_DAWN_PACKAGE() ?? join(sourceRoot, '.tools/emdawnwebgpu_pkg'));
 
 // Native declarations and deterministic external API doubles are not GPU or
 // browser execution. Required inputs must be explicit; never substitute history.

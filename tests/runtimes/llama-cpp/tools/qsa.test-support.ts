@@ -1,3 +1,4 @@
+import { READ_ENV_CC, READ_ENV_CXX } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -5,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import yargs from 'yargs';
 import type { FileIdentity } from '#dto/shared';
-import { createMetrics, environmentObservation } from '#tools/ci/metrics';
+import { createMetrics } from '#tools/ci/metrics';
 import { fileIdentity, optionalStat } from '#tools/shared/files';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import { observeSource, type SourceMode } from '#tools/source/capture';
@@ -179,7 +180,7 @@ export async function runQsaRegression({ context, mode, jobs }: { context: Build
     const started = performance.now();
     let exit: number | undefined;
     try {
-      const result = await runProcess({ command: executable, args: arguments_, cwd: context.checkoutRoot, env: { ...process.env, OMP_NUM_THREADS: '1' }, capture: 'file' });
+      const result = await runProcess({ command: executable, args: arguments_, cwd: context.checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { OMP_NUM_THREADS: '1' } }, capture: 'file' });
       exit = result.exitCode;
       await writeFile(join(logs, `${name}.txt`), Buffer.concat([result.stdout, result.stderr]));
     } catch (error) {
@@ -212,7 +213,7 @@ export async function runQsaRegression({ context, mode, jobs }: { context: Build
         }
       }
       const test = join(context.outputRoot, `test-${name}`);
-      await command({ name: `${name}-test-configure`, args: ['cmake', '-S', join(captured.inputs.compileRoot, 'tests/runtimes/llama_cpp/qsa-selection'), '-B', test, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', `-DLCB_LLAMA_SOURCE=${prepared.root}`, `-DLCB_NATIVE_BUILD=${build}`, `-DCMAKE_C_COMPILER=${process.env['CC'] ?? 'clang'}`, `-DCMAKE_CXX_COMPILER=${process.env['CXX'] ?? 'clang++'}`] });
+      await command({ name: `${name}-test-configure`, args: ['cmake', '-S', join(captured.inputs.compileRoot, 'tests/runtimes/llama_cpp/qsa-selection'), '-B', test, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', `-DLCB_LLAMA_SOURCE=${prepared.root}`, `-DLCB_NATIVE_BUILD=${build}`, `-DCMAKE_C_COMPILER=${READ_ENV_CC() ?? 'clang'}`, `-DCMAKE_CXX_COMPILER=${READ_ENV_CXX() ?? 'clang++'}`] });
       await command({ name: `${name}-test-compile`, args: ['cmake', '--build', test, '--parallel', String(jobs)] });
       executables[name] = join(test, 'qsa-model');
       status.libraries[name] = await fileIdentity({ path: join(build, 'llama/src/libllama.a') });
@@ -277,8 +278,8 @@ export async function runQsaCli({ argv }: { argv: readonly string[] }): Promise<
       }
       const mode: SourceMode = args.local ? { kind: 'local' } : { kind: 'release', expectedCommit: args['expected-commit'] ?? '' };
       const context = { checkoutRoot: resolve(args['checkout-root']), toolingRoot: resolve(args['tooling-root']), outputRoot: resolve(args['output-root']), toolchainRoot: resolve(args['toolchain-root']) };
-      const metrics = createMetrics({ env: process.env, checkoutRoot: context.checkoutRoot });
-      await metrics.observeEnvironment({ observation: environmentObservation({ env: process.env, workRoot: context.checkoutRoot }) });
+      const metrics = createMetrics({ checkoutRoot: context.checkoutRoot });
+      await metrics.observeEnvironment();
       await metrics.measure({ phase: 'qsa.native', packageKind: undefined, operation: async () => runQsaRegression({ context, mode, jobs: args.jobs }) });
     }).parseAsync();
 }

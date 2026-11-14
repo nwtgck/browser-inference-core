@@ -1,3 +1,4 @@
+import { READ_ENV_PATH } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -62,7 +63,7 @@ export async function executable({ root, name, source }: { root: string; name: s
 export async function executeShell({ root, script, environment }: { root: string; script: string; environment: NodeJS.ProcessEnv }) {
   await mkdir(join(root, '.github/scripts'), { recursive: true });
   await copyFile(join(checkoutRoot, '.github/scripts/run-offline.sh'), join(root, '.github/scripts/run-offline.sh'));
-  return runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', script], cwd: root, env: { ...process.env, ...environment, PATH: join(root, 'bin') + ':' + process.env.PATH }, timeoutMs: 20_000 });
+  return runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', script], cwd: root, env: { kind: 'inherit', removePrefixes: [], overrides: { ...environment, PATH: join(root, 'bin') + ':' + READ_ENV_PATH() } }, timeoutMs: 20_000 });
 }
 
 export async function readCalls({ root }: { root: string }): Promise<{ command: string; args: string[]; environment?: Record<string, string> }[]> {

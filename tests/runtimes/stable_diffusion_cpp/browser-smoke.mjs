@@ -1,3 +1,9 @@
+import {
+  READ_ENV_BIC_BROWSER_RESULTS_FILE,
+  READ_ENV_BIC_BROWSER_SESSION_JSON,
+  READ_ENV_BIC_PLAYWRIGHT_MODULE,
+  READ_ENV_SDCB_TEST_WEBGPU,
+} from '#tools/shared/node-env';
 // Real Wasm/Worker/filesystem/callback tests plus small synthetic Qwen timestep
 // and 3D convolution graphs. Optional SDCB_TEST_WEBGPU=1 checks WebGPU arithmetic;
 // neither mode is a trained-model image-generation/quality test.
@@ -11,8 +17,8 @@ import { imageSmokeScope } from './browser-smoke-contract.mjs';
 import { runArithmeticProbes } from './arithmetic-probes.mjs';
 import { assertModuleSurface, assertPublicGguf } from './core-contract.mjs';
 const root = path.resolve(process.argv[2] ?? 'dist/package');
-const testWebGpu = process.env.SDCB_TEST_WEBGPU === '1';
-const { chromium } = await import(pathToFileURL(path.resolve(process.env.BIC_PLAYWRIGHT_MODULE || '../../.tools/browser/node_modules/playwright/index.mjs')).href);
+const testWebGpu = READ_ENV_SDCB_TEST_WEBGPU() === '1';
+const { chromium } = await import(pathToFileURL(path.resolve(READ_ENV_BIC_PLAYWRIGHT_MODULE() || '../../.tools/browser/node_modules/playwright/index.mjs')).href);
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
@@ -297,7 +303,7 @@ try {
         results.push(result);
         // The pipeline wrapper finalizes its tested package snapshot, not build/.
         // Preserve the standalone recorder behavior outside that explicit mode.
-        if (!process.env.BIC_BROWSER_RESULTS_FILE) {
+        if (!READ_ENV_BIC_BROWSER_RESULTS_FILE()) {
           const file = path.resolve('build', profile, variant, 'provenance.json');
           const provenance = JSON.parse(await readFile(file, 'utf8'));
           provenance.validation.browserSmoke = true;
@@ -314,10 +320,10 @@ try {
   if (failures.length) {
     throw new Error(`${failures.length} image browser smoke configuration(s) failed; see per-profile diagnostics`);
   }
-  if (process.env.BIC_BROWSER_RESULTS_FILE) {
-    const output = process.env.BIC_BROWSER_SESSION_JSON
-      ? { session: JSON.parse(process.env.BIC_BROWSER_SESSION_JSON), results } : results;
-    await writeFile(process.env.BIC_BROWSER_RESULTS_FILE, JSON.stringify(output, null, 2) + '\n');
+  if (READ_ENV_BIC_BROWSER_RESULTS_FILE()) {
+    const output = READ_ENV_BIC_BROWSER_SESSION_JSON()
+      ? { session: JSON.parse(READ_ENV_BIC_BROWSER_SESSION_JSON()), results } : results;
+    await writeFile(READ_ENV_BIC_BROWSER_RESULTS_FILE(), JSON.stringify(output, null, 2) + '\n');
   }
 } finally {
   await browser?.close();

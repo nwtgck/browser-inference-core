@@ -1,5 +1,8 @@
 # Optional expert-sum Dawn comparison
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 This developer experiment consumes supplied WGSL. It compares expert-sum variants
 with a supplied binary ADD chain, using synthetic buffers and guard regions.
 The caller supplies those inputs and their provenance. Results cover the

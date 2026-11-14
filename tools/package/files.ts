@@ -24,37 +24,33 @@ export async function readRegularBytes({ path, maxBytes }: { path: string; maxBy
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new Error('Invalid bounded file size');
   }
-  const file = await open(await regularFile({ path }), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const before = await file.stat({ bigint: true });
-    if (!before.isFile()) {
-      throw new Error(`Non-regular opened package input: ${path}`);
+  await using file = await open(await regularFile({ path }), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const before = await file.stat({ bigint: true });
+  if (!before.isFile()) {
+    throw new Error(`Non-regular opened package input: ${path}`);
+  }
+  if (before.size > BigInt(maxBytes)) {
+    throw new Error(`Oversized package metadata: ${path}`);
+  }
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for (;;) {
+    const chunk = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1 - bytes));
+    const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
+    if (!bytesRead) {
+      break;
     }
-    if (before.size > BigInt(maxBytes)) {
+    bytes += bytesRead;
+    if (bytes > maxBytes) {
       throw new Error(`Oversized package metadata: ${path}`);
     }
-    const chunks: Buffer[] = [];
-    let bytes = 0;
-    for (;;) {
-      const chunk = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1 - bytes));
-      const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
-      if (!bytesRead) {
-        break;
-      }
-      bytes += bytesRead;
-      if (bytes > maxBytes) {
-        throw new Error(`Oversized package metadata: ${path}`);
-      }
-      chunks.push(chunk.subarray(0, bytesRead));
-    }
-    const after = await file.stat({ bigint: true });
-    if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
-      throw new Error(`Package input changed while reading: ${path}`);
-    }
-    return Buffer.concat(chunks, bytes);
-  } finally {
-    await file.close();
+    chunks.push(chunk.subarray(0, bytesRead));
   }
+  const after = await file.stat({ bigint: true });
+  if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
+    throw new Error(`Package input changed while reading: ${path}`);
+  }
+  return Buffer.concat(chunks, bytes);
 }
 
 export async function readMetadata<T>({ path, decode }: { path: string; decode: ({ input }: { input: unknown }) => T }): Promise<T> {
@@ -136,8 +132,7 @@ export async function copyBoundTree({ source, destination, files }: { source: st
 }
 
 export async function checkNpmPack({ directory: root, files }: { directory: string; files: ReadonlyMap<string, FileEntry> }): Promise<void> {
-  const env = { ...process.env, npm_config_ignore_scripts: 'true', npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false' };
-  const result = await runProcess({ command: 'npm', args: ['pack', '--dry-run', '--json', '--ignore-scripts', '--offline'], cwd: root, env, capture: 'file' });
+  const result = await runProcess({ command: 'npm', args: ['pack', '--dry-run', '--json', '--ignore-scripts', '--offline'], cwd: root, env: { kind: 'inherit', removePrefixes: [], overrides: { npm_config_ignore_scripts: 'true', npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false' } }, capture: 'file' });
   const packed = parseJson({ text: result.stdout.toString('utf8'), decode: decodeNpmPack });
   if (packed.length !== 1) {
     throw new Error('npm pack returned more than one package');

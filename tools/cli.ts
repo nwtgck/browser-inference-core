@@ -5,6 +5,7 @@ import yargs from 'yargs';
 import type { RuntimeName } from '#dto/shared';
 import { runtimeNames } from '#tools/shared/contracts';
 import { ProcessError, runProcess } from '#tools/shared/process';
+import { READ_ENV_BIC_METRICS_MODE, READ_ENV_GITHUB_JOB, READ_ENV_GITHUB_RUN_ATTEMPT, READ_ENV_GITHUB_RUN_ID, READ_ENV_LCB_SOURCE_COMMIT, READ_ENV_SDCB_TEST_WEBGPU } from '#tools/shared/node-env';
 import type { PackageKind } from '#tools/ci/metrics';
 import { cachePlanOptions, requiredString } from '#tools/toolchain/cli-options';
 
@@ -113,10 +114,10 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
   const emit = writeJson ?? jsonOutput;
   let metrics: Promise<ReturnType<typeof import('#tools/ci/metrics').createMetrics> | undefined> | undefined;
   async function measured<T>({ phase, packageKind, operation }: { phase: string; packageKind: PackageKind | undefined; operation: () => Promise<T> }): Promise<T> {
-    if (process.env['BIC_METRICS_MODE'] !== 'basic') {
+    if (READ_ENV_BIC_METRICS_MODE() !== 'basic') {
       return operation();
     }
-    metrics ??= Promise.resolve().then(() => tools.metrics()).then(({ createMetrics }) => createMetrics({ env: process.env, checkoutRoot: executingCheckoutRoot })).catch(() => {
+    metrics ??= Promise.resolve().then(() => tools.metrics()).then(({ createMetrics }) => createMetrics({ checkoutRoot: executingCheckoutRoot })).catch(() => {
       try {
         process.stderr.write('[pipeline-metrics] Optional telemetry unavailable.\n');
       } catch { /* Optional output. */ }
@@ -279,6 +280,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
         .option('repository', requiredString)
         .option('npm-fixture', requiredString)
         .option('output', requiredString)
+        .option('summary', { type: 'string', requiresArg: true })
         .option('run-id', { type: 'number', requiresArg: true })
         .option('run-attempt', { type: 'number', requiresArg: true })
         .implies('run-id', 'run-attempt')
@@ -301,7 +303,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
           const resolution = await readNpmResolution({ directory: resolve(options['npm-fixture']), expected: { repository: options.repository, commit: options.commit, version: publication.frozen.report.data.package.version } });
           const output = resolve(options.output);
           const run = options['run-id'] === undefined || options['run-attempt'] === undefined ? undefined : { id: options['run-id'], attempt: options['run-attempt'] };
-          await writeConfirmedReport({ publication, repository: options.repository, resolution, output, run });
+          await writeConfirmedReport({ publication, repository: options.repository, resolution, output, run, summary: options.summary === undefined ? undefined : resolve(options.summary) });
           await emit({ value: { output, artifactCommit: publication.commit, sourceCommit: publication.frozen.sourceCommit }, output: undefined });
         },
       })), () => {})
@@ -316,7 +318,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
         packageKind: runtimePackageKind({ runtime: options.runtime }),
         operation: async () => {
           const { validateSavedRuntimePackage } = await tools.validation();
-          const receipt = await validateSavedRuntimePackage({ checkoutRoot: resolve(options['checkout-root']), runtime: options.runtime, packageDirectory: resolve(options.package), receiptPath: resolve(options.receipt), environment: process.env, runProcess });
+          const receipt = await validateSavedRuntimePackage({ checkoutRoot: resolve(options['checkout-root']), runtime: options.runtime, packageDirectory: resolve(options.package), receiptPath: resolve(options.receipt), settings: { selectedSourceCommit: READ_ENV_LCB_SOURCE_COMMIT(), runId: READ_ENV_GITHUB_RUN_ID(), runAttempt: READ_ENV_GITHUB_RUN_ATTEMPT(), job: READ_ENV_GITHUB_JOB(), testWebGpu: READ_ENV_SDCB_TEST_WEBGPU() }, childEnvironment: undefined, runProcess });
           await emit({ value: receipt, output: undefined });
         },
       })), () => {});
@@ -324,7 +326,16 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
 
 export async function main({ argv, modules, writeJson, writeText }: { argv: readonly string[]; modules: CliModules | undefined; writeJson: typeof jsonOutput | undefined; writeText: (({ stream, text }: { stream: 'stdout' | 'stderr'; text: string }) => void) | undefined }): Promise<number> {
   const write = writeText ?? (({ stream, text }: { stream: 'stdout' | 'stderr'; text: string }) => {
-    process[stream].write(text);
+    switch (stream) {
+    case 'stdout': process.stdout.write(text);
+      break;
+    case 'stderr': process.stderr.write(text);
+      break;
+    default: {
+      const exhaustive: never = stream;
+      throw new Error(`Unhandled output stream: ${String(exhaustive)}`);
+    }
+    }
   });
   try {
     await createCli({ modules, writeJson }).parseAsync(argv, {}, (error, _options, output) => {

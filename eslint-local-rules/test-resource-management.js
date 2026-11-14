@@ -1,4 +1,4 @@
-import { builtinName, isTestFile, isTestSupportFile, propertyName, staticString, unwrap } from './test-resource-ast.js';
+import { builtinName, isNodeMjsTestFile, isNodeToolFile, isTestFile, isTestSupportFile, propertyName, staticString, unwrap } from './test-resource-ast.js';
 
 const protocolNames = new Set(['dispose', 'asyncDispose']);
 const runtimeNames = new Set(['DisposableStack', 'AsyncDisposableStack', 'SuppressedError']);
@@ -9,11 +9,12 @@ const registryNames = new Set(['Symbol.dispose', 'Symbol.asyncDispose']);
 export const rule = {
   meta: {
     type: 'problem',
-    docs: { description: 'Keep explicit resource management in tests, without runtime polyfills.' },
+    docs: { description: 'Keep explicit resource management in Node TypeScript tools and tests, without runtime polyfills.' },
     schema: [],
     messages: {
-      usingOnlyInTest: 'using / await using are allowed only in *.test.ts, never in *.test-support.ts or production modules.',
-      protocolOnlyInTest: 'Disposal symbols/runtime APIs belong only in *.test.ts or *.test-support.ts, never production modules. Symbol property keys must be statically known outside tests.',
+      usingOnlyInNode: 'using / await using belong only in Node TypeScript tools or *.test.ts, never browser modules, JavaScript or *.test-support.ts.',
+      protocolOnlyInNode: 'Disposal symbols belong only in Node TypeScript tools, *.test.ts or *.test-support.ts. Symbol property keys must be statically known elsewhere.',
+      unsupportedNodeRuntime: 'DisposableStack, AsyncDisposableStack and SuppressedError are unavailable in the supported Node 22 tooling runtime. Use using / await using with disposal symbols and the TypeScript emit.',
       noPolyfill: 'Do not polyfill or replace explicit resource-management symbols or runtime APIs, including in tests. Use a compatible test runtime.',
     },
   },
@@ -22,12 +23,27 @@ export const rule = {
     const filename = context.physicalFilename ?? context.filename;
     const sourceCode = context.sourceCode;
     const isTest = isTestFile({ filename });
-    const allowedProtocol = isTest || isTestSupportFile({ filename });
+    const isSupport = isTestSupportFile({ filename });
+    const isNodeTool = isNodeToolFile({ filename });
+    const allowedUsing = isTest || (isNodeTool && !isSupport);
+    const allowedProtocol = isTest || isSupport || isNodeTool;
+    const allowedRuntimeApi = isTest || isSupport;
+    const allowedProtocolCall = isNodeMjsTestFile({ filename });
     const builtin = node => builtinName({ node, sourceCode });
     const name = node => propertyName({ node, sourceCode });
     const string = node => staticString({ node, sourceCode });
     const protocol = node => node?.type === 'MemberExpression' && builtin(node.object) === 'Symbol' && (protocolNames.has(name(node)) || (node.computed && name(node) === undefined));
+    const consumesProtocol = node => {
+      const member = node.parent;
+      return allowedProtocolCall && protocolNames.has(name(node)) && member?.type === 'MemberExpression'
+        && member.computed && member.property === node && member.parent?.type === 'CallExpression' && member.parent.callee === member;
+    };
     const report = (node, messageId) => context.report({ node, messageId });
+    const runtimeAccess = node => {
+      if (!allowedRuntimeApi) {
+        report(node, isNodeTool ? 'unsupportedNodeRuntime' : 'protocolOnlyInNode');
+      }
+    };
     const polyfillImport = node => {
       const value = string(node);
       if (value && /(?:core-js(?:-pure)?(?:\/(?:index|stable|actual|full)(?:\/index)?(?:\.js)?\/?|\/)?$|core-js(?:-pure)?\/.*(?:dispos|explicit-resource|suppressed-error)|(?:^|\/)(?:disposablestack|asyncdisposablestack|suppressed-error)\/.*(?:polyfill|shim)|@esfx\/disposable)/u.test(value)) {
@@ -43,36 +59,47 @@ export const rule = {
         report(node, 'noPolyfill');
       }
       if (node.type === 'ArrayPattern') {
-        node.elements.forEach(writeTarget);
+        for (const element of node.elements) {
+          writeTarget(element);
+        }
       }
       if (node.type === 'ObjectPattern') {
-        node.properties.forEach(property => writeTarget(property.value ?? property.argument));
+        for (const property of node.properties) {
+          writeTarget(property.value ?? property.argument);
+        }
       }
       if (node.type === 'AssignmentPattern') {
         writeTarget(node.left);
       }
     };
     const destructure = (pattern, value, node) => {
-      if (builtin(value) !== 'Symbol' || pattern?.type !== 'ObjectPattern') {
+      if (pattern?.type !== 'ObjectPattern') {
         return;
       }
-      if (!allowedProtocol && pattern.properties.some(property => property.type === 'Property' && (protocolNames.has(name(property)) || (property.computed && name(property) === undefined)))) {
-        report(node, 'protocolOnlyInTest');
+      const owner = builtin(value);
+      if (owner === 'Symbol' && !allowedProtocol && pattern.properties.some(property => property.type === 'Property' && (protocolNames.has(name(property)) || (property.computed && name(property) === undefined)))) {
+        report(node, 'protocolOnlyInNode');
+      }
+      if (['globalThis', 'window', 'self', 'global'].includes(owner) && pattern.properties.some(property => property.type === 'Property' && runtimeNames.has(name(property)))) {
+        runtimeAccess(node);
       }
     };
     const visitors = {
       VariableDeclaration(node) {
-        if (!isTest && (node.kind === 'using' || node.kind === 'await using')) {
-          report(node, 'usingOnlyInTest');
+        if (!allowedUsing && (node.kind === 'using' || node.kind === 'await using')) {
+          report(node, 'usingOnlyInNode');
         }
       },
       MemberExpression(node) {
-        if (!allowedProtocol && (protocol(node) || runtimeNames.has(builtin(node)))) {
-          report(node, 'protocolOnlyInTest');
+        if (!allowedProtocol && protocol(node) && !consumesProtocol(node)) {
+          report(node, 'protocolOnlyInNode');
+        }
+        if (runtimeNames.has(builtin(node))) {
+          runtimeAccess(node);
         }
       },
       Identifier(node) {
-        if (allowedProtocol || !runtimeNames.has(node.name)) {
+        if (allowedRuntimeApi || !runtimeNames.has(node.name)) {
           return;
         }
         // Identifier keys and declarations are not reads of a global runtime API.
@@ -82,18 +109,18 @@ export const rule = {
           return;
         }
         if (builtin(node) === node.name) {
-          report(node, 'protocolOnlyInTest');
+          runtimeAccess(node);
         }
       },
       TSQualifiedName(node) {
         if (!allowedProtocol && builtin(node.left) === 'Symbol' && protocolNames.has(node.right.name)) {
-          report(node, 'protocolOnlyInTest');
+          report(node, 'protocolOnlyInNode');
         }
       },
       TSIndexedAccessType(node) {
         if (!allowedProtocol && node.objectType.type === 'TSTypeQuery' && builtin(node.objectType.exprName) === 'Symbol'
           && node.indexType.type === 'TSLiteralType' && protocolNames.has(string(node.indexType.literal))) {
-          report(node, 'protocolOnlyInTest');
+          report(node, 'protocolOnlyInNode');
         }
       },
       VariableDeclarator(node) {
@@ -121,7 +148,9 @@ export const rule = {
           report(node, 'noPolyfill');
         }
         if (builtin(callee) === 'require') {
-          node.arguments.forEach(polyfillImport);
+          for (const argument of node.arguments) {
+            polyfillImport(argument);
+          }
         }
         const resolved = builtin(callee);
         const separator = resolved?.lastIndexOf('.') ?? -1;
@@ -139,7 +168,7 @@ export const rule = {
           if (['defineProperty', 'set', 'deleteProperty'].includes(method)) {
             report(node, 'noPolyfill');
           } else if (!allowedProtocol && ['get', 'has', 'hasOwn', 'getOwnPropertyDescriptor'].includes(method)) {
-            report(node, 'protocolOnlyInTest');
+            report(node, 'protocolOnlyInNode');
           }
         }
         if (builtin(target) === 'Symbol' && ['defineProperties', 'assign'].includes(method)) {
@@ -153,6 +182,10 @@ export const rule = {
         if (['globalThis', 'window', 'self', 'global'].includes(builtin(target)) && replacementNames.has(key)
           && ['defineProperty', 'set'].includes(method)) {
           report(node, 'noPolyfill');
+        }
+        if (['globalThis', 'window', 'self', 'global'].includes(builtin(target)) && runtimeNames.has(key)
+          && ['get', 'has', 'hasOwn', 'getOwnPropertyDescriptor'].includes(method)) {
+          runtimeAccess(node);
         }
         if (['globalThis', 'window', 'self', 'global'].includes(builtin(target)) && ['defineProperties', 'assign'].includes(method)
           && node.arguments.slice(1).some(argument => argument.type !== 'ObjectExpression'

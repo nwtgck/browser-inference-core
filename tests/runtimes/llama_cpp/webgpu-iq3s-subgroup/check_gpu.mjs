@@ -1,3 +1,4 @@
+import { READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Supplied IQ3 WGSL and CPU reference fixtures; numerical checks only.
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -23,7 +24,7 @@ const report = {
 const buffers = new Set();
 let device;
 try {
-  const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
+  const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
   const { GPUBufferUsage, GPUMapMode } = globals;
   globalThis[ownerKey] = create([]);
   const adapter = await globalThis[ownerKey].requestAdapter();

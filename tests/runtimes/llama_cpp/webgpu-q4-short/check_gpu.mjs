@@ -1,10 +1,16 @@
+import {
+  READ_ENV_LCB_Q4_BENCHMARKS,
+  READ_ENV_LCB_Q4_CPU_REFERENCE_DIR,
+  READ_ENV_LCB_Q4_WALL_BENCHMARKS,
+  READ_ENV_LCB_TEST_WEBGPU_MODULE,
+} from '#tools/shared/node-env';
 // Standalone comparison of supplied Q4 WGSL with supplied CPU references.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fixture } from './fixtures.mjs';
 const [directory, outputPath] = process.argv.slice(2);
 if (!directory || !outputPath || process.argv.length !== 4) throw new Error('Usage: check_gpu.mjs SHADERS REPORT.json');
-const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
+const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
 const { GPUBufferUsage, GPUMapMode } = globals;
 const ownerKey = Symbol('Q4 standalone Dawn owner');
 const report = { schema: 1, scope: 'Supplied Q4_K WGSL and CPU references with optional GPU timing; not production-factory or model validation', cases: [], benchmarks: [], errors: [], ok: false };
@@ -19,7 +25,7 @@ try {
   const sg = adapter.info.subgroupMaxSize;
   if (![4, 8, 16, 32, 64, 128].includes(sg) || ![4, 8, 16, 32, 64, 128].includes(adapter.info.subgroupMinSize) || adapter.info.subgroupMinSize > sg) throw new Error('Unsupported subgroup size range');
   for (const feature of ['subgroups', 'shader-f16']) if (!adapter.features.has(feature)) throw new Error('Missing feature: ' + feature);
-  const timed = process.env.LCB_Q4_BENCHMARKS === '1';
+  const timed = READ_ENV_LCB_Q4_BENCHMARKS() === '1';
   if (timed && !adapter.features.has('timestamp-query')) throw new Error('Benchmark requires timestamp-query');
   device = await adapter.requestDevice({ requiredFeatures: ['subgroups', 'shader-f16', ...(timed ? ['timestamp-query'] : [])] });
   device.addEventListener('uncapturederror', event => report.errors.push(event.error.message));
@@ -99,7 +105,7 @@ try {
   for (const [caseIndex, spec] of cases.entries()) {
     if (!['ordinary', 'indexed'].includes(spec.kind) || !Number.isInteger(spec.k) || spec.k <= 0 || spec.k % 256 || !Number.isInteger(spec.m) || spec.m <= 0 || ![0, 1, 2].includes(spec.mode) || typeof spec.sharedInput !== 'boolean' || typeof spec.broadcast !== 'boolean' || ![32, 64, 128, 256].includes(spec.workgroups?.[sg])) throw new Error('Invalid experiment case');
     const chosen = spec.workgroups[sg], data = fixture(spec);
-    const cpuBytes = await readFile(join(process.env.LCB_Q4_CPU_REFERENCE_DIR, `${caseIndex}.f64`));
+    const cpuBytes = await readFile(join(READ_ENV_LCB_Q4_CPU_REFERENCE_DIR(), `${caseIndex}.f64`));
     if (cpuBytes.length !== data.outputWords * 16) throw new Error('CPU reference output count mismatch');
     data.cpu = new Float64Array(cpuBytes.buffer.slice(cpuBytes.byteOffset, cpuBytes.byteOffset + cpuBytes.byteLength));
     const a = upload(data.weights), x = upload(data.input), ids = upload(data.ids), u = upload(data.params, GPUBufferUsage.UNIFORM);
@@ -121,7 +127,7 @@ try {
       const spec = cases.find(row => row.kind === kind && row.k === k && row.m === m && !row.sharedInput && !row.broadcast);
       if (!spec) throw new Error('Benchmark shape is missing from cases.json');
       const data = fixture(spec), chosen = spec.workgroups[sg];
-      const cpuBytes = await readFile(join(process.env.LCB_Q4_CPU_REFERENCE_DIR, `${cases.indexOf(spec)}.f64`));
+      const cpuBytes = await readFile(join(READ_ENV_LCB_Q4_CPU_REFERENCE_DIR(), `${cases.indexOf(spec)}.f64`));
       if (cpuBytes.length !== data.outputWords * 16) throw new Error('Benchmark CPU reference count mismatch');
       data.cpu = new Float64Array(cpuBytes.buffer.slice(cpuBytes.byteOffset, cpuBytes.byteOffset + cpuBytes.byteLength));
       const a = upload(data.weights), x = upload(data.input), ids = upload(data.ids), u = upload(data.params, GPUBufferUsage.UNIFORM), dst = upload(data.initial);
@@ -140,7 +146,7 @@ try {
       }
       query.destroy();
       const wallPairs = [], wallBaseline = [], wallSelected = [], wallBatchDispatches = 20;
-      if (process.env.LCB_Q4_WALL_BENCHMARKS === '1') {
+      if (READ_ENV_LCB_Q4_WALL_BENCHMARKS() === '1') {
         for (let rep = 0; rep < 12; rep++) {
           const pair = {};
           for (const index of rep % 2 ? [1, 0] : [0, 1]) {

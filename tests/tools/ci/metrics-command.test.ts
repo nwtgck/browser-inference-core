@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
-import { ProcessError, runProcess } from '#tools/shared/process';
+import { ProcessError, runProcess, type InheritedChildEnvironment } from '#tools/shared/process';
 import { readRecords } from '#tools/ci/summary';
 
 const cli = resolve('build/tooling/tools/ci/cli.js');
@@ -14,7 +14,7 @@ test('disabled timing passes large command output through without creating logs'
   const root = await mkdtemp(join(tmpdir(), 'bicore-command-off-'));
   try {
     const directory = join(root, 'metrics');
-    const env = { ...process.env, BIC_METRICS_MODE: 'off', BIC_METRICS_DIR: directory };
+    const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'off', BIC_METRICS_DIR: directory } };
     const result = await runProcess({ command: process.execPath, args: [cli, 'run', '--phase', 'test.large', '--', process.execPath, '-e', 'process.stdout.write("x".repeat(1048576))'], cwd: process.cwd(), env, capture: 'file' });
     assert.equal(result.stdout.length, 1048576);
     await assert.rejects(stat(directory));
@@ -28,7 +28,7 @@ test('external command preserves streams and failure despite optional logger err
   try {
     const broken = join(root, 'not-a-directory');
     await writeFile(broken, 'fixture');
-    const env = { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: broken };
+    const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: broken } };
     await assert.rejects(runProcess({ command: process.execPath, args: [cli, 'run', '--phase', 'test.command', '--', process.execPath, '-e', 'console.log("out"); console.error("err"); process.exit(7)'], cwd: process.cwd(), env, capture: 'file' }), error => {
       assert.ok(error instanceof ProcessError);
       assert.equal(error.exitCode, 7);
@@ -46,7 +46,7 @@ test('enabled command logs failure but never command arguments or environment se
   const root = await mkdtemp(join(tmpdir(), 'bicore-command-record-'));
   try {
     const directory = join(root, 'metrics');
-    const env = { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: directory, GH_TOKEN: 'SECRET-FIXTURE' };
+    const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: directory, GH_TOKEN: 'SECRET-FIXTURE' } };
     await assert.rejects(runProcess({ command: process.execPath, args: [cli, 'run', '--phase', 'test.command', '--', process.execPath, '-e', 'const hidden="ARGUMENT-SECRET"; process.exit(7)'], cwd: process.cwd(), env, capture: 'file' }), error => error instanceof ProcessError && error.exitCode === 7);
     const { records, errors } = await readRecords({ directory });
     assert.equal(errors, 0);
@@ -68,7 +68,7 @@ test('SIGTERM reaches the child and the wrapper exits by the same signal', { ski
   const code = `const fs = require('node:fs'); process.on('SIGTERM', () => { fs.writeFileSync(${JSON.stringify(stopped)}, 'yes'); process.exit(0); }); fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1000);`;
   const child = spawn(process.execPath, [cli, 'run', '--phase', 'test.cancel', '--', process.execPath, '-e', code], {
     cwd: process.cwd(),
-    env: { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
+    env: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
     stdio: 'ignore',
   });
   const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
@@ -112,7 +112,7 @@ test('cancellation kills a child that ignores SIGTERM within the grace period', 
   const code = `const fs = require('node:fs'); process.on('SIGTERM', () => {}); fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1000);`;
   const child = spawn(process.execPath, [cli, 'run', '--phase', 'test.ignore', '--', process.execPath, '-e', code], {
     cwd: process.cwd(),
-    env: { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
+    env: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
     stdio: 'ignore',
   });
   const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
@@ -154,7 +154,7 @@ test('a terminating parent cannot leave a signal-ignoring grandchild holding the
   const code = `const cp = require('node:child_process'); process.on('SIGTERM', () => process.exit(0)); cp.spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], {stdio: 'inherit'}); setInterval(() => {}, 1000);`;
   const child = spawn(process.execPath, [cli, 'run', '--phase', 'test.grandchild', '--', process.execPath, '-e', code], {
     cwd: process.cwd(),
-    env: { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
+    env: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: join(root, 'metrics') },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.resume();
@@ -198,7 +198,7 @@ test('separate CI steps summarize their own saved observations', async () => {
   const root = await mkdtemp(join(tmpdir(), 'bicore-command-summary-'));
   try {
     const directory = join(root, 'metrics');
-    const env = { ...process.env, BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: directory };
+    const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: directory } };
     await runProcess({ command: process.execPath, args: [cli, 'run', '--phase', 'fixture.complete', '--', process.execPath, '-e', 'process.exit(0)'], cwd: process.cwd(), env, capture: 'file' });
     const result = await runProcess({ command: process.execPath, args: [cli, 'summary', '--directory', directory], cwd: process.cwd(), env, capture: 'file' });
     assert.match(result.stdout.toString('utf8'), /fixture\.complete/u);

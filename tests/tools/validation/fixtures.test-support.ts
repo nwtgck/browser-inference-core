@@ -11,7 +11,7 @@ import { imageSmokeScope } from '#runtimes/stable-diffusion-cpp/tools/browser-sm
 import { parseJson } from '#tools/shared/json';
 import type { runProcess } from '#tools/shared/process';
 import { runtimeTestInputs, testFilesForRuntime } from '#tools/validation/runtime';
-import { clearValidationReceipt, validateSnapshot, type ValidationReceipt } from '#tools/validation/snapshot';
+import { clearValidationReceipt, validateSnapshot, type ExecutionSettings, type ValidationReceipt } from '#tools/validation/snapshot';
 import { manifestIo, type ManifestIo } from '#tools/validation/manifest';
 import { checkedImageResults, addImageValidation } from '#tools/validation/image-results';
 import { checkedLlamaResults, addLlamaValidation } from '#tools/validation/llama-results';
@@ -23,7 +23,7 @@ type Result = LlamaBrowserResult | StableDiffusionBrowserResult;
 type Envelope = { session: BrowserSession; results: readonly Result[] };
 export type ValidationFixture = {
   root: string; checkoutRoot: string; packageDirectory: string; receiptPath: string; runtime: RuntimeName;
-  profiles: string[]; variants: string[]; testFiles: Record<string, string>; environment: NodeJS.ProcessEnv;
+  profiles: string[]; variants: string[]; testFiles: Record<string, string>; settings: ExecutionSettings & { testWebGpu?: string | undefined };
   commands: { phase: 'node_asyncify' | 'chromium_smoke'; args: readonly string[]; resultPath: string }[];
   finalCalls: number; childFailure: Error | undefined; finalFailure: Error | undefined; writeResults: boolean; resultText: string | undefined;
   resultMutator: (({ session, results }: { session: BrowserSession; results: readonly Result[] }) => unknown) | undefined;
@@ -85,7 +85,7 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
       profiles: Object.keys(configuration.profiles),
       variants: Object.keys(configuration.variants),
       testFiles: testFilesForRuntime({ checkoutRoot, runtime }),
-      environment: { ...process.env, LCB_SOURCE_COMMIT: fixtureSource, GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '2', GITHUB_JOB: 'fixture', SDCB_TEST_WEBGPU: '0' },
+      settings: { selectedSourceCommit: fixtureSource, runId: '123', runAttempt: '2', job: 'fixture', testWebGpu: '0' },
       commands: [],
       finalCalls: 0,
       childFailure: undefined,
@@ -107,21 +107,22 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
           if (command !== process.execPath || cwd !== path.join(checkoutRoot, 'runtimes', runtime) || env === undefined) {
             throw new Error('Wrong smoke invocation');
           }
+          const values = env.kind === 'inherit' ? env.overrides : env.values;
           const browser = args[0]?.endsWith('/browser-smoke.mjs') === true;
           if (!browser && !args[0]?.endsWith('/asyncify-rewind.mjs')) {
             throw new Error('Unexpected smoke process');
           }
-          if (env.BIC_BROWSER_RESULTS_FILE === undefined) {
+          if (values.BIC_BROWSER_RESULTS_FILE === undefined) {
             throw new Error('Missing fresh result path');
           }
-          state.commands.push({ phase: browser ? 'chromium_smoke' : 'node_asyncify', args, resultPath: env.BIC_BROWSER_RESULTS_FILE });
+          state.commands.push({ phase: browser ? 'chromium_smoke' : 'node_asyncify', args, resultPath: values.BIC_BROWSER_RESULTS_FILE });
           if (browser && state.writeResults) {
-            const rawSession: unknown = JSON.parse(env.BIC_BROWSER_SESSION_JSON ?? '');
+            const rawSession: unknown = JSON.parse(values.BIC_BROWSER_SESSION_JSON ?? '');
             let envelope: Envelope;
             switch (runtime) {
             case 'llama-cpp': envelope = decodeLlamaBrowserEnvelope({ input: { session: rawSession, results: llamaResults({ profiles: state.profiles, variants: state.variants }) } });
               break;
-            case 'stable-diffusion-cpp': envelope = decodeStableDiffusionBrowserEnvelope({ input: { session: rawSession, results: imageResults({ profiles: state.profiles, variants: state.variants, gpu: state.environment.SDCB_TEST_WEBGPU === '1' }) } });
+            case 'stable-diffusion-cpp': envelope = decodeStableDiffusionBrowserEnvelope({ input: { session: rawSession, results: imageResults({ profiles: state.profiles, variants: state.variants, gpu: state.settings.testWebGpu === '1' }) } });
               break;
             default: {
               const exhaustive: never = runtime;
@@ -129,7 +130,7 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
             }
             }
             const value = state.resultMutator === undefined ? envelope : state.resultMutator(envelope);
-            await writeFile(env.BIC_BROWSER_RESULTS_FILE, state.resultText ?? JSON.stringify(value));
+            await writeFile(values.BIC_BROWSER_RESULTS_FILE, state.resultText ?? JSON.stringify(value));
           }
           await state.afterProcess?.();
           return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
@@ -140,7 +141,8 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
           return validateSnapshot({
             checkoutRoot,
             receiptPath: state.receiptPath,
-            environment: state.environment,
+            settings: state.settings,
+            childEnvironment: undefined,
             runProcess: run,
             io: state.io,
             plan: {
@@ -168,11 +170,12 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
         }
         case 'stable-diffusion-cpp': {
           const validated = await verifyImage({ sourceRoot, directory: state.packageDirectory, requireClean: true, checkNpmPack: false });
-          const gpu = state.environment.SDCB_TEST_WEBGPU === '1';
+          const gpu = state.settings.testWebGpu === '1';
           return validateSnapshot({
             checkoutRoot,
             receiptPath: state.receiptPath,
-            environment: state.environment,
+            settings: state.settings,
+            childEnvironment: undefined,
             runProcess: run,
             io: state.io,
             plan: {

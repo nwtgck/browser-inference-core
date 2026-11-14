@@ -1549,8 +1549,7 @@ jobs:
             --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT" \
             --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --repository "$GITHUB_REPOSITORY" --npm-fixture "$GITHUB_WORKSPACE/build/consumer-lock" \
-            --output "$GITHUB_WORKSPACE/build/consumer-update"
-          tee -a "$GITHUB_STEP_SUMMARY" < "$GITHUB_WORKSPACE/build/consumer-update/report.md"
+            --output "$GITHUB_WORKSPACE/build/consumer-update" --summary "$GITHUB_STEP_SUMMARY"
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:

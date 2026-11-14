@@ -1,5 +1,8 @@
 # Optional Q8 Dawn comparison
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 This developer experiment consumes supplied WGSL and compares a 256-lane baseline
 with the short-workgroup choices used by its synthetic cases. The caller supplies
 the shader files and their provenance; the report covers the supplied kernels.

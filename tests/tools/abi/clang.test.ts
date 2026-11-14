@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { chmod, copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { READ_ENV_PATH } from '#tools/shared/node-env';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectAst, type Compilation } from '#tools/abi/clang';
 import { readClangJson } from '#tools/abi/clang-json';
 
@@ -57,29 +59,18 @@ test('JSONL consumer rejects normalizer failure, invalid UTF-8 and truncated JSO
     },
   };
   const jq = path.join(work, 'jq');
-  await copyFile(processFixture, jq);
+  await writeFile(jq, `\
+#!${process.execPath}
+await import(${JSON.stringify(pathToFileURL(processFixture).href)});
+`);
   await chmod(jq, 0o755);
-  using environment = {
-    path: process.env.PATH,
-    mode: process.env.BICORE_TEST_JQ_MODE,
-    [Symbol.dispose]() {
-      if (this.path === undefined) {
-        delete process.env.PATH;
-      } else {
-        process.env.PATH = this.path;
-      }
-      if (this.mode === undefined) {
-        delete process.env.BICORE_TEST_JQ_MODE;
-      } else {
-        process.env.BICORE_TEST_JQ_MODE = this.mode;
-      }
-    },
-  };
-  process.env.PATH = path.join(work, 'missing');
-  await assert.rejects(readClangJson({ command: process.execPath, args: [processFixture, 'compiler', 'valid'], cwd: work, onDocument: () => undefined }), /spawn jq ENOENT/u);
-  process.env.PATH = work + path.delimiter + (environment.path ?? '');
+  const originalPath = READ_ENV_PATH();
+  {
+    using environment = stubEnvironment({ values: { PATH: path.join(work, 'missing') } });
+    await assert.rejects(readClangJson({ command: process.execPath, args: [processFixture, 'compiler', 'valid'], cwd: work, onDocument: () => undefined }), /spawn jq ENOENT/u);
+  }
   for (const [mode, reason] of [['exit', /actual jq diagnostic/u], ['utf8', /UTF-8 in jq JSONL/u], ['json_eof', /JSON/u]] as const) {
-    process.env.BICORE_TEST_JQ_MODE = mode;
+    using environment = stubEnvironment({ values: { PATH: work + path.delimiter + (originalPath ?? ''), BICORE_TEST_JQ_MODE: mode } });
     await assert.rejects(readClangJson({ command: process.execPath, args: [processFixture, 'compiler', 'valid'], cwd: work, onDocument: () => undefined }), reason);
   }
 });

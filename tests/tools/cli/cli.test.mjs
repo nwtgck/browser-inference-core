@@ -15,7 +15,7 @@ await symlink(join(root, 'node_modules'), join(temporary, 'node_modules'), 'dir'
 await writeFile(join(temporary, 'package.json'), JSON.stringify({ type: 'module', imports: { '#source/toolchain.json': './toolchain/config.json', '#tools/*': './tools/*.js', '#runtimes/*': './runtimes/*.js' } }));
 // Emit only the CLI and its passive Node helpers. Every command module is
 // supplied by the test; no real preparation/build/publication module is loaded.
-for (const file of ['tools/cli.ts', 'tools/shared/process.ts', 'tools/shared/contracts.ts', 'tools/shared/files.ts', 'tools/ci/metrics.ts', 'tools/toolchain/cli-options.ts']) {
+for (const file of ['tools/cli.ts', 'tools/shared/process.ts', 'tools/shared/contracts.ts', 'tools/shared/files.ts', 'tools/shared/node-env.ts', 'tools/ci/metrics.ts', 'tools/toolchain/cli-options.ts', 'tests/tools/shared/node-env.test-support.ts']) {
   const source = await readFile(join(root, file), 'utf8');
   const { outputText } = ts.transpileModule(source, { fileName: file, compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, verbatimModuleSyntax: true } });
   const target = join(temporary, file.replace(/\.ts$/u, '.js'));
@@ -26,6 +26,7 @@ const entry = join(temporary, 'tools/cli.js');
 const { createCli, main } = await import(pathToFileURL(entry).href);
 const { ProcessError, runProcess } = await import(pathToFileURL(join(temporary, 'tools/shared/process.js')).href);
 const { createMetrics } = await import(pathToFileURL(join(temporary, 'tools/ci/metrics.js')).href);
+const { stubEnvironment } = await import(pathToFileURL(join(temporary, 'tests/tools/shared/node-env.test-support.js')).href);
 
 const metricsStub = async () => ({ createMetrics: () => ({ measure: async ({ operation }) => operation() }) });
 
@@ -108,8 +109,7 @@ test('scalar options reject repeated or empty values before dispatch', async () 
 });
 
 test('root, group and leaf help have no dispatch side effects', async () => {
-  const originalMode = process.env.BIC_METRICS_MODE;
-  process.env.BIC_METRICS_MODE = 'basic';
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'basic' } });
   let loads = 0;
   try {
     for (const argv of [['--help'], ['toolchain', '--help'], ['package', '--help'], ['publication', '--help'], ['validation', '--help'], ['toolchain', 'prepare', '--help'], ['publication', 'freeze', '--help'], ['validation', 'runtime', '--help']]) {
@@ -129,11 +129,7 @@ test('root, group and leaf help have no dispatch side effects', async () => {
     }
     assert.equal(loads, 0);
   } finally {
-    if (originalMode === undefined) {
-      delete process.env.BIC_METRICS_MODE;
-    } else {
-      process.env.BIC_METRICS_MODE = originalMode;
-    }
+    environment[Symbol.dispose]();
   }
 });
 
@@ -309,7 +305,7 @@ test('confirm and report reuse the confirmed frozen state', async () => {
     { work: resolve('frozen'), receipt: resolve('receipt.json'), commit: 'artifact' },
     { work: resolve('frozen'), receipt: resolve('receipt.json'), commit: 'artifact' },
     { directory: resolve('npm'), expected: { repository: 'owner/repository', commit: 'artifact', version: 'confirmed-version' } },
-    { publication, repository: 'owner/repository', resolution, output: resolve('report.md'), run: undefined },
+    { publication, repository: 'owner/repository', resolution, output: resolve('report.md'), run: undefined, summary: undefined },
   ]);
 });
 
@@ -378,34 +374,33 @@ test('the executable boundary reports help, validation failures and process exit
   }
 });
 
-test('runtime validation forwards the environment and process boundary without starting a browser', async () => {
-  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp']) {
-    const receipt = { runtime, checked: true };
-    const cli = runner({
-      modules: {
-        validation: async () => ({
-          validateSavedRuntimePackage: async args => {
-            assert.equal(args.checkoutRoot, resolve('checkout'));
-            assert.equal(args.runtime, runtime);
-            assert.equal(args.packageDirectory, resolve('package'));
-            assert.equal(args.receiptPath, resolve('browser-receipt.json'));
-            assert.equal(args.environment, process.env);
-            assert.equal(args.runProcess, runProcess);
-            return receipt;
-          },
-        }),
-      },
-    });
-    const argv = [...commands[9].argv];
-    argv[argv.indexOf('--runtime') + 1] = runtime;
-    await cli.parse(argv);
-    assert.deepEqual(cli.emitted, [{ value: receipt, output: undefined }]);
+test('runtime validation forwards its typed selection and process boundary without starting a browser', async () => {
+  const environment = stubEnvironment({ values: { LCB_SOURCE_COMMIT: 'a'.repeat(40), GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '2', GITHUB_JOB: 'runtime-validation', SDCB_TEST_WEBGPU: '1' } });
+  try {
+    for (const runtime of ['llama-cpp', 'stable-diffusion-cpp']) {
+      const receipt = { runtime, checked: true };
+      const cli = runner({
+        modules: {
+          validation: async () => ({
+            validateSavedRuntimePackage: async args => {
+              assert.deepEqual(args, { checkoutRoot: resolve('checkout'), runtime, packageDirectory: resolve('package'), receiptPath: resolve('browser-receipt.json'), settings: { selectedSourceCommit: 'a'.repeat(40), runId: '123', runAttempt: '2', job: 'runtime-validation', testWebGpu: '1' }, childEnvironment: undefined, runProcess });
+              return receipt;
+            },
+          }),
+        },
+      });
+      const argv = [...commands[9].argv];
+      argv[argv.indexOf('--runtime') + 1] = runtime;
+      await cli.parse(argv);
+      assert.deepEqual(cli.emitted, [{ value: receipt, output: undefined }]);
+    }
+  } finally {
+    environment[Symbol.dispose]();
   }
 });
 
 test('basic metrics measure the typed handler in the same process', async () => {
-  const originalMode = process.env.BIC_METRICS_MODE;
-  process.env.BIC_METRICS_MODE = 'basic';
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'basic' } });
   try {
     const calls = [];
     let loads = 0;
@@ -416,8 +411,7 @@ test('basic metrics measure the typed handler in the same process', async () => 
           loads++;
           return {
             createMetrics: args => {
-              assert.equal(args.env, process.env);
-              assert.equal(args.checkoutRoot, temporary);
+              assert.deepEqual(args, { checkoutRoot: temporary });
               return {
                 measure: async ({ phase, packageKind, operation }) => {
                   calls.push([phase, packageKind, process.pid]);
@@ -441,17 +435,12 @@ test('basic metrics measure the typed handler in the same process', async () => 
     assert.deepEqual(calls, [['cli.package.assemble', 'root', process.pid]]);
     assert.deepEqual(cli.emitted, [{ value: { sourceCommit: 'revision', output: resolve('package') }, output: undefined }]);
   } finally {
-    if (originalMode === undefined) {
-      delete process.env.BIC_METRICS_MODE;
-    } else {
-      process.env.BIC_METRICS_MODE = originalMode;
-    }
+    environment[Symbol.dispose]();
   }
 });
 
 test('disabled metrics do not load the metrics module or change command output', async () => {
-  const originalMode = process.env.BIC_METRICS_MODE;
-  process.env.BIC_METRICS_MODE = 'off';
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'off' } });
   try {
     let operations = 0;
     let loads = 0;
@@ -473,17 +462,12 @@ test('disabled metrics do not load the metrics module or change command output',
     assert.equal(operations, 1);
     assert.deepEqual(cli.emitted, [{ value: { toolsRoot: resolve('tools'), status: 'complete' }, output: undefined }]);
   } finally {
-    if (originalMode === undefined) {
-      delete process.env.BIC_METRICS_MODE;
-    } else {
-      process.env.BIC_METRICS_MODE = originalMode;
-    }
+    environment[Symbol.dispose]();
   }
 });
 
 test('metrics loading failures preserve the single operation and its original error', async context => {
-  const originalMode = process.env.BIC_METRICS_MODE;
-  process.env.BIC_METRICS_MODE = 'basic';
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'basic' } });
   const warnings = [];
   context.mock.method(process.stderr, 'write', text => {
     warnings.push(text);
@@ -511,20 +495,13 @@ test('metrics loading failures preserve the single operation and its original er
     assert.match(warnings[0], /Optional telemetry unavailable/u);
     assert.doesNotMatch(warnings[0], /Private import detail/u);
   } finally {
-    if (originalMode === undefined) {
-      delete process.env.BIC_METRICS_MODE;
-    } else {
-      process.env.BIC_METRICS_MODE = originalMode;
-    }
+    environment[Symbol.dispose]();
   }
 });
 
 test('actual metric spans retain cancellation and the original exception', async () => {
   const logRoot = await mkdtemp(join(tmpdir(), 'bicore-cli-metrics-'));
-  const originalMode = process.env.BIC_METRICS_MODE;
-  const originalDirectory = process.env.BIC_METRICS_DIR;
-  process.env.BIC_METRICS_MODE = 'basic';
-  process.env.BIC_METRICS_DIR = logRoot;
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'basic', BIC_METRICS_DIR: logRoot } });
   try {
     let observer;
     const original = new Error('Operation cancelled');
@@ -555,16 +532,7 @@ test('actual metric spans retain cancellation and the original exception', async
     assert.equal(observer.records[1].exitCode, null);
     assert.deepEqual(cli.emitted, []);
   } finally {
-    if (originalMode === undefined) {
-      delete process.env.BIC_METRICS_MODE;
-    } else {
-      process.env.BIC_METRICS_MODE = originalMode;
-    }
-    if (originalDirectory === undefined) {
-      delete process.env.BIC_METRICS_DIR;
-    } else {
-      process.env.BIC_METRICS_DIR = originalDirectory;
-    }
+    environment[Symbol.dispose]();
     await rm(logRoot, { recursive: true, force: true });
   }
 });
@@ -585,7 +553,7 @@ test('report forwards an explicit workflow run identity as one typed pair', asyn
     },
   });
   await cli.parse([...commands[8].argv, '--run-id', '12345', '--run-attempt', '2']);
-  assert.deepEqual(calls, [{ publication, repository: 'owner/repository', resolution, output: resolve('report.md'), run: { id: 12345, attempt: 2 } }]);
+  assert.deepEqual(calls, [{ publication, repository: 'owner/repository', resolution, output: resolve('report.md'), run: { id: 12345, attempt: 2 }, summary: undefined }]);
 });
 
 test('incomplete or invalid report run identities are rejected before dispatch', async () => {

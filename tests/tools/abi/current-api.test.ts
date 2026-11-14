@@ -1,11 +1,12 @@
+import { READ_ENV_BICORE_LLAMA_ABI_SCHEMA, READ_ENV_BICORE_SD_ABI_SCHEMA } from '#tools/shared/node-env';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decodeAbiSchema, type AbiField, type AbiSchema, type AbiType } from '#dto/shared';
 import { readJson } from '#tools/shared/json';
 import { abiSchemaFingerprint } from '#tools/abi/schema';
 
-const llamaSchema = process.env.BICORE_LLAMA_ABI_SCHEMA;
-const imageSchema = process.env.BICORE_SD_ABI_SCHEMA;
+const llamaSchema = READ_ENV_BICORE_LLAMA_ABI_SCHEMA();
+const imageSchema = READ_ENV_BICORE_SD_ABI_SCHEMA();
 
 function verifyRecordGraph({ schema }: { schema: AbiSchema }): void {
   const names = new Set(schema.records.map(record => record.name));

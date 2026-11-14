@@ -1,3 +1,4 @@
+import { READ_ENV_LCB_HC_FORCE_GC, READ_ENV_LCB_HC_TRACE, READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Optional numerical comparison of supplied HC WGSL with staged GPU expressions.
 // Standalone numerical smoke test; software-GPU results are not target-device speed.
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ const [shaderDirectory, reportPath] = process.argv.slice(2);
 if (!shaderDirectory || !reportPath || process.argv.length > 6) {
   throw new Error('Usage: check-gpu.mjs SHADERS REPORT [CASE_START CASE_COUNT]');
 }
-const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE ?? 'webgpu');
+const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE() ?? 'webgpu');
 import { join } from 'node:path';
 const { GPUBufferUsage, GPUMapMode } = globals;
 const report={version:2,scope:'supplied HC4 WGSL against staged GPU expressions; not production-factory or model validation',cases:[],errors:[]};
@@ -15,11 +16,11 @@ const gpu=create(['backend=vulkan']);
 // Keep an explicit root until cleanup and the standalone process exit.
 const gpuLifetime = Symbol('HC Dawn instance lifetime');
 globalThis[gpuLifetime] = gpu;
-const forceGc = process.env.LCB_HC_FORCE_GC === '1';
+const forceGc = READ_ENV_LCB_HC_FORCE_GC() === '1';
 report.forcedGc = forceGc;
 report.node = process.version;
 const caseStart=Number(process.argv[4]??0), caseCount=Number(process.argv[5]??288);
-const trace=(...x)=>{if(process.env.LCB_HC_TRACE)console.log(...x);};
+const trace=(...x)=>{if(READ_ENV_LCB_HC_TRACE())console.log(...x);};
 await writeFile(reportPath+'.jsonl','');
 let device;
 const made=[];

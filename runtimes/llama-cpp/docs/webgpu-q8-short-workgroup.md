@@ -71,6 +71,7 @@ With compatible shader inputs and a locally installed Dawn module, run from the
 repository root:
 
 ```sh
+npm run tooling:build
 LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
 LCB_Q8_BENCHMARKS=1 \
 node tests/runtimes/llama_cpp/webgpu-q8-short/check_gpu.mjs \

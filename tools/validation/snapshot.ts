@@ -8,10 +8,11 @@ import { packageFiles, assertSame, bytesIdentity, readMetadataBytes } from '#too
 import { directory, fileIdentity, isContained, treeIdentity } from '#tools/shared/files';
 import { parseJson } from '#tools/shared/json';
 import { replaceFileUnchanged } from '#tools/shared/output';
-import type { runProcess } from '#tools/shared/process';
+import type { ChildEnvironment, runProcess } from '#tools/shared/process';
 import { withValidationManifest, manifestIo, type ManifestIo } from './manifest.js';
 
 export type SmokeResult = { profile: string; variant: string; passed: boolean };
+export type ExecutionSettings = { selectedSourceCommit?: string | undefined; runId?: string | undefined; runAttempt?: string | undefined; job?: string | undefined };
 type TestIdentity = FileIdentity & { executable: boolean };
 type TreeMetadata = Record<string, { kind: 'directory' } | { kind: 'file'; executable: boolean }>;
 export type ValidationReceipt<Runtime extends RuntimeName, Result extends SmokeResult> = BrowserSession & {
@@ -93,16 +94,16 @@ export async function testIdentity({ files, fixturePath }: { files: Readonly<Rec
   return result;
 }
 
-export function executionIdentity<Runtime extends RuntimeName>({ runtime, sourceCommit, environment }: { runtime: Runtime; sourceCommit: string; environment: NodeJS.ProcessEnv }): Omit<BrowserSession, 'snapshotSha256' | 'testInputsSha256' | 'testWebGpu'> & { runtime: Runtime } {
+export function executionIdentity<Runtime extends RuntimeName>({ runtime, sourceCommit, settings }: { runtime: Runtime; sourceCommit: string; settings: ExecutionSettings }): Omit<BrowserSession, 'snapshotSha256' | 'testInputsSha256' | 'testWebGpu'> & { runtime: Runtime } {
   if (!/^[a-f0-9]{40}$/u.test(sourceCommit)) {
     throw new Error('Invalid source commit');
   }
-  if ((environment.LCB_SOURCE_COMMIT ?? sourceCommit) !== sourceCommit) {
+  if ((settings.selectedSourceCommit ?? sourceCommit) !== sourceCommit) {
     throw new Error('Package does not match selected source commit');
   }
-  const runId = environment.GITHUB_RUN_ID ?? 'local';
-  const runAttempt = environment.GITHUB_RUN_ATTEMPT ?? '1';
-  const job = environment.GITHUB_JOB ?? 'local';
+  const runId = settings.runId ?? 'local';
+  const runAttempt = settings.runAttempt ?? '1';
+  const job = settings.job ?? 'local';
   if ((runId !== 'local' && !/^[0-9]{1,32}$/u.test(runId)) || !/^[1-9][0-9]{0,8}$/u.test(runAttempt) || !/^[A-Za-z0-9_-]{1,100}$/u.test(job)) {
     throw new Error('Invalid run identity');
   }
@@ -119,7 +120,7 @@ export async function clearValidationReceipt({ packageDirectory, receiptPath }: 
   await rm(receiptPath, { force: true });
 }
 
-export async function validateSnapshot<Manifest extends RuntimeManifest, Result extends SmokeResult>({ checkoutRoot, receiptPath, environment, runProcess: run, plan, io }: { checkoutRoot: string; receiptPath: string; environment: NodeJS.ProcessEnv; runProcess: typeof runProcess; plan: SmokePlan<Manifest, Result>; io: ManifestIo }): Promise<ValidationReceipt<Manifest['runtime'], Result>> {
+export async function validateSnapshot<Manifest extends RuntimeManifest, Result extends SmokeResult>({ checkoutRoot, receiptPath, settings, childEnvironment, runProcess: run, plan, io }: { checkoutRoot: string; receiptPath: string; settings: ExecutionSettings; childEnvironment: ChildEnvironment | undefined; runProcess: typeof runProcess; plan: SmokePlan<Manifest, Result>; io: ManifestIo }): Promise<ValidationReceipt<Manifest['runtime'], Result>> {
   const input = plan.validated.input;
   const directory = input.directory;
   const manifestPath = path.join(directory, 'manifest.json');
@@ -129,7 +130,7 @@ export async function validateSnapshot<Manifest extends RuntimeManifest, Result 
   for (const profile of Object.values(input.manifest.profiles)) {
     assertSame({ actual: Object.keys(profile.variants).sort(), expected: [...plan.variants].sort(), message: 'Smoke requires every configured variant' });
   }
-  const identity = executionIdentity({ runtime: input.manifest.runtime, sourceCommit: input.manifest.sourceCommit, environment });
+  const identity = executionIdentity({ runtime: input.manifest.runtime, sourceCommit: input.manifest.sourceCommit, settings });
   const snapshot = new Map(plan.validated.files);
   const metadata = await treeMetadata({ root: directory });
   const implementation = await testIdentity({ files: plan.testFiles, fixturePath: undefined });
@@ -151,7 +152,20 @@ export async function validateSnapshot<Manifest extends RuntimeManifest, Result 
     };
     await assertSnapshot({ expected: snapshot });
     const resultsPath = path.join(temporary, 'results.json');
-    const env = { ...environment, BIC_BROWSER_RESULTS_FILE: resultsPath, BIC_BROWSER_SESSION_JSON: JSON.stringify(session) };
+    const overrides = { BIC_BROWSER_RESULTS_FILE: resultsPath, BIC_BROWSER_SESSION_JSON: JSON.stringify(session) };
+    let env: ChildEnvironment;
+    switch (childEnvironment?.kind) {
+    case undefined: env = { kind: 'inherit', removePrefixes: [], overrides };
+      break;
+    case 'inherit': env = { ...childEnvironment, overrides: { ...childEnvironment.overrides, ...overrides } };
+      break;
+    case 'replace': env = { ...childEnvironment, values: { ...childEnvironment.values, ...overrides } };
+      break;
+    default: {
+      const exhaustive: never = childEnvironment;
+      throw new Error(`Unhandled validation child environment: ${String(exhaustive)}`);
+    }
+    }
     const cwd = path.join(checkoutRoot, 'runtimes', input.manifest.runtime);
     const harness = path.join(checkoutRoot, 'tests/runtimes', input.manifest.runtime.replaceAll('-', '_'));
     if (plan.nodeAsyncify) {

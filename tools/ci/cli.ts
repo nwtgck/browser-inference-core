@@ -3,10 +3,11 @@ import { open } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yargs from 'yargs';
-import { cacheObservation, createMetrics, environmentObservation, printObservation } from '#tools/ci/metrics';
+import { cacheObservation, createMetrics, printObservation } from '#tools/ci/metrics';
 import { runObservedCommand } from '#tools/ci/command';
 import { ninjaSummary, readRecords, summarize, type Summary } from '#tools/ci/summary';
 import { directory as ensureDirectory, isContained } from '#tools/shared/files';
+import { READ_ENV_BIC_METRICS_MODE } from '#tools/shared/node-env';
 
 async function writeSummary({ directory, checkoutRoot, report }: { directory: string; checkoutRoot: string; report: Summary }): Promise<void> {
   const target = resolve(directory);
@@ -14,17 +15,13 @@ async function writeSummary({ directory, checkoutRoot, report }: { directory: st
     throw new Error('Metrics summary must be outside the source tree');
   }
   await ensureDirectory({ path: target, create: true });
-  const file = await open(join(target, 'summary.json'), constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
-  try {
-    const info = await file.stat();
-    if (!info.isFile() || info.nlink !== 1) {
-      throw new Error('Invalid summary file');
-    }
-    await file.truncate(0);
-    await file.writeFile(`${JSON.stringify(report, undefined, 2)}\n`);
-  } finally {
-    await file.close();
+  await using file = await open(join(target, 'summary.json'), constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  const info = await file.stat();
+  if (!info.isFile() || info.nlink !== 1) {
+    throw new Error('Invalid summary file');
   }
+  await file.truncate(0);
+  await file.writeFile(`${JSON.stringify(report, undefined, 2)}\n`);
 }
 
 function consoleSummary({ report }: { report: Summary }): void {
@@ -59,9 +56,9 @@ function consoleSummary({ report }: { report: Summary }): void {
   }
 }
 
-export async function main({ args, checkoutRoot, env }: { args: readonly string[]; checkoutRoot: string; env: NodeJS.ProcessEnv }): Promise<void> {
-  const metrics = createMetrics({ checkoutRoot, env });
-  const enabled = env['BIC_METRICS_MODE'] === 'basic';
+export async function main({ args, checkoutRoot }: { args: readonly string[]; checkoutRoot: string }): Promise<void> {
+  const metrics = createMetrics({ checkoutRoot });
+  const enabled = READ_ENV_BIC_METRICS_MODE() === 'basic';
   await yargs([...args])
     .scriptName('bicore-metrics').exitProcess(false).version(false).help().strict().demandCommand(1)
     .parserConfiguration({ 'populate--': true, 'camel-case-expansion': false, 'parse-numbers': false })
@@ -83,7 +80,7 @@ export async function main({ args, checkoutRoot, env }: { args: readonly string[
       if (!command) {
         throw new Error('A command after -- is required');
       }
-      const outcome = await runObservedCommand({ metrics, phase: options.phase, command, args: commandLine.slice(1), cwd: process.cwd(), env });
+      const outcome = await runObservedCommand({ metrics, phase: options.phase, command, args: commandLine.slice(1), cwd: process.cwd(), env: undefined });
       if (outcome.signal) {
         process.kill(process.pid, outcome.signal);
       } else {
@@ -114,7 +111,7 @@ export async function main({ args, checkoutRoot, env }: { args: readonly string[
       await metrics.observeCacheSave({ kind: options.kind, outcome: options.outcome });
     })
     .command('environment', 'Record whether compiler caches are configured', builder => builder, async () => {
-      await metrics.observeEnvironment({ observation: environmentObservation({ env, workRoot: checkoutRoot }) });
+      await metrics.observeEnvironment();
     })
     .command('summary', 'Summarize optional observations', builder => builder
       .option('directory', { type: 'string' }).option('ninja', { type: 'string' }), async options => {
@@ -143,7 +140,7 @@ export async function main({ args, checkoutRoot, env }: { args: readonly string[
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    await main({ args: process.argv.slice(2), checkoutRoot: process.cwd(), env: process.env });
+    await main({ args: process.argv.slice(2), checkoutRoot: process.cwd() });
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

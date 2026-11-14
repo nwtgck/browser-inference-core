@@ -5,6 +5,7 @@ import test from 'node:test';
 import { exportCommit, gitEnvironment, observeSource, selectedGitlinks, snapshotCompileInputs } from '#tools/source/capture';
 import { runProcess } from '#tools/shared/process';
 import { commitFiles, git, initializeRepository, temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 
 test('selected commit objects ignore worktree, staged changes, replacement refs and attributes', async () => {
   await using temporary = await temporaryDirectory();
@@ -22,25 +23,12 @@ test('selected commit objects ignore worktree, staged changes, replacement refs 
   await git({ root: sourceRoot, args: ['add', 'input'] });
   await git({ root: sourceRoot, args: ['update-index', '--assume-unchanged', 'input'] });
   await writeFile(join(sourceRoot, 'input'), 'hidden working-tree edit\n');
-  const saved = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE, GIT_INDEX_FILE: process.env.GIT_INDEX_FILE };
-  try {
-    process.env.GIT_DIR = '/missing/repository';
-    process.env.GIT_WORK_TREE = '/missing/worktree';
-    process.env.GIT_INDEX_FILE = '/missing/index';
-    const destination = join(temporary.root, 'output');
-    await exportCommit({ sourceRoot, revision, destination });
-    assert.equal(await readFile(join(destination, 'input'), 'utf8'), 'committed\n');
-    assert.equal(await readFile(join(destination, 'text'), 'utf8'), '$Format:%H$\n');
-    assert.equal(await readFile(join(destination, 'tool.bat'), 'utf8'), '@echo off\necho fixture\n');
-  } finally {
-    for (const [name, value] of Object.entries(saved)) {
-      if (value === undefined) {
-        delete process.env[name];
-      } else {
-        process.env[name] = value;
-      }
-    }
-  }
+  using environment = stubEnvironment({ values: { GIT_DIR: '/missing/repository', GIT_WORK_TREE: '/missing/worktree', GIT_INDEX_FILE: '/missing/index' } });
+  const destination = join(temporary.root, 'output');
+  await exportCommit({ sourceRoot, revision, destination });
+  assert.equal(await readFile(join(destination, 'input'), 'utf8'), 'committed\n');
+  assert.equal(await readFile(join(destination, 'text'), 'utf8'), '$Format:%H$\n');
+  assert.equal(await readFile(join(destination, 'tool.bat'), 'utf8'), '@echo off\necho fixture\n');
 });
 
 test('binary large blobs, executable mode and contained links are preserved without hardlinks', async () => {

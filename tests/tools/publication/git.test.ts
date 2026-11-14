@@ -7,6 +7,8 @@ import { localGit, localGitEnvironment, verifyGitTree } from '#tools/publication
 import { freezePackage } from '#tools/publication/artifacts';
 import { packageFiles } from '#tools/package/files';
 import { write, sourceRoot, fixtureSource } from '#tests/tools/package/fixtures.test-support';
+import { runProcess } from '#tools/shared/process';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 
 test('streaming Git verification accepts empty and multichunk blobs and ignores later worktree mutations', async () => {
   await using temporary = await temporaryDirectory();
@@ -51,34 +53,26 @@ test('Git transformations, ignored omissions, extra blobs and symbolic-link tree
   }
 });
 
-test('publication Git environment excludes caller identity, config, alternate index and repository overrides', () => {
-  const saved = new Map<string, string | undefined>();
+test('publication Git environment excludes caller overrides and preserves unrelated unknown values', async () => {
   const values = { GIT_DIR: '/unrelated', GIT_WORK_TREE: '/unrelated', GIT_INDEX_FILE: '/unrelated/index', GIT_AUTHOR_NAME: 'Caller', GIT_COMMITTER_NAME: 'Caller', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.autocrlf', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_GLOBAL: '/untrusted-config' };
-  for (const [name, value] of Object.entries(values)) {
-    saved.set(name, process.env[name]);
-    process.env[name] = value;
-  }
-  using restore = {
-    [Symbol.dispose]() {
-      for (const [name, value] of saved) {
-        if (value === undefined) {
-          delete process.env[name];
-        } else {
-          process.env[name] = value;
-        }
-      }
-    },
-  };
-  const environment = localGitEnvironment();
+  using environment = stubEnvironment({ values: { ...values, GIT_FUTURE_OVERRIDE: 'untrusted', BICORE_UNRELATED_TRANSFER: 'preserved' } });
+  const names = [...Object.keys(values), 'GIT_FUTURE_OVERRIDE', 'BICORE_UNRELATED_TRANSFER', 'GIT_CONFIG_NOSYSTEM', 'GIT_ALLOW_PROTOCOL', 'GIT_NO_LAZY_FETCH', 'GIT_NO_REPLACE_OBJECTS', 'GIT_TERMINAL_PROMPT'];
+  const result = await runProcess({ command: process.execPath, args: ['-e', `const fs=require('node:fs');for(const name of ${JSON.stringify(names)})fs.writeSync(1,name+'='+String(process.env[name])+'\\n');`], cwd: sourceRoot, env: localGitEnvironment() });
+  const transferred = new Map(result.stdout.toString('utf8').trim().split('\n').map(line => {
+    const separator = line.indexOf('=');
+    return [line.slice(0, separator), line.slice(separator + 1)];
+  }));
   for (const name of Object.keys(values).filter(name => name !== 'GIT_CONFIG_GLOBAL')) {
-    assert.equal(environment[name], undefined);
+    assert.equal(transferred.get(name), 'undefined');
   }
-  assert.equal(environment.GIT_CONFIG_GLOBAL, '/dev/null');
-  assert.equal(environment.GIT_CONFIG_NOSYSTEM, '1');
-  assert.equal(environment.GIT_ALLOW_PROTOCOL, '');
-  assert.equal(environment.GIT_NO_LAZY_FETCH, '1');
-  assert.equal(environment.GIT_NO_REPLACE_OBJECTS, '1');
-  assert.equal(environment.GIT_TERMINAL_PROMPT, '0');
+  assert.equal(transferred.get('GIT_FUTURE_OVERRIDE'), 'undefined');
+  assert.equal(transferred.get('BICORE_UNRELATED_TRANSFER'), 'preserved');
+  assert.equal(transferred.get('GIT_CONFIG_GLOBAL'), '/dev/null');
+  assert.equal(transferred.get('GIT_CONFIG_NOSYSTEM'), '1');
+  assert.equal(transferred.get('GIT_ALLOW_PROTOCOL'), '');
+  assert.equal(transferred.get('GIT_NO_LAZY_FETCH'), '1');
+  assert.equal(transferred.get('GIT_NO_REPLACE_OBJECTS'), '1');
+  assert.equal(transferred.get('GIT_TERMINAL_PROMPT'), '0');
 });
 
 test('freeze rejects source branches, overlapping, existing and parent-linked state before verification or writes', async () => {

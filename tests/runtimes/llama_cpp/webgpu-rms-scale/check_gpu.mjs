@@ -1,3 +1,4 @@
+import { READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Numerical and optional timestamp comparison of explicitly supplied WGSL.
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -9,7 +10,7 @@ const report = { schema:1,scope:'Supplied fused and staged RMS/scale WGSL; numer
 const hash=x=>createHash('sha256').update(x).digest('hex'),invariant=(ok,message)=>{if(!ok)throw new Error(message);};
 const buffers=new Set(),ownerKey=Symbol('RMS/scale Dawn owner');let device;
 try{
- const{create,globals}=await import(process.env.LCB_TEST_WEBGPU_MODULE);
+ const{create,globals}=await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
   const { GPUBufferUsage, GPUMapMode } = globals;
   globalThis[ownerKey]=create([]);
  const adapter=await globalThis[ownerKey].requestAdapter();invariant(adapter,'No WebGPU adapter');

@@ -7,7 +7,8 @@ import { directory, fileIdentities, fileIdentity, optionalStat, treeIdentity } f
 import { parseJson } from '#tools/shared/json';
 import { compileArguments, recordCompilerInputs, type CompileEntry } from '#tools/shared/compiler-inputs';
 import { withOutputDirectories } from '#tools/shared/output';
-import { ProcessError, runProcess } from '#tools/shared/process';
+import { ProcessError, runProcess, type ChildEnvironment } from '#tools/shared/process';
+import { READ_ENV_BIC_CACHE_ID, READ_ENV_CC, READ_ENV_CXX, READ_ENV_EM_COMPILER_WRAPPER, READ_ENV_PATH } from '#tools/shared/node-env';
 import { exportCommit, gitEnvironment, gitRead, observeSource, snapshotCompileInputs, type SourceMode, type SourceSnapshot, type SourceState } from '#tools/source/capture';
 import { stageProfile } from '#tools/package/stage';
 import { verifyAsyncifyBigIntPatch } from '#tools/toolchain/prepare';
@@ -144,10 +145,10 @@ function buildDirectory({ context, selection }: { context: BuildContext; selecti
   return resolve(context.outputRoot, 'build', selection.kind, selection.profile, selection.variant);
 }
 
-async function runBuildCommand({ command, args, cwd, env, log }: { command: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv; log: string }): Promise<void> {
+async function runBuildCommand({ command, args, cwd, env, log, capture }: { command: string; args: readonly string[]; cwd: string; env: ChildEnvironment; log: string; capture: 'pipe' | 'tee' }): Promise<void> {
   const invocation = Buffer.from(`${JSON.stringify([command, ...args])}\n`);
   try {
-    const result = await runProcess({ command, args, cwd, env });
+    const result = await runProcess({ command, args, cwd, env, capture });
     await writeFile(log, Buffer.concat([invocation, result.stdout, result.stderr]));
   } catch (error) {
     const output = error instanceof ProcessError ? Buffer.concat([error.stdout, error.stderr]) : Buffer.from(String(error));
@@ -157,7 +158,7 @@ async function runBuildCommand({ command, args, cwd, env, log }: { command: stri
 }
 
 /** --emit-tsd uses the SDK's npm compiler, independently of project tooling. */
-export async function checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env }: { emscriptenRoot: string; buildRoot: string; env: NodeJS.ProcessEnv }): Promise<void> {
+export async function checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env }: { emscriptenRoot: string; buildRoot: string; env: ChildEnvironment }): Promise<void> {
   // emcmake records config.NODE_JS[0] here; reuse its selected executable rather
   // than guessing an SDK Node version or using a global TypeScript compiler.
   const cache = await readFile(join(buildRoot, 'CMakeCache.txt'), 'utf8');
@@ -167,7 +168,7 @@ export async function checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, e
   }
   try {
     // The package entry is JavaScript; npm's .bin entry can be a shell shim.
-    await runBuildCommand({ command: node, args: [join(emscriptenRoot, 'node_modules/typescript/bin/tsc'), '--version'], cwd: buildRoot, env, log: join(buildRoot, 'declaration-compiler.log') });
+    await runBuildCommand({ command: node, args: [join(emscriptenRoot, 'node_modules/typescript/bin/tsc'), '--version'], cwd: buildRoot, env, log: join(buildRoot, 'declaration-compiler.log'), capture: 'pipe' });
   } catch (error) {
     throw new Error(`Emscripten --emit-tsd requires its SDK npm dependencies. Run npm ci --prefix "${emscriptenRoot}" --include=dev --ignore-scripts --no-audit --no-fund before building.\n${error instanceof Error ? error.message : String(error)}`);
   }
@@ -228,7 +229,7 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   }
   case 'native':
     // ABI declarations use the actual target compiler's Clang AST.
-    cmakeArgs.push(`-DCMAKE_C_COMPILER=${process.env['CC'] ?? 'clang'}`, `-DCMAKE_CXX_COMPILER=${process.env['CXX'] ?? 'clang++'}`);
+    cmakeArgs.push(`-DCMAKE_C_COMPILER=${READ_ENV_CC() ?? 'clang'}`, `-DCMAKE_CXX_COMPILER=${READ_ENV_CXX() ?? 'clang++'}`);
     command = 'cmake';
     args = cmakeArgs;
     break;
@@ -237,8 +238,9 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     throw new Error(`Unknown build kind: ${String(_ex)}`);
   }
   }
-  const env = { ...gitEnvironment({ ceiling: source.inputs.compileRoot }), PYTHONDONTWRITEBYTECODE: '1', PATH: `${emscriptenRoot}:${process.env['PATH'] ?? ''}` };
-  await runBuildCommand({ command, args, cwd: buildRoot, env, log: join(buildRoot, 'configure.log') });
+  const git = gitEnvironment({ ceiling: source.inputs.compileRoot });
+  const env: ChildEnvironment = { ...git, overrides: { ...git.overrides, PYTHONDONTWRITEBYTECODE: '1', PATH: `${emscriptenRoot}:${READ_ENV_PATH() ?? ''}` } };
+  await runBuildCommand({ command, args, cwd: buildRoot, env, log: join(buildRoot, 'configure.log'), capture: 'tee' });
   const compilationDatabase = join(buildRoot, 'compile_commands.json');
   const entries = parseJson({ text: await readFile(compilationDatabase, 'utf8'), decode: decodeCompilationDatabase });
   verifyCompileConfiguration({ entries, profile: chosen.profile });
@@ -254,7 +256,7 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     throw new Error(`Unknown build kind: ${String(_ex)}`);
   }
   }
-  await runBuildCommand({ command: 'cmake', args: ['--build', buildRoot, '--target', 'core', '-j', String(selection.jobs)], cwd: buildRoot, env, log: join(buildRoot, 'compile.log') });
+  await runBuildCommand({ command: 'cmake', args: ['--build', buildRoot, '--target', 'core', '-j', String(selection.jobs)], cwd: buildRoot, env, log: join(buildRoot, 'compile.log'), capture: 'tee' });
   const runtimeDirectory = join(buildRoot, 'runtime');
   let moduleDeclarationPreparation: LlamaProvenance['moduleDeclarationPreparation'];
   switch (selection.kind) {
@@ -310,6 +312,8 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   }
   const compiledInputs = await recordCompilerInputs({ buildRoot, roots: { prepared: prepared.root, compile: source.inputs.compileRoot, build: buildRoot, emscripten: emscriptenRoot } });
   const publishable = state.publishable && selection.kind === 'wasm';
+  const cacheIdentity = READ_ENV_BIC_CACHE_ID();
+  const compilerWrapper = READ_ENV_EM_COMPILER_WRAPPER();
   const provenance: LlamaProvenance = {
     runtime: 'llama-cpp',
     profile: selection.profile,
@@ -328,7 +332,7 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     compiledInputs,
     cmakeCommand: [command, ...args],
     builtAtUnix: Math.floor(Date.now() / 1000),
-    buildCache: { ...(process.env['BIC_CACHE_ID'] === undefined ? {} : { identity: process.env['BIC_CACHE_ID'] }), ...(process.env['EM_COMPILER_WRAPPER'] === undefined ? {} : { compilerWrapper: process.env['EM_COMPILER_WRAPPER'] }) },
+    buildCache: { ...(cacheIdentity === undefined ? {} : { identity: cacheIdentity }), ...(compilerWrapper === undefined ? {} : { compilerWrapper }) },
     visionBf16Storage: visionBf16StorageMetadata(),
     ...(moduleDeclarationPreparation === undefined ? {} : { moduleDeclarationPreparation }),
     ...(browserModulePreparation === undefined ? {} : { browserModulePreparation }),

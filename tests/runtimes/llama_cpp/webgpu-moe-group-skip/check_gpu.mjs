@@ -1,13 +1,14 @@
+import { READ_ENV_LCB_TEST_WEBGPU_BACKEND, READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Opt-in real-Dawn validation of supplied gather and matrix WGSL.
 import {readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {performance} from 'node:perf_hooks';
-if (!process.argv[2] || !process.env.LCB_TEST_WEBGPU_MODULE) {
+if (!process.argv[2] || !READ_ENV_LCB_TEST_WEBGPU_MODULE()) {
   throw new Error('Usage: LCB_TEST_WEBGPU_MODULE=... node check_gpu.mjs INPUTS [--output REPORT]');
 }
-const {create, globals}=await import(process.env.LCB_TEST_WEBGPU_MODULE);
+const {create, globals}=await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
 const { GPUBufferUsage, GPUMapMode } = globals;
 const lab=resolve(process.argv[2]), argv=process.argv.slice(3);
 const value=(name,fallback)=>{const i=argv.indexOf(name);return i<0?fallback:argv[i+1];};
@@ -21,7 +22,7 @@ const specs=JSON.parse(manifestBytes).filter(x=>(large||!x.large)&&x.name.includ
 invariant(specs.length>0,'No fixtures selected');
 const names=['baseline','candidate'];
 const report={scope:'Supplied gather/baseline/candidate WGSL and synthetic fixtures; numerical/byte validation and optional timestamps, without production provenance or model speed claims',status:'started',source,runnerSha256:hash(readFileSync(fileURLToPath(import.meta.url))),adapter:{},device:{},cases:[],benchmarks:[],errors:[]};
-const owner=create(process.env.LCB_TEST_WEBGPU_BACKEND?['backend='+process.env.LCB_TEST_WEBGPU_BACKEND]:[]);globalThis[Symbol.for('ggml-moe-group-check.owner')]=owner;
+const owner=create(READ_ENV_LCB_TEST_WEBGPU_BACKEND()?['backend='+READ_ENV_LCB_TEST_WEBGPU_BACKEND()]:[]);globalThis[Symbol.for('ggml-moe-group-check.owner')]=owner;
 let device;const live=new Set(),queries=new Set();
 try{
  const adapter=await owner.requestAdapter();invariant(adapter,'No WebGPU adapter');

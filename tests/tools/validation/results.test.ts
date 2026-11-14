@@ -9,7 +9,7 @@ import { imageResults, llamaResults, readFixtureManifest, validationFixture } fr
 
 const profiles = ['cpu-wasm32', 'webgpu-wasm32-jspi'];
 const variants = ['browser', 'test'];
-const session = { ...executionIdentity({ runtime: 'llama-cpp', sourceCommit: 'a'.repeat(40), environment: {} }), snapshotSha256: 'b'.repeat(64), testInputsSha256: 'c'.repeat(64), testWebGpu: false };
+const session = { ...executionIdentity({ runtime: 'llama-cpp', sourceCommit: 'a'.repeat(40), settings: {} }), snapshotSha256: 'b'.repeat(64), testInputsSha256: 'c'.repeat(64), testWebGpu: false };
 
 test('image evidence requires every arithmetic probe on each backend in execution order', () => {
   for (const gpu of [false, true]) {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { READ_ENV_BICORE_TEST_JQ_MODE } from '#tools/shared/node-env';
 import { writeSync } from 'node:fs';
 
 if (process.argv[2] === 'compiler') {
@@ -23,7 +24,7 @@ if (process.argv[2] === 'compiler') {
 } else {
   process.stdin.resume();
   process.stdin.on('end', () => {
-    switch (process.env.BICORE_TEST_JQ_MODE) {
+    switch (READ_ENV_BICORE_TEST_JQ_MODE()) {
     case 'json_eof': writeSync(1, '{');
       break;
     case 'utf8': writeSync(1, Buffer.from([0xc3, 0x28]));

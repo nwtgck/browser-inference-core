@@ -4,15 +4,14 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { SourceIdentity } from '#dto/shared';
 import { containedPath, directory, fileIdentities, isContained, optionalStat, regularFile, relativePath } from '#tools/shared/files';
 import { withOutputDirectories } from '#tools/shared/output';
-import { runProcess, startProcess } from '#tools/shared/process';
+import { runProcess, startProcess, type InheritedChildEnvironment } from '#tools/shared/process';
 import { BinaryReader } from '#tools/shared/streams';
 
 const objectId = /^[a-f0-9]{40}$/u;
 const ignoredNames = new Set(['.git', 'build', '.github']);
 
-export function gitEnvironment({ ceiling }: { ceiling?: string | undefined }): NodeJS.ProcessEnv {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
-  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1', ...(ceiling === undefined ? {} : { GIT_CEILING_DIRECTORIES: ceiling }) };
+export function gitEnvironment({ ceiling }: { ceiling?: string | undefined }): InheritedChildEnvironment {
+  return { kind: 'inherit', removePrefixes: ['GIT_'], overrides: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1', ...(ceiling === undefined ? {} : { GIT_CEILING_DIRECTORIES: ceiling }) } };
 }
 
 const gitOptions = ['-c', 'protocol.allow=never', '-c', 'core.fsmonitor=false'];

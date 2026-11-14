@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { READ_ENV_BIC_TEST_CHECKOUT, READ_ENV_BIC_TEST_COMPILER_FAILURE, READ_ENV_BIC_TEST_MUTATE } from '#tools/shared/node-env';
 // Synthetic external compiler boundary; no source is compiled or published.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import path from 'node:path';
 
 const args = process.argv.slice(2);
 if (args[0] === '--build') {
-  if (process.env.BIC_TEST_COMPILER_FAILURE === '1') {
+  if (READ_ENV_BIC_TEST_COMPILER_FAILURE() === '1') {
     throw new Error('Synthetic compiler failure');
   }
   const build = args[1];
@@ -17,10 +18,10 @@ if (args[0] === '--build') {
   await writeFile(path.join(build, 'compile_commands.json'), JSON.stringify([{ directory: build, file: source, arguments: ['synthetic-c++', '-c', source] }]));
   await writeFile(path.join(build, 'target-sources/core.txt'), `${path.dirname(source)}\n${source}\n`);
   await writeFile(path.join(build, 'target-sources/core.txt.declared'), `${path.dirname(source)}\n${source}\n`);
-  if (process.env.BIC_TEST_MUTATE === 'prepared') {
+  if (READ_ENV_BIC_TEST_MUTATE() === 'prepared') {
     await writeFile(path.join(selection.preparedRoot, 'patch-provenance.json'), '{"changed":true}\n');
   }
-  if (process.env.BIC_TEST_MUTATE === 'snapshot') {
+  if (READ_ENV_BIC_TEST_MUTATE() === 'snapshot') {
     await writeFile(path.join(selection.compileRoot, 'runtimes/stable-diffusion-cpp/config/variants.json'), '{"changed":true}\n');
   }
 } else {
@@ -33,7 +34,7 @@ if (args[0] === '--build') {
   const receipt = JSON.parse(await readFile(path.join(preparedRoot, 'patch-provenance.json'), 'utf8'));
   assert.equal(receipt.runtime, 'stable-diffusion-cpp');
   assert.ok(receipt.patches.length > 0);
-  assert.equal(checkoutRoot, process.env.BIC_TEST_CHECKOUT);
+  assert.equal(checkoutRoot, READ_ENV_BIC_TEST_CHECKOUT());
   assert.notEqual(compileRoot, checkoutRoot);
   await writeFile(path.join(build, 'compiler-selection.json'), JSON.stringify({ compileRoot, preparedRoot }));
 }

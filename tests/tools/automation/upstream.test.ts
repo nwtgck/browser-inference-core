@@ -179,9 +179,9 @@ test('the real upstream CLI carries workflow primitives through plan, checkout a
   const output = join(temporary.root, 'output');
   const env = { GITHUB_OUTPUT: output };
   const args = ['--checkout-root', value.checkoutRoot, '--state', state, '--repository', repository, '--base', value.request.base, '--source', value.source, '--previous', value.previous, '--ref', 'refs/tags/v1.0.0', '--resolved-ref', 'refs/tags/v1.0.0', '--commit', value.target, '--requested', 'custom', '--allow-non-fast-forward', 'false', '--relation', 'ahead'];
-  await main({ args: ['upstream-plan', ...args], env });
-  await main({ args: ['upstream-checkout', ...args], env });
-  await main({ args: ['upstream-candidate', ...args], env });
+  await main({ args: ['upstream-plan', ...args], outputPath: env.GITHUB_OUTPUT });
+  await main({ args: ['upstream-checkout', ...args], outputPath: env.GITHUB_OUTPUT });
+  await main({ args: ['upstream-candidate', ...args], outputPath: env.GITHUB_OUTPUT });
   const text = await readFile(output, 'utf8');
   assert.match(text, /changed=true/u);
   assert.match(text, /needs-push=true/u);
@@ -193,7 +193,7 @@ test('the real upstream CLI carries workflow primitives through plan, checkout a
   const unchangedArgs = args.map((arg, index) => args[index - 1] === '--commit' ? value.previous : arg).filter((_, index) => args[index] !== '--relation' && args[index - 1] !== '--relation');
   await git({ root: value.checkoutRoot, args: ['reset', '--hard', value.source] });
   await git({ root: join(value.checkoutRoot, upstreamPath), args: ['checkout', '--detach', value.previous] });
-  await main({ args: ['upstream-plan', ...unchangedArgs, '--comparison', join(temporary.root, 'absent-comparison.json')], env });
+  await main({ args: ['upstream-plan', ...unchangedArgs, '--comparison', join(temporary.root, 'absent-comparison.json')], outputPath: env.GITHUB_OUTPUT });
   assert.match(await readFile(output, 'utf8'), /changed=false/u);
   await assertSource({ checkoutRoot: value.checkoutRoot, request: value.request, clean: true });
 });
@@ -228,11 +228,11 @@ test('request validation and selection share checks and preserve the source iden
   const output = join(temporary.root, 'output');
   const args = ['--checkout-root', value.checkoutRoot, '--state', join(temporary.root, 'state'), '--repository', repository, '--base', value.request.base, '--target', 'custom', '--custom-ref', value.target];
   const env = { GITHUB_OUTPUT: output };
-  await main({ args: ['upstream-validate', ...args], env });
+  await main({ args: ['upstream-validate', ...args], outputPath: env.GITHUB_OUTPUT });
   assert.match(await readFile(output, 'utf8'), new RegExp(`source=${value.source}`, 'u'));
   assert.match(await readFile(output, 'utf8'), new RegExp(`previous=${value.previous}`, 'u'));
-  await main({ args: ['upstream-select', ...args, '--expected-source', value.source, '--expected-previous', value.previous], env });
+  await main({ args: ['upstream-select', ...args, '--expected-source', value.source, '--expected-previous', value.previous], outputPath: env.GITHUB_OUTPUT });
   assert.match(await readFile(output, 'utf8'), new RegExp(`ref=${value.target}`, 'u'));
   await commitFiles({ root: value.checkoutRoot });
-  await assert.rejects(main({ args: ['upstream-select', ...args, '--expected-source', value.source, '--expected-previous', value.previous], env }), /Source identity changed/u);
+  await assert.rejects(main({ args: ['upstream-select', ...args, '--expected-source', value.source, '--expected-previous', value.previous], outputPath: env.GITHUB_OUTPUT }), /Source identity changed/u);
 });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BinaryReader } from '#tools/shared/streams';
-import { runProcess, startProcess } from '#tools/shared/process';
+import { runProcess, startProcess, type InheritedChildEnvironment } from '#tools/shared/process';
 import type { FileEntry } from '#dto/shared';
 import { relativePath } from '#tools/shared/files';
 import { bytesIdentity, assertSame } from '#tools/package/files';
@@ -13,14 +13,8 @@ export function gitObjectId({ value }: { value: string }): string {
 }
 
 /** Local Git only; transport remains visible in the workflow. */
-export function localGitEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith('GIT_')) {
-      delete env[key];
-    }
-  }
-  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0' };
+export function localGitEnvironment(): InheritedChildEnvironment {
+  return { kind: 'inherit', removePrefixes: ['GIT_'], overrides: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0' } };
 }
 
 export async function localGit({ cwd, args, input }: { cwd: string; args: readonly string[]; input?: string | Uint8Array }): Promise<Buffer> {

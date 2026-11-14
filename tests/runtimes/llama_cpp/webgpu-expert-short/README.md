@@ -1,5 +1,8 @@
 # Optional expert-matvec Dawn comparison
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 This developer experiment consumes supplied Q5_1/IQ4_NL WGSL and experiment cases.
 It compares a 256-lane baseline with each case's selected pipeline. The caller
 supplies the shader files, case choices, and their provenance; the report covers

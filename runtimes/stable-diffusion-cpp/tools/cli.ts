@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import yargs from 'yargs';
 import type { SourceMode } from '#tools/source/capture';
 import { cachePlanOptions, runCachePlan, writeCachePlan } from '#tools/toolchain/cli-options';
-import { createMetrics, environmentObservation } from '#tools/ci/metrics';
+import { createMetrics } from '#tools/ci/metrics';
 import { buildRuntime, prepareBuildInputs } from './build.js';
 import { loadConfiguration, selectConfiguration } from './config.js';
 
@@ -63,8 +63,8 @@ export async function main({ args }: { args: readonly string[] }): Promise<void>
       'include-toolchain-notices': { type: 'boolean', default: false },
     }), async (argv) => {
       const context = { checkoutRoot: path.resolve(argv['checkout-root']), toolingRoot: path.resolve(argv['tooling-root']), outputRoot: path.resolve(argv['output-root']), toolchainRoot: path.resolve(argv['toolchain-root']) };
-      const metrics = createMetrics({ env: process.env, checkoutRoot: context.checkoutRoot });
-      await metrics.observeEnvironment({ observation: environmentObservation({ env: process.env, workRoot: context.checkoutRoot }) });
+      const metrics = createMetrics({ checkoutRoot: context.checkoutRoot });
+      await metrics.observeEnvironment();
       const result = await metrics.measure({
         phase: 'build.total',
         packageKind: undefined,

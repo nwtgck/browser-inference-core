@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { READ_ENV_PATH } from '#tools/shared/node-env';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 import { constants } from 'node:fs';
 import { access, chmod, readFile, rename, rm } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
@@ -78,17 +80,7 @@ exit 42
 `,
   });
   await chmod(command, 0o755);
-  const beforePath = process.env.PATH;
-  using restore = {
-    [Symbol.dispose]() {
-      if (beforePath === undefined) {
-        delete process.env.PATH;
-      } else {
-        process.env.PATH = beforePath;
-      }
-    },
-  };
-  process.env.PATH = join(root, 'bin') + ':' + (beforePath ?? '');
+  using environment = stubEnvironment({ values: { PATH: join(root, 'bin') + ':' + (READ_ENV_PATH() ?? '') } });
   await assert.rejects(buildPackage({ ...options, checkNpmPack: true }), /exited with 42/u);
   assert.deepEqual(await readFile(join(destination, 'manifest.json')), original);
 });
@@ -116,7 +108,7 @@ test('rehashing package metadata cannot introduce build hooks, peers or bundled 
 test('standalone aggregate checks all three npm package boundaries while deferred assembly performs no pack', async () => {
   await using fixture = await packageFixture();
   let npm: string | undefined;
-  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
+  for (const directory of (READ_ENV_PATH() ?? '').split(delimiter)) {
     const candidate = join(directory, 'npm');
     try {
       await access(candidate, constants.X_OK);
@@ -142,21 +134,7 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
 `,
   });
   await chmod(command, 0o755);
-  const previous = new Map(['PATH', 'BICORE_TEST_NPM_LOG', 'BICORE_TEST_NPM_REAL'].map(name => [name, process.env[name]]));
-  using restore = {
-    [Symbol.dispose]() {
-      for (const [name, value] of previous) {
-        if (value === undefined) {
-          delete process.env[name];
-        } else {
-          process.env[name] = value;
-        }
-      }
-    },
-  };
-  process.env.PATH = join(fixture.root, 'bin') + delimiter + (process.env.PATH ?? '');
-  process.env.BICORE_TEST_NPM_LOG = log;
-  process.env.BICORE_TEST_NPM_REAL = npm;
+  using environment = stubEnvironment({ values: { PATH: join(fixture.root, 'bin') + delimiter + (READ_ENV_PATH() ?? ''), BICORE_TEST_NPM_LOG: log, BICORE_TEST_NPM_REAL: npm } });
   await assemblePackage({ sourceRoot, inputs: join(fixture.root, 'package-inputs'), destination: join(fixture.root, 'deferred'), checkNpmPack: false });
   await assert.rejects(readFile(log), { code: 'ENOENT' });
   await validatePackage({ sourceRoot, directory: fixture.directory, requireClean: true, checkNpmPack: true });

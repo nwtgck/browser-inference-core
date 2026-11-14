@@ -1,3 +1,4 @@
+import { READ_ENV_BIC_BROWSER_RESULTS_FILE, READ_ENV_BIC_BROWSER_SESSION_JSON, READ_ENV_BIC_PLAYWRIGHT_MODULE } from '#tools/shared/node-env';
 /** CI-only checks of each shipped variant; synthetic inference and mocked GPU suspension. */
 import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -9,7 +10,7 @@ const modelFile = resolve(process.argv[3] || 'build/fixture.gguf');
 const chatTestFile = fileURLToPath(new URL('./chat-surface.mjs', import.meta.url));
 const fileMountTestFile = fileURLToPath(new URL('./file-mount-lifetime.mjs', import.meta.url));
 const chatTemplate = await readFile('vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
-const playwrightPath = resolve(process.env.BIC_PLAYWRIGHT_MODULE || '../../.tools/browser/node_modules/playwright/index.mjs');
+const playwrightPath = resolve(READ_ENV_BIC_PLAYWRIGHT_MODULE() || '../../.tools/browser/node_modules/playwright/index.mjs');
 const { chromium } = await import(pathToFileURL(playwrightPath).href);
 const mime = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
@@ -238,9 +239,9 @@ try {
       await page.close();
     }
   }
-  const resultFile = process.env.BIC_BROWSER_RESULTS_FILE || 'build/browser-results.json';
-  const output = process.env.BIC_BROWSER_SESSION_JSON
-    ? { session: JSON.parse(process.env.BIC_BROWSER_SESSION_JSON), results } : results;
+  const resultFile = READ_ENV_BIC_BROWSER_RESULTS_FILE() || 'build/browser-results.json';
+  const output = READ_ENV_BIC_BROWSER_SESSION_JSON()
+    ? { session: JSON.parse(READ_ENV_BIC_BROWSER_SESSION_JSON()), results } : results;
   await writeFile(resultFile, JSON.stringify(output, null, 2)+'\n');
   console.log(JSON.stringify(results, null, 2));
 } finally {

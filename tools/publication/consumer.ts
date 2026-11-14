@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { appendFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ReportData } from '#dto/shared';
 import type { ConsumerReportEnvelope } from '#dto/llama-cpp';
@@ -37,23 +37,31 @@ export function renderReport({ repository, commit, data, resolution }: { reposit
     '**Install with explicit package names:**', '',
     '```sh', `npm install llama-cpp-browser-core@github:${repository}#${commit}`, '```', '',
     '```sh', `npm install stable-diffusion-cpp-browser-core@github:${repository}#${commit}`, '```', '',
-    '| Runtime | ABI | Profiles |', '| --- | --- | --- |',
   ];
+  return lines.join('\n') + '\n' + renderIntegrationDetails({ metadata });
+}
+
+function renderIntegrationDetails({ metadata }: { metadata: ReturnType<typeof publicationMetadata> }): string {
+  const lines = ['| Runtime | ABI | Profiles |', '| --- | --- | --- |'];
   for (const runtime of runtimeNames) {
-    const item = data.runtimes[runtime];
+    const item = metadata.runtimes[runtime];
     lines.push(`| ${runtime} | ${String(item.abiVersion)} | ${Object.keys(item.profiles).join(', ')} |`);
   }
   lines.push('', 'Both runtimes are independent modules. Build and smoke results do not certify real-model inference.', '', 'The root manifest binds each runtime manifest; each runtime manifest owns its payload inventory. Check the selected ABI fingerprint before calling native exports.', '', `Complete manifest: [manifest.json](${metadata.retrieval.manifest})`, '');
   for (const runtime of runtimeNames) {
-    lines.push(`- [${runtime} manifest](${metadata.retrieval.artifactRawBase}${data.runtimes[runtime].manifest})`);
+    lines.push(`- [${runtime} manifest](${metadata.retrieval.artifactRawBase}${metadata.runtimes[runtime].manifest})`);
   }
   return lines.join('\n') + '\n';
 }
 
 /** Reuse only the confirmed private freeze result from the same publish job. */
-export async function writeConfirmedReport({ publication, repository, resolution, output, run }: { publication: ConfirmedPublication; repository: string; resolution: NpmResolution; output: string; run: { id: number; attempt: number } | undefined }) {
+export async function writeConfirmedReport({ publication, repository, resolution, output, run, summary }: { publication: ConfirmedPublication; repository: string; resolution: NpmResolution; output: string; run: { id: number; attempt: number } | undefined; summary: string | undefined }) {
   checkFrozen({ frozen: publication.frozen });
-  return writeReport({ repository, commit: publication.commit, data: publication.frozen.report.data, resolution, output, run });
+  const result = await writeReport({ repository, commit: publication.commit, data: publication.frozen.report.data, resolution, output, run });
+  if (summary !== undefined) {
+    await appendFile(summary, '## Consumer integration details\n\n' + renderIntegrationDetails({ metadata: result.metadata }));
+  }
+  return result;
 }
 
 export async function writeReport({ repository, commit, data, resolution, output, run }: { repository: string; commit: string; data: ReportData; resolution: NpmResolution; output: string; run: { id: number; attempt: number } | undefined }) {

@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
 export type ProcessResult = { stdout: Buffer; stderr: Buffer; exitCode: number };
+export type InheritedChildEnvironment = { kind: 'inherit'; overrides: Readonly<NodeJS.ProcessEnv>; removePrefixes: readonly string[] };
+export type ChildEnvironment = InheritedChildEnvironment | { kind: 'replace'; values: Readonly<NodeJS.ProcessEnv> };
 
 export class ProcessError extends Error {
   readonly command: string;
@@ -56,9 +58,74 @@ function checkedResult({ command, stdout, stderr, status }: { command: string; s
   return { stdout, stderr, exitCode: status.code };
 }
 
+function teeOutput({ source, destination }: { source: Readable; destination: Writable }): () => Promise<void> {
+  let failure: Error | undefined;
+  // eslint-disable-next-line local-rules-named-args/require-named-args -- Node calls Writable error listeners with one Error argument.
+  const onError = (error: Error): void => {
+    failure ??= error;
+    source.unpipe(destination);
+    source.resume();
+  };
+  destination.on('error', onError);
+  source.pipe(destination, { end: false });
+  return async () => {
+    source.unpipe(destination);
+    try {
+      if (failure) {
+        throw failure;
+      }
+      // Wait for queued writes without ending the caller's stdout/stderr.
+      await new Promise<void>((resolve, reject) => {
+        destination.write(Buffer.alloc(0), error => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+      if (failure) {
+        throw failure;
+      }
+    } finally {
+      destination.off('error', onError);
+    }
+  };
+}
+
+function childEnvironment({ environment }: { environment: ChildEnvironment | undefined }): NodeJS.ProcessEnv | undefined {
+  if (environment === undefined) {
+    return undefined;
+  }
+  switch (environment.kind) {
+  case 'replace': return { ...environment.values };
+  case 'inherit': {
+    // eslint-disable-next-line local-rules-node-env/node-env-policy -- Preserve opaque child-environment inheritance; no values escape the process boundary.
+    const values = { ...process.env };
+    for (const key of Object.keys(values)) {
+      if (environment.removePrefixes.some(prefix => key.startsWith(prefix))) {
+        delete values[key];
+      }
+    }
+    for (const [key, value] of Object.entries(environment.overrides)) {
+      if (value === undefined) {
+        delete values[key];
+      } else {
+        values[key] = value;
+      }
+    }
+    return values;
+  }
+  default: {
+    const exhaustive: never = environment;
+    throw new Error(`Unhandled child environment: ${String(exhaustive)}`);
+  }
+  }
+}
+
 /** Streaming processes share the same error/exit handling as buffered commands. */
-export function startProcess({ command, args, cwd, env, timeoutMs }: { command: string; args: readonly string[]; cwd: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }) {
-  const child = spawn(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+export function startProcess({ command, args, cwd, env, timeoutMs }: { command: string; args: readonly string[]; cwd: string; env?: ChildEnvironment; timeoutMs?: number }) {
+  const child = spawn(command, args, { cwd, env: childEnvironment({ environment: env }), stdio: ['pipe', 'pipe', 'pipe'] });
   const errors: Buffer[] = [];
   child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
   const completed = completion({ child, timeoutMs }).then((status) => {
@@ -67,36 +134,29 @@ export function startProcess({ command, args, cwd, env, timeoutMs }: { command: 
   });
   // A streaming consumer may still be reading when a failed child closes.
   void completed.catch(() => undefined);
-  return { stdin: child.stdin satisfies Writable, stdout: child.stdout satisfies Readable, completed, kill: () => child.kill() };
+  return { stdin: child.stdin satisfies Writable, stdout: child.stdout satisfies Readable, stderr: child.stderr satisfies Readable, completed, kill: () => child.kill() };
 }
 
-export async function runProcess({ command, args, cwd, env, input, timeoutMs, capture }: { command: string; args: readonly string[]; cwd: string; env?: NodeJS.ProcessEnv; input?: string | Uint8Array; timeoutMs?: number; capture?: 'pipe' | 'file' }): Promise<ProcessResult> {
+export async function runProcess({ command, args, cwd, env, input, timeoutMs, capture }: { command: string; args: readonly string[]; cwd: string; env?: ChildEnvironment; input?: string | Uint8Array; timeoutMs?: number; capture?: 'pipe' | 'file' | 'tee' }): Promise<ProcessResult> {
   switch (capture) {
   case 'file': {
     const temporary = await mkdtemp(join(tmpdir(), 'bicore-process-'));
     try {
       const output = join(temporary, 'stdout');
       const errors = join(temporary, 'stderr');
-      const stdout = await open(output, 'wx');
-      try {
-        const stderr = await open(errors, 'wx');
-        try {
-          const child = spawn(command, args, { cwd, env, stdio: ['pipe', stdout.fd, stderr.fd] });
-          const completed = completion({ child, timeoutMs });
-          child.stdin?.end(input);
-          const status = await completed;
-          return checkedResult({ command, stdout: await readFile(output), stderr: await readFile(errors), status });
-        } finally {
-          await stderr.close();
-        }
-      } finally {
-        await stdout.close();
-      }
+      await using stdout = await open(output, 'wx');
+      await using stderr = await open(errors, 'wx');
+      const child = spawn(command, args, { cwd, env: childEnvironment({ environment: env }), stdio: ['pipe', stdout.fd, stderr.fd] });
+      const completed = completion({ child, timeoutMs });
+      child.stdin?.end(input);
+      const status = await completed;
+      return checkedResult({ command, stdout: await readFile(output), stderr: await readFile(errors), status });
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
   }
   case 'pipe':
+  case 'tee':
   case undefined:
     break;
   default: {
@@ -107,11 +167,25 @@ export async function runProcess({ command, args, cwd, env, input, timeoutMs, ca
   const child = startProcess({ command, args, cwd, ...(env === undefined ? {} : { env }), ...(timeoutMs === undefined ? {} : { timeoutMs }) });
   const chunks: Buffer[] = [];
   child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+  const output: (() => Promise<void>)[] = [];
+  switch (capture) {
+  case 'tee':
+    output.push(teeOutput({ source: child.stdout, destination: process.stdout }), teeOutput({ source: child.stderr, destination: process.stderr }));
+    break;
+  case 'pipe':
+  case undefined: break;
+  default: {
+    const _ex: never = capture;
+    throw new Error(`Unhandled process capture mode: ${_ex}`);
+  }
+  }
+  let failed = false;
   child.stdin.end(input);
   try {
     const result = await child.completed;
     return { ...result, stdout: Buffer.concat(chunks) };
   } catch (error) {
+    failed = true;
     if (error instanceof ProcessError) {
       error.stdout = Buffer.concat(chunks);
       if (error.stdout.length) {
@@ -119,6 +193,14 @@ export async function runProcess({ command, args, cwd, env, input, timeoutMs, ca
       }
     }
     throw error;
+  } finally {
+    const flushed = output.map(finish => finish());
+    // Both destinations must finish before a tee failure can reach the caller.
+    await Promise.allSettled(flushed);
+    if (!failed) {
+      // A log destination failure must not replace the compiler's exit/details.
+      await Promise.all(flushed);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import yargs from 'yargs';
-import { createMetrics, environmentObservation } from '#tools/ci/metrics';
+import { createMetrics } from '#tools/ci/metrics';
 import type { SourceMode } from '#tools/source/capture';
 import { cachePlanOptions, runCachePlan, writeCachePlan } from '#tools/toolchain/cli-options';
 import { loadConfiguration, selectConfiguration } from '#runtimes/llama-cpp/tools/config';
@@ -73,8 +73,8 @@ export async function main({ argv }: { argv: readonly string[] }): Promise<void>
       .option('include-toolchain-notices', { type: 'boolean', default: false })
       .option('python', { type: 'string', default: 'python3' }), async args => {
       const context = { checkoutRoot: resolve(args['checkout-root']), toolingRoot: resolve(args['tooling-root']), outputRoot: resolve(args['output-root']), toolchainRoot: resolve(args['toolchain-root']) };
-      const metrics = createMetrics({ env: process.env, checkoutRoot: context.checkoutRoot });
-      await metrics.observeEnvironment({ observation: environmentObservation({ env: process.env, workRoot: context.checkoutRoot }) });
+      const metrics = createMetrics({ checkoutRoot: context.checkoutRoot });
+      await metrics.observeEnvironment();
       const result = await metrics.measure({
         phase: 'build.total',
         packageKind: undefined,

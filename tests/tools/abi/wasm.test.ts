@@ -6,12 +6,14 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { generateBindings } from '#tools/abi/generate';
-import { runProcess } from '#tools/shared/process';
+import { runProcess, type InheritedChildEnvironment } from '#tools/shared/process';
+import { READ_ENV_BICORE_ABI_KEEP_OUTPUT, READ_ENV_BICORE_EMSDK_NODE, READ_ENV_BICORE_EMSDK_ROOT } from '#tools/shared/node-env';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 
 const checkout = path.resolve(path.dirname(createRequire(import.meta.url).resolve('#source/toolchain.json')), '..');
 const fixtures = path.join(checkout, 'tests/tools/abi/fixtures');
-const sdk = process.env.BICORE_EMSDK_ROOT;
-const sdkNode = process.env.BICORE_EMSDK_NODE;
+const sdk = READ_ENV_BICORE_EMSDK_ROOT();
+const sdkNode = READ_ENV_BICORE_EMSDK_NODE();
 
 for (const variant of [
   { pointer64: 0, suspension: 'asyncify' },
@@ -21,17 +23,7 @@ for (const variant of [
   test(`actual C declarations through Wasm and host types: memory64=${variant.pointer64}, ${variant.suspension}`, { skip: !sdk || !sdkNode }, async () => {
     assert.ok(sdk);
     assert.ok(sdkNode);
-    using compilerEnvironment = {
-      previous: process.env.EM_CONFIG,
-      [Symbol.dispose]() {
-        if (this.previous === undefined) {
-          delete process.env.EM_CONFIG;
-        } else {
-          process.env.EM_CONFIG = this.previous;
-        }
-      },
-    };
-    process.env.EM_CONFIG = path.join(sdk, '.emscripten');
+    using compilerEnvironment = stubEnvironment({ values: { EM_CONFIG: path.join(sdk, '.emscripten') } });
     const work = await mkdtemp(path.join(os.tmpdir(), 'bicore-abi-wasm-'));
     try {
       const compileRoot = path.join(work, 'compile');
@@ -41,7 +33,7 @@ for (const variant of [
       for (const name of ['api.h', 'metadata.cpp', 'bridge.cpp']) {
         await cp(path.join(fixtures, name), path.join(native, name));
       }
-      const env = { ...process.env, EM_CONFIG: path.join(sdk, '.emscripten'), EMSDK_NODE: sdkNode };
+      const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { EM_CONFIG: path.join(sdk, '.emscripten'), EMSDK_NODE: sdkNode } };
       await runProcess({ command: 'cmake', args: ['-S', fixtures, '-B', build, '-G', 'Ninja', `-DCMAKE_TOOLCHAIN_FILE=${path.join(sdk, 'upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake')}`, `-DCOMPILE_ROOT=${compileRoot}`, `-DPOINTER64=${variant.pointer64}`, `-DSUSPENSION=${variant.suspension}`, `-DCMAKE_CROSSCOMPILING_EMULATOR=${sdkNode}`], cwd: checkout, env });
       const schema = await generateBindings({
         policy: { runtime: 'llama-cpp', astScope: undefined, publicFunction: ({ entry: { node, namespaces } }) => namespaces.length === 0 && node.kind === 'FunctionDecl' && node.name?.startsWith('ggml_fixture_') === true, exclusions: {}, acceptedDeprecated: [], synchronous: ['ggml_fixture_getter'] },
@@ -92,11 +84,11 @@ void [token, pointer, invalid];
       await cp(path.join(build, 'generated/functions.d.ts'), path.join(build, 'generated/functions.d.mts'));
       await cp(path.join(checkout, 'runtimes/shared/host/abi.d.ts'), path.join(build, 'abi.d.mts'));
       await runProcess({ command: process.execPath, args: [path.join(checkout, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2023', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--lib', 'ES2023,DOM', path.join(build, 'consumer.mts')], cwd: checkout, capture: 'file' });
-      if (process.env.BICORE_ABI_KEEP_OUTPUT) {
+      if (READ_ENV_BICORE_ABI_KEEP_OUTPUT()) {
         process.stderr.write(`ABI fixture retained at ${build}\n`);
       }
     } finally {
-      if (!process.env.BICORE_ABI_KEEP_OUTPUT) {
+      if (!READ_ENV_BICORE_ABI_KEEP_OUTPUT()) {
         await rm(work, { recursive: true, force: true });
       }
     }

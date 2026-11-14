@@ -4,7 +4,8 @@ import type { RuntimeName } from '#dto/shared';
 import { decodeLlamaBrowserEnvelope, type LlamaBrowserResult } from '#dto/llama-cpp';
 import { decodeStableDiffusionBrowserEnvelope, type StableDiffusionBrowserResult } from '#dto/stable-diffusion-cpp';
 import { createSyntheticModel } from './synthetic-model.js';
-import { clearValidationReceipt, manifestIo, validateSnapshot, type ValidationReceipt } from './snapshot.js';
+import { clearValidationReceipt, manifestIo, validateSnapshot, type ExecutionSettings, type ValidationReceipt } from './snapshot.js';
+import type { ChildEnvironment } from '#tools/shared/process';
 
 export type { ValidationReceipt } from './snapshot.js';
 
@@ -14,17 +15,20 @@ export const runtimeTestInputs = {
     'tests/runtimes/llama_cpp/asyncify-rewind.mjs', 'tests/runtimes/llama_cpp/browser-smoke.mjs',
     'tests/runtimes/llama_cpp/chat-surface.mjs', 'tests/runtimes/llama_cpp/file-mount-lifetime.mjs',
     'runtimes/llama-cpp/vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'tools/validation/synthetic-model.ts',
+    'tools/shared/node-env.ts',
   ],
   'stable-diffusion-cpp': [
     'tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs', 'tests/runtimes/stable_diffusion_cpp/gguf-fixture.mjs',
     'tests/runtimes/stable_diffusion_cpp/model-io-fixtures.mjs', 'tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.mjs',
     'tests/runtimes/stable_diffusion_cpp/core-contract.mjs',
     'runtimes/stable-diffusion-cpp/config/browser-smoke-contract.json', 'runtimes/stable-diffusion-cpp/tools/browser-smoke-contract.ts', 'tests/runtimes/stable_diffusion_cpp/arithmetic-probes.mjs',
+    'tools/shared/node-env.ts',
   ],
 } as const;
 
 export function testFilesForRuntime({ checkoutRoot, runtime }: { checkoutRoot: string; runtime: RuntimeName }): Record<string, string> {
   const files: Record<string, string> = {};
+  files['executed/node-env.js'] = fileURLToPath(import.meta.resolve('#tools/shared/node-env'));
   for (const name of runtimeTestInputs[runtime]) {
     files[name] = path.join(checkoutRoot, name);
   }
@@ -48,7 +52,7 @@ export function testFilesForRuntime({ checkoutRoot, runtime }: { checkoutRoot: s
 }
 
 /** Saved artifacts may be old, incomplete or from another run; decode once here. */
-export async function validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory, receiptPath, environment, runProcess }: { checkoutRoot: string; runtime: RuntimeName; packageDirectory: string; receiptPath: string; environment: NodeJS.ProcessEnv; runProcess: typeof import('#tools/shared/process').runProcess }): Promise<ValidationReceipt<'llama-cpp', LlamaBrowserResult> | ValidationReceipt<'stable-diffusion-cpp', StableDiffusionBrowserResult>> {
+export async function validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory, receiptPath, settings, childEnvironment, runProcess }: { checkoutRoot: string; runtime: RuntimeName; packageDirectory: string; receiptPath: string; settings: ExecutionSettings & { testWebGpu?: string | undefined }; childEnvironment: ChildEnvironment | undefined; runProcess: typeof import('#tools/shared/process').runProcess }): Promise<ValidationReceipt<'llama-cpp', LlamaBrowserResult> | ValidationReceipt<'stable-diffusion-cpp', StableDiffusionBrowserResult>> {
   await clearValidationReceipt({ packageDirectory, receiptPath });
   switch (runtime) {
   case 'llama-cpp': {
@@ -62,7 +66,8 @@ export async function validateSavedRuntimePackage({ checkoutRoot, runtime, packa
     return validateSnapshot({
       checkoutRoot,
       receiptPath,
-      environment,
+      settings,
+      childEnvironment,
       runProcess,
       io: manifestIo,
       plan: {
@@ -88,11 +93,12 @@ export async function validateSavedRuntimePackage({ checkoutRoot, runtime, packa
     const validated = await verifyRuntimePackage({ sourceRoot: checkoutRoot, directory: packageDirectory, requireClean: true, checkNpmPack: false });
     const profiles = Object.keys(configuration.profiles);
     const variants = Object.keys(configuration.variants);
-    const testWebGpu = environment.SDCB_TEST_WEBGPU === '1';
+    const testWebGpu = settings.testWebGpu === '1';
     return validateSnapshot({
       checkoutRoot,
       receiptPath,
-      environment,
+      settings,
+      childEnvironment,
       runProcess,
       io: manifestIo,
       plan: {

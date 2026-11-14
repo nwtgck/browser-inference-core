@@ -1,3 +1,4 @@
+import type { InheritedChildEnvironment } from '#tools/shared/process';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises';
@@ -25,13 +26,21 @@ const fs = require('node:fs');
 fs.writeFileSync(process.env.SDK_TSC_MARKER, JSON.stringify({ arguments: process.argv.slice(2), cwd: process.cwd(), node: process.execPath }));
 console.log('Version fixture');
 `);
-  const env = { ...process.env, PATH: globalBin, SDK_TSC_MARKER: marker };
+  const env: InheritedChildEnvironment = { kind: 'inherit', removePrefixes: [], overrides: { PATH: globalBin, SDK_TSC_MARKER: marker } };
   await checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env });
   assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), { arguments: ['--version'], cwd: buildRoot, node: process.execPath });
   const log = await readFile(join(buildRoot, 'declaration-compiler.log'), 'utf8');
   assert.equal(log.split('\n')[0], JSON.stringify([process.execPath, compiler, '--version']));
   await rm(compiler);
   await assert.rejects(checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env }), /SDK npm dependencies.*npm ci --prefix/su);
-  await writeFile(compiler, 'process.exitCode = 7;\n');
+  await writeFile(compiler, `\
+const fs = require('node:fs');
+fs.writeSync(1, 'compiler stdout\\n');
+fs.writeSync(2, 'compiler stderr\\n');
+process.exitCode = 7;
+`);
   await assert.rejects(checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env }), /SDK npm dependencies/su);
+  const failure = await readFile(join(buildRoot, 'declaration-compiler.log'), 'utf8');
+  assert.match(failure, /compiler stdout/u);
+  assert.match(failure, /compiler stderr/u);
 });

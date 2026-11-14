@@ -5,6 +5,7 @@ import yargs from 'yargs';
 import { decodeGitHubCompare, decodeGitHubRelease, decodeGitHubReleases, type GitHubRelease } from '#dto/llama-cpp';
 import { readJson } from '#tools/shared/json';
 import { requiredString } from '#tools/toolchain/cli-options';
+import { READ_ENV_GITHUB_OUTPUT } from '#tools/shared/node-env';
 import { assertSource, checkedRef, checkoutUpstream, createUpdateRequest, errorDetails, overlayPreflight, prepareCandidate, writeCandidateReport } from './upstream/operations.js';
 import { planUpdate, selectUpstream, type UpdatePlan, type UpdateTarget } from './upstream/plan.js';
 import { planArchiveDownloads, planPullRequests, planReportArchives, planReportDownloads, prepareCommentWrite } from './comments/operations.js';
@@ -30,14 +31,13 @@ const requestOptions = {
   'custom-ref': { type: 'string' },
 } as const;
 
-async function outputs({ env, values }: { env: NodeJS.ProcessEnv; values: Readonly<Record<string, string>> }): Promise<void> {
-  const path = env['GITHUB_OUTPUT'];
+async function outputs({ outputPath, values }: { outputPath: string | undefined; values: Readonly<Record<string, string>> }): Promise<void> {
   for (const [key, value] of Object.entries(values)) {
     if (/[\r\n\0]/u.test(value)) {
       throw new Error('Unsafe workflow output');
     }
-    if (path) {
-      await appendFile(path, `${key}=${value}\n`);
+    if (outputPath) {
+      await appendFile(outputPath, `${key}=${value}\n`);
     }
   }
 }
@@ -89,7 +89,7 @@ async function workflowPlan({ repository, base, source, previous, ref, resolvedR
   return planUpdate({ request: { repository, base, sourceCommit: source, previousCommit: previous }, selection: { requested, ref, release: undefined }, resolvedCommit: commit, resolvedRef, relation: observedRelation, allowNonFastForward });
 }
 
-export async function main({ args, env }: { args: readonly string[]; env: NodeJS.ProcessEnv }): Promise<void> {
+export async function main({ args, outputPath }: { args: readonly string[]; outputPath: string | undefined }): Promise<void> {
   await yargs([...args]).scriptName('bicore-automation').exitProcess(false).version(false).strict().help().demandCommand(1)
     .parserConfiguration({ 'camel-case-expansion': false, 'parse-numbers': false })
     .fail((message, error) => {
@@ -102,7 +102,7 @@ export async function main({ args, env }: { args: readonly string[]; env: NodeJS
         state: options.state,
         operation: async () => {
           const { request } = await validateRequest({ checkoutRoot: options['checkout-root'], repository: options.repository, base: options.base, requestedTarget: options.target, customRef: options['custom-ref'] });
-          await outputs({ env, values: { source: request.sourceCommit, previous: request.previousCommit } });
+          await outputs({ outputPath, values: { source: request.sourceCommit, previous: request.previousCommit } });
         },
       });
     })
@@ -129,7 +129,7 @@ export async function main({ args, env }: { args: readonly string[]; env: NodeJS
           }
           }
           const selection = selectUpstream({ target, releases });
-          await outputs({ env, values: { source: request.sourceCommit, previous: request.previousCommit, ref: selection.ref, requested: selection.requested } });
+          await outputs({ outputPath, values: { source: request.sourceCommit, previous: request.previousCommit, ref: selection.ref, requested: selection.requested } });
         },
       });
     })
@@ -143,10 +143,10 @@ export async function main({ args, env }: { args: readonly string[]; env: NodeJS
           case 'unchanged':
             await mkdir(options.state, { recursive: true });
             await writeFile(join(options.state, 'details.md'), 'The selected llama.cpp commit is unchanged. No candidate branch or push is needed.\n');
-            await outputs({ env, values: { changed: 'false', branch: '', relation: '' } });
+            await outputs({ outputPath, values: { changed: 'false', branch: '', relation: '' } });
             break;
           case 'planned':
-            await outputs({ env, values: { changed: 'true', branch: plan.branch, relation: plan.relation } });
+            await outputs({ outputPath, values: { changed: 'true', branch: plan.branch, relation: plan.relation } });
             break;
           default: {
             const exhaustive: never = plan;
@@ -182,7 +182,7 @@ export async function main({ args, env }: { args: readonly string[]; env: NodeJS
           case 'planned': {
             const candidate = await prepareCandidate({ checkoutRoot: options['checkout-root'], plan, existingCommit: options.existing || undefined, preflight: overlayPreflight });
             await writeCandidateReport({ state: options.state, candidate });
-            await outputs({ env, values: { 'needs-push': String(candidate.status === 'candidate_prepared'), status: candidate.status, commit: candidate.sourceCommit, branch: plan.branch } });
+            await outputs({ outputPath, values: { 'needs-push': String(candidate.status === 'candidate_prepared'), status: candidate.status, commit: candidate.sourceCommit, branch: plan.branch } });
             break;
           }
           case 'unchanged': break;
@@ -213,5 +213,5 @@ export async function main({ args, env }: { args: readonly string[]; env: NodeJS
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  await main({ args: process.argv.slice(2), env: process.env });
+  await main({ args: process.argv.slice(2), outputPath: READ_ENV_GITHUB_OUTPUT() });
 }

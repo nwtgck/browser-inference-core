@@ -119,36 +119,28 @@ export async function sameFileBytes({ left, right }: { left: string; right: stri
   if ((await stat(left)).size !== (await stat(right)).size) {
     return false;
   }
-  const a = await open(left, 'r');
-  try {
-    const b = await open(right, 'r');
-    try {
-      const x = Buffer.allocUnsafe(1024 * 1024);
-      const y = Buffer.allocUnsafe(x.length);
-      for (;;) {
-        const read = await a.read(x, 0, x.length, null);
-        if (!read.bytesRead) {
-          return (await b.read(y, 0, 1, null)).bytesRead === 0;
-        }
-        let remaining = read.bytesRead;
-        let offset = 0;
-        while (remaining) {
-          const next = await b.read(y, offset, remaining, null);
-          if (!next.bytesRead) {
-            return false;
-          }
-          offset += next.bytesRead;
-          remaining -= next.bytesRead;
-        }
-        if (!x.subarray(0, read.bytesRead).equals(y.subarray(0, read.bytesRead))) {
-          return false;
-        }
-      }
-    } finally {
-      await b.close();
+  await using a = await open(left, 'r');
+  await using b = await open(right, 'r');
+  const x = Buffer.allocUnsafe(1024 * 1024);
+  const y = Buffer.allocUnsafe(x.length);
+  for (;;) {
+    const read = await a.read(x, 0, x.length, null);
+    if (!read.bytesRead) {
+      return (await b.read(y, 0, 1, null)).bytesRead === 0;
     }
-  } finally {
-    await a.close();
+    let remaining = read.bytesRead;
+    let offset = 0;
+    while (remaining) {
+      const next = await b.read(y, offset, remaining, null);
+      if (!next.bytesRead) {
+        return false;
+      }
+      offset += next.bytesRead;
+      remaining -= next.bytesRead;
+    }
+    if (!x.subarray(0, read.bytesRead).equals(y.subarray(0, read.bytesRead))) {
+      return false;
+    }
   }
 }
 

@@ -39,6 +39,7 @@ With local Vulkan-capable Dawn, shader-f16 and compatible inputs, run from the
 repository root:
 
 ```sh
+npm run tooling:build
 LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
 MOE_SUM_BENCHMARKS=1 \
 node --expose-gc tests/runtimes/llama_cpp/webgpu-moe-sum/check_gpu.mjs \

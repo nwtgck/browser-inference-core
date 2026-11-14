@@ -15,7 +15,7 @@ function lint({ code, filename = 'tools/runtime.ts' }) {
   return messages;
 }
 
-const runtimeAccesses = [
+const protocolAccesses = [
   'Symbol.dispose;', 'Symbol.asyncDispose;', 'Symbol["dispose"];', 'Symbol[`async${"Dispose"}`];',
   'const key = "dis"; Symbol[key + "pose"];', 'Symbol[chooseKey()];',
   'const { [chooseKey()]: value } = Symbol;', 'Reflect.get(Symbol, chooseKey());',
@@ -29,8 +29,13 @@ const runtimeAccesses = [
   '(Symbol as SymbolConstructor)!.dispose;', 'Reflect.get(Symbol, "dispose");',
   'const O = Object; O.getOwnPropertyDescriptor(Symbol, "asyncDispose");',
   'type Key = typeof Symbol.dispose;', 'type Key = (typeof Symbol)["asyncDispose"];',
+];
+
+const nativeRuntimeAccesses = [
   'new DisposableStack();', 'new globalThis.AsyncDisposableStack();',
   'const C = SuppressedError; new C(first, second);',
+  'const { DisposableStack: Stack } = globalThis; new Stack();',
+  'Reflect.get(globalThis, "AsyncDisposableStack");',
 ];
 
 const polyfills = [
@@ -59,26 +64,26 @@ const polyfills = [
   'Object.defineProperty(globalThis, "DisposableStack", { value: class {} });',
 ];
 
-for (const filename of ['tools/runtime.ts', 'tools/runtime.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts']) {
+for (const filename of ['tools/runtime.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts', 'runtimes/example/host/tools/future.ts', 'tools/../runtimes/example/host/future.ts', 'src/tools/future.ts']) {
   test(`blocks disposal protocols in owned implementation: ${filename}`, () => {
-    for (const code of runtimeAccesses) {
-      assert.ok(lint({ code, filename }).some(message => message.messageId === 'protocolOnlyInTest'), code);
+    for (const code of [...protocolAccesses, ...nativeRuntimeAccesses]) {
+      assert.ok(lint({ code, filename }).some(message => message.messageId === 'protocolOnlyInNode'), code);
     }
   });
 }
 
 for (const filename of ['tests/tools/example.test.ts', 'tests/tools/example.test-support.ts']) {
   test(`allows disposal protocols in actual Node test modules: ${filename}`, () => {
-    for (const code of runtimeAccesses) {
+    for (const code of [...protocolAccesses, ...nativeRuntimeAccesses]) {
       assert.deepEqual(lint({ code, filename }), [], code);
     }
   });
 }
 
-for (const filename of ['tools/runtime.ts', 'tools/runtime.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts', 'tests/example.test.mjs', 'tests/example.test.tsx', 'tests/example.test-support.ts', 'tests/test-support/helper.ts']) {
-  test(`blocks using declarations outside *.test.ts: ${filename}`, () => {
+for (const filename of ['tools/runtime.mjs', 'tools/runtime.js', 'tools/runtime.cjs', 'tools/runtime.mts', 'tools/runtime.cts', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts', 'runtimes/example/host/tools/future.ts', 'src/tools/future.ts', 'tests/example.test.mjs', 'tests/example.test.tsx', 'tests/example.test-support.ts', 'tools/helper.test-support.ts', 'tests/test-support/helper.ts']) {
+  test(`blocks using declarations outside Node tools and *.test.ts: ${filename}`, () => {
     for (const code of ['using resource = make();', 'async function run() { await using resource = make(); }']) {
-      assert.ok(lint({ code, filename }).some(message => message.messageId === 'usingOnlyInTest'), code);
+      assert.ok(lint({ code, filename }).some(message => message.messageId === 'usingOnlyInNode'), code);
     }
   });
 }
@@ -87,7 +92,29 @@ test('actual Node test filenames permit synchronous and asynchronous using', () 
   assert.deepEqual(lint({ code: 'using resource = make(); async function run() { await using other = make(); }', filename: 'tests/resource.test.ts' }), []);
 });
 
-for (const filename of ['tests/example.test.ts', 'tests/example.test-support.ts', 'tools/runtime.ts', 'runtimes/example/host/runtime.mjs']) {
+test('owned Node MJS tests can consume typed cleanup without defining protocols or using declarations', () => {
+  for (const code of ['environment[Symbol.dispose]();', 'await environment[Symbol.asyncDispose]();']) {
+    assert.deepEqual(lint({ code, filename: 'tests/tools/environment.test.mjs' }), [], code);
+    assert.ok(lint({ code, filename: 'runtimes/example/host/environment.test.mjs' }).some(message => message.messageId === 'protocolOnlyInNode'), code);
+  }
+  for (const code of ['Symbol.dispose;', 'const key = Symbol.dispose;', 'const value = { [Symbol.dispose]() {} };']) {
+    assert.ok(lint({ code, filename: 'tests/tools/environment.test.mjs' }).some(message => message.messageId === 'protocolOnlyInNode'), code);
+  }
+});
+
+for (const filename of ['tools/runtime.ts', 'tools/shared/nested/runtime.ts', 'runtimes/llama-cpp/tools/runtime.ts', 'runtimes/stable-diffusion-cpp/tools/nested/runtime.ts']) {
+  test(`Node tooling permits using and disposal symbols but not unavailable native runtime APIs: ${filename}`, () => {
+    assert.deepEqual(lint({ code: 'using resource = make(); async function run() { await using other = make(); }', filename }), []);
+    for (const code of protocolAccesses) {
+      assert.deepEqual(lint({ code, filename }), [], code);
+    }
+    for (const code of nativeRuntimeAccesses) {
+      assert.ok(lint({ code, filename }).some(message => message.messageId === 'unsupportedNodeRuntime'), code);
+    }
+  });
+}
+
+for (const filename of ['tests/example.test.ts', 'tests/example.test-support.ts', 'tools/runtime.ts', 'runtimes/llama-cpp/tools/runtime.ts', 'runtimes/example/host/runtime.mjs']) {
   test(`blocks resource polyfills even in test modules: ${filename}`, () => {
     for (const code of polyfills) {
       assert.ok(lint({ code, filename }).some(message => message.messageId === 'noPolyfill'), code);
@@ -97,12 +124,12 @@ for (const filename of ['tests/example.test.ts', 'tests/example.test-support.ts'
 
 test('lookalike support filenames do not grant runtime protocol permissions', () => {
   for (const filename of ['tests/example.test-support.tsx', 'tests/example.test-support.mjs', 'tests/test-support/helper.ts', 'tests/example.test-helpers.ts']) {
-    assert.ok(lint({ code: 'Symbol.dispose;', filename }).some(message => message.messageId === 'protocolOnlyInTest'));
+    assert.ok(lint({ code: 'Symbol.dispose;', filename }).some(message => message.messageId === 'protocolOnlyInNode'));
   }
 });
 
 test('ordinary symbols, cleanup methods and shadowed bindings remain valid', () => {
-  for (const code of [
+  const cases = [
     'resource.dispose(); resource.asyncDispose(); resource.close();',
     'import "core-js/actual/array/to-sorted";',
     'Symbol.iterator; Symbol.asyncIterator; Symbol.for("application-key");',
@@ -114,7 +141,10 @@ test('ordinary symbols, cleanup methods and shadowed bindings remain valid', () 
     'const Object = { defineProperty() {} }; Object.defineProperty(Symbol, "dispose", {});',
     'const box = { DisposableStack: 1 }; box.DisposableStack;', 'class DisposableStack {} new DisposableStack();',
     'Object.defineProperty(Symbol, "applicationSymbol", { value: Symbol() });',
-  ]) {
-    assert.deepEqual(lint({ code }), [], code);
+  ];
+  for (const filename of ['tools/runtime.ts', 'runtimes/example/host/future.ts']) {
+    for (const code of cases) {
+      assert.deepEqual(lint({ code, filename }), [], code);
+    }
   }
 });

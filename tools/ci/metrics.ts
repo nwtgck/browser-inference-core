@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { directory, isContained } from '#tools/shared/files';
+import { READ_ENV_BIC_CACHE_ID, READ_ENV_BIC_CACHE_MODE, READ_ENV_BIC_METRICS_DIR, READ_ENV_BIC_METRICS_MODE, READ_ENV_BIC_METRICS_PROFILE, READ_ENV_BIC_METRICS_RUNTIME, READ_ENV_BIC_METRICS_VARIANT, READ_ENV_CCACHE_CONFIGPATH, READ_ENV_CCACHE_DIR, READ_ENV_EM_CACHE, READ_ENV_EM_COMPILER_WRAPPER, READ_ENV_GITHUB_JOB, READ_ENV_GITHUB_RUN_ATTEMPT, READ_ENV_GITHUB_RUN_ID, READ_ENV_LCB_SOURCE_COMMIT, READ_ENV_RUNNER_TEMP } from '#tools/shared/node-env';
 import type { NinjaSummary } from '#tools/ci/summary';
 
 export type MetricContext = {
@@ -12,6 +13,10 @@ export type MetricContext = {
   profile: string | undefined; variant: string | undefined;
 };
 export type MetricResult = 'success' | 'failure' | 'cancelled';
+export type CacheEnvironmentSettings = {
+  cacheUseMode?: string | undefined; emCache?: string | undefined; compilerWrapper?: string | undefined;
+  ccacheDirectory?: string | undefined; ccacheConfiguration?: string | undefined; compilerIdentity?: string | undefined;
+};
 export type PackageKind = 'llama' | 'image' | 'root';
 export type SpanStart = MetricContext & {
   schemaVersion: 1; mode: 'basic'; clock: 'monotonic_ns'; event: 'span_start'; phase: string; spanId: string;
@@ -53,15 +58,15 @@ function exitCodeFor({ result }: { result: MetricResult }): number | null {
 }
 
 /** Only fixed, non-secret CI labels are recorded. */
-export function metricContext({ env }: { env: NodeJS.ProcessEnv }): MetricContext {
+export function metricContext({ context }: { context: Partial<MetricContext> }): MetricContext {
   return {
-    runId: label({ value: env['GITHUB_RUN_ID'] }),
-    runAttempt: label({ value: env['GITHUB_RUN_ATTEMPT'] }),
-    job: label({ value: env['GITHUB_JOB'] }),
-    sourceCommit: label({ value: env['LCB_SOURCE_COMMIT'] }),
-    runtime: label({ value: env['BIC_METRICS_RUNTIME'] }),
-    profile: label({ value: env['BIC_METRICS_PROFILE'] }),
-    variant: label({ value: env['BIC_METRICS_VARIANT'] }),
+    runId: label({ value: context.runId }),
+    runAttempt: label({ value: context.runAttempt }),
+    job: label({ value: context.job }),
+    sourceCommit: label({ value: context.sourceCommit }),
+    runtime: label({ value: context.runtime }),
+    profile: label({ value: context.profile }),
+    variant: label({ value: context.variant }),
   };
 }
 
@@ -218,22 +223,23 @@ export class Metrics {
     printObservation({ event: 'ninja_observation', values: observation });
   }
 
-  async observeEnvironment({ observation }: { observation: EnvironmentObservation }): Promise<void> {
+  async observeEnvironment(): Promise<void> {
     if (!this.#enabled) {
       return;
     }
+    const observation = environmentObservation({ settings: { cacheUseMode: READ_ENV_BIC_CACHE_MODE(), emCache: READ_ENV_EM_CACHE(), compilerWrapper: READ_ENV_EM_COMPILER_WRAPPER(), ccacheDirectory: READ_ENV_CCACHE_DIR(), ccacheConfiguration: READ_ENV_CCACHE_CONFIGPATH(), compilerIdentity: READ_ENV_BIC_CACHE_ID() }, workRoot: this.#checkoutRoot });
     await this.#write({ record: { schemaVersion: 1, event: 'environment_observation', ...this.#context, ...observation } });
     printObservation({ event: 'environment_observation', values: observation });
   }
 }
 
-export function createMetrics({ env, checkoutRoot }: { env: NodeJS.ProcessEnv; checkoutRoot: string }): Metrics {
-  const root = env['RUNNER_TEMP'];
+export function createMetrics({ checkoutRoot }: { checkoutRoot: string }): Metrics {
+  const root = READ_ENV_RUNNER_TEMP();
   return new Metrics({
-    enabled: env['BIC_METRICS_MODE'] === 'basic',
-    directory: env['BIC_METRICS_DIR'] || (root ? join(root, 'bic-pipeline-metrics') : undefined),
+    enabled: READ_ENV_BIC_METRICS_MODE() === 'basic',
+    directory: READ_ENV_BIC_METRICS_DIR() || (root ? join(root, 'bic-pipeline-metrics') : undefined),
     checkoutRoot,
-    context: metricContext({ env }),
+    context: metricContext({ context: { runId: READ_ENV_GITHUB_RUN_ID(), runAttempt: READ_ENV_GITHUB_RUN_ATTEMPT(), job: READ_ENV_GITHUB_JOB(), sourceCommit: READ_ENV_LCB_SOURCE_COMMIT(), runtime: READ_ENV_BIC_METRICS_RUNTIME(), profile: READ_ENV_BIC_METRICS_PROFILE(), variant: READ_ENV_BIC_METRICS_VARIANT() } }),
   });
 }
 
@@ -266,7 +272,7 @@ export function cacheObservation({ kind, requested, matched, hit, outcome, saveE
 }
 
 /** Report whether cache wiring is active without logging local paths. */
-export function environmentObservation({ env, workRoot }: { env: NodeJS.ProcessEnv; workRoot: string }): EnvironmentObservation {
+export function environmentObservation({ settings, workRoot }: { settings: CacheEnvironmentSettings; workRoot: string }): EnvironmentObservation {
   const location = ({ value, expected }: { value: string | undefined; expected: string }): 'unset' | 'expected' | 'different' => {
     if (!value) {
       return 'unset';
@@ -274,12 +280,12 @@ export function environmentObservation({ env, workRoot }: { env: NodeJS.ProcessE
     return resolve(value) === resolve(workRoot, expected) ? 'expected' : 'different';
   };
   return {
-    cacheUseMode: label({ value: env['BIC_CACHE_MODE'] }),
-    emCache: location({ value: env['EM_CACHE'], expected: '.tools/emsdk/upstream/emscripten/cache' }),
-    compilerWrapper: env['EM_COMPILER_WRAPPER'] === 'ccache' ? 'ccache' : 'unset-or-different',
-    ccacheDirectory: env['CCACHE_DIR'] ? 'set' : 'unset',
-    ccacheConfiguration: location({ value: env['CCACHE_CONFIGPATH'], expected: '.cache/ccache.conf' }),
-    compilerIdentity: label({ value: env['BIC_CACHE_ID'] }),
+    cacheUseMode: label({ value: settings.cacheUseMode }),
+    emCache: location({ value: settings.emCache, expected: '.tools/emsdk/upstream/emscripten/cache' }),
+    compilerWrapper: settings.compilerWrapper === 'ccache' ? 'ccache' : 'unset-or-different',
+    ccacheDirectory: settings.ccacheDirectory ? 'set' : 'unset',
+    ccacheConfiguration: location({ value: settings.ccacheConfiguration, expected: '.cache/ccache.conf' }),
+    compilerIdentity: label({ value: settings.compilerIdentity }),
   };
 }
 

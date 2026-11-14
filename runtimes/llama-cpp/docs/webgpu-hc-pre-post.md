@@ -56,6 +56,7 @@ With a locally installed Vulkan-capable Dawn module and compatible inputs, run
 from the repository root:
 
 ```sh
+npm run tooling:build
 LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
 node tests/runtimes/llama_cpp/webgpu-hc/check-gpu.mjs \
   /absolute/path/to/shaders /absolute/path/to/hc-report.json

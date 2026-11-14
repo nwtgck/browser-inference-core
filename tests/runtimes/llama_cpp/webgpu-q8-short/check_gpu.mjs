@@ -1,3 +1,4 @@
+import { READ_ENV_LCB_Q8_BENCHMARKS, READ_ENV_LCB_Q8_FORCE_GC, READ_ENV_LCB_TEST_WEBGPU_MODULE } from '#tools/shared/node-env';
 // Optional Dawn experiment over supplied WGSL. Input provenance is the caller's responsibility.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -5,7 +6,7 @@ const [shaderDirectory, outputPath] = process.argv.slice(2);
 if (!shaderDirectory || !outputPath || process.argv.length !== 4) {
   throw new Error('Usage: check_gpu.mjs SHADER_DIRECTORY REPORT.json');
 }
-const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
+const { create, globals } = await import(READ_ENV_LCB_TEST_WEBGPU_MODULE());
 const { GPUBufferUsage, GPUMapMode } = globals;
 // Dawn's async runner depends on this owner, including during await/mapAsync.
 const ownerKey = Symbol('q8 standalone Dawn owner');
@@ -18,7 +19,7 @@ const buffers = new Set();
 let device;
 try {
   globalThis[ownerKey] = create([]);
-  const forcedGc = process.env.LCB_Q8_FORCE_GC === '1';
+  const forcedGc = READ_ENV_LCB_Q8_FORCE_GC() === '1';
   if (forcedGc && typeof global.gc !== 'function') throw new Error('Forced GC requested without --expose-gc');
   const adapter = await globalThis[ownerKey].requestAdapter();
   if (!adapter) throw new Error('No WebGPU adapter');
@@ -32,7 +33,7 @@ try {
   for (const feature of ['subgroups', 'shader-f16']) {
     if (!adapter.features.has(feature)) throw new Error('Missing required feature: ' + feature);
   }
-  const timed = process.env.LCB_Q8_BENCHMARKS === '1';
+  const timed = READ_ENV_LCB_Q8_BENCHMARKS() === '1';
   if (timed && !adapter.features.has('timestamp-query')) throw new Error('Benchmark requires timestamp-query');
   device = await adapter.requestDevice({ requiredFeatures: ['subgroups', 'shader-f16',
     ...(timed ? ['timestamp-query'] : [])] });

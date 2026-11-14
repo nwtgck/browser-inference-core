@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 import { chmod, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -158,17 +159,7 @@ test('generated fixture bytes are bound and only the owned temporary directory i
   const alias = path.join(fixture.root, 'temp-alias');
   await mkdir(actual);
   await symlink(actual, alias);
-  const previous = process.env.TMPDIR;
-  using restore = {
-    [Symbol.dispose]() {
-      if (previous === undefined) {
-        delete process.env.TMPDIR;
-      } else {
-        process.env.TMPDIR = previous;
-      }
-    },
-  };
-  process.env.TMPDIR = alias;
+  using environment = stubEnvironment({ values: { TMPDIR: alias } });
   fixture.afterProcess = async () => {
     const command = fixture.commands.at(-1);
     assert.ok(command);
@@ -215,10 +206,10 @@ test('npm failure restores the original and npm mutation cannot leave a success 
 
 test('dirty provenance and source mismatches fail before any smoke, and receipts cannot remove payloads', async () => {
   await using fixture = await validationFixture({ runtime: 'stable-diffusion-cpp' });
-  fixture.environment.LCB_SOURCE_COMMIT = 'b'.repeat(40);
+  fixture.settings.selectedSourceCommit = 'b'.repeat(40);
   await assert.rejects(fixture.validate(), /source commit/u);
   assert.deepEqual(fixture.commands, []);
-  fixture.environment.LCB_SOURCE_COMMIT = 'a'.repeat(40);
+  fixture.settings.selectedSourceCommit = 'a'.repeat(40);
   const manifest = await readFixtureManifest({ fixture });
   for (const profile of fixture.profiles) {
     for (const variant of fixture.variants) {
@@ -247,10 +238,12 @@ test('saved-package entry connects current typed configuration to mandatory exte
       assert.equal(cwd, path.join(checkoutRoot, 'runtimes', runtime));
       assert.ok(args[0]);
       scripts.push(path.basename(args[0]));
-      assert.ok(env?.BIC_BROWSER_RESULTS_FILE);
-      assert.ok(env.BIC_BROWSER_SESSION_JSON);
+      assert.ok(env);
+      const values = env.kind === 'inherit' ? env.overrides : env.values;
+      assert.ok(values.BIC_BROWSER_RESULTS_FILE);
+      assert.ok(values.BIC_BROWSER_SESSION_JSON);
       if (scripts.at(-1) === 'browser-smoke.mjs') {
-        const session: unknown = JSON.parse(env.BIC_BROWSER_SESSION_JSON);
+        const session: unknown = JSON.parse(values.BIC_BROWSER_SESSION_JSON);
         let results: ReturnType<typeof llamaResults> | ReturnType<typeof imageResults>;
         switch (runtime) {
         case 'llama-cpp': results = llamaResults({ profiles: fixture.profiles, variants: fixture.variants });
@@ -262,12 +255,12 @@ test('saved-package entry connects current typed configuration to mandatory exte
           throw new Error(String(exhaustive));
         }
         }
-        await writeFile(env.BIC_BROWSER_RESULTS_FILE, JSON.stringify({ session, results }));
+        await writeFile(values.BIC_BROWSER_RESULTS_FILE, JSON.stringify({ session, results }));
       }
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
     };
-    fixture.environment.SDCB_TEST_WEBGPU = '1';
-    const receipt = await validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory: fixture.packageDirectory, receiptPath: fixture.receiptPath, environment: fixture.environment, runProcess: run });
+    fixture.settings.testWebGpu = '1';
+    const receipt = await validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory: fixture.packageDirectory, receiptPath: fixture.receiptPath, settings: fixture.settings, childEnvironment: undefined, runProcess: run });
     assert.equal(receipt.runtime, runtime);
     assert.equal(receipt.status, 'complete');
     switch (runtime) {

@@ -1,5 +1,8 @@
 # Optional Q4 Dawn comparison and CPU reference
 
+Build the repository Node tooling first with `npm run tooling:build` from the
+repository root; the script uses its emitted Node helpers.
+
 The Dawn experiment consumes supplied ordinary/indexed Q4_K WGSL, case choices,
 and CPU reference files. It compares output values and buffer guards and can
 record GPU timestamps. The caller supplies input provenance; the script does not

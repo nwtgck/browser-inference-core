@@ -300,93 +300,89 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
 
 /** Inspect the export section while seeking over code/data sections. */
 export async function readWasmExports({ path }: { path: string }): Promise<Set<string>> {
-  const file = await open(await regularFile({ path }), 'r');
-  try {
-    const size = (await file.stat()).size;
-    let position = 0;
-    async function take({ bytes }: { bytes: number }): Promise<Buffer> {
-      if (position + bytes > size) {
-        throw new Error('Truncated WebAssembly section');
-      }
-      const data = Buffer.alloc(bytes);
-      let offset = 0;
-      while (offset < bytes) {
-        const read = await file.read(data, offset, bytes - offset, position);
-        if (!read.bytesRead) {
-          throw new Error('Truncated WebAssembly file');
-        }
-        offset += read.bytesRead;
-        position += read.bytesRead;
-      }
-      return data;
+  await using file = await open(await regularFile({ path }), 'r');
+  const size = (await file.stat()).size;
+  let position = 0;
+  async function take({ bytes }: { bytes: number }): Promise<Buffer> {
+    if (position + bytes > size) {
+      throw new Error('Truncated WebAssembly section');
     }
-    async function leb({ limit }: { limit: number }): Promise<number> {
-      let value = 0;
-      let shift = 0;
-      for (let i = 0; i < 5; i++) {
-        if (position >= limit) {
-          throw new Error('Truncated WebAssembly integer');
-        }
-        const byte = (await take({ bytes: 1 }))[0];
-        if (byte === undefined) {
-          throw new Error('Truncated WebAssembly integer');
-        }
-        value += (byte & 127) * 2 ** shift;
-        if (!(byte & 128)) {
-          if (value > 0xffffffff) {
-            throw new Error('Oversized WebAssembly integer');
-          }
-          return value;
-        }
-        shift += 7;
+    const data = Buffer.alloc(bytes);
+    let offset = 0;
+    while (offset < bytes) {
+      const read = await file.read(data, offset, bytes - offset, position);
+      if (!read.bytesRead) {
+        throw new Error('Truncated WebAssembly file');
       }
-      throw new Error('Invalid WebAssembly integer');
+      offset += read.bytesRead;
+      position += read.bytesRead;
     }
-    if (!(await take({ bytes: 8 })).equals(Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]))) {
-      throw new Error('Not a WebAssembly module');
-    }
-    const names = new Set<string>();
-    const all = new Set<string>();
-    let found = false;
-    while (position < size) {
-      const section = (await take({ bytes: 1 }))[0];
-      const length = await leb({ limit: size });
-      const end = position + length;
-      if (end > size) {
-        throw new Error('Truncated WebAssembly section');
-      }
-      if (section === 7) {
-        if (found) {
-          throw new Error('Duplicate WebAssembly export section');
-        }
-        found = true;
-        const count = await leb({ limit: end });
-        for (let i = 0; i < count; i++) {
-          const bytes = await leb({ limit: end });
-          if (position + bytes >= end) {
-            throw new Error('Truncated WebAssembly export');
-          }
-          const name = new TextDecoder('utf-8', { fatal: true }).decode(await take({ bytes }));
-          const kind = (await take({ bytes: 1 }))[0];
-          if (kind === undefined || kind > 4 || all.has(name)) {
-            throw new Error('Invalid or duplicate WebAssembly export');
-          }
-          all.add(name);
-          await leb({ limit: end });
-          if (kind === 0) {
-            names.add(name);
-          }
-        }
-        if (position !== end) {
-          throw new Error('Unexpected WebAssembly export bytes');
-        }
-      }
-      position = end;
-    }
-    return names;
-  } finally {
-    await file.close();
+    return data;
   }
+  async function leb({ limit }: { limit: number }): Promise<number> {
+    let value = 0;
+    let shift = 0;
+    for (let i = 0; i < 5; i++) {
+      if (position >= limit) {
+        throw new Error('Truncated WebAssembly integer');
+      }
+      const byte = (await take({ bytes: 1 }))[0];
+      if (byte === undefined) {
+        throw new Error('Truncated WebAssembly integer');
+      }
+      value += (byte & 127) * 2 ** shift;
+      if (!(byte & 128)) {
+        if (value > 0xffffffff) {
+          throw new Error('Oversized WebAssembly integer');
+        }
+        return value;
+      }
+      shift += 7;
+    }
+    throw new Error('Invalid WebAssembly integer');
+  }
+  if (!(await take({ bytes: 8 })).equals(Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]))) {
+    throw new Error('Not a WebAssembly module');
+  }
+  const names = new Set<string>();
+  const all = new Set<string>();
+  let found = false;
+  while (position < size) {
+    const section = (await take({ bytes: 1 }))[0];
+    const length = await leb({ limit: size });
+    const end = position + length;
+    if (end > size) {
+      throw new Error('Truncated WebAssembly section');
+    }
+    if (section === 7) {
+      if (found) {
+        throw new Error('Duplicate WebAssembly export section');
+      }
+      found = true;
+      const count = await leb({ limit: end });
+      for (let i = 0; i < count; i++) {
+        const bytes = await leb({ limit: end });
+        if (position + bytes >= end) {
+          throw new Error('Truncated WebAssembly export');
+        }
+        const name = new TextDecoder('utf-8', { fatal: true }).decode(await take({ bytes }));
+        const kind = (await take({ bytes: 1 }))[0];
+        if (kind === undefined || kind > 4 || all.has(name)) {
+          throw new Error('Invalid or duplicate WebAssembly export');
+        }
+        all.add(name);
+        await leb({ limit: end });
+        if (kind === 0) {
+          names.add(name);
+        }
+      }
+      if (position !== end) {
+        throw new Error('Unexpected WebAssembly export bytes');
+      }
+    }
+    position = end;
+  }
+  return names;
 }
 
 export async function validateProfileWasm({ directory, files, relative, exports }: { directory: string; files: ReadonlyMap<string, FileEntry>; relative: string; exports: readonly string[] }): Promise<void> {
