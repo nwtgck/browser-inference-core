@@ -4,6 +4,7 @@ import { decodeAbiSchema, decodeAbiExtensionSidecar, type AbiSchema, type AbiCat
 import type { LlamaProvenance } from '#dto/llama-cpp';
 import type { StableDiffusionProvenance } from '#dto/stable-diffusion-cpp';
 import { assembleAbiCatalog, renderSchemaModule, renderFunctionTypes, renderFunctionModule } from '#tools/abi/schema';
+import { renderExtensionDeclarations } from '#tools/abi/generate';
 import { withOutputDirectories } from '#tools/shared/output';
 import { containedPath } from '#tools/shared/files';
 import { copyRegular, copyRegularTree, packageFiles, readMetadata, bytesIdentity } from './files.js';
@@ -73,6 +74,15 @@ export async function assembleRuntimePackage<P extends Provenance, M extends Run
       await copyRegular({ source: join(sourceRoot, 'runtimes/shared/api/schema.d.ts'), destination: join(output, 'api/schema.d.ts') });
       await writeFile(join(output, 'api/functions.d.ts'), renderFunctionTypes({ schema: catalog }));
       await writeFile(join(output, 'api/functions.mjs'), renderFunctionModule({ schema: catalog }));
+      switch (runtime) {
+      case 'llama-cpp': await writeFile(join(output, 'api/extensions.d.ts'), renderExtensionDeclarations({ declarations: catalog.extensionDeclarations ?? [] }));
+        break;
+      case 'stable-diffusion-cpp': break;
+      default: {
+        const exhaustive: never = runtime;
+        throw new Error(String(exhaustive));
+      }
+      }
       const exports = [...targets.values()][0]?.exports.filter(name => [...targets.values()].every(schema => schema.exports.includes(name))) ?? [];
       await writeFile(join(output, 'api/exports.json'), JSON.stringify(exports, undefined, 2) + '\n');
       for (const name of hostFiles) {

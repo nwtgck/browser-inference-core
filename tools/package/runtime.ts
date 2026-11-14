@@ -9,7 +9,7 @@ import { regularFile, containedPath } from '#tools/shared/files';
 import { readMetadata, packageFiles, assertSame, checkNpmPack, requireFiles, readMetadataBytes, bytesIdentity } from './files.js';
 import { assertWasmExports } from './wasm-exports.js';
 import { runtimeExports } from './layout.js';
-import { renderExtensionTypes, renderModuleTypes } from '#tools/abi/generate';
+import { renderExtensionTypes, renderExtensionDeclarations, renderModuleTypes } from '#tools/abi/generate';
 import { abiSchemaFingerprint, assembleAbiCatalog, renderSchemaModule, renderFunctionTypes, renderFunctionModule } from '#tools/abi/schema';
 
 export type RuntimeProfiles = Record<string, { variants: Record<string, LlamaProvenance | StableDiffusionProvenance> }>;
@@ -255,6 +255,21 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
   if (await readFile(join(directory, 'api/functions.mjs'), 'utf8') !== renderFunctionModule({ schema })) {
     throw new Error('Public JavaScript facade differs from schema');
   }
+  let extensionTypes: string | undefined;
+  switch (runtime) {
+  case 'llama-cpp':
+    extensionTypes = renderExtensionDeclarations({ declarations: schema.extensionDeclarations ?? [] });
+    await requireFiles({ files, names: ['api/extensions.d.ts'] });
+    if (await readFile(join(directory, 'api/extensions.d.ts'), 'utf8') !== extensionTypes) {
+      throw new Error('Public extension types differ from compiler declarations');
+    }
+    break;
+  case 'stable-diffusion-cpp': break;
+  default: {
+    const exhaustive: never = runtime;
+    throw new Error(String(exhaustive));
+  }
+  }
   const targets: AbiSchema[] = [];
   for (const [profile, information] of Object.entries(manifest.profiles)) {
     for (const variant of Object.keys(information.variants)) {
@@ -266,6 +281,14 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
         throw new Error('Invalid compiled target ABI fingerprint');
       }
       targets.push(target);
+      if (extensionTypes !== undefined) {
+        const expected = renderExtensionDeclarations({ declarations: target.extensionDeclarations ?? [] });
+        const relative = `profiles/${profile}/${variant}/extensions.d.ts`;
+        await requireFiles({ files, names: [relative] });
+        if (expected !== extensionTypes || await readFile(join(directory, relative), 'utf8') !== expected) {
+          throw new Error('Target extension types differ from public compiler declarations');
+        }
+      }
       for (const extensionId of ['model-graph-v1', 'webgpu-q8-diagnostic-v1']) {
         const prefix = `profiles/${profile}/${variant}/${extensionId === 'webgpu-q8-diagnostic-v1' ? 'q8-diagnostic-v1' : extensionId}`;
         const extension = target.extensions?.[extensionId];
@@ -279,6 +302,8 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
         if ([extension.versionExport, extension.schemaHashExport, ...extension.functions.map(fn => fn.export)].some(name => !target.exports.includes(name))) {
           throw new Error('Optional boundary declaration names an uncompiled export');
         }
+        const declaration = target.extensionDeclarations?.find(value => value.extensionId === extensionId);
+        assertSame({ actual: declaration, expected: { extensionId, functions: extension.functions }, message: 'Implemented extension differs from its public compiler declaration' });
         await requireFiles({ files, names: [prefix + '.schema.json', prefix + '.functions.d.ts'] });
         assertSame({ actual: input.sidecars.get(prefix), expected: { ...extension, schemaSha256: target.schemaSha256 }, message: 'Optional boundary sidecar differs from compiled declaration' });
         if (await readFile(join(directory, prefix + '.functions.d.ts'), 'utf8') !== renderExtensionTypes({ extension })) {

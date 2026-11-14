@@ -17,6 +17,7 @@ provenance. Applications choose a profile and create each native module separate
 | `browser-inference-core/<runtime>/profiles/<profile>/<variant>/core.wasm` | Matching WebAssembly binary |
 | `browser-inference-core/llama-cpp/profiles/<profile>/<variant>/model-graph-v1.functions` | Synchronous model graph extension declarations |
 | `browser-inference-core/llama-cpp/profiles/<profile>/<variant>/q8-diagnostic-v1.functions` | Optional profiling-target diagnostic declarations |
+| `browser-inference-core/llama-cpp/api/extensions` | Always available ModelGraphNativeExports and Q8DiagnosticFunctions types; check the target capability before calling |
 | `browser-inference-core/manifest.json` | Complete package identities and links to each runtime manifest |
 
 Replace `<runtime>` with `llama-cpp` or `stable-diffusion-cpp`. Select an actual

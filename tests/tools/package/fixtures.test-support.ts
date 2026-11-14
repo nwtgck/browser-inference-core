@@ -2,13 +2,13 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { artifactDirectories } from '#tools/shared/contracts';
-import { decodeAbiSchema, type RuntimeName, type AbiSchema, type AbiExtension, type PatchReceipt, type FileEntry } from '#dto/shared';
+import { decodeAbiSchema, type RuntimeName, type AbiSchema, type AbiExtension, type AbiExtensionDeclaration, type PatchReceipt, type FileEntry } from '#dto/shared';
 import { decodeLlamaManifest, decodeLlamaProvenance, type LlamaProvenance, type LlamaManifest } from '#dto/llama-cpp';
 import { decodeStableDiffusionManifest, decodeStableDiffusionProvenance, type StableDiffusionProvenance, type StableDiffusionManifest, type Upstreams } from '#dto/stable-diffusion-cpp';
 import type { RuntimeManifest } from '#tools/package/runtime';
 import { fileIdentity } from '#tools/shared/files';
 import { abiSchemaFingerprint, assembleAbiCatalog, renderFunctionTypes, renderFunctionModule, renderSchemaModule } from '#tools/abi/schema';
-import { renderModuleTypes, renderExtensionTypes } from '#tools/abi/generate';
+import { renderModuleTypes, renderExtensionTypes, renderExtensionDeclarations } from '#tools/abi/generate';
 import { assembleRuntimePackage } from '#tools/package/assemble-runtime';
 import { embeddedNotices } from '#tools/package/licenses';
 import { verifyRuntimeInput as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
@@ -56,13 +56,22 @@ export function fixtureAbi({ runtime, memory64, gpuProfile }: { runtime: Runtime
   const schema: AbiSchema = { abiVersion: 3, runtime, pointerRepresentation: 'bigint_native', pointerBytes: memory64 ? 8 : 4, schemaSha256: '0'.repeat(64), functions: [{ name, export: '_' + name, returnType: 'uint32_t', returnKind: 'unsigned', abiType: { kind: 'integer', bits: 32, signed: false }, parameters: [], bridge: false }], records: [], callbacks: [], constants: runtime === 'llama-cpp' ? [] : ['SD_TYPE_BF16'], constantValues: runtime === 'llama-cpp' ? {} : { SD_TYPE_BF16: '30' }, excluded: [], exports: ['_' + name], suspendingExports: [], callbackMetadata: { version: 2, getters: [] }, ...(runtime === 'stable-diffusion-cpp' ? { capabilities: { ggufFileOffsetBits: 64, safetensorsFileOffsetBits: 64, callerOwnedRandomAccess: 1, upstreamApi: 1, ggufShards: 1, ggufOriginalShapes: 1, bf16WeightRetention: 1, modelIoMask: 7 } } : {}) };
   if (runtime === 'llama-cpp') {
     const extensions: Record<string, AbiExtension> = {};
-    for (const extensionId of ['model-graph-v1', ...(gpuProfile ? ['webgpu-q8-diagnostic-v1'] : [])]) {
-      extensions[extensionId] = { extensionId, version: 1, abiVersion: 1, baseAbiVersion: 3, pointerRepresentation: 'bigint_u64', suspension: 'none', versionExport: '_' + name, schemaHashExport: '_' + name, functions: schema.functions, records: [], constants: [], constantValues: {} };
-      if (extensionId === 'webgpu-q8-diagnostic-v1') {
-        const run = { ...schema.functions[0]!, name: 'fixture_run_v1', export: '_fixture_run_v1' };
-        extensions[extensionId]!.functions = [...schema.functions, run];
-        schema.exports.push(run.export);
-      }
+    const graph: AbiExtension = { extensionId: 'model-graph-v1', version: 1, abiVersion: 1, baseAbiVersion: 3, pointerRepresentation: 'bigint_u64', suspension: 'none', versionExport: '_' + name, schemaHashExport: '_' + name, functions: schema.functions, records: [], constants: [], constantValues: {} };
+    extensions[graph.extensionId] = graph;
+    const pointer = { cType: 'uint64_t', kind: 'u64' as const, abiType: { kind: 'integer' as const, bits: 64, signed: false } };
+    const diagnostic: AbiExtensionDeclaration = {
+      extensionId: 'webgpu-q8-diagnostic-v1',
+      functions: [
+        { name: 'fixture_q8_version', export: '_fixture_q8_version', returnType: 'uint32_t', returnKind: 'unsigned', abiType: { kind: 'integer', bits: 32, signed: false }, parameters: [{ name: 'backend', ...pointer }], bridge: false },
+        { name: 'fixture_q8_run_v1', export: '_fixture_q8_run_v1', returnType: 'int32_t', returnKind: 'signed', abiType: { kind: 'integer', bits: 32, signed: true }, parameters: [...['backend', 'dst', 'request', 'report'].map(name => ({ name, ...pointer })), { name: 'report_capacity', cType: 'uint32_t', kind: 'unsigned', abiType: { kind: 'integer', bits: 32, signed: false } }], bridge: false },
+      ],
+    };
+    schema.extensionDeclarations = [{ extensionId: graph.extensionId, functions: graph.functions }, diagnostic];
+    if (gpuProfile) {
+      const extension: AbiExtension = { ...graph, ...diagnostic, suspension: 'jspi', versionExport: '_fixture_q8_version' };
+      extensions[extension.extensionId] = extension;
+      schema.exports.push(...extension.functions.map(fn => fn.export));
+      schema.suspendingExports.push('fixture_q8_run_v1');
     }
     schema.extensions = extensions;
   }
@@ -120,6 +129,9 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
         await write({ path: join(build, 'runtime/module-options.d.ts'), data: await readFile(join(sourceRoot, 'runtimes/stable-diffusion-cpp/bindings/module-options.d.ts')) });
       }
       await write({ path: join(build, 'runtime/core.wasm'), data: fixtureWasm({ names: schema.exports.map(name => name.slice(1)) }) });
+      if (runtime === 'llama-cpp') {
+        await write({ path: join(build, 'runtime/extensions.d.ts'), data: renderExtensionDeclarations({ declarations: schema.extensionDeclarations ?? [] }) });
+      }
       for (const extension of Object.values(schema.extensions ?? {})) {
         const name = extension.extensionId === 'webgpu-q8-diagnostic-v1' ? 'q8-diagnostic-v1' : extension.extensionId;
         await write({ path: join(build, 'runtime', name + '.schema.json'), data: JSON.stringify({ ...extension, schemaSha256: schema.schemaSha256 }) });

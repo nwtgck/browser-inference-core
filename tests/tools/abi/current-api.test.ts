@@ -88,6 +88,29 @@ test('actual llama metadata preserves current multimodal, batch, callback and re
   assert.ok(records.get('mtmd_helper_gen_audio_inp')?.fields.some(field => field.name === 'speaker_ref'));
   assert.ok(records.get('mtmd_helper_gen_audio_inp')?.fields.some(field => field.name === 'temp' && field.cType === 'float'));
   assert.ok(schema.extensions?.['model-graph-v1']);
+  const declarations = schema.extensionDeclarations;
+  assert.ok(declarations);
+  assert.deepEqual(declarations.map(value => value.extensionId).sort(), ['model-graph-v1', 'webgpu-q8-diagnostic-v1']);
+  const diagnostic = declarations.find(value => value.extensionId === 'webgpu-q8-diagnostic-v1');
+  assert.ok(diagnostic);
+  assert.equal(diagnostic.functions.find(fn => fn.name.endsWith('_version'))?.parameters[0]?.kind, 'u64');
+  const run = diagnostic.functions.find(fn => fn.name.endsWith('_run_v1'));
+  assert.ok(run);
+  assert.deepEqual(run.parameters.map(parameter => parameter.kind), ['u64', 'u64', 'u64', 'u64', 'unsigned']);
+  assert.ok(!schema.records.some(record => record.name.startsWith('ggml_webgpu_q8_diagnostic_')));
+  assert.ok(!schema.constants.some(name => name.startsWith('GGML_WEBGPU_Q8_DIAGNOSTIC_')));
+  assert.ok(!schema.callbacks.some(callback => callback.name.startsWith('ggml_backend_webgpu_q8_diagnostic_')));
+  const implemented = schema.extensions['webgpu-q8-diagnostic-v1'];
+  if (implemented) {
+    assert.deepEqual(implemented.functions, diagnostic.functions);
+    for (const fn of implemented.functions) {
+      assert.ok(schema.exports.includes(fn.export));
+    }
+    assert.ok(schema.suspendingExports.includes(run.export.slice(1)));
+  } else {
+    assert.ok(!schema.exports.some(name => name.startsWith('_lcb_webgpu_q8_diagnostic_')));
+    assert.ok(!schema.suspendingExports.some(name => name.startsWith('lcb_webgpu_q8_diagnostic_')));
+  }
 });
 
 test('actual image metadata preserves generation results, progress width and public GGML records', { skip: imageSchema === undefined }, async () => {

@@ -19,6 +19,7 @@ export function runtimeExports({ runtime, prefix }: { runtime: RuntimeName; pref
   };
   switch (runtime) {
   case 'llama-cpp':
+    exports['./api/extensions'] = { types: `${prefix}/api/extensions.d.ts` };
     for (const extension of ['model-graph-v1', 'q8-diagnostic-v1']) {
       exports[`./profiles/*/${extension}.schema.json`] = `${prefix}/profiles/*/${extension}.schema.json`;
       exports[`./profiles/*/${extension}.functions`] = { types: `${prefix}/profiles/*/${extension}.functions.d.ts` };

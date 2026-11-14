@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AbiExtension, AbiFunction, AbiSchema, RuntimeName } from '#dto/shared';
+import type { AbiExtension, AbiExtensionDeclaration, AbiFunction, AbiSchema, RuntimeName } from '#dto/shared';
 import { replaceFileUnchanged, withOutputDirectories } from '#tools/shared/output';
 import { isContained } from '#tools/shared/files';
 import { childNodes, compilerMacros, inspectAst, inspectLayouts, readCompilation, type AstEntry, type AstNode, type AstScope } from './clang.js';
@@ -79,15 +79,14 @@ function extension({ id, prefix, recordPrefix, declarations, entries }: { id: st
   };
 }
 
-export function renderExtensionTypes({ extension: value }: { extension: AbiExtension }): string {
+export function renderExtensionTypes({ extension: value }: { extension: AbiExtensionDeclaration }): string {
   if (value.extensionId === 'webgpu-q8-diagnostic-v1') {
     const version = value.functions.find((fn) => fn.name.endsWith('_version'));
     const run = value.functions.find((fn) => fn.name.endsWith('_run_v1'));
     if (!version || !run) {
       throw new Error('Incomplete diagnostic declaration');
     }
-    const type = ({ parameter }: { parameter: AbiFunction['parameters'][number] }) => ['pointer', 'record', 'u64', 'i64'].includes(parameter.kind) ? 'bigint' : 'number';
-    return ['/** Derived from the compiled optional diagnostic declaration. */', 'export interface Q8DiagnosticFunctions {', `  version(${version.parameters.map((parameter) => `${parameter.name}: ${type({ parameter })}`).join(', ')}): number;`, `  runV1(${run.parameters.map((parameter) => `${parameter.name}: ${type({ parameter })}`).join(', ')}): Promise<number>;`, '}', ''].join('\n');
+    return ['/** C diagnostic contract; implementation availability is recorded separately. */', 'export interface Q8DiagnosticFunctions {', `  version(${version.parameters.map((parameter) => `${parameter.name}: ${jsType({ kind: parameter.kind })}`).join(', ')}): ${jsType({ kind: version.returnKind })};`, `  runV1(${run.parameters.map((parameter) => `${parameter.name}: ${jsType({ kind: parameter.kind })}`).join(', ')}): Promise<${jsType({ kind: run.returnKind })}>;`, '}', ''].join('\n');
   }
   const lines = ['/** Synchronous native extension, derived from its real declarations. */', 'export interface ModelGraphNativeExports {'];
   for (const fn of value.functions) {
@@ -96,6 +95,15 @@ export function renderExtensionTypes({ extension: value }: { extension: AbiExten
   }
   lines.push('}', '');
   return lines.join('\n');
+}
+
+/** These contracts can be imported even when the target omits an implementation. */
+export function renderExtensionDeclarations({ declarations }: { declarations: readonly AbiExtensionDeclaration[] }): string {
+  const ids = ['model-graph-v1', 'webgpu-q8-diagnostic-v1'];
+  if (declarations.length !== ids.length || ids.some(id => declarations.filter(value => value.extensionId === id).length !== 1)) {
+    throw new Error('Incomplete public extension declarations');
+  }
+  return [...declarations].sort((left, right) => left.extensionId.localeCompare(right.extensionId)).map(extension => renderExtensionTypes({ extension })).join('\n');
 }
 
 export function renderModuleTypes({ schema }: { schema: AbiSchema }): string {
@@ -165,6 +173,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
     throw new Error('No public functions found in the actual target header set');
   }
   const extensions: Record<string, AbiExtension> = {};
+  const extensionDeclarations: AbiExtensionDeclaration[] = [];
   const helpers = ['_bicore_abi_version', '_bicore_schema_hash', '_bicore_pointer_bytes', '_malloc', '_free'];
   let moduleTypes: string | undefined;
   switch (policy.runtime) {
@@ -174,7 +183,12 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
       extension({ id: 'webgpu-q8-diagnostic-v1', prefix: 'lcb_webgpu_q8_diagnostic_', recordPrefix: 'ggml_webgpu_q8_diagnostic_', declarations, entries }),
     ]) {
       if (value) {
-        extensions[value.extensionId] = value;
+        extensionDeclarations.push({ extensionId: value.extensionId, functions: value.functions });
+        // The header declares a contract on every target. The actual target's
+        // compile definition accompanies the Q8 implementation source in CMake.
+        if (value.extensionId !== 'webgpu-q8-diagnostic-v1' || macros.has('LCB_WEBGPU_Q8_DIAGNOSTIC')) {
+          extensions[value.extensionId] = value;
+        }
       }
     }
     break;
@@ -254,7 +268,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
     schemaSha256: '0'.repeat(64),
     functions: baseFunctions,
     records: recordList,
-    callbacks: [...declarations.callbacks.values()].filter((callback) => /^(?:ggml|gguf|llama|mtmd|sd)_/u.test(callback.name)).sort((left, right) => left.name.localeCompare(right.name)),
+    callbacks: [...declarations.callbacks.values()].filter((callback) => /^(?:ggml|gguf|llama|mtmd|sd)_/u.test(callback.name) && !callback.name.startsWith('ggml_backend_webgpu_q8_diagnostic_')).sort((left, right) => left.name.localeCompare(right.name)),
     constants: Object.keys(constantValues),
     constantValues,
     excluded: [...excluded].map(([name, reason]) => ({ name, reason })).sort((left, right) => left.name.localeCompare(right.name)),
@@ -265,6 +279,15 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
     extensions,
     ...(testFunctions.length ? { testFunctions } : {}),
   };
+  switch (policy.runtime) {
+  case 'llama-cpp': schema.extensionDeclarations = extensionDeclarations;
+    break;
+  case 'stable-diffusion-cpp': break;
+  default: {
+    const exhaustive: never = policy.runtime;
+    throw new Error(String(exhaustive));
+  }
+  }
   schema.schemaSha256 = abiSchemaFingerprint({ schema });
   await withOutputDirectories({
     destinations: [output],
@@ -282,6 +305,9 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
       ]);
       if (moduleTypes) {
         files.set(moduleTypes, renderModuleTypes({ schema }));
+      }
+      if (extensionDeclarations.length) {
+        files.set('extensions.d.ts', renderExtensionDeclarations({ declarations: extensionDeclarations }));
       }
       for (const [name, value] of Object.entries(extensions)) {
         const prefix = name === 'webgpu-q8-diagnostic-v1' ? 'q8-diagnostic-v1' : name;
@@ -309,6 +335,9 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
   if (runtimeDirectory !== undefined) {
     await mkdir(runtimeDirectory, { recursive: true });
     await replaceFileUnchanged({ candidate: path.join(output, 'schema.json'), output: path.join(runtimeDirectory, 'abi.json') });
+    if (extensionDeclarations.length) {
+      await replaceFileUnchanged({ candidate: path.join(output, 'extensions.d.ts'), output: path.join(runtimeDirectory, 'extensions.d.ts') });
+    }
     if (moduleTypes) {
       await replaceFileUnchanged({ candidate: path.join(output, moduleTypes), output: path.join(runtimeDirectory, moduleTypes) });
       await replaceFileUnchanged({ candidate: path.join(output, 'module-options.d.ts'), output: path.join(runtimeDirectory, 'module-options.d.ts') });

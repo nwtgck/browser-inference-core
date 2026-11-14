@@ -8,9 +8,7 @@
 #include "mtmd-vision-bf16.h"
 #include "model-graph.h"
 #include "metadata.h"
-#ifdef LCB_WEBGPU_Q8_DIAGNOSTIC
 #include "webgpu-q8-diagnostic.h"
-#endif
 #include <stdint.h>
 #include <stddef.h>
 #include <errno.h>
@@ -143,10 +141,8 @@ enum class BicoreRecordLayouts : uint64_t {
     BICORE_RECORD(mtmd_input_part),
     BICORE_RECORD(mtmd_input_text),
     BICORE_RECORD(mtmd_video_config),
-#ifdef LCB_WEBGPU_Q8_DIAGNOSTIC
     BICORE_RECORD(ggml_webgpu_q8_diagnostic_request_v1),
     BICORE_RECORD(ggml_webgpu_q8_diagnostic_report_v1),
-#endif
 };
 #undef BICORE_RECORD
 

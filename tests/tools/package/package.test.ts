@@ -275,6 +275,24 @@ test('optional boundary declarations and types require their compiled exports', 
   await assert.rejects(validate({ directory: fixture.directory }), /uncompiled export/u);
 });
 
+for (const relative of ['api/extensions.d.ts', 'profiles/cpu-wasm32/browser/extensions.d.ts']) {
+  test(`extension types remain bound to compiler declarations: ${relative}`, async () => {
+    await using fixture = await packageFixture();
+    const path = join(fixture.directory, artifactDirectories['llama-cpp'], relative);
+    await writeFile(path, (await readFile(path, 'utf8')).replace('Promise<number>', 'number'));
+    await rehashRuntime({ directory: fixture.directory, runtime: 'llama-cpp', change: () => {} });
+    await assert.rejects(validate({ directory: fixture.directory }), /extension types differ/u);
+  });
+}
+
+test('the permanent extension type entry is required without a diagnostic profile', async () => {
+  await using fixture = await packageFixture();
+  const path = join(fixture.directory, artifactDirectories['llama-cpp'], 'api/extensions.d.ts');
+  await rm(path);
+  await rehashRuntime({ directory: fixture.directory, runtime: 'llama-cpp', change: () => {} });
+  await assert.rejects(validate({ directory: fixture.directory }), /Missing.*extensions[.]d[.]ts/u);
+});
+
 test('Q8 diagnostic metadata cannot be advertised by a non-diagnostic profile', async () => {
   await using fixture = await packageFixture();
   await rewriteLlamaTargetMetadata({
@@ -284,7 +302,7 @@ test('Q8 diagnostic metadata cannot be advertised by a non-diagnostic profile', 
     schema.extensions!['webgpu-q8-diagnostic-v1'] = { ...base, extensionId: 'webgpu-q8-diagnostic-v1', suspension: 'jspi', functions: [...base.functions, { ...base.functions[0]!, name: 'fixture_run_v1' }] };
     },
   });
-  await assert.rejects(validate({ directory: fixture.directory }), /Q8 diagnostic boundary differs/u);
+  await assert.rejects(validate({ directory: fixture.directory }), /Implemented extension differs|Q8 diagnostic boundary differs/u);
 });
 
 test('unrelated saved metadata is preserved without becoming another payload identity', async () => {

@@ -247,8 +247,8 @@ endif()
 if(LCB_WEBGPU AND GGML_WEBGPU_GPU_PROFILE)
     target_sources(core PRIVATE native/diagnostics/webgpu-q8-diagnostic.cpp)
     target_compile_definitions(core PRIVATE LCB_WEBGPU_Q8_DIAGNOSTIC=1)
-    target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/diagnostics")
 endif()
+target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/diagnostics")
 
 # The added header is consumed only by the changed chat TU and leaf bindings.
 target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/model-graph")

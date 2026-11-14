@@ -56,6 +56,8 @@ export const abiExtensionSchema = z.object({
   constantValues: z.record(z.string(), z.string()),
 });
 export type AbiExtension = z.infer<typeof abiExtensionSchema>;
+const extensionDeclarationSchema = abiExtensionSchema.pick({ extensionId: true, functions: true });
+export type AbiExtensionDeclaration = z.infer<typeof extensionDeclarationSchema>;
 export const abiSchemaSchema = z.object({
   abiVersion: z.literal(3),
   runtime: runtimeNameSchema,
@@ -74,6 +76,7 @@ export const abiSchemaSchema = z.object({
   callbackMetadata: z.object({ version: z.literal(2), getters: z.array(z.object({ name: z.string(), export: z.string() })) }),
   capabilities: z.record(z.string(), z.number()).optional(),
   extensions: z.record(z.string(), abiExtensionSchema).optional(),
+  extensionDeclarations: z.array(extensionDeclarationSchema).optional(),
 });
 export type AbiSchema = z.infer<typeof abiSchemaSchema>;
 const abiCatalogSchema = abiSchemaSchema.extend({ targets: z.record(z.string(), abiSchemaSchema) });
