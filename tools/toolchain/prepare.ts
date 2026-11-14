@@ -88,7 +88,7 @@ export async function prepareDawn({ toolsRoot, dawnTag, dawnSha256 }: { toolsRoo
         if (!output) {
           throw new Error('Missing Dawn output');
         }
-        const unpack = join(temporary, 'unpacked');
+        const unpack = join(dirname(output), 'unpacked');
         await mkdir(unpack);
         await runProcess({ command: 'unzip', args: ['-q', archive, '-d', unpack], cwd: temporary });
         const packageRoot = await directory({ path: join(unpack, 'emdawnwebgpu_pkg') });
