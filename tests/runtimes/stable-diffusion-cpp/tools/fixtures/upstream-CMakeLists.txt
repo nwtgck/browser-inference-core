@@ -1,0 +1,9 @@
+find_program(GIT_EXE NAMES git)
+if(GIT_EXE)
+    message(FATAL_ERROR "Prepared source discovered an enclosing Git repository")
+endif()
+file(WRITE "${CMAKE_BINARY_DIR}/upstream-identities.txt"
+    "${SDCPP_BUILD_COMMIT};${GGML_BUILD_COMMIT};${SDCPP_BUILD_VERSION}")
+add_library(stable-diffusion STATIC configure-only.cpp)
+add_library(ggml-webgpu STATIC configure-only.cpp)
+set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "-exceptions")

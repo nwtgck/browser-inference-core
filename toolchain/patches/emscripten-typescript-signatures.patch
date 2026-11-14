@@ -1,0 +1,40 @@
+--- a/tools/emscripten.py
++++ b/tools/emscripten.py
+@@ -701,9 +701,18 @@
+     should_export = settings.EXPORT_KEEPALIVE and mangled in settings.EXPORTED_FUNCTIONS
+     if not should_export:
+       continue
++    # JS generation has already populated native_sigs with explicit signature
++    # conversions, sanitizer helpers and dynCalls. Match those same wrappers,
++    # rather than exposing the underlying memory64 i64 signature.
++    conversion = native_sigs.get(name) if settings.MEMORY64 else None
+     arguments = []
+     for index, type in enumerate(functype.params):
+-      arguments.append(f"_{index}: {type_to_ts_type(type)}")
++      ts_type = type_to_ts_type(type)
++      if conversion and conversion[index + 1] == 'p':
++        ts_type = 'number'
++      elif conversion and conversion[index + 1] == 'P':
++        ts_type = 'number | undefined'
++      arguments.append(f"_{index}: {ts_type}")
+     out += f'  {mangled}({", ".join(arguments)}): '
+     if not functype.returns:
+       ret_ts_type = 'void'
+@@ -712,6 +721,8 @@
+     else:
+       tuple_types = [type_to_ts_type(t) for t in functype.returns]
+       ret_ts_type = f'[{", ".join(tuple_types)}]'
++    if conversion and conversion[0] == 'p':
++      ret_ts_type = 'number'
+     if settings.ASYNCIFY == 2 and any(fnmatch.fnmatch(name, pat) for pat in settings.ASYNCIFY_EXPORTS):
+       ret_ts_type = f'Promise<{ret_ts_type}>'
+     out += f'{ret_ts_type};\n'
+@@ -773,7 +784,7 @@
+ def type_to_ts_type(type):
+   return {
+     webassembly.Type.I32: 'number',
+-    webassembly.Type.I64: 'BigInt',
++    webassembly.Type.I64: 'bigint',
+     webassembly.Type.F32: 'number',
+     webassembly.Type.F64: 'number',
+     webassembly.Type.EXTERNREF: 'any',

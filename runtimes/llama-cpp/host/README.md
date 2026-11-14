@@ -1,0 +1,66 @@
+# llama.cpp host helpers
+
+These files are always shipped with the artifact as tested reference code for
+application TypeScript implementations. Importing these helpers is optional;
+changing application host code does not require rebuilding Wasm.
+
+```js
+import { createCore } from 'browser-inference-core/llama-cpp/host';
+const core = await createCore({ profile: 'cpu-wasm32' });
+await core.api.llama_backend_init();
+console.log(core.readUtf8(await core.api.llama_version()));
+await core.api.llama_backend_free();
+```
+
+`index.mjs` loads a profile and variant; `bindings.mjs` demonstrates generated C schema checks,
+record access, memory helpers, and serialized Promise calls; `read-only-file.mjs`
+adapts synchronous range reads to Emscripten's filesystem. None owns a model,
+conversation, tool loop, or worker. CPU Chromium tests use these shipped files for
+synthetic model loading/decode/state operations; host tests cover the helpers.
+
+The generated low-level surface includes public `ggml.h`, `ggml-alloc.h`,
+`ggml-backend.h` and `gguf.h` functions, as well as `ggml-cpu.h` and `ggml-opt.h`
+declarations included transitively by `llama.h`. Named public record layouts and
+selected integer macro constants are included. Scalar and pointer functions use
+their original C exports; by-value records use ordinary `bicore_` bridges.
+Deprecated, variadic and
+unavailable declarations are listed with reasons in `schema.excluded`.
+`ggml_threadpool_get_n_threads` is declared but has no implementation in this
+upstream pin, so it is not exported; the implemented threadpool APIs remain.
+Callback pointers are raw native addresses, so callers must manage their
+lifetime and ABI. A callback returning an aggregate requires a native thunk
+matching the compiler's callback ABI; scalar JS callback signatures do not
+represent a structure return. Callback declarations are included in the target
+metadata.
+
+The default `variant: 'browser'` omits Node.js support and Emscripten assertions.
+Use `createCore({ profile: 'cpu-wasm32', variant: 'test' })` for Node.js tests;
+that variant retains both. The loader selects JavaScript and Wasm from the same
+`profiles/<profile>/<variant>/` directory. It does not detect an environment and
+switch variants automatically. Keep these files together when copying artifacts.
+All `browser` profiles annotate the generated sibling Wasm URL with
+`/* @vite-ignore */`. Vite therefore leaves this URL for the host instead of
+automatically copying its Wasm asset. Deploy the matching file explicitly or
+pass `moduleOptions.wasmBinary` / `moduleOptions.locateFile`; the runtime still
+supports its existing URL fallback. `test` variants are unchanged. See the
+runtime's `browser-host.md` guide for the full contract.
+
+`webgpu-wasm32-asyncify` provides WebGPU without memory64 or JSPI. The loader
+selects its `ccall(..., { async: true })` completion path automatically. When
+using `attachCore` directly, pass `{ suspension: 'asyncify' }` as its third argument.
+Keep native calls serialized until the returned Promise settles; a raw Asyncify
+export can return while the GPU operation is still pending. Callback functions
+remain synchronous. The 32-bit profile's linear-memory ceiling is 4 GiB; actual
+model capacity also depends on device limits and native staging allocations.
+
+`webgpu-wasm32-jspi` uses the same 4 GiB linear-memory ceiling without requiring
+memory64. It requires JSPI instead of Asyncify; attach it with
+`{ suspension: 'jspi' }`, as for `webgpu-wasm64-jspi`. Public pointer and
+64-bit arguments remain `bigint` on both pointer widths. The shared caller
+converts them to the actual native wire representation. It selects layout and
+constants from the catalog target matching the compiled fingerprint. The application selects
+an explicit profile after checking capabilities; the example performs no fallback.
+
+Alternatively import `browser-inference-core/llama-cpp/profiles/cpu-wasm32/browser/core.mjs` directly.
+Its Embind chat types and C exports work without these helpers. See the artifact's
+`chat-and-multimodal.md` guide for ownership and limitations.

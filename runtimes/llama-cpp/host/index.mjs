@@ -1,0 +1,29 @@
+import schema from '../api/schema.mjs';
+import { createLowLevelFunctions } from '../api/functions.mjs';
+import { attachCore as attachBindings } from './bindings.mjs';
+export { createAbiCaller, selectAbiSchema, toNativePointer, fromNativePointer, toEmscriptenPointer, fromEmscriptenPointer } from './abi.mjs';
+export { mountReadOnlyFile } from './read-only-file.mjs';
+export { schema };
+
+export function attachCore(module, metadata, options = {}) {
+  return attachBindings(module, metadata, { ...options, createApi: createLowLevelFunctions });
+}
+
+/** No automatic download, model selection, fallback, or Worker creation. */
+export async function createCore({ profile, variant = 'browser', baseURL = new URL('../profiles/', import.meta.url), moduleOptions = {} } = {}) {
+  if (!['cpu-wasm32', 'webgpu-wasm64-jspi-gpu-profile', 'webgpu-wasm32-asyncify', 'webgpu-wasm32-jspi', 'webgpu-wasm64-jspi'].includes(profile)) {
+    throw new TypeError('Select an explicit supported build profile');
+  }
+  if (!['browser', 'test'].includes(variant)) {
+    throw new TypeError('Select browser or test as the runtime variant');
+  }
+  const root = new URL(`${profile}/${variant}/`, baseURL);
+  const { default: factory } = await import(new URL('core.mjs', root).href);
+  const module = await factory({
+    locateFile: path => new URL(path, root).href,
+    ...moduleOptions,
+  });
+  return attachCore(module, schema, {
+    suspension: profile === 'webgpu-wasm32-asyncify' ? 'asyncify' : profile.includes('-jspi') ? 'jspi' : 'direct',
+  });
+}

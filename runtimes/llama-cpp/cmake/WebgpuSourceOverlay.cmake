@@ -1,0 +1,16 @@
+if(NOT LCB_WEBGPU OR NOT TARGET ggml-webgpu OR NOT TARGET ggml-base)
+    message(FATAL_ERROR "Prepared WebGPU source requires its upstream targets")
+endif()
+if(NOT EMDAWNWEBGPU_DIR)
+    message(FATAL_ERROR "WebGPU requires the prepared pinned Dawn package")
+endif()
+set(LCB_WEBGPU_HEADERS "${LCB_LLAMA_SOURCE}/ggml/src/ggml-webgpu")
+if(NOT EXISTS "${LCB_WEBGPU_HEADERS}/ggml-webgpu-aligned-word-load-shaders.hpp")
+    message(FATAL_ERROR "Missing prepared canonical word-loader shader header")
+endif()
+target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
+target_include_directories(ggml-webgpu PRIVATE "${LCB_WEBGPU_HEADERS}")
+# The context consumes the checkpoint batch interface owned by ggml's prepared
+# source tree. Private include paths do not propagate from ggml-base to llama.
+target_include_directories(ggml-base PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src")
+target_include_directories(llama PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src")

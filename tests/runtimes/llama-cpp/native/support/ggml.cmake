@@ -1,0 +1,8 @@
+if(NOT TARGET ggml)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    foreach(option NATIVE METAL ACCELERATE OPENMP BLAS BUILD_TESTS BUILD_EXAMPLES)
+        set(GGML_${option} OFF CACHE BOOL "" FORCE)
+    endforeach()
+    set(GGML_CPU ON CACHE BOOL "" FORCE)
+    add_subdirectory("${LCB_PREPARED_SOURCE}/ggml" "${CMAKE_CURRENT_BINARY_DIR}/ggml" EXCLUDE_FROM_ALL)
+endif()

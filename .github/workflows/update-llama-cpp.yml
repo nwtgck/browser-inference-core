@@ -22,7 +22,7 @@ on:
 # jobs.update.permissions overrides it with the write access needed for git push.
 defaults:
   run:
-    working-directory: llama-cpp
+    working-directory: .
 
 permissions:
   contents: read
@@ -37,29 +37,297 @@ jobs:
     # Branch preparation only: no PR writes or workflow-dispatch permission.
     permissions:
       contents: write
+    env:
+      TARGET: ${{ inputs.target }}
+      CUSTOM_REF: ${{ inputs.custom_ref }}
+      BASE: ${{ github.ref_name }}
+      ALLOW_NON_FAST_FORWARD: ${{ inputs.allow_non_fast_forward }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          submodules: recursive
+          submodules: false
           persist-credentials: false
-      - name: Resolve upstream, push the candidate branch, and show the PR form link
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22.16.0
+      - name: Acquire tooling dependencies (online)
+        run: |
+          printf 'UPDATE_STATE=%s/upstream-update\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Acquire offline automation image (online)
+        shell: bash
+        run: |
+
+          # This context contains only the inline image recipe, never repository code.
+          image_context="$(mktemp -d "$RUNNER_TEMP/bicore-automation.XXXXXX")"
+          cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
+          FROM node:22.16.0-bookworm AS node
+          FROM ubuntu:24.04
+          COPY --from=node /usr/local/ /usr/local/
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 jq unzip patch \
+              && rm -rf /var/lib/apt/lists/*
+          BICORE_DOCKERFILE
+          docker build --pull --tag "bicore-automation:$GITHUB_JOB" "$image_context"
+          printf 'BIC_OFFLINE_IMAGE=bicore-automation:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
+      - name: Emit the current checkout tooling
+        id: request
+        shell: bash
+        run: |
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            npm run tooling:build
+            node build/tooling/tools/automation/cli.js upstream-validate --checkout-root "$GITHUB_WORKSPACE" \
+              --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+              --custom-ref "$CUSTOM_REF"
+          OFFLINE
+      - name: Acquire the current pinned upstream (online)
+        shell: bash
+        run: |
+
+          git submodule update --init --recursive --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
+      - name: Acquire the requested release metadata (online)
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ inputs.target }}
-          CUSTOM_REF: ${{ inputs.custom_ref }}
-          BASE: ${{ github.ref_name }}
-          ALLOW_NON_FAST_FORWARD: ${{ inputs.allow_non_fast_forward }}
+        run: |
+
+          # The stable endpoint must really be a published vX.Y.Z release. The released
+          # nightly is the first published bNNNN prerelease in the service's list order.
+          state="$UPDATE_STATE"
+          mkdir -p "$state"
+          if [[ "$TARGET" == latest ]]; then
+            gh api --hostname github.com --method GET repos/ggml-org/llama.cpp/releases/latest > "$state/releases.json"
+          elif [[ "$TARGET" == latest-unstable ]]; then
+            printf '[]\n' > "$state/releases.json"
+            completed=false
+            for page in $(seq 1 100); do
+              gh api --hostname github.com --method GET repos/ggml-org/llama.cpp/releases \
+                -f per_page=100 -f page="$page" > "$state/release-page.json"
+              jq -e 'type == "array"' "$state/release-page.json" > /dev/null
+              jq -s '.[0] + .[1]' "$state/releases.json" "$state/release-page.json" > "$state/releases-next.json"
+              mv "$state/releases-next.json" "$state/releases.json"
+              if jq -e 'any(.[]; .draft == false and .prerelease == true and (.published_at | type == "string" and length > 0) and (.tag_name | test("^b[0-9]+$")))' "$state/release-page.json" > /dev/null; then
+                completed=true
+                break
+              fi
+              if [[ "$(jq 'length' "$state/release-page.json")" -lt 100 ]]; then completed=true; break; fi
+            done
+            if [[ "$completed" != true ]]; then echo 'Release pagination limit exceeded.' >&2; exit 1; fi
+          fi
+      - name: Select the requested upstream ref
+        id: selection
+        shell: bash
+        env:
+          REQUEST_SOURCE: ${{ steps.request.outputs.source }}
+          REQUEST_PREVIOUS: ${{ steps.request.outputs.previous }}
+        run: |
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+            -e REQUEST_SOURCE -e REQUEST_PREVIOUS
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-select --checkout-root "$GITHUB_WORKSPACE" \
+              --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+              --custom-ref "$CUSTOM_REF" --releases "$UPDATE_STATE/releases.json" \
+              --expected-source "$REQUEST_SOURCE" --expected-previous "$REQUEST_PREVIOUS"
+          OFFLINE
+      - name: Fetch the exact upstream and comparison (online)
+        id: resolution
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          PREVIOUS_COMMIT: ${{ steps.selection.outputs.previous }}
+        run: |
+
+          # The validated ref is data, never an endpoint or shell expression. Git peels
+          # annotated tags locally after fetching; an unqualified tag/branch ambiguity fails.
+          state="$UPDATE_STATE"
+          upstream="$GITHUB_WORKSPACE/runtimes/llama-cpp/vendor/llama.cpp"
+          remote=https://github.com/ggml-org/llama.cpp.git
+          if [[ "$SELECTED_REF" =~ ^[0-9a-f]{40}$ || "$SELECTED_REF" == refs/tags/* || "$SELECTED_REF" == refs/heads/* ]]; then
+            fetch_ref="$SELECTED_REF"
+          else
+            git -C "$upstream" ls-remote --refs "$remote" "refs/tags/$SELECTED_REF" "refs/heads/$SELECTED_REF" > "$state/named-refs.txt"
+            awk '{print $2}' "$state/named-refs.txt" > "$state/ref-names.txt"
+            mapfile -t names < "$state/ref-names.txt"
+            if [[ "${#names[@]}" != 1 ]]; then echo 'Ref is missing or ambiguous; use refs/tags/... or refs/heads/...' >&2; exit 1; fi
+            fetch_ref="${names[0]}"
+            [[ "$fetch_ref" == "refs/tags/$SELECTED_REF" || "$fetch_ref" == "refs/heads/$SELECTED_REF" ]]
+          fi
+          git -C "$upstream" fetch --no-tags --depth=1 "$remote" "$fetch_ref"
+          commit="$(git -C "$upstream" rev-parse --verify 'FETCH_HEAD^{commit}')"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$SELECTED_REF" =~ ^[0-9a-f]{40}$ ]]; then test "$commit" = "$SELECTED_REF"; fi
+          printf 'ref=%s\ncommit=%s\n' "$SELECTED_REF" "$commit" >> "$GITHUB_OUTPUT"
+          if [[ "$PREVIOUS_COMMIT" != "$commit" ]]; then
+            gh api --hostname github.com --method GET "repos/ggml-org/llama.cpp/compare/$PREVIOUS_COMMIT...$commit" > "$state/comparison.json"
+          fi
+      - name: Plan the source-bound candidate branch
+        id: plan
+        shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
+        run: |
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-plan --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+              --comparison "$UPDATE_STATE/comparison.json"
+          OFFLINE
+      - name: Inspect the existing candidate branch (online)
+        id: existing
+        if: steps.plan.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.plan.outputs.branch }}
+        run: |
+
+          # Existing human repairs survive. ls-remote establishes existence only; the
+          # fetched tip is the immutable snapshot subsequently validated and reported.
+          state="$UPDATE_STATE"
+          remote="https://github.com/$GITHUB_REPOSITORY.git"
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          status=0
+          git ls-remote --exit-code --heads "$remote" "refs/heads/$BRANCH" > "$state/branch-probe.txt" || status=$?
+          [[ "$status" == 0 || "$status" == 2 ]]
+          if [[ -s "$state/branch-probe.txt" ]]; then
+            git fetch --no-tags --depth=1 "$remote" "refs/heads/$BRANCH"
+            commit="$(git rev-parse --verify FETCH_HEAD)"
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+            printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+            printf 'exists=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'exists=false\n' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check out the already fetched candidate source
+        if: steps.plan.outputs.changed == 'true' && steps.existing.outputs.exists == 'false'
+        shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
+          RELATION: ${{ steps.plan.outputs.relation }}
+        run: |
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-checkout --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" --relation "$RELATION"
+          OFFLINE
+      - name: Acquire the selected nested upstreams (online)
+        if: steps.plan.outputs.changed == 'true' && steps.existing.outputs.exists == 'false'
         shell: bash
         run: |
-          extra=()
-          if [[ "$ALLOW_NON_FAST_FORWARD" == "true" ]]; then
-            extra+=(--allow-non-fast-forward)
-          fi
-          python3 scripts/update_llama_cpp.py --target "$TARGET" --custom-ref "$CUSTOM_REF" --base "$BASE" "${extra[@]}"
+
+          git -C runtimes/llama-cpp/vendor/llama.cpp submodule update --init --recursive
+      - name: Validate or prepare the candidate commit
+        id: candidate
+        if: steps.plan.outputs.changed == 'true'
+        shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
+          RELATION: ${{ steps.plan.outputs.relation }}
+          EXISTING_COMMIT: ${{ steps.existing.outputs.commit }}
+        run: |
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-candidate --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+              --relation "$RELATION" --existing "$EXISTING_COMMIT"
+          OFFLINE
+      - name: Push the candidate branch (online)
+        id: push
+        if: steps.candidate.outputs.needs-push == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_COMMIT: ${{ steps.candidate.outputs.commit }}
+          BRANCH: ${{ steps.candidate.outputs.branch }}
+        run: |
+
+          # An ordinary push only. This token never creates a PR or dispatches a build.
+          # The human PR form in the report is the explicit handoff to the build workflow.
+          [[ "$CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          git push "https://github.com/$GITHUB_REPOSITORY.git" "$CANDIDATE_COMMIT:refs/heads/$BRANCH"
+      - name: Render the manual pull request handoff
+        if: always()
+        shell: bash
+        env:
+          PUSH_OUTCOME: ${{ steps.push.outcome }}
+          CANDIDATE_STATUS: ${{ steps.candidate.outputs.status }}
+          CHANGED: ${{ steps.plan.outputs.changed }}
+        run: |
+          {
+            printf '## llama.cpp update branch\n\n'
+            if [[ "$CANDIDATE_STATUS" == branch_exists ]]; then
+              cat "$UPDATE_STATE/handoff.md"
+            elif [[ "$PUSH_OUTCOME" == success ]]; then
+              printf '**Candidate branch push succeeded.**\n\n'
+              cat "$UPDATE_STATE/handoff.md"
+            elif [[ "$CHANGED" != false ]]; then
+              printf '**The candidate push did not complete.** Inspect the failed step and rerun to inspect any surviving branch.\n'
+            fi
+            if [[ -f "$UPDATE_STATE/details.md" ]]; then cat "$UPDATE_STATE/details.md"; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ -d "$UPDATE_STATE" ]]; then printf '%s\n' "$PUSH_OUTCOME" > "$UPDATE_STATE/push-outcome.txt"; fi
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: upstream-update-report
-          path: llama-cpp/build/upstream-update/
+          path: ${{ runner.temp }}/upstream-update/
           if-no-files-found: ignore
           retention-days: 14

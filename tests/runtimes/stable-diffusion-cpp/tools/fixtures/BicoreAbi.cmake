@@ -1,0 +1,5 @@
+function(bicore_add_abi)
+    cmake_parse_arguments(ABI "" "TARGET;RUNTIME;CHECKOUT_ROOT;COMPILE_ROOT;TOOLING_ROOT;NODE;OUTPUT;SD_SOURCE;GGML_SOURCE" "" ${ARGN})
+    file(WRITE "${CMAKE_BINARY_DIR}/abi-inputs.txt"
+        "${ABI_TARGET};${ABI_RUNTIME};${ABI_CHECKOUT_ROOT};${ABI_COMPILE_ROOT};${ABI_TOOLING_ROOT};${ABI_SD_SOURCE};${ABI_GGML_SOURCE}")
+endfunction()

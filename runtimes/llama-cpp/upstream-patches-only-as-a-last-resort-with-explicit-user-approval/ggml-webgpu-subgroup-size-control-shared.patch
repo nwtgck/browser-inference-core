@@ -1,0 +1,412 @@
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
+@@ -0,0 +1,364 @@
++#pragma once
++
++// Optional cold pipeline creation; callbacks own only independent CPU data.
++#include <webgpu/webgpu_cpp.h>
++
++#include <array>
++#include <atomic>
++#include <cstddef>
++#include <cstdint>
++#include <exception>
++#include <memory>
++#include <mutex>
++#include <utility>
++
++namespace ggml_webgpu_optional {
++
++enum class Outcome { ready, rejected, terminal };
++enum class Fatal {
++    none,
++    device_lost,
++    device_terminal,
++    host_exception,
++    invalid_future,
++    wait_failed,
++    callback_incomplete,
++    callback_failed,
++    unknown_gpu_error,
++    null_pipeline,
++};
++
++struct DeviceState {
++    std::atomic<bool> lost{false};
++    std::atomic<bool> terminal{false};
++    // Participating optional attempts only. Not an exclusion contract for
++    // unrelated calls on the device. Never held across WaitAny.
++    std::mutex scope_issue_mutex;
++
++    bool healthy() const noexcept {
++        return !lost.load(std::memory_order_acquire) && !terminal.load(std::memory_order_acquire);
++    }
++};
++
++// Callback-owned state contains no GPU handle, context, Instance, or publisher.
++struct ScopeData {
++    std::atomic<bool> done{false};
++    wgpu::PopErrorScopeStatus status = wgpu::PopErrorScopeStatus::Error;
++    wgpu::ErrorType error = wgpu::ErrorType::Unknown;
++    std::array<char, 1024> message{};
++    bool truncated = false;
++};
++
++struct Ticket {
++    std::shared_ptr<ScopeData> data;
++};
++
++inline void scope_complete(wgpu::PopErrorScopeStatus status, wgpu::ErrorType error,
++                           wgpu::StringView message, Ticket* ticket) noexcept {
++    // Each issued callback owns exactly one Ticket. Nothing here calls WebGPU.
++    const auto data = ticket->data;
++    data->status = status;
++    data->error = error;
++    const auto capacity = data->message.size() - 1;
++    std::size_t copied = 0;
++    if (message.data != nullptr) {
++        if (message.length == WGPU_STRLEN) {
++            while (copied < capacity && message.data[copied] != '\0') {
++                data->message[copied] = message.data[copied];
++                ++copied;
++            }
++            data->truncated = message.data[copied] != '\0';
++        } else {
++            const auto count = message.length < capacity ? message.length : capacity;
++            for (; copied < count; ++copied) {
++                data->message[copied] = message.data[copied];
++            }
++            data->truncated = message.length > capacity;
++        }
++    }
++    data->message[copied] = '\0';
++    data->done.store(true, std::memory_order_release);
++    delete ticket;
++}
++
++template<class Pipeline>
++struct Attempt {
++    Outcome outcome = Outcome::terminal;
++    Fatal fatal = Fatal::none;
++    std::exception_ptr host_exception;
++    Pipeline pipeline{};
++    std::array<std::shared_ptr<ScopeData>, 3> scopes{};
++    // Pop throwing after release leaves registration ambiguous. Do not reclaim
++    // such userdata: a late callback may still own it. No more attempts on this
++    // terminal device are allowed. This field records that exceptional boundary.
++    std::size_t indeterminate_tickets = 0;
++};
++
++// Ops performs synchronous push/create/pop with no JSPI yield. Wait is outside
++// that interval. Native callers must preserve one thread for the whole interval;
++// browser callers must use their existing synchronous factory call boundary.
++template<class Ops>
++Attempt<typename Ops::Pipeline> create_optional(Ops& ops, DeviceState& device,
++                                                std::uint64_t timeout_ns) {
++    using Result = Attempt<typename Ops::Pipeline>;
++    Result result;
++    const auto started_ns = ops.now_ns();
++    const auto unusable_reason = [&] {
++        return device.lost.load(std::memory_order_acquire) ? Fatal::device_lost : Fatal::device_terminal;
++    };
++    const auto terminal = [&](Fatal reason) {
++        device.terminal.store(true, std::memory_order_release);
++        result.outcome = Outcome::terminal;
++        result.fatal = reason;
++    };
++    if (!device.healthy()) {
++        terminal(unusable_reason());
++        return result;
++    }
++
++    std::array<std::unique_ptr<Ticket>, 3> tickets;
++    std::array<wgpu::Future, 3> futures{};
++    // Every allocation owned by this helper precedes the first push. Host API
++    // internals can still throw; that is terminal, never an optional rejection.
++    try {
++        for (std::size_t i = 0; i < tickets.size(); ++i) {
++            result.scopes[i] = std::make_shared<ScopeData>();
++            tickets[i] = std::make_unique<Ticket>(Ticket{result.scopes[i]});
++        }
++    } catch (...) {
++        result.host_exception = std::current_exception();
++        terminal(Fatal::host_exception);
++        return result;
++    }
++
++    try {
++        std::lock_guard<std::mutex> issue_lock(device.scope_issue_mutex);
++        // Another attempt may have become terminal while we allocated tickets.
++        if (!device.healthy()) {
++            terminal(unusable_reason());
++            return result;
++        }
++        try {
++            ops.push(wgpu::ErrorFilter::OutOfMemory);
++            ops.push(wgpu::ErrorFilter::Internal);
++            ops.push(wgpu::ErrorFilter::Validation);
++            if (!device.healthy()) {
++                // Still close all scopes before returning to the caller.
++                result.fatal = unusable_reason();
++            } else {
++                result.pipeline = ops.create();
++            }
++            // Tickets and scope results are indexed by pop order: V, I, OOM.
++            // Pop every scope before the first WaitAny / possible JSPI suspension.
++            for (std::size_t i = 0; i < futures.size(); ++i) {
++                Ticket* ticket = tickets[i].release();
++                try {
++                    futures[i] = ops.pop(wgpu::CallbackMode::WaitAnyOnly, &scope_complete, ticket);
++                    if (futures[i].id == 0) {
++                        ++result.indeterminate_tickets;
++                        // Its scope/event state is unknown. Publish terminal
++                        // while still holding the emission lock; do not issue
++                        // more calls to try to normalize an unknown stack.
++                        terminal(Fatal::invalid_future);
++                        return result;
++                    }
++                } catch (...) {
++                    // Registration may have happened. Touching ticket here could
++                    // double-free it, even when a callback has already run.
++                    ++result.indeterminate_tickets;
++                    throw;
++                }
++            }
++        } catch (...) {
++            // Publish terminal before releasing the emission mutex, so another
++            // participating attempt cannot push after an indeterminate pop.
++            result.host_exception = std::current_exception();
++            terminal(Fatal::host_exception);
++            return result;
++        }
++    } catch (...) {
++        result.host_exception = std::current_exception();
++        terminal(Fatal::host_exception);
++        return result;
++    }
++
++    // WaitAny Success need only complete one future. Each count-1 wait and each
++    // callback's done bit are checked independently; array Success is not enough.
++    try {
++        for (std::size_t i = 0; i < futures.size(); ++i) {
++            if (futures[i].id == 0) {
++                terminal(Fatal::invalid_future);
++                return result;
++            }
++            if (!result.scopes[i]->done.load(std::memory_order_acquire)) {
++                const auto now_ns = ops.now_ns();
++                const auto elapsed = now_ns >= started_ns ? now_ns - started_ns : timeout_ns;
++                const auto remaining = elapsed < timeout_ns ? timeout_ns - elapsed : 0;
++                if (ops.wait(futures[i], remaining) != wgpu::WaitStatus::Success) {
++                    terminal(Fatal::wait_failed);
++                    return result;
++                }
++            }
++            if (!result.scopes[i]->done.load(std::memory_order_acquire)) {
++                terminal(Fatal::callback_incomplete);
++                return result;
++            }
++        }
++    } catch (...) {
++        result.host_exception = std::current_exception();
++        terminal(Fatal::host_exception);
++        return result;
++    }
++    if (!device.healthy() || result.fatal != Fatal::none) {
++        terminal(unusable_reason());
++        return result;
++    }
++    bool rejected = false;
++    for (const auto& scope : result.scopes) {
++        // done acquire above precedes every non-atomic field read.
++        if (scope->status != wgpu::PopErrorScopeStatus::Success) {
++            terminal(Fatal::callback_failed);
++            return result;
++        }
++        switch (scope->error) {
++            case wgpu::ErrorType::NoError: break;
++            case wgpu::ErrorType::Validation:
++            case wgpu::ErrorType::Internal:
++            case wgpu::ErrorType::OutOfMemory: rejected = true; break;
++            default:
++                terminal(Fatal::unknown_gpu_error);
++                return result;
++        }
++    }
++    if (rejected) {
++        result.outcome = Outcome::rejected;
++    } else if (!ops.valid(result.pipeline)) {
++        terminal(Fatal::null_pipeline);
++    } else {
++        result.outcome = Outcome::ready;
++    }
++    return result;
++}
++
++} // namespace ggml_webgpu_optional
++
++#include <unordered_map>
++#include <stdexcept>
++
++namespace ggml_webgpu_optional {
++enum class InitializationPhase { empty, pending, ready, failed };
++struct InitializationAttempt {
++    std::atomic<InitializationPhase> & phase;
++    bool committed = false;
++    DeviceState * published_control = nullptr;
++    ~InitializationAttempt() {
++        if (!committed) {
++            if (published_control) { published_control->terminal.store(true, std::memory_order_release); }
++            phase.store(InitializationPhase::failed, std::memory_order_release);
++        }
++    }
++    void finish() { phase.store(InitializationPhase::ready, std::memory_order_release); committed = true; }
++};
++struct DeviceGeneration {
++    DeviceState control;
++    std::uint64_t generation;
++    DeviceGeneration() {
++        static std::atomic<std::uint64_t> next{1};
++        generation = next.fetch_add(1, std::memory_order_relaxed);
++    }
++};
++enum class EntryState { creating, ready, rejected };
++enum class Selection { requested, canonical };
++
++template<class Pipeline>
++struct Selected {
++    Selection selection;
++    Pipeline pipeline;
++};
++
++// One object per shader library. Legacy AUTO keeps its own unchanged cache.
++// No callback or Ticket owns this cache. Only the creating owner commits here.
++template<class Pipeline, class Key, class Hash>
++class OptionalCache {
++    struct Entry {
++        EntryState state = EntryState::creating;
++        Pipeline pipeline{};
++        std::array<std::shared_ptr<ScopeData>, 3> rejection{};
++    };
++    DeviceState& device;
++    std::mutex mutex;
++    std::unordered_map<Key, Entry, Hash> entries;
++
++    void require_healthy() const {
++        if (!device.healthy()) {
++            throw std::runtime_error("optional pipeline device is terminal");
++        }
++    }
++
++public:
++    const std::uint64_t generation;
++    OptionalCache(DeviceState& device_state, std::uint64_t device_generation)
++        : device(device_state), generation(device_generation) {}
++
++    bool rejected(const Key& key) {
++        std::lock_guard<std::mutex> lock(mutex);
++        require_healthy();
++        const auto found = entries.find(key);
++        return found != entries.end() && found->second.state == EntryState::rejected;
++    }
++
++    template<class Create, class Canonical>
++    Selected<Pipeline> select(const Key& key, bool admitted,
++                              Create create, Canonical canonical) {
++        require_healthy();
++        bool owner = false;
++        if (admitted) {
++            std::lock_guard<std::mutex> lock(mutex);
++            require_healthy();
++            const auto found = entries.find(key);
++            if (found == entries.end()) {
++                entries.emplace(key, Entry{});
++                owner = true;
++            } else if (found->second.state == EntryState::ready) {
++                // Return the complete pipeline/context, including actual rows.
++                return {Selection::requested, found->second.pipeline};
++            }
++            // Creating: this caller uses canonical without waiting or memoizing
++            // failure. Rejected: failure memo avoids another optional compile.
++        }
++        if (owner) {
++            Attempt<Pipeline> attempt;
++            try {
++                attempt = create();
++            } catch (...) {
++                device.terminal.store(true, std::memory_order_release);
++                throw;
++            }
++            if (attempt.outcome == Outcome::terminal) {
++                device.terminal.store(true, std::memory_order_release);
++                if (attempt.host_exception) { std::rethrow_exception(attempt.host_exception); }
++                require_healthy();
++            }
++            require_healthy();
++            std::lock_guard<std::mutex> lock(mutex);
++            require_healthy();
++            auto& entry = entries.at(key);
++            if (attempt.outcome == Outcome::ready) {
++                entry.pipeline = std::move(attempt.pipeline);
++                entry.state = EntryState::ready;
++                return {Selection::requested, entry.pipeline};
++            }
++            entry.rejection = std::move(attempt.scopes);
++            entry.state = EntryState::rejected;
++        }
++        require_healthy();
++        // Canonical runs outside both mutexes and recomputes its own old key.
++        // Its existing cache and decisions are returned intact, even when cold.
++        auto pipeline = canonical();
++        require_healthy();
++        return {Selection::canonical, std::move(pipeline)};
++    }
++};
++
++
++} // namespace ggml_webgpu_optional
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-batch-readback.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-batch-readback.hpp
+@@ -26,10 +26,11 @@
+         auto * buffer = request.tensor->view_src ? request.tensor->view_src->buffer : request.tensor->buffer;
+         if (!buffer || buffer->iface.get_tensor != ggml_backend_webgpu_buffer_get_tensor) return false;
+         auto * source = static_cast<ggml_backend_webgpu_buffer_context *>(buffer->context);
+-        if (!source || !source->global_ctx || !source->buffer ||
+-            (source->buffer.GetUsage() & wgpu::BufferUsage::CopySrc) == wgpu::BufferUsage::None) return false;
++        if (!source || !source->global_ctx || !source->buffer) return false;
+         if (global && global != source->global_ctx) return false;
+         global = source->global_ctx;
++        ggml_webgpu_require_healthy_global_device(global);
++        if ((source->buffer.GetUsage() & wgpu::BufferUsage::CopySrc) == wgpu::BufferUsage::None) return false;
+         const auto * root = request.tensor->view_src ? request.tensor->view_src : request.tensor;
+         const uintptr_t root_data = reinterpret_cast<uintptr_t>(root->data);
+         const uintptr_t pointer_base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
+@@ -54,12 +55,14 @@
+     while (position.request < count) {
+         const plan current = next(ranges.data(), count, position);
+         if (!current.count) break; // The remaining requests were empty.
++        ggml_webgpu_require_healthy_global_device(global);
+         GGML_ASSERT(current.bytes > 0 && current.bytes <= staging_cap && current.bytes % 4 == 0);
+         if (!global->get_tensor_staging_buf || global->get_tensor_staging_buf.GetSize() < current.bytes) {
+             if (global->get_tensor_staging_buf) global->get_tensor_staging_buf.Destroy();
+             ggml_webgpu_create_buffer(global->device, global->get_tensor_staging_buf, current.bytes,
+                                      wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead, "batch_get_staging");
+         }
++        ggml_webgpu_require_healthy_global_device(global);
+         auto encoder = global->device.CreateCommandEncoder();
+         for (size_t i = 0; i < current.count; ++i) {
+             const auto & part = current.pieces[i];
+@@ -67,8 +70,13 @@
+                                       global->get_tensor_staging_buf, part.slot, part.copy_size);
+         }
+         auto commands = encoder.Finish();
++        ggml_webgpu_require_healthy_global_device(global);
+         global->queue.Submit(1, &commands);
+         ggml_backend_webgpu_map_buffer(global, global->get_tensor_staging_buf, wgpu::MapMode::Read, 0, current.bytes);
++        if (!ggml_webgpu_device_is_healthy(global)) {
++            global->get_tensor_staging_buf.Unmap();
++            ggml_webgpu_require_healthy_global_device(global);
++        }
+         bool okay = true;
+         try {
+             for (size_t i = 0; i < current.count && okay; ++i) {
