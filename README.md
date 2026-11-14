@@ -75,8 +75,9 @@ invalidation, and the cold-cache path.
 Network operations are intentionally inline in the workflow YAML so acquisition
 destinations, credentials and remote writes remain visible. Builds, tests and
 local package preparation run in network-disabled containers through
-`.github/scripts/run-offline.sh`. That script supplies shared Docker execution
-settings; workflow YAML supplies each command and its environment. Typed local
+`.github/scripts/run-offline.sh`. That executable supplies shared Docker settings,
+common environment and strict Bash. YAML supplies extra Docker options, the
+explicit image argument and quoted `OFFLINE` command bodies. Typed local
 tools handle preparation, transformation and validation.
 
 ## Runtime package layout (manifest format 5)

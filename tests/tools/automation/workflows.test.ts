@@ -108,11 +108,30 @@ test('parsed workflow permissions, event trust and all literal shell bodies rema
       assert.doesNotMatch(step.run, /python3 -m build_tools|\$\{\{/u);
       await runProcess({ command: 'bash', args: ['-n'], cwd: checkoutRoot, input: step.run });
       if (step.run.includes('build/tooling/tools/automation/cli.js')) {
-        assert.match(step.run, /bash \.github\/scripts\/run-offline\.sh/u);
-        assert.doesNotMatch(step.run.split("<<'BICORE_OFFLINE'")[0] ?? '', /-e GH_TOKEN/u);
+        assert.match(step.run, /\.github\/scripts\/run-offline\.sh/u);
+        assert.doesNotMatch(step.run.split("<<'OFFLINE'")[0] ?? '', /-e GH_TOKEN/u);
       }
     }
   }
+});
+
+test('the shared launcher passes literal options and quoted stdin to strict Bash and preserves its failure', async () => {
+  await using temporary = await temporaryDirectory();
+  const environment = await serviceEnvironment({ root: temporary.root, value: scenario() });
+  environment['QUOTE_PROBE'] = 'host value';
+  environment['GH_TOKEN'] = 'fixture-token';
+  const script = `\
+offline_docker_args=(
+  -e 'QUOTE_PROBE=container value'
+)
+.github/scripts/run-offline.sh "\${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+  test "$QUOTE_PROBE" = 'container value'
+  printf '%s\\n' "$QUOTE_PROBE"
+  printf 'inner diagnostic\\n' >&2
+  exit 7
+OFFLINE
+`;
+  await assert.rejects(runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', script], cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: environment }, capture: 'file' }), (error: unknown) => error instanceof ProcessError && error.exitCode === 7 && error.stdout.toString() === 'container value\n' && error.stderr.toString() === 'inner diagnostic\n');
 });
 
 test('literal reporter shell separates API credentials, consumes the attempt-bound report and posts once', async () => {

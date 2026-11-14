@@ -73,17 +73,19 @@ jobs:
         id: request
         shell: bash
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
-            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
-            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME" "$UPDATE_STATE"
-          npm run tooling:build
-          node build/tooling/tools/automation/cli.js upstream-validate --checkout-root "$GITHUB_WORKSPACE" \
-            --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
-            --custom-ref "$CUSTOM_REF"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            npm run tooling:build
+            node build/tooling/tools/automation/cli.js upstream-validate --checkout-root "$GITHUB_WORKSPACE" \
+              --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+              --custom-ref "$CUSTOM_REF"
+          OFFLINE
       - name: Acquire the current pinned upstream (online)
         shell: bash
         run: |
@@ -126,17 +128,20 @@ jobs:
           REQUEST_SOURCE: ${{ steps.request.outputs.source }}
           REQUEST_PREVIOUS: ${{ steps.request.outputs.previous }}
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
-            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
-            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT -e REQUEST_SOURCE -e REQUEST_PREVIOUS \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME" "$UPDATE_STATE"
-          node build/tooling/tools/automation/cli.js upstream-select --checkout-root "$GITHUB_WORKSPACE" \
-            --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
-            --custom-ref "$CUSTOM_REF" --releases "$UPDATE_STATE/releases.json" \
-            --expected-source "$REQUEST_SOURCE" --expected-previous "$REQUEST_PREVIOUS"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+            -e REQUEST_SOURCE -e REQUEST_PREVIOUS
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-select --checkout-root "$GITHUB_WORKSPACE" \
+              --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+              --custom-ref "$CUSTOM_REF" --releases "$UPDATE_STATE/releases.json" \
+              --expected-source "$REQUEST_SOURCE" --expected-previous "$REQUEST_PREVIOUS"
+          OFFLINE
       - name: Fetch the exact upstream and comparison (online)
         id: resolution
         shell: bash
@@ -180,18 +185,20 @@ jobs:
           TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
           RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
-            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
-            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME" "$UPDATE_STATE"
-          node build/tooling/tools/automation/cli.js upstream-plan --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
-            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
-            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
-            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
-            --comparison "$UPDATE_STATE/comparison.json"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-plan --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+              --comparison "$UPDATE_STATE/comparison.json"
+          OFFLINE
       - name: Inspect the existing candidate branch (online)
         id: existing
         if: steps.plan.outputs.changed == 'true'
@@ -232,17 +239,19 @@ jobs:
           RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
           RELATION: ${{ steps.plan.outputs.relation }}
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
-            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
-            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME" "$UPDATE_STATE"
-          node build/tooling/tools/automation/cli.js upstream-checkout --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
-            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
-            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
-            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" --relation "$RELATION"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-checkout --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" --relation "$RELATION"
+          OFFLINE
       - name: Acquire the selected nested upstreams (online)
         if: steps.plan.outputs.changed == 'true' && steps.existing.outputs.exists == 'false'
         shell: bash
@@ -263,18 +272,20 @@ jobs:
           RELATION: ${{ steps.plan.outputs.relation }}
           EXISTING_COMMIT: ${{ steps.existing.outputs.commit }}
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
-            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
-            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME" "$UPDATE_STATE"
-          node build/tooling/tools/automation/cli.js upstream-candidate --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
-            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
-            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
-            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
-            --relation "$RELATION" --existing "$EXISTING_COMMIT"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e UPDATE_STATE
+            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD
+            -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED
+            -e TARGET_COMMIT -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME" "$UPDATE_STATE"
+            node build/tooling/tools/automation/cli.js upstream-candidate --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+              --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+              --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+              --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+              --relation "$RELATION" --existing "$EXISTING_COMMIT"
+          OFFLINE
       - name: Push the candidate branch (online)
         id: push
         if: steps.candidate.outputs.needs-push == 'true'

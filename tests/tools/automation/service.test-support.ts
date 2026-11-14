@@ -152,7 +152,7 @@ async function fixtureService(): Promise<void> {
         if (arg === '-w' && value) {
           cwd = value;
         }
-      } else if (arg === '--rm' || arg === '-i' || arg?.startsWith('--cap-drop=') || arg?.startsWith('--security-opt=')) {
+      } else if (arg === '--pull=never' || arg === '--rm' || arg === '-i' || arg?.startsWith('--cap-drop=') || arg?.startsWith('--security-opt=')) {
         continue;
       } else {
         index++;

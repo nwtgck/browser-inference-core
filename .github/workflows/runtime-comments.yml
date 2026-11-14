@@ -60,12 +60,13 @@ jobs:
       - name: Emit trusted default-branch tooling
         shell: bash
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e REPORT_STATE -e COMMENT_NUMBER \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          npm run tooling:build
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e REPORT_STATE -e COMMENT_NUMBER
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            npm run tooling:build
+          OFFLINE
       - name: Acquire open pull requests (online)
         shell: bash
         env:
@@ -93,12 +94,13 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e REPORT_STATE -e COMMENT_NUMBER \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          node build/tooling/tools/automation/cli.js comments-pulls --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e REPORT_STATE -e COMMENT_NUMBER
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/automation/cli.js comments-pulls --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
+          OFFLINE
       - name: Acquire matching workflow histories (online)
         shell: bash
         env:
@@ -131,12 +133,13 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e REPORT_STATE -e COMMENT_NUMBER \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          node build/tooling/tools/automation/cli.js comments-runs --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e REPORT_STATE -e COMMENT_NUMBER
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/automation/cli.js comments-runs --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
+          OFFLINE
       - name: Acquire attempt-bound report artifact listings (online)
         shell: bash
         env:
@@ -174,12 +177,13 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e REPORT_STATE -e COMMENT_NUMBER \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          node build/tooling/tools/automation/cli.js comments-artifacts --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e REPORT_STATE -e COMMENT_NUMBER
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/automation/cli.js comments-artifacts --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
+          OFFLINE
       - name: Request report archive locations (online)
         shell: bash
         env:
@@ -205,12 +209,13 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          bash .github/scripts/run-offline.sh \
-            -e REPORT_STATE -e COMMENT_NUMBER \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          node build/tooling/tools/automation/cli.js comments-redirects --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
-          BICORE_OFFLINE
+          offline_docker_args=(
+            -e REPORT_STATE -e COMMENT_NUMBER
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/automation/cli.js comments-redirects --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY"
+          OFFLINE
       - name: Download report data without API credentials (online)
         shell: bash
         env:
@@ -266,12 +271,13 @@ jobs:
             done
             if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
             export COMMENT_NUMBER="$number"
-            bash .github/scripts/run-offline.sh \
-              -e REPORT_STATE -e COMMENT_NUMBER \
-              "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          node build/tooling/tools/automation/cli.js comments-write --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY" --number "$COMMENT_NUMBER"
-          BICORE_OFFLINE
+            offline_docker_args=(
+              -e REPORT_STATE -e COMMENT_NUMBER
+            )
+            .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+              mkdir -p "$HOME"
+              node build/tooling/tools/automation/cli.js comments-write --state "$REPORT_STATE" --repository "$GITHUB_REPOSITORY" --number "$COMMENT_NUMBER"
+          OFFLINE
 
             IFS=$'\t' read -r write comment < "$directory/write.txt"
             if [[ "$write" == skip ]]; then continue; fi

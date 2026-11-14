@@ -281,6 +281,9 @@ fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:proce
           continue;
         }
         await executeShell({ root, script: 'bash -n <<\'WORKFLOW\'\n' + text({ value: step.run }) + '\nWORKFLOW\n', environment: {} });
+        if (text({ value: step.run }).includes("<<'OFFLINE'")) {
+          await runProcess({ command: 'bash', args: ['-n'], cwd: checkoutRoot, input: offlineScript({ step }) });
+        }
       }
     }
   }
@@ -295,6 +298,7 @@ fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:proce
   const calls = await readCalls({ root });
   assert.ok(calls.length >= 20);
   for (const { args } of calls) {
+    assert.ok(args.includes('--pull=never'));
     assert.equal(args[args.indexOf('--network') + 1], 'none');
     assert.ok(args.includes('--cap-drop=ALL'));
     assert.ok(args.includes('--security-opt=no-new-privileges:true'));
@@ -373,10 +377,20 @@ process.stderr.write('original stderr\\n');
 process.exit(Number(process.env.DOCKER_EXIT));
 `,
   });
-  const input = 'literal $GH_TOKEN and spaces\n';
-  const args = ['.github/scripts/run-offline.sh', '-e', 'HOME=/tmp', '-e', 'EXTRA=value with spaces', 'fixture:tag', 'bash', '-euo', 'pipefail', '-c', 'printf "%s" "$EXTRA"'];
-  for (const code of [0, 7]) {
-    const operation = runProcess({ command: 'bash', args, cwd: root, input, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, GH_TOKEN: 'private-token', GITHUB_TOKEN: 'private-token', CALLS: join(root, 'call.json'), DOCKER_EXIT: String(code) } } });
+  const input = '  literal $GH_TOKEN and spaces\n';
+  const args = ['-e', 'HOME=/tmp', '-e', 'EXTRA=value with spaces'];
+  const script = `\
+offline_docker_args=(
+  -e HOME=/tmp
+  -e 'EXTRA=value with spaces'
+)
+.github/scripts/run-offline.sh "\${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+  literal $GH_TOKEN and spaces
+OFFLINE
+`;
+  for (const code of [0, 7, 125]) {
+    const image = code === 125 ? '' : `fixture:exit-${code}`;
+    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', script], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, BIC_OFFLINE_IMAGE: image, GH_TOKEN: 'private-token', GITHUB_TOKEN: 'private-token', CALLS: join(root, 'call.json'), DOCKER_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
       assert.equal(result.stdout.toString(), 'original stdout\n');
@@ -387,7 +401,8 @@ process.exit(Number(process.env.DOCKER_EXIT));
     const call = object({ value: JSON.parse(await readFile(join(root, 'call.json'), 'utf8')) });
     const forwarded = list({ value: call.args }).map(value => text({ value }));
     assert.equal(call.input, input);
-    assert.deepEqual(forwarded.slice(-args.length + 1), args.slice(1));
+    assert.deepEqual(forwarded.slice(-args.length - 4), [...args, image, 'bash', '-euo', 'pipefail']);
+    assert.ok(forwarded.includes('--pull=never'));
     assert.equal(forwarded[forwarded.indexOf('--network') + 1], 'none');
     assert.equal(forwarded[forwarded.indexOf('-w') + 1], root);
     assert.ok(forwarded.includes(`${root}:${root}`));
@@ -395,8 +410,16 @@ process.exit(Number(process.env.DOCKER_EXIT));
     assert.ok(forwarded.includes(`HOME=${runner}/bicore-home`));
     assert.ok(forwarded.includes('NPM_CONFIG_OFFLINE=true'));
     assert.ok(forwarded.includes('GIT_NO_LAZY_FETCH=1'));
+    assert.ok(forwarded.includes(`PLAYWRIGHT_BROWSERS_PATH=${root}/.tools/browser-binaries`));
+    assert.ok(forwarded.includes('LCB_SOURCE_COMMIT'));
+    assert.ok(forwarded.includes('BIC_METRICS_MODE'));
+    assert.ok(forwarded.includes('CCACHE_CONFIGPATH'));
     assert.ok(!forwarded.some(value => /^(GH_TOKEN|GITHUB_TOKEN)(=|$)/u.test(value)));
   }
+  const missingCall = join(root, 'missing-image-call.json');
+  await assert.rejects(runProcess({ command: 'bash', args: ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, BIC_OFFLINE_IMAGE: undefined, CALLS: missingCall, DOCKER_EXIT: '125' } } }), (error: unknown) => error instanceof ProcessError && error.exitCode === 125);
+  const missing = object({ value: JSON.parse(await readFile(missingCall, 'utf8')) });
+  assert.deepEqual(list({ value: missing.args }).slice(-4), ['', 'bash', '-euo', 'pipefail']);
 });
 
 test('Dawn acquisition verifies restored bytes, recovers failed restores and never installs a bad download', async () => {

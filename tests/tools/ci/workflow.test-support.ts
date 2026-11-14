@@ -45,11 +45,12 @@ export function actionSteps({ job, action }: { job: string; action: string }): R
 
 export function offlineScript({ step }: { step: Record<string, unknown> }): string {
   const script = text({ value: step.run });
-  const marker = "<<'BICORE_OFFLINE'\n";
+  const marker = "<<'OFFLINE'";
   const begin = script.indexOf(marker);
-  const end = script.lastIndexOf('\nBICORE_OFFLINE');
+  const body = script.indexOf('\n', begin);
+  const end = script.lastIndexOf('\nOFFLINE');
   assert.ok(begin >= 0 && end > begin, 'Expected the explicit container stdin boundary');
-  return script.slice(begin + marker.length, end) + '\n';
+  return script.slice(body + 1, end) + '\n';
 }
 
 export async function executable({ root, name, source }: { root: string; name: string; source: string }): Promise<string> {
