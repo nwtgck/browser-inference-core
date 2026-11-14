@@ -3,7 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { decodeFrozenPublication, type SourceFacts, type ReportData, type FrozenPublication, type JsonObject, type Validation } from '#dto/shared';
 import { artifactDirectories, runtimeNames } from '#tools/shared/contracts';
 import { isContained, optionalStat, directory } from '#tools/shared/files';
-import { validatePackage, type ValidatedPackage, type RuntimeManifests } from '#tools/package/aggregate';
+import { assemblePackage, validatePackage, type ValidatedPackage, type RuntimeManifests } from '#tools/package/aggregate';
+import type { Metrics } from '#tools/ci/metrics';
 import { assertSame, bytesIdentity, copyBoundTree, readMetadata, checkNpmPack } from '#tools/package/files';
 import { canonicalJson } from '#tools/abi/schema';
 import { gitBlob, gitObjectId, localGit, verifyGitTree } from './git.js';
@@ -47,7 +48,7 @@ export async function createReportData({ validated, verifySource }: { validated:
   };
 }
 
-export async function freezePackage({ sourceRoot, packageDirectory, work, receipt, branch, expectedSource, verifySource }: { sourceRoot: string; packageDirectory: string; work: string; receipt: string; branch: string; expectedSource: string; verifySource: VerifySource }): Promise<FrozenPublication> {
+async function publicationPaths({ sourceRoot, packageDirectory, work, receipt, branch }: { sourceRoot: string; packageDirectory: string; work: string; receipt: string; branch: string }): Promise<{ input: string; snapshot: string; receiptPath: string }> {
   if (branch !== 'artifacts' && !branch.startsWith('artifacts/')) {
     throw new Error('Refusing to publish over a source branch');
   }
@@ -63,21 +64,50 @@ export async function freezePackage({ sourceRoot, packageDirectory, work, receip
   }
   await directory({ path: dirname(snapshot), create: true });
   await directory({ path: dirname(receiptPath), create: true });
+  return { input, snapshot, receiptPath };
+}
+
+/** External packages still enter through full artifact validation. */
+export async function freezePackage({ sourceRoot, packageDirectory, work, receipt, branch, expectedSource, verifySource }: { sourceRoot: string; packageDirectory: string; work: string; receipt: string; branch: string; expectedSource: string; verifySource: VerifySource }): Promise<FrozenPublication> {
+  const paths = await publicationPaths({ sourceRoot, packageDirectory, work, receipt, branch });
+  const { input } = paths;
   const validated = await validatePackage({ sourceRoot, directory: input, requireClean: true, checkNpmPack: false });
+  return freezeValidatedPackage({ validated, paths, branch, expectedSource, verifySource, metrics: undefined });
+}
+
+/** Assemble and freeze in one process, retaining the typed validation result. */
+export async function preparePublication({ sourceRoot, inputs, packageDirectory, work, receipt, branch, expectedSource, verifySource, metrics }: { sourceRoot: string; inputs: string; packageDirectory: string; work: string; receipt: string; branch: string; expectedSource: string; verifySource: VerifySource; metrics: Metrics | undefined }): Promise<FrozenPublication> {
+  const paths = await publicationPaths({ sourceRoot, packageDirectory, work, receipt, branch });
+  const assemble = () => assemblePackage({ sourceRoot, inputs, destination: paths.input, checkNpmPack: false });
+  const validated = await (metrics ? metrics.measure({ phase: 'publication.assemble', packageKind: 'root', operation: assemble }) : assemble());
+  return freezeValidatedPackage({ validated, paths, branch, expectedSource, verifySource, metrics });
+}
+
+async function freezeValidatedPackage({ validated, paths, branch, expectedSource, verifySource, metrics }: { validated: ValidatedPackage; paths: { input: string; snapshot: string; receiptPath: string }; branch: string; expectedSource: string; verifySource: VerifySource; metrics: Metrics | undefined }): Promise<FrozenPublication> {
+  const { input, snapshot, receiptPath } = paths;
+  async function measured<T>({ phase, operation }: { phase: string; operation: () => Promise<T> }): Promise<T> {
+    return metrics ? metrics.measure({ phase, packageKind: 'root', operation }) : operation();
+  }
   if (validated.manifest.sourceCommit !== gitObjectId({ value: expectedSource })) {
     throw new Error('Package differs from selected source');
   }
   // Copy verification is its own byte boundary. The typed validated input is
   // shared afterwards; the private snapshot needs no second manifest decoder.
-  await copyBoundTree({ source: input, destination: snapshot, files: validated.files });
-  await checkNpmPack({ directory: snapshot, files: validated.files });
-  const data = await createReportData({ validated, verifySource });
-  await localGit({ cwd: snapshot, args: ['init', '-q'] });
-  await localGit({ cwd: snapshot, args: ['config', 'user.name', 'github-actions[bot]'] });
-  await localGit({ cwd: snapshot, args: ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'] });
-  await localGit({ cwd: snapshot, args: ['add', '--all'] });
-  const tree = gitObjectId({ value: (await localGit({ cwd: snapshot, args: ['write-tree'] })).toString('utf8').trim() });
-  await verifyGitTree({ work: snapshot, tree, files: validated.files });
+  await measured({ phase: 'publication.copy', operation: () => copyBoundTree({ source: input, destination: snapshot, files: validated.files }) });
+  await measured({ phase: 'publication.npm-pack', operation: () => checkNpmPack({ directory: snapshot, files: validated.files }) });
+  const data = await measured({ phase: 'publication.source', operation: () => createReportData({ validated, verifySource }) });
+  const tree = await measured({
+    phase: 'publication.git',
+    operation: async () => {
+      await localGit({ cwd: snapshot, args: ['init', '-q'] });
+      await localGit({ cwd: snapshot, args: ['config', 'user.name', 'github-actions[bot]'] });
+      await localGit({ cwd: snapshot, args: ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'] });
+      await localGit({ cwd: snapshot, args: ['add', '--all'] });
+      const tree = gitObjectId({ value: (await localGit({ cwd: snapshot, args: ['write-tree'] })).toString('utf8').trim() });
+      await verifyGitTree({ work: snapshot, tree, files: validated.files });
+      return tree;
+    },
+  });
   const identities = Object.fromEntries(runtimeNames.map(runtime => {
     const entry = validated.files.get(artifactDirectories[runtime] + '/manifest.json');
     if (!entry) {

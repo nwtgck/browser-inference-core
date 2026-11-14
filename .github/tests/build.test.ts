@@ -567,7 +567,7 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
   }
 });
 
-test('publication freezing keeps its saved receipt and errors without echoing the receipt', async () => {
+test('publication preparation keeps its summary, saved receipt and errors in one invocation', async () => {
   const step = namedStep({ job: 'publish', name: 'Assemble and freeze the source-bound publication tree' });
   for (const code of [0, 7]) {
     await using temporary = await temporaryDirectory();
@@ -582,28 +582,32 @@ test('publication freezing keeps its saved receipt and errors without echoing th
 const fs=require('node:fs');
 const path=require('node:path');
 const args=process.argv.slice(2);
-if(args[1]==='publication'&&args[2]==='freeze'){
+fs.appendFileSync(path.join(process.cwd(),'node-calls.jsonl'),JSON.stringify(args)+'\\n');
+if(args[1]==='publication'&&args[2]==='prepare'){
   const receipt=args[args.indexOf('--receipt')+1];
   fs.mkdirSync(path.dirname(receipt),{recursive:true});
   fs.writeFileSync(receipt,JSON.stringify({tree:process.env.TREE,sourceCommit:process.env.LCB_SOURCE_COMMIT}));
-  process.stdout.write('receipt stdout\\n');
+  process.stdout.write('publication summary\\n');
   process.stderr.write('freeze diagnostic\\n');
   process.exit(Number(process.env.FREEZE_EXIT));
 }
-process.stdout.write('assembly ready\\n');
+throw new Error('Unexpected publication invocation');
 `,
     });
     const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, LCB_SOURCE_COMMIT: source, TREE: tree, FREEZE_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
-      assert.equal(result.stdout.toString(), 'assembly ready\n');
+      assert.equal(result.stdout.toString(), 'publication summary\n');
       assert.equal(result.stderr.toString(), 'freeze diagnostic\n');
       assert.equal(await readFile(output, 'utf8'), `tree=${tree}\nsource-commit=${source}\n`);
     } else {
-      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === 'assembly ready\n');
+      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === 'publication summary\n');
       await assert.rejects(readFile(output));
     }
     assert.deepEqual(JSON.parse(await readFile(join(root, 'build/publication/frozen.json'), 'utf8')), { tree, sourceCommit: source });
+    const calls: string[][] = (await readFile(join(root, 'node-calls.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as string[]);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], ['build/tooling/tools/cli.js', 'publication', 'prepare', '--checkout-root', root, '--inputs', join(root, 'build/package-inputs'), '--directory', join(root, 'dist/package'), '--work-root', join(root, 'build/publication/package'), '--receipt', join(root, 'build/publication/frozen.json'), '--branch', 'artifacts', '--source-commit', source, '--source-work-root', join(root, 'build/publication/sources'), '--python', 'python3']);
   }
 });
 

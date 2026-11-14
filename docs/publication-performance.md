@@ -18,9 +18,12 @@ file list and sizes. Ordinary package/verify commands perform their requested
 pack check. CI can defer that check during assembly because publication checks
 the final private snapshot. It does not maintain a second npm packlist algorithm.
 
-The offline `publication freeze` entry:
+CI uses `publication prepare` to assemble the aggregate and pass its typed
+validation result directly to freezing in the same process. The separate
+`publication freeze` entry validates an independently supplied aggregate first.
+Both entries then perform the same snapshot and publication checks:
 
-1. Validates the package, source identity and both runtime inventories.
+1. Checks the selected source identity against the validated aggregate package.
 2. Copies the validated byte inventory into a fresh private snapshot.
 3. Checks npm packing for that aggregate snapshot.
 4. Collects source facts once, including prepared-source and actual compiler-input

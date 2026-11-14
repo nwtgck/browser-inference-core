@@ -1357,12 +1357,11 @@ jobs:
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js package assemble --checkout-root "$GITHUB_WORKSPACE" \
-              --inputs "$GITHUB_WORKSPACE/build/package-inputs" --output "$GITHUB_WORKSPACE/dist/package" --defer-npm-pack
-            node build/tooling/tools/cli.js publication freeze --checkout-root "$GITHUB_WORKSPACE" \
+            node build/tooling/tools/cli.js publication prepare --checkout-root "$GITHUB_WORKSPACE" \
+              --inputs "$GITHUB_WORKSPACE/build/package-inputs" \
               --directory "$GITHUB_WORKSPACE/dist/package" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
               --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --branch artifacts \
-              --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3 > /dev/null
+              --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3
             jq -r '"tree=\(.tree)\nsource-commit=\(.sourceCommit)"' build/publication/frozen.json >> "$GITHUB_OUTPUT"
           OFFLINE
       - name: Publish append-only artifact commit

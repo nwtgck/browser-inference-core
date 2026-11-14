@@ -11,7 +11,7 @@ import { stageBuiltProfile } from '#runtimes/llama-cpp/tools/build';
 import { decodeLlamaProvenance } from '#dto/llama-cpp';
 import { verifyRuntimePackage as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
 import { verifyRuntimePackage as verifyImage } from '#runtimes/stable-diffusion-cpp/tools/verify';
-import { freezePackage } from '#tools/publication/artifacts';
+import { preparePublication } from '#tools/publication/artifacts';
 import { assemblePackage, validatePackage } from '#tools/package/aggregate';
 import { artifactDirectories } from '#tools/shared/contracts';
 import { decodePackageMetadata } from '#dto/shared';
@@ -144,13 +144,15 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
   await verifyLlama({ sourceRoot, directory: join(fixture.root, 'package-inputs/llama-cpp'), requireClean: true, checkNpmPack: true });
   await verifyImage({ sourceRoot, directory: join(fixture.root, 'package-inputs/stable-diffusion-cpp'), requireClean: true, checkNpmPack: true });
   let sourceChecks = 0;
-  await freezePackage({
+  await preparePublication({
     sourceRoot,
-    packageDirectory: fixture.directory,
+    inputs: join(fixture.root, 'package-inputs'),
+    packageDirectory: join(fixture.root, 'prepared-publication'),
     work: join(fixture.root, 'publication'),
     receipt: join(fixture.root, 'frozen.json'),
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    metrics: undefined,
     verifySource: async ({ sourceCommit, manifests }) => {
       sourceChecks++;
       const image = Object.values(Object.values(manifests['stable-diffusion-cpp'].profiles)[0]!.variants)[0]!;

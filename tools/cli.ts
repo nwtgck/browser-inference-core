@@ -6,7 +6,7 @@ import type { RuntimeName } from '#dto/shared';
 import { runtimeNames } from '#tools/shared/contracts';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import { READ_ENV_BIC_METRICS_MODE, READ_ENV_GITHUB_JOB, READ_ENV_GITHUB_RUN_ATTEMPT, READ_ENV_GITHUB_RUN_ID, READ_ENV_LCB_SOURCE_COMMIT, READ_ENV_SDCB_TEST_WEBGPU } from '#tools/shared/node-env';
-import type { PackageKind } from '#tools/ci/metrics';
+import type { Metrics, PackageKind } from '#tools/ci/metrics';
 import { cachePlanOptions, requiredString } from '#tools/toolchain/cli-options';
 
 const executingCheckoutRoot = dirname(dirname(fileURLToPath(import.meta.resolve('#source/toolchain.json'))));
@@ -60,7 +60,7 @@ export type CliModules = {
   runtimePackage: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/package'), 'buildPackage'>>;
   runtimeVerify: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/verify'), 'verifyRuntimePackage'>>;
   aggregate: () => Promise<Pick<typeof import('#tools/package/aggregate'), 'assemblePackage' | 'validatePackage'>>;
-  publication: () => Promise<Pick<typeof import('#tools/publication/artifacts'), 'freezePackage' | 'confirmPublication'>>;
+  publication: () => Promise<Pick<typeof import('#tools/publication/artifacts'), 'preparePublication' | 'freezePackage' | 'confirmPublication'>>;
   publicationSources: () => Promise<Pick<typeof import('#tools/publication/source'), 'verifyPublicationSources'>>;
   npmResolution: () => Promise<Pick<typeof import('#tools/publication/npm-lock'), 'prepareNpmResolution' | 'readNpmResolution'>>;
   report: () => Promise<Pick<typeof import('#tools/publication/consumer'), 'writeConfirmedReport'>>;
@@ -112,10 +112,10 @@ const booleanOption = { type: 'boolean', default: false } as const;
 export function createCli({ modules, writeJson }: { modules: CliModules | undefined; writeJson: typeof jsonOutput | undefined }) {
   const tools = modules ?? defaultModules;
   const emit = writeJson ?? jsonOutput;
-  let metrics: Promise<ReturnType<typeof import('#tools/ci/metrics').createMetrics> | undefined> | undefined;
-  async function measured<T>({ phase, packageKind, operation }: { phase: string; packageKind: PackageKind | undefined; operation: () => Promise<T> }): Promise<T> {
+  let metrics: Promise<Metrics | undefined> | undefined;
+  async function observer(): Promise<Metrics | undefined> {
     if (READ_ENV_BIC_METRICS_MODE() !== 'basic') {
-      return operation();
+      return undefined;
     }
     metrics ??= Promise.resolve().then(() => tools.metrics()).then(({ createMetrics }) => createMetrics({ checkoutRoot: executingCheckoutRoot })).catch(() => {
       try {
@@ -123,8 +123,11 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
       } catch { /* Optional output. */ }
       return undefined;
     });
-    const observer = await metrics;
-    return observer ? observer.measure({ phase, packageKind, operation }) : operation();
+    return metrics;
+  }
+  async function measured<T>({ phase, packageKind, operation }: { phase: string; packageKind: PackageKind | undefined; operation: () => Promise<T> }): Promise<T> {
+    const metrics = await observer();
+    return metrics ? metrics.measure({ phase, packageKind, operation }) : operation();
   }
   return yargs()
     .scriptName('bicore')
@@ -230,6 +233,27 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
       })), () => {})
     .command('publication', 'Freeze, confirm, and report local publication state', command => command
       .demandCommand(1)
+      .command('prepare', 'Assemble and freeze runtime packages in one process', command => command
+        .option('checkout-root', checkoutRootOption)
+        .option('inputs', requiredString)
+        .option('directory', requiredString)
+        .option('work-root', { ...requiredString, description: 'Fresh artifact snapshot directory' })
+        .option('receipt', requiredString)
+        .option('branch', requiredString)
+        .option('source-commit', requiredString)
+        .option('source-work-root', { ...requiredString, description: 'Fresh compiler snapshot and upstream preparation directory' })
+        .option('python', { ...requiredString, description: 'Python executable for the upstream WGSL generator' }), async options => measured({
+        phase: 'cli.publication.prepare',
+        packageKind: 'root',
+        operation: async () => {
+          const sourceRoot = resolve(options['checkout-root']);
+          const output = resolve(options.directory);
+          const { preparePublication } = await tools.publication();
+          const { verifyPublicationSources } = await tools.publicationSources();
+          const frozen = await preparePublication({ sourceRoot, inputs: resolve(options.inputs), packageDirectory: output, work: resolve(options['work-root']), receipt: resolve(options.receipt), branch: options.branch, expectedSource: options['source-commit'], verifySource: ({ sourceCommit, manifests }) => verifyPublicationSources({ sourceRoot, workRoot: resolve(options['source-work-root']), sourceCommit, manifests, python: options.python }), metrics: await observer() });
+          await emit({ value: { sourceCommit: frozen.sourceCommit, output, tree: frozen.tree }, output: undefined });
+        },
+      }))
       .command('freeze', 'Freeze a verified package and its source facts', command => command
         .option('checkout-root', checkoutRootOption)
         .option('directory', requiredString)

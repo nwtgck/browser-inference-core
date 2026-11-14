@@ -79,6 +79,7 @@ const commands = [
   { name: 'npm-fixture', argv: ['publication', 'npm-fixture', '--directory', 'npm', '--repository', 'owner/repository', '--commit', 'artifact', '--version', '1.2.3'], required: ['directory', 'repository', 'commit', 'version'] },
   { name: 'report', argv: ['publication', 'report', '--work-root', 'frozen', '--receipt', 'receipt.json', '--commit', 'artifact', '--repository', 'owner/repository', '--npm-fixture', 'npm', '--output', 'report.md'], required: ['work-root', 'receipt', 'commit', 'repository', 'npm-fixture', 'output'] },
   { name: 'validation-runtime', argv: ['validation', 'runtime', '--runtime', 'llama-cpp', '--checkout-root', 'checkout', '--package', 'package', '--receipt', 'browser-receipt.json'], required: ['runtime', 'checkout-root', 'package', 'receipt'] },
+  { name: 'publication-prepare', argv: ['publication', 'prepare', '--checkout-root', 'checkout', '--inputs', 'inputs', '--directory', 'package', '--work-root', 'frozen', '--receipt', 'receipt.json', '--branch', 'artifacts', '--source-commit', 'revision', '--source-work-root', 'source-work', '--python', 'python3'], required: ['checkout-root', 'inputs', 'directory', 'work-root', 'receipt', 'branch', 'source-commit', 'source-work-root', 'python'] },
 ];
 
 for (const command of commands) {
@@ -274,6 +275,56 @@ test('freeze connects real source verification arguments without a dependency ro
     { sourceRoot: resolve('checkout'), workRoot: resolve('source-work'), sourceCommit: 'actual-source', manifests, python: 'python3' },
   ]);
   assert.deepEqual(cli.emitted, [{ value: frozen, output: undefined }]);
+});
+
+test('publication preparation shares the CLI observer and prints only its publication summary', async () => {
+  const environment = stubEnvironment({ values: { BIC_METRICS_MODE: 'basic' } });
+  try {
+    const manifests = { selected: 'manifests' };
+    const facts = { verified: true };
+    const frozen = { sourceCommit: 'actual-source', tree: 'actual-tree', report: { private: 'large report' } };
+    const calls = [];
+    let loads = 0;
+    const observer = {
+      measure: async ({ phase, operation }) => {
+        calls.push(phase);
+        return operation();
+      },
+    };
+    const cli = runner({
+      modules: {
+        metrics: async () => {
+          loads++;
+          return { createMetrics: () => observer };
+        },
+        publication: async () => ({
+          preparePublication: async args => {
+            const { verifySource, metrics, ...options } = args;
+            assert.equal(metrics, observer);
+            calls.push(options);
+            assert.equal(await verifySource({ sourceCommit: frozen.sourceCommit, manifests }), facts);
+            return frozen;
+          },
+        }),
+        publicationSources: async () => ({
+          verifyPublicationSources: async args => {
+            calls.push(args);
+            return facts;
+          },
+        }),
+      },
+    });
+    await cli.parse(commands[10].argv);
+    assert.equal(loads, 1);
+    assert.deepEqual(calls, [
+      'cli.publication.prepare',
+      { sourceRoot: resolve('checkout'), inputs: resolve('inputs'), packageDirectory: resolve('package'), work: resolve('frozen'), receipt: resolve('receipt.json'), branch: 'artifacts', expectedSource: 'revision' },
+      { sourceRoot: resolve('checkout'), workRoot: resolve('source-work'), sourceCommit: frozen.sourceCommit, manifests, python: 'python3' },
+    ]);
+    assert.deepEqual(cli.emitted, [{ value: { sourceCommit: frozen.sourceCommit, output: resolve('package'), tree: frozen.tree }, output: undefined }]);
+  } finally {
+    environment[Symbol.dispose]();
+  }
 });
 
 test('confirm and report reuse the confirmed frozen state', async () => {

@@ -6,7 +6,8 @@ import { decodeFrozenPublication, type SourceFacts } from '#dto/shared';
 import { decodeConsumerReportEnvelope } from '#dto/llama-cpp';
 import { bytesIdentity } from '#tools/package/files';
 import { packageFixture, fixtureSource, sourceRoot } from '#tests/tools/package/fixtures.test-support';
-import { freezePackage, confirmPublication, checkFrozen } from '#tools/publication/artifacts';
+import { preparePublication, freezePackage, confirmPublication, checkFrozen } from '#tools/publication/artifacts';
+import { Metrics, metricContext } from '#tools/ci/metrics';
 import { writeConfirmedReport } from '#tools/publication/consumer';
 import { extractNpmResolution } from '#tools/publication/npm-lock';
 import { localGit, verifyGitTree } from '#tools/publication/git';
@@ -16,6 +17,55 @@ import { readConsumerReport } from '#tools/automation/comments/archive';
 function fixtureSourceFacts({ sourceCommit }: { sourceCommit: string }): SourceFacts {
   return { sourceCommit, runtimes: { 'llama-cpp': { upstream: 'b'.repeat(40), preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: { 'stable-diffusion': { path: 'fixture', repository: 'fixture', commit: 'b'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
 }
+
+test('same-process preparation freezes the same bytes and report with one source verification', async () => {
+  await using fixture = await packageFixture();
+  const frozen = await freezePackage({ sourceRoot, packageDirectory: fixture.directory, work: join(fixture.root, 'external'), receipt: join(fixture.root, 'external.json'), branch: 'artifacts', expectedSource: fixtureSource, verifySource: async ({ sourceCommit }) => fixtureSourceFacts({ sourceCommit }) });
+  const metrics = new Metrics({ enabled: true, directory: join(fixture.root, 'metrics'), checkoutRoot: sourceRoot, context: metricContext({ context: {} }) });
+  let checks = 0;
+  const prepared = await metrics.measure({
+    phase: 'cli.publication.prepare',
+    packageKind: 'root',
+    operation: () => preparePublication({
+      sourceRoot,
+      inputs: join(fixture.root, 'package-inputs'),
+      packageDirectory: join(fixture.root, 'prepared'),
+      work: join(fixture.root, 'publication'),
+      receipt: join(fixture.root, 'frozen.json'),
+      branch: 'artifacts',
+      expectedSource: fixtureSource,
+      verifySource: async ({ sourceCommit }) => {
+        checks++;
+        return fixtureSourceFacts({ sourceCommit });
+      },
+      metrics,
+    }),
+  });
+  assert.deepEqual(prepared, frozen);
+  assert.equal(checks, 1);
+  const spans = metrics.records.filter(record => record.event === 'span_start');
+  assert.deepEqual(spans.map(record => record.phase), ['cli.publication.prepare', 'publication.assemble', 'publication.copy', 'publication.npm-pack', 'publication.source', 'publication.git']);
+  assert.ok(spans.slice(1).every(record => record.parentSpanId === spans[0]!.spanId));
+  const commit = (await localGit({ cwd: join(fixture.root, 'publication'), args: ['commit-tree', prepared.tree], input: 'Prepared publication test\n' })).toString('utf8').trim();
+  assert.deepEqual((await confirmPublication({ work: join(fixture.root, 'publication'), receipt: join(fixture.root, 'frozen.json'), commit })).frozen, prepared);
+});
+
+test('preparation rejects the wrong source and corrupt runtime inputs before source verification', async () => {
+  await using fixture = await packageFixture();
+  let checks = 0;
+  const verifySource = async ({ sourceCommit }: { sourceCommit: string }) => {
+    checks++;
+    return fixtureSourceFacts({ sourceCommit });
+  };
+  const options = { sourceRoot, inputs: join(fixture.root, 'package-inputs'), packageDirectory: join(fixture.root, 'prepared'), work: join(fixture.root, 'publication'), receipt: join(fixture.root, 'frozen.json'), branch: 'artifacts', expectedSource: 'c'.repeat(40), verifySource, metrics: undefined };
+  await assert.rejects(preparePublication(options), /selected source/u);
+  await assert.rejects(readFile(options.receipt), { code: 'ENOENT' });
+  const payload = join(options.inputs, 'llama-cpp/profiles/cpu-wasm32/browser/core.wasm');
+  await writeFile(payload, 'wrong runtime bytes');
+  await assert.rejects(preparePublication({ ...options, expectedSource: fixtureSource }));
+  await assert.rejects(readFile(options.receipt), { code: 'ENOENT' });
+  assert.equal(checks, 0);
+});
 
 test('freeze validates source once and reuses the same report after immutable Git confirmation', async () => {
   await using fixture = await packageFixture();
@@ -129,13 +179,15 @@ test('source failures and mutations after the private npm pack never produce a p
   let checks = 0;
   const failedWork = join(fixture.root, 'source-failure');
   const failedReceipt = join(fixture.root, 'source-failure.json');
-  await assert.rejects(freezePackage({
+  await assert.rejects(preparePublication({
     sourceRoot,
-    packageDirectory: fixture.directory,
+    inputs: join(fixture.root, 'package-inputs'),
+    packageDirectory: join(fixture.root, 'prepared'),
     work: failedWork,
     receipt: failedReceipt,
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    metrics: undefined,
     verifySource: async () => {
       checks++;
       throw new Error('Selected source receipt mismatch');

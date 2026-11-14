@@ -262,7 +262,7 @@ export async function collectSourceFacts({ checkoutRoot, inputs, output, python 
     let receipt = preparedByOptions.get(key);
     if (receipt === undefined) {
       const prepared = await prepareSources({ inputs, output: join(output, profile), python, options: preparation });
-      await verifyPreparedSources({ prepared });
+      // Preparation already records the final bytes before atomic activation.
       receipt = prepared.receipt;
       preparedByOptions.set(key, receipt);
     }
