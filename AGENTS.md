@@ -119,6 +119,14 @@ fixes and tests to the affected scope; directory targets and explicit file
 targets are both appropriate. Update callers and test support when a shared
 contract changes, and include the relevant consumers in verification.
 
+For changes to source selection, compile definitions or CMake wiring, verify an
+actual production configuration that activates the affected path and compile
+the affected target or translation unit with its generated build settings.
+Native fixtures or another profile do not establish coverage of different active
+sources, platform branches or include paths. If prerequisites prevent this check,
+identify the unverified path and missing inputs explicitly. Choose representative
+configurations for the changed behavior; a full local matrix is not required.
+
 - Use `npm run lint -- --fix <affected paths...>` for owned JS/TS changes.
 - Use `npm run tooling:build` when emitting TypeScript for Node tests; it also
   performs strict type checking. Use `npm run tooling:check` when only checking

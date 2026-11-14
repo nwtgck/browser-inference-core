@@ -26,6 +26,14 @@ Dawn headers or already compiled runtime artifacts. Read those tests' input
 requirements and report missing inputs and skips. A missing dependency is not
 a passing contract check.
 
+Choose a representative production configuration that activates the changed
+path. Configure checks target setup; compiling the affected consumer checks its
+include paths and platform-specific code. Native fixtures may use different
+source selections or include directories, so their success does not substitute
+for the corresponding Wasm compile. Use the generated build settings rather than
+adding test-only include paths to make that consumer compile. This does not
+require a full local matrix or browser execution.
+
 Native checks do not establish Wasm pointer width, JSPI/Asyncify completion,
 Embind marshalling or WebGPU execution. The CI matrix separately compiles the
 actual targets and validates their matching generated schemas, declarations,

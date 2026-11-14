@@ -31,8 +31,10 @@ const metricsStub = async () => ({ createMetrics: () => ({ measure: async ({ ope
 
 function runner({ modules }) {
   const emitted = [];
+  const accessedModules = [];
   const boundary = new Proxy(modules, {
     get(target, key) {
+      accessedModules.push(key);
       if (Object.hasOwn(target, key)) {
         return target[key];
       }
@@ -46,6 +48,7 @@ function runner({ modules }) {
   });
   return {
     emitted,
+    accessedModules,
     async parse(argv) {
       let help = '';
       await createCli({
@@ -595,6 +598,9 @@ test('incomplete or invalid report run identities are rejected before dispatch',
     ['--run-id', '9007199254740992', '--run-attempt', '2'],
     ['--run-id', '12345', '--run-attempt', 'not-a-number'],
   ]) {
-    await assert.rejects(runner({ modules: {} }).parse([...commands[8].argv, ...flags]), /Implications|positive safe integers|Invalid/u);
+    const cli = runner({ modules: {} });
+    await assert.rejects(cli.parse([...commands[8].argv, ...flags]), Error);
+    assert.deepEqual(cli.accessedModules, []);
+    assert.deepEqual(cli.emitted, []);
   }
 });

@@ -10,5 +10,7 @@ if(NOT EXISTS "${LCB_WEBGPU_HEADERS}/ggml-webgpu-aligned-word-load-shaders.hpp")
 endif()
 target_compile_definitions(ggml-webgpu PRIVATE GGML_WEBGPU_BATCH_PARAM_UPLOADS)
 target_include_directories(ggml-webgpu PRIVATE "${LCB_WEBGPU_HEADERS}")
-# Both the scheduler and model consumers compile from the same prepared tree.
+# The context consumes the checkpoint batch interface owned by ggml's prepared
+# source tree. Private include paths do not propagate from ggml-base to llama.
 target_include_directories(ggml-base PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src")
+target_include_directories(llama PRIVATE "${LCB_LLAMA_SOURCE}/ggml/src")

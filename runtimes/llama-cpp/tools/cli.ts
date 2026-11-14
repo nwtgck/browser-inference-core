@@ -26,6 +26,10 @@ export async function main({ argv }: { argv: readonly string[] }): Promise<void>
   const booleanStrings = ['ON', 'OFF', 'true', 'false', '1', '0', ''] as const;
   await yargs([...argv]).scriptName('llama-cpp').strict().demandCommand(1).help().exitProcess(false)
     .parserConfiguration({ 'camel-case-expansion': false })
+    .showHelpOnFail(false)
+    .fail((message, error) => {
+      throw error ?? new Error(message);
+    })
     .command('cache-plan', 'Plan caches for this runtime', parser => parser.options(cachePlanOptions), async args => {
       const checkoutRoot = resolve(args['checkout-root']);
       const configuration = await loadConfiguration({ checkoutRoot });
@@ -94,5 +98,10 @@ export async function main({ argv }: { argv: readonly string[] }): Promise<void>
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  await main({ argv: process.argv.slice(2) });
+  try {
+    await main({ argv: process.argv.slice(2) });
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
 }
