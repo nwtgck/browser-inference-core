@@ -2,8 +2,8 @@
   "formatVersion": 2,
   "runtime": "llama-cpp",
   "abiVersion": 3,
-  "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
-  "schemaSha256": "56890524292b453d57d52c06ce2fbc838e81547ddfc69f1e5bbdd4a5ed5f32ec",
+  "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
+  "schemaSha256": "f3d7c3761c3418e9fd2c9c563b92737a21a4d54564fb8e05ddddd152f6f0daa4",
   "llamaCommit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "licenseRoots": [
     "emscripten",
@@ -27,6 +27,11 @@
       "path": "api/exports.json"
     },
     {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "api/extensions.d.ts"
+    },
+    {
       "bytes": 77164,
       "sha256": "383a218af1d191abdbc5a986592636500a05d3f2d97391cd38ad5bb896cb8053",
       "path": "api/functions.d.ts"
@@ -42,13 +47,13 @@
       "path": "api/schema.d.ts"
     },
     {
-      "bytes": 4836256,
-      "sha256": "00f4d8d679c7edf9aa81e685586b74daeea6183af9ce90a406072c66c10c2501",
+      "bytes": 4873755,
+      "sha256": "6a34978e3729fb521c37baa406b340b8b6442ecfd07858732c514556ad527073",
       "path": "api/schema.json"
     },
     {
-      "bytes": 2412100,
-      "sha256": "292d7a5e73e65fe34259bf79184aeae8e5ce621af56ad82858292b746c9aab6a",
+      "bytes": 2428400,
+      "sha256": "b22e1c3fa0deeb02057cd5a672aeb7e0473afa86d81a311169387e4275d85078",
       "path": "api/schema.mjs"
     },
     {
@@ -1577,13 +1582,13 @@
       "path": "native-license-index.json"
     },
     {
-      "bytes": 1584,
-      "sha256": "fa758c392a6a6c7cc24ee5e875bcb18749b6699d2c86089f577a918c886c77ce",
+      "bytes": 1656,
+      "sha256": "30c5a14126246e38bb83199d846bb43e3028dbfdb898b16eb76bcb50790cd749",
       "path": "package.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/cpu-wasm32/browser/abi.json"
     },
     {
@@ -1598,8 +1603,13 @@
     },
     {
       "bytes": 6893154,
-      "sha256": "d415eb09848943a2359bb0f7c4bf6b1267a21279369d808b7704b31ff512d96c",
+      "sha256": "133e01268265d104ec1981561ff8c0e3e820a45ed34f0627654b01b512d3b631",
       "path": "profiles/cpu-wasm32/browser/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/cpu-wasm32/browser/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1608,12 +1618,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/cpu-wasm32/browser/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/cpu-wasm32/test/abi.json"
     },
     {
@@ -1628,8 +1638,13 @@
     },
     {
       "bytes": 7057568,
-      "sha256": "88dc5e4f31930d6e116a14dd7fa3d808ed138f9efe90b66755b651b4e60e614f",
+      "sha256": "88a37d2c36e0945112f4bc82b633ec531a8f773a5205c426cc0f261f89b6f664",
       "path": "profiles/cpu-wasm32/test/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/cpu-wasm32/test/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1638,12 +1653,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/cpu-wasm32/test/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/webgpu-wasm32-asyncify/browser/abi.json"
     },
     {
@@ -1658,8 +1673,13 @@
     },
     {
       "bytes": 16349737,
-      "sha256": "4b9680ff348013c9c3b2e557d7c1e354a04b40fb64e32998f34fbc6d75e3602d",
+      "sha256": "fa26b13e13b65ae39f4a2188d2cf69f84e64e92c0a28ea01bf9c28192b43c55d",
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm32-asyncify/browser/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1668,12 +1688,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/webgpu-wasm32-asyncify/browser/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/webgpu-wasm32-asyncify/test/abi.json"
     },
     {
@@ -1688,8 +1708,13 @@
     },
     {
       "bytes": 16598224,
-      "sha256": "1388411212826c88f37e72fd28dec274dfcb5d1f9b6a387a9b62776757736d80",
+      "sha256": "967738a52a12281133bc695caf420020bccc84fdb9b5c3b1fc0be4dbd3003254",
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm32-asyncify/test/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1698,12 +1723,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/webgpu-wasm32-asyncify/test/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/webgpu-wasm32-jspi/browser/abi.json"
     },
     {
@@ -1718,8 +1743,13 @@
     },
     {
       "bytes": 9245857,
-      "sha256": "f515cd348f27385f104e67c4422967893248eb4adbffcda2164f562c6297868f",
+      "sha256": "ed9720e5965fdc7c3812753c49bd02955107ea274d4b9f978de4f4898a11d13d",
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm32-jspi/browser/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1728,12 +1758,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/webgpu-wasm32-jspi/browser/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065794,
-      "sha256": "91b9611712030c6befcc3f1582895e439963df14c07af741e93165db235446d5",
+      "bytes": 1074614,
+      "sha256": "80b685ab2c2619f58044cae6e1988fce47b66db74b4b167923783b6c003f73a2",
       "path": "profiles/webgpu-wasm32-jspi/test/abi.json"
     },
     {
@@ -1748,8 +1778,13 @@
     },
     {
       "bytes": 9428241,
-      "sha256": "df710cdac1386e0b2d99848fefbc36f0ed6d46223edccf0331c5350c5480472d",
+      "sha256": "441c7ac102ecf773e65c34e9addcd166c49d60a36ec317f94e9c9955c143297a",
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm32-jspi/test/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1758,12 +1793,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "50c2b79dc5ea3f490ddf8b0b7a314853a79170c47f6218d876988b1fc4fb6815",
+      "sha256": "789d90f1392b7f180d28206012dd4264f839832165facd695cf5162daf1adfbb",
       "path": "profiles/webgpu-wasm32-jspi/test/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065828,
-      "sha256": "b6f8b38e0ba44ab036aa835b78b026c4796f820f1a4e708d60d9f4401f7ff541",
+      "bytes": 1074648,
+      "sha256": "76a17e2228cbb5b54009bfacf9b1d9bd38bff3354cd096a20422d7719957c81f",
       "path": "profiles/webgpu-wasm64-jspi/browser/abi.json"
     },
     {
@@ -1778,8 +1813,13 @@
     },
     {
       "bytes": 9552889,
-      "sha256": "9e08abc6e8753bb79fe7c5db2f708233f5322fdbd63408e6805e92fc15bfc177",
+      "sha256": "21e8cfc58c9ead511a8b4af31fe60ba4eef242733b38fb0e3b99c353267eb2f6",
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm64-jspi/browser/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1788,12 +1828,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "e9169aef5a71e9985032119670b10fd74d657a992cbb577ddb26c94ba83a7f15",
+      "sha256": "53e09746b85239702635eff88e130532b3ec717551e59bb5601b2422a2bcb841",
       "path": "profiles/webgpu-wasm64-jspi/browser/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1065828,
-      "sha256": "b6f8b38e0ba44ab036aa835b78b026c4796f820f1a4e708d60d9f4401f7ff541",
+      "bytes": 1074648,
+      "sha256": "76a17e2228cbb5b54009bfacf9b1d9bd38bff3354cd096a20422d7719957c81f",
       "path": "profiles/webgpu-wasm64-jspi/test/abi.json"
     },
     {
@@ -1808,8 +1848,13 @@
     },
     {
       "bytes": 9740680,
-      "sha256": "4508cf63b77418375c7fc413d869b2b941f3003b8a6a5fce0e9dee6313785dbb",
+      "sha256": "521d9e501d7521974091778b1ed4e04fcae3c6393646bf8fac206ee6700b1488",
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm64-jspi/test/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1818,12 +1863,12 @@
     },
     {
       "bytes": 5755,
-      "sha256": "e9169aef5a71e9985032119670b10fd74d657a992cbb577ddb26c94ba83a7f15",
+      "sha256": "53e09746b85239702635eff88e130532b3ec717551e59bb5601b2422a2bcb841",
       "path": "profiles/webgpu-wasm64-jspi/test/model-graph-v1.schema.json"
     },
     {
-      "bytes": 1083262,
-      "sha256": "9e118439d937b0ba3d61a96ef5c6d53c9155af795d0ebd6c0295d0e887aaa439",
+      "bytes": 1090541,
+      "sha256": "51905c9b869fb6bfa5f642c62db351dc08eaebe9fea649fbfc7257ec10176f7e",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/abi.json"
     },
     {
@@ -1838,8 +1883,13 @@
     },
     {
       "bytes": 9596428,
-      "sha256": "0242b7c1e0c903357da02c88049c59b702bf550debfb62c3105030c71f236869",
+      "sha256": "a280259d4c6a9b16f8426546d6c997efc79668890bda03be33407feadb1018fe",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1848,22 +1898,22 @@
     },
     {
       "bytes": 5755,
-      "sha256": "43dce42f8ad53806aa019a668a073fd208835e997d450cee676bb29e13bc0631",
+      "sha256": "ab11adf0a78df9b9bf9577b4a6e4cfe4525dd9bcc7665b0abc0e481caab3bbde",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/model-graph-v1.schema.json"
     },
     {
-      "bytes": 259,
-      "sha256": "55d93ce97c5f18c448d094c0031fc3042e71efc18af4e637ab856e7adcb33a83",
+      "bytes": 275,
+      "sha256": "cbf56347a15f2358312a25139fb84a1110198ed6c2a29f55a32310a36da39efa",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/q8-diagnostic-v1.functions.d.ts"
     },
     {
       "bytes": 13658,
-      "sha256": "9ebfb3706ae7ea6910ce62df9d054c460d1a5acf82451ba39aa83dcebf35cea9",
+      "sha256": "be84cc5e9881631357301daa597cb645d2d78d46793ca4d4fd30d6982989cb39",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/q8-diagnostic-v1.schema.json"
     },
     {
-      "bytes": 1083262,
-      "sha256": "9e118439d937b0ba3d61a96ef5c6d53c9155af795d0ebd6c0295d0e887aaa439",
+      "bytes": 1090541,
+      "sha256": "51905c9b869fb6bfa5f642c62db351dc08eaebe9fea649fbfc7257ec10176f7e",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/abi.json"
     },
     {
@@ -1877,9 +1927,14 @@
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.mjs"
     },
     {
-      "bytes": 9783164,
-      "sha256": "4738897170585abc4c1e92aa3fe8a6767e173dcba3e78b005139b89a047d0dcf",
+      "bytes": 9783165,
+      "sha256": "63225e493b5eca46c9596906b904dee230347a462248e1ca1bad79e28615c417",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.wasm"
+    },
+    {
+      "bytes": 982,
+      "sha256": "2bd4cca2e2b333a442b44eec20c5f22bfa0c6ae815283e4447cd42f5d1716ba8",
+      "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/extensions.d.ts"
     },
     {
       "bytes": 706,
@@ -1888,17 +1943,17 @@
     },
     {
       "bytes": 5755,
-      "sha256": "43dce42f8ad53806aa019a668a073fd208835e997d450cee676bb29e13bc0631",
+      "sha256": "ab11adf0a78df9b9bf9577b4a6e4cfe4525dd9bcc7665b0abc0e481caab3bbde",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/model-graph-v1.schema.json"
     },
     {
-      "bytes": 259,
-      "sha256": "55d93ce97c5f18c448d094c0031fc3042e71efc18af4e637ab856e7adcb33a83",
+      "bytes": 275,
+      "sha256": "cbf56347a15f2358312a25139fb84a1110198ed6c2a29f55a32310a36da39efa",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/q8-diagnostic-v1.functions.d.ts"
     },
     {
       "bytes": 13658,
-      "sha256": "9ebfb3706ae7ea6910ce62df9d054c460d1a5acf82451ba39aa83dcebf35cea9",
+      "sha256": "be84cc5e9881631357301daa597cb645d2d78d46793ca4d4fd30d6982989cb39",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/q8-diagnostic-v1.schema.json"
     }
   ],
@@ -1909,7 +1964,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "browser",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -1948,11 +2003,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -1987,8 +2042,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -2279,8 +2334,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -18646,8 +18701,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -35123,8 +35178,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -35726,8 +35781,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -37555,7 +37610,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794661701,
+          "builtAtUnix": 1794663761,
           "buildCache": {
             "identity": "c182a588bda086bda29fd057d8fb53de",
             "compilerWrapper": "ccache"
@@ -37614,7 +37669,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "test",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -37653,11 +37708,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -37692,8 +37747,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -37984,8 +38039,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -54351,8 +54406,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -70828,8 +70883,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -71431,8 +71486,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -73260,7 +73315,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794661713,
+          "builtAtUnix": 1794663704,
           "buildCache": {
             "identity": "e9386b7caffdd66bafb2784be70b9338",
             "compilerWrapper": "ccache"
@@ -73312,7 +73367,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -73351,11 +73406,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -73390,8 +73445,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -73682,8 +73737,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -90049,8 +90104,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -107842,8 +107897,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -108449,8 +108504,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -110293,7 +110348,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661753,
+          "builtAtUnix": 1794663895,
           "buildCache": {
             "identity": "bbfdfd2bce32aaa7ee1b8c4199c433b7",
             "compilerWrapper": "ccache"
@@ -110340,7 +110395,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -110379,11 +110434,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -110418,8 +110473,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -110710,8 +110765,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -127077,8 +127132,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -144870,8 +144925,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -145477,8 +145532,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -147321,7 +147376,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661846,
+          "builtAtUnix": 1794663793,
           "buildCache": {
             "identity": "6d148079f619c2923f64447d2e5cf807",
             "compilerWrapper": "ccache"
@@ -147361,7 +147416,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -147400,11 +147455,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -147439,8 +147494,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -147731,8 +147786,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -164098,8 +164153,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -181891,8 +181946,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -182498,8 +182553,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -184342,7 +184397,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661783,
+          "builtAtUnix": 1794663752,
           "buildCache": {
             "identity": "c6629e302eb28641b484d611d85f2333",
             "compilerWrapper": "ccache"
@@ -184389,7 +184444,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -184428,11 +184483,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -184467,8 +184522,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -184759,8 +184814,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -201126,8 +201181,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -218919,8 +218974,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -219526,8 +219581,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -221370,7 +221425,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661716,
+          "builtAtUnix": 1794663724,
           "buildCache": {
             "identity": "27289256caeec38a3746d97fc826070c",
             "compilerWrapper": "ccache"
@@ -221410,7 +221465,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -221449,11 +221504,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -221488,8 +221543,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -221780,8 +221835,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -238147,8 +238202,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -255977,8 +256032,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -256584,8 +256639,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -258428,7 +258483,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661748,
+          "builtAtUnix": 1794663776,
           "buildCache": {
             "identity": "abaae16e6be4ba90e0b82869d19730c2",
             "compilerWrapper": "ccache"
@@ -258475,7 +258530,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -258514,11 +258569,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -258553,8 +258608,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -258845,8 +258900,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -275212,8 +275267,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -293042,8 +293097,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -293649,8 +293704,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -295493,7 +295548,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661710,
+          "builtAtUnix": 1794663716,
           "buildCache": {
             "identity": "2207c8773a7f9e78af758f6c43c4eae1",
             "compilerWrapper": "ccache"
@@ -295533,7 +295588,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "browser",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -295573,11 +295628,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -295612,8 +295667,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -295904,8 +295959,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -312271,8 +312326,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -330142,8 +330197,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -330753,8 +330808,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -332601,7 +332656,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661735,
+          "builtAtUnix": 1794663770,
           "buildCache": {
             "identity": "16744b159182c38c3d3d259e68af441a",
             "compilerWrapper": "ccache"
@@ -332648,7 +332703,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "test",
-          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+          "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -332688,11 +332743,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
+            "sourceCommit": "c053e66830cd057f0b2b18c50bb032325f3ce0f7",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14862,
-                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
+                "bytes": 14858,
+                "sha256": "18517fd4339833ece79716b1ce8dbf6ee8e76c9bd8233503f6e6d6c5fec17e23"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -332727,8 +332782,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "runtimes/llama-cpp/native/abi/metadata.h": {
                 "bytes": 247,
@@ -333019,8 +333074,8 @@
                 "sha256": "4645e9d1872dc6551c72b274256b098e0dde06a185da8a90908313d6e79cf96f"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4793,
-                "sha256": "d14f7aed62223b149f59bfcf2d5c7dc839783f34025f5af5f50cbd8783e1e982"
+                "bytes": 4940,
+                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -349386,8 +349441,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "native/abi/metadata.h": {
                 "bytes": 247,
@@ -367257,8 +367312,8 @@
                 "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
               },
               "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                "bytes": 7306,
-                "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                "bytes": 7228,
+                "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
               },
               "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                 "bytes": 25607,
@@ -367868,8 +367923,8 @@
                   "sha256": "d848aad1f4c8f1e787ec278d88f9d9c93963f5ca8297bdce297802146c64c622"
                 },
                 "compile/runtimes/llama-cpp/native/abi/metadata.cpp": {
-                  "bytes": 7306,
-                  "sha256": "0e768808e68378c84fba95b5fb7c1ed6b20038a8054467d95e2a484244eecb3e"
+                  "bytes": 7228,
+                  "sha256": "608882b17ebf6054903db8b7abc6db266ccb8df4d71680a615a23f3b4287b090"
                 },
                 "compile/runtimes/llama-cpp/native/chat/chat-embind.cpp": {
                   "bytes": 25607,
@@ -369716,7 +369771,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794661736,
+          "builtAtUnix": 1794663725,
           "buildCache": {
             "identity": "5423a64cc8f4165e8b18312afc19a7ab",
             "compilerWrapper": "ccache"

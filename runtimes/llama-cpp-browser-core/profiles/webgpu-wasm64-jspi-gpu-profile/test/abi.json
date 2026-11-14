@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 8,
-  "schemaSha256": "b6f262cbe5a788fe3b72431554c6f80fc47517ea1a5beb5f7ca55590938975dd",
+  "schemaSha256": "de98f47a641d39c563d8b1e5ccb47ba47418bab3938e74650842040bfb69c473",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -41912,65 +41912,6 @@
       ]
     },
     {
-      "name": "ggml_backend_webgpu_q8_diagnostic_v1_t",
-      "cType": "int32_t (*)(ggml_backend_t, struct ggml_tensor *, const struct ggml_webgpu_q8_diagnostic_request_v1 *, struct ggml_webgpu_q8_diagnostic_report_v1 *, uint32_t)",
-      "returnType": "int32_t",
-      "returnKind": "signed",
-      "abiType": {
-        "kind": "integer",
-        "bits": 32,
-        "signed": true
-      },
-      "parameters": [
-        {
-          "name": "arg0",
-          "cType": "ggml_backend_t",
-          "kind": "pointer",
-          "abiType": {
-            "kind": "pointer",
-            "bits": 64
-          }
-        },
-        {
-          "name": "arg1",
-          "cType": "struct ggml_tensor *",
-          "kind": "pointer",
-          "abiType": {
-            "kind": "pointer",
-            "bits": 64
-          }
-        },
-        {
-          "name": "arg2",
-          "cType": "const struct ggml_webgpu_q8_diagnostic_request_v1 *",
-          "kind": "pointer",
-          "abiType": {
-            "kind": "pointer",
-            "bits": 64
-          }
-        },
-        {
-          "name": "arg3",
-          "cType": "struct ggml_webgpu_q8_diagnostic_report_v1 *",
-          "kind": "pointer",
-          "abiType": {
-            "kind": "pointer",
-            "bits": 64
-          }
-        },
-        {
-          "name": "arg4",
-          "cType": "uint32_t",
-          "kind": "unsigned",
-          "abiType": {
-            "kind": "integer",
-            "bits": 32,
-            "signed": false
-          }
-        }
-      ]
-    },
-    {
       "name": "ggml_custom_op_t",
       "cType": "void (*)(struct ggml_tensor *, int, int, void *)",
       "returnType": "void",
@@ -46672,5 +46613,338 @@
         "GGML_WEBGPU_Q8_DIAGNOSTIC_REPETITIONS_MAX_V1": "128"
       }
     }
-  }
+  },
+  "extensionDeclarations": [
+    {
+      "extensionId": "model-graph-v1",
+      "functions": [
+        {
+          "name": "lcb_model_graph_architecture_known",
+          "export": "_lcb_model_graph_architecture_known",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "name",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_last_error",
+          "export": "_lcb_model_graph_last_error",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sample",
+          "export": "_lcb_model_graph_sample",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "workspace",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "sampler",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "logits",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "count",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sampler_workspace_free",
+          "export": "_lcb_model_graph_sampler_workspace_free",
+          "returnType": "void",
+          "returnKind": "void",
+          "abiType": {
+            "kind": "void"
+          },
+          "parameters": [
+            {
+              "name": "workspace",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sampler_workspace_new",
+          "export": "_lcb_model_graph_sampler_workspace_new",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "vocabulary_size",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_schema_hash",
+          "export": "_lcb_model_graph_schema_hash",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_version",
+          "export": "_lcb_model_graph_version",
+          "returnType": "uint32_t",
+          "returnKind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_free",
+          "export": "_lcb_model_graph_vocab_free",
+          "returnType": "void",
+          "returnKind": "void",
+          "abiType": {
+            "kind": "void"
+          },
+          "parameters": [
+            {
+              "name": "owner",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_get",
+          "export": "_lcb_model_graph_vocab_get",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "owner",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_new",
+          "export": "_lcb_model_graph_vocab_new",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "metadata",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        }
+      ]
+    },
+    {
+      "extensionId": "webgpu-q8-diagnostic-v1",
+      "functions": [
+        {
+          "name": "lcb_webgpu_q8_diagnostic_run_v1",
+          "export": "_lcb_webgpu_q8_diagnostic_run_v1",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "backend",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "dst",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "request",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "report",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "report_capacity",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_webgpu_q8_diagnostic_version",
+          "export": "_lcb_webgpu_q8_diagnostic_version",
+          "returnType": "uint32_t",
+          "returnKind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "backend",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        }
+      ]
+    }
+  ]
 }

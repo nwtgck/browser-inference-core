@@ -38,6 +38,9 @@
     "./llama-cpp/manifest.json": "./runtimes/llama-cpp-browser-core/manifest.json",
     "./llama-cpp/native-license-index.json": "./runtimes/llama-cpp-browser-core/native-license-index.json",
     "./llama-cpp/licenses/*": "./runtimes/llama-cpp-browser-core/licenses/*",
+    "./llama-cpp/api/extensions": {
+      "types": "./runtimes/llama-cpp-browser-core/api/extensions.d.ts"
+    },
     "./llama-cpp/profiles/*/model-graph-v1.schema.json": "./runtimes/llama-cpp-browser-core/profiles/*/model-graph-v1.schema.json",
     "./llama-cpp/profiles/*/model-graph-v1.functions": {
       "types": "./runtimes/llama-cpp-browser-core/profiles/*/model-graph-v1.functions.d.ts"

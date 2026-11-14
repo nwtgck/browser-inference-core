@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 4,
-  "schemaSha256": "df0d2d8dcac7d13afd0b527af8e61c708bd08c64a2dedfc14d9c14db9b41cce3",
+  "schemaSha256": "87229dc91ba1612b390d984b9e01ac25d59a1102a946e29aa87b5b31000417e9",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -37773,7 +37773,7 @@
     {
       "name": "gguf_init_params",
       "cType": "struct gguf_init_params",
-      "id": 17,
+      "id": 19,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -37807,7 +37807,7 @@
     {
       "name": "llama_batch",
       "cType": "struct llama_batch",
-      "id": 18,
+      "id": 20,
       "size": 28,
       "alignment": 4,
       "fields": [
@@ -37901,7 +37901,7 @@
     {
       "name": "llama_chat_message",
       "cType": "struct llama_chat_message",
-      "id": 19,
+      "id": 21,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -37934,7 +37934,7 @@
     {
       "name": "llama_context_params",
       "cType": "struct llama_context_params",
-      "id": 20,
+      "id": 22,
       "size": 136,
       "alignment": 4,
       "fields": [
@@ -38428,7 +38428,7 @@
     {
       "name": "llama_embd",
       "cType": "struct llama_embd",
-      "id": 21,
+      "id": 23,
       "size": 12,
       "alignment": 4,
       "fields": [
@@ -38477,7 +38477,7 @@
     {
       "name": "llama_logit_bias",
       "cType": "struct llama_logit_bias",
-      "id": 22,
+      "id": 24,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -38511,7 +38511,7 @@
     {
       "name": "llama_model_imatrix_data",
       "cType": "struct llama_model_imatrix_data",
-      "id": 23,
+      "id": 25,
       "size": 12,
       "alignment": 4,
       "fields": [
@@ -38558,7 +38558,7 @@
     {
       "name": "llama_model_kv_override",
       "cType": "struct llama_model_kv_override",
-      "id": 24,
+      "id": 26,
       "size": 264,
       "alignment": 8,
       "fields": [
@@ -38662,7 +38662,7 @@
     {
       "name": "llama_model_params",
       "cType": "struct llama_model_params",
-      "id": 25,
+      "id": 27,
       "size": 52,
       "alignment": 4,
       "fields": [
@@ -38887,7 +38887,7 @@
     {
       "name": "llama_model_quantize_params",
       "cType": "struct llama_model_quantize_params",
-      "id": 26,
+      "id": 28,
       "size": 44,
       "alignment": 4,
       "fields": [
@@ -39088,7 +39088,7 @@
     {
       "name": "llama_model_tensor_buft_override",
       "cType": "struct llama_model_tensor_buft_override",
-      "id": 27,
+      "id": 29,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -39121,7 +39121,7 @@
     {
       "name": "llama_model_tensor_override",
       "cType": "struct llama_model_tensor_override",
-      "id": 28,
+      "id": 30,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -39155,7 +39155,7 @@
     {
       "name": "llama_opt_params",
       "cType": "struct llama_opt_params",
-      "id": 29,
+      "id": 31,
       "size": 24,
       "alignment": 4,
       "fields": [
@@ -39240,7 +39240,7 @@
     {
       "name": "llama_perf_context_data",
       "cType": "struct llama_perf_context_data",
-      "id": 30,
+      "id": 32,
       "size": 56,
       "alignment": 8,
       "fields": [
@@ -39362,7 +39362,7 @@
     {
       "name": "llama_perf_sampler_data",
       "cType": "struct llama_perf_sampler_data",
-      "id": 31,
+      "id": 33,
       "size": 16,
       "alignment": 8,
       "fields": [
@@ -39396,7 +39396,7 @@
     {
       "name": "llama_sampler",
       "cType": "struct llama_sampler",
-      "id": 32,
+      "id": 34,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -39429,7 +39429,7 @@
     {
       "name": "llama_sampler_chain_params",
       "cType": "struct llama_sampler_chain_params",
-      "id": 33,
+      "id": 35,
       "size": 1,
       "alignment": 1,
       "fields": [
@@ -39451,7 +39451,7 @@
     {
       "name": "llama_sampler_data",
       "cType": "struct llama_sampler_data",
-      "id": 34,
+      "id": 36,
       "size": 16,
       "alignment": 4,
       "fields": [
@@ -39508,7 +39508,7 @@
     {
       "name": "llama_sampler_i",
       "cType": "struct llama_sampler_i",
-      "id": 35,
+      "id": 37,
       "size": 48,
       "alignment": 4,
       "fields": [
@@ -39661,7 +39661,7 @@
     {
       "name": "llama_sampler_seq_config",
       "cType": "struct llama_sampler_seq_config",
-      "id": 36,
+      "id": 38,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -39695,7 +39695,7 @@
     {
       "name": "llama_token_data",
       "cType": "struct llama_token_data",
-      "id": 37,
+      "id": 39,
       "size": 12,
       "alignment": 4,
       "fields": [
@@ -39741,7 +39741,7 @@
     {
       "name": "llama_token_data_array",
       "cType": "struct llama_token_data_array",
-      "id": 38,
+      "id": 40,
       "size": 24,
       "alignment": 8,
       "fields": [
@@ -39802,7 +39802,7 @@
     {
       "name": "mtmd_audio_stream_params",
       "cType": "struct mtmd_audio_stream_params",
-      "id": 39,
+      "id": 41,
       "size": 12,
       "alignment": 4,
       "fields": [
@@ -39850,7 +39850,7 @@
     {
       "name": "mtmd_caps",
       "cType": "struct mtmd_caps",
-      "id": 40,
+      "id": 42,
       "size": 3,
       "alignment": 1,
       "fields": [
@@ -39898,7 +39898,7 @@
     {
       "name": "mtmd_context_params",
       "cType": "struct mtmd_context_params",
-      "id": 41,
+      "id": 43,
       "size": 60,
       "alignment": 4,
       "fields": [
@@ -40097,7 +40097,7 @@
     {
       "name": "mtmd_decoder_pos",
       "cType": "struct mtmd_decoder_pos",
-      "id": 42,
+      "id": 44,
       "size": 16,
       "alignment": 4,
       "fields": [
@@ -40158,7 +40158,7 @@
     {
       "name": "mtmd_gen_audio_info",
       "cType": "struct mtmd_gen_audio_info",
-      "id": 43,
+      "id": 45,
       "size": 16,
       "alignment": 4,
       "fields": [
@@ -40218,7 +40218,7 @@
     {
       "name": "mtmd_gen_inp",
       "cType": "struct mtmd_gen_inp",
-      "id": 44,
+      "id": 46,
       "size": 48,
       "alignment": 4,
       "fields": [
@@ -40379,7 +40379,7 @@
     {
       "name": "mtmd_gen_out",
       "cType": "struct mtmd_gen_out",
-      "id": 45,
+      "id": 47,
       "size": 32,
       "alignment": 4,
       "fields": [
@@ -40491,7 +40491,7 @@
     {
       "name": "mtmd_gen_state_params",
       "cType": "struct mtmd_gen_state_params",
-      "id": 46,
+      "id": 48,
       "size": 4,
       "alignment": 4,
       "fields": [
@@ -40513,7 +40513,7 @@
     {
       "name": "mtmd_helper_bitmap_wrapper",
       "cType": "struct mtmd_helper_bitmap_wrapper",
-      "id": 47,
+      "id": 49,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -40546,7 +40546,7 @@
     {
       "name": "mtmd_helper_cap",
       "cType": "struct mtmd_helper_cap",
-      "id": 48,
+      "id": 50,
       "size": 8,
       "alignment": 1,
       "fields": [
@@ -40659,7 +40659,7 @@
     {
       "name": "mtmd_helper_embd_batch",
       "cType": "struct mtmd_helper_embd_batch",
-      "id": 49,
+      "id": 51,
       "size": 24,
       "alignment": 4,
       "fields": [
@@ -40744,7 +40744,7 @@
     {
       "name": "mtmd_helper_gen_audio_inp",
       "cType": "struct mtmd_helper_gen_audio_inp",
-      "id": 50,
+      "id": 52,
       "size": 52,
       "alignment": 4,
       "fields": [
@@ -40918,7 +40918,7 @@
     {
       "name": "mtmd_helper_init_opt",
       "cType": "struct mtmd_helper_init_opt",
-      "id": 51,
+      "id": 53,
       "size": 24,
       "alignment": 8,
       "fields": [
@@ -40939,7 +40939,7 @@
     {
       "name": "mtmd_helper_video_info",
       "cType": "struct mtmd_helper_video_info",
-      "id": 52,
+      "id": 54,
       "size": 16,
       "alignment": 4,
       "fields": [
@@ -40999,7 +40999,7 @@
     {
       "name": "mtmd_helper_video_init_params",
       "cType": "struct mtmd_helper_video_init_params",
-      "id": 53,
+      "id": 55,
       "size": 24,
       "alignment": 8,
       "fields": [
@@ -41058,7 +41058,7 @@
     {
       "name": "mtmd_helper_video_src",
       "cType": "struct mtmd_helper_video_src",
-      "id": 54,
+      "id": 56,
       "size": 20,
       "alignment": 4,
       "fields": [
@@ -41130,7 +41130,7 @@
     {
       "name": "mtmd_input_part",
       "cType": "struct mtmd_input_part",
-      "id": 55,
+      "id": 57,
       "size": 8,
       "alignment": 4,
       "fields": [
@@ -41163,7 +41163,7 @@
     {
       "name": "mtmd_input_text",
       "cType": "struct mtmd_input_text",
-      "id": 56,
+      "id": 58,
       "size": 12,
       "alignment": 4,
       "fields": [
@@ -41224,7 +41224,7 @@
     {
       "name": "mtmd_video_config",
       "cType": "struct mtmd_video_config",
-      "id": 57,
+      "id": 59,
       "size": 20,
       "alignment": 4,
       "fields": [
@@ -46077,5 +46077,338 @@
       "constants": [],
       "constantValues": {}
     }
-  }
+  },
+  "extensionDeclarations": [
+    {
+      "extensionId": "model-graph-v1",
+      "functions": [
+        {
+          "name": "lcb_model_graph_architecture_known",
+          "export": "_lcb_model_graph_architecture_known",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "name",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_last_error",
+          "export": "_lcb_model_graph_last_error",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sample",
+          "export": "_lcb_model_graph_sample",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "workspace",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "sampler",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "logits",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "count",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sampler_workspace_free",
+          "export": "_lcb_model_graph_sampler_workspace_free",
+          "returnType": "void",
+          "returnKind": "void",
+          "abiType": {
+            "kind": "void"
+          },
+          "parameters": [
+            {
+              "name": "workspace",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_sampler_workspace_new",
+          "export": "_lcb_model_graph_sampler_workspace_new",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "vocabulary_size",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_schema_hash",
+          "export": "_lcb_model_graph_schema_hash",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_version",
+          "export": "_lcb_model_graph_version",
+          "returnType": "uint32_t",
+          "returnKind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          },
+          "parameters": [],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_free",
+          "export": "_lcb_model_graph_vocab_free",
+          "returnType": "void",
+          "returnKind": "void",
+          "abiType": {
+            "kind": "void"
+          },
+          "parameters": [
+            {
+              "name": "owner",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_get",
+          "export": "_lcb_model_graph_vocab_get",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "owner",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_model_graph_vocab_new",
+          "export": "_lcb_model_graph_vocab_new",
+          "returnType": "uint64_t",
+          "returnKind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "metadata",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        }
+      ]
+    },
+    {
+      "extensionId": "webgpu-q8-diagnostic-v1",
+      "functions": [
+        {
+          "name": "lcb_webgpu_q8_diagnostic_run_v1",
+          "export": "_lcb_webgpu_q8_diagnostic_run_v1",
+          "returnType": "int32_t",
+          "returnKind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          },
+          "parameters": [
+            {
+              "name": "backend",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "dst",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "request",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "report",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            },
+            {
+              "name": "report_capacity",
+              "cType": "uint32_t",
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 32,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        },
+        {
+          "name": "lcb_webgpu_q8_diagnostic_version",
+          "export": "_lcb_webgpu_q8_diagnostic_version",
+          "returnType": "uint32_t",
+          "returnKind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          },
+          "parameters": [
+            {
+              "name": "backend",
+              "cType": "uint64_t",
+              "kind": "u64",
+              "abiType": {
+                "kind": "integer",
+                "bits": 64,
+                "signed": false
+              }
+            }
+          ],
+          "bridge": false
+        }
+      ]
+    }
+  ]
 }

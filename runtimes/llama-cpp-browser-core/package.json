@@ -43,6 +43,9 @@
     "./manifest.json": "./manifest.json",
     "./native-license-index.json": "./native-license-index.json",
     "./licenses/*": "./licenses/*",
+    "./api/extensions": {
+      "types": "./api/extensions.d.ts"
+    },
     "./profiles/*/model-graph-v1.schema.json": "./profiles/*/model-graph-v1.schema.json",
     "./profiles/*/model-graph-v1.functions": {
       "types": "./profiles/*/model-graph-v1.functions.d.ts"
