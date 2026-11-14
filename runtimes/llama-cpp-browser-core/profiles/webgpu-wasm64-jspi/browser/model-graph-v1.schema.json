@@ -1,0 +1,249 @@
+{
+  "extensionId": "model-graph-v1",
+  "version": 1,
+  "abiVersion": 1,
+  "baseAbiVersion": 3,
+  "pointerRepresentation": "bigint_u64",
+  "suspension": "none",
+  "versionExport": "_lcb_model_graph_version",
+  "schemaHashExport": "_lcb_model_graph_schema_hash",
+  "functions": [
+    {
+      "name": "lcb_model_graph_architecture_known",
+      "export": "_lcb_model_graph_architecture_known",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_last_error",
+      "export": "_lcb_model_graph_last_error",
+      "returnType": "uint64_t",
+      "returnKind": "u64",
+      "abiType": {
+        "kind": "integer",
+        "bits": 64,
+        "signed": false
+      },
+      "parameters": [],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_sample",
+      "export": "_lcb_model_graph_sample",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "workspace",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "sampler",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "logits",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "count",
+          "cType": "uint32_t",
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_sampler_workspace_free",
+      "export": "_lcb_model_graph_sampler_workspace_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "abiType": {
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "workspace",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_sampler_workspace_new",
+      "export": "_lcb_model_graph_sampler_workspace_new",
+      "returnType": "uint64_t",
+      "returnKind": "u64",
+      "abiType": {
+        "kind": "integer",
+        "bits": 64,
+        "signed": false
+      },
+      "parameters": [
+        {
+          "name": "vocabulary_size",
+          "cType": "uint32_t",
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_schema_hash",
+      "export": "_lcb_model_graph_schema_hash",
+      "returnType": "uint64_t",
+      "returnKind": "u64",
+      "abiType": {
+        "kind": "integer",
+        "bits": 64,
+        "signed": false
+      },
+      "parameters": [],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_version",
+      "export": "_lcb_model_graph_version",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": false
+      },
+      "parameters": [],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_vocab_free",
+      "export": "_lcb_model_graph_vocab_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "abiType": {
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "owner",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_vocab_get",
+      "export": "_lcb_model_graph_vocab_get",
+      "returnType": "uint64_t",
+      "returnKind": "u64",
+      "abiType": {
+        "kind": "integer",
+        "bits": 64,
+        "signed": false
+      },
+      "parameters": [
+        {
+          "name": "owner",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_model_graph_vocab_new",
+      "export": "_lcb_model_graph_vocab_new",
+      "returnType": "uint64_t",
+      "returnKind": "u64",
+      "abiType": {
+        "kind": "integer",
+        "bits": 64,
+        "signed": false
+      },
+      "parameters": [
+        {
+          "name": "metadata",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    }
+  ],
+  "records": [],
+  "constants": [],
+  "constantValues": {},
+  "schemaSha256": "5b09bd8a6380b02d40348d9e195efc57f190c3a884381cf63938a2f44fb6dc64"
+}

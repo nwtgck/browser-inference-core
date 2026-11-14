@@ -1,0 +1,55 @@
+{
+  "name": "llama-cpp-browser-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "host/",
+    "profiles/",
+    "api/",
+    "manifest.json",
+    "native-license-index.json",
+    "licenses/",
+    "README.md",
+    "chat-and-multimodal.md",
+    "browser-host.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./host/abi": {
+      "types": "./host/abi.d.ts",
+      "import": "./host/abi.mjs"
+    },
+    "./host": {
+      "types": "./host/index.d.ts",
+      "import": "./host/index.mjs"
+    },
+    "./api/functions": {
+      "types": "./api/functions.d.ts",
+      "import": "./api/functions.mjs"
+    },
+    "./api/schema.json": "./api/schema.json",
+    "./api/schema.mjs": {
+      "types": "./api/schema.d.ts",
+      "import": "./api/schema.mjs"
+    },
+    "./api/exports.json": "./api/exports.json",
+    "./profiles/*/core.mjs": {
+      "types": "./profiles/*/core.d.ts",
+      "import": "./profiles/*/core.mjs"
+    },
+    "./profiles/*/core.wasm": "./profiles/*/core.wasm",
+    "./manifest.json": "./manifest.json",
+    "./native-license-index.json": "./native-license-index.json",
+    "./licenses/*": "./licenses/*",
+    "./profiles/*/model-graph-v1.schema.json": "./profiles/*/model-graph-v1.schema.json",
+    "./profiles/*/model-graph-v1.functions": {
+      "types": "./profiles/*/model-graph-v1.functions.d.ts"
+    },
+    "./profiles/*/q8-diagnostic-v1.schema.json": "./profiles/*/q8-diagnostic-v1.schema.json",
+    "./profiles/*/q8-diagnostic-v1.functions": {
+      "types": "./profiles/*/q8-diagnostic-v1.functions.d.ts"
+    }
+  }
+}

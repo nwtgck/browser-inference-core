@@ -1,33 +1,76 @@
 {
-  "name": "llama-cpp-browser-core",
+  "name": "browser-inference-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "license": "MIT",
   "files": [
-    "llama-cpp-browser-core",
-    "stable-diffusion-cpp-browser-core",
+    "runtimes/",
     "manifest.json",
     "README.md",
     "LICENSE"
   ],
   "exports": {
-    "./stable-diffusion-cpp/examples/runtime": {
-      "types": "./stable-diffusion-cpp-browser-core/examples/runtime/index.d.ts",
-      "import": "./stable-diffusion-cpp-browser-core/examples/runtime/index.mjs"
-    },
-    "./llama-cpp/*": "./llama-cpp-browser-core/*",
-    "./stable-diffusion-cpp/*": "./stable-diffusion-cpp-browser-core/*",
     "./manifest.json": "./manifest.json",
-    "./api/*": "./llama-cpp-browser-core/api/*",
-    "./profiles/*": "./llama-cpp-browser-core/profiles/*",
-    "./profiles/*/core.mjs": {
-      "types": "./llama-cpp-browser-core/profiles/*/core.d.ts",
-      "import": "./llama-cpp-browser-core/profiles/*/core.mjs"
+    "./llama-cpp/host/abi": {
+      "types": "./runtimes/llama-cpp-browser-core/host/abi.d.ts",
+      "import": "./runtimes/llama-cpp-browser-core/host/abi.mjs"
     },
-    "./examples/runtime": {
-      "types": "./llama-cpp-browser-core/examples/runtime/index.d.ts",
-      "import": "./llama-cpp-browser-core/examples/runtime/index.mjs"
-    }
+    "./llama-cpp/host": {
+      "types": "./runtimes/llama-cpp-browser-core/host/index.d.ts",
+      "import": "./runtimes/llama-cpp-browser-core/host/index.mjs"
+    },
+    "./llama-cpp/api/functions": {
+      "types": "./runtimes/llama-cpp-browser-core/api/functions.d.ts",
+      "import": "./runtimes/llama-cpp-browser-core/api/functions.mjs"
+    },
+    "./llama-cpp/api/schema.json": "./runtimes/llama-cpp-browser-core/api/schema.json",
+    "./llama-cpp/api/schema.mjs": {
+      "types": "./runtimes/llama-cpp-browser-core/api/schema.d.ts",
+      "import": "./runtimes/llama-cpp-browser-core/api/schema.mjs"
+    },
+    "./llama-cpp/api/exports.json": "./runtimes/llama-cpp-browser-core/api/exports.json",
+    "./llama-cpp/profiles/*/core.mjs": {
+      "types": "./runtimes/llama-cpp-browser-core/profiles/*/core.d.ts",
+      "import": "./runtimes/llama-cpp-browser-core/profiles/*/core.mjs"
+    },
+    "./llama-cpp/profiles/*/core.wasm": "./runtimes/llama-cpp-browser-core/profiles/*/core.wasm",
+    "./llama-cpp/manifest.json": "./runtimes/llama-cpp-browser-core/manifest.json",
+    "./llama-cpp/native-license-index.json": "./runtimes/llama-cpp-browser-core/native-license-index.json",
+    "./llama-cpp/licenses/*": "./runtimes/llama-cpp-browser-core/licenses/*",
+    "./llama-cpp/profiles/*/model-graph-v1.schema.json": "./runtimes/llama-cpp-browser-core/profiles/*/model-graph-v1.schema.json",
+    "./llama-cpp/profiles/*/model-graph-v1.functions": {
+      "types": "./runtimes/llama-cpp-browser-core/profiles/*/model-graph-v1.functions.d.ts"
+    },
+    "./llama-cpp/profiles/*/q8-diagnostic-v1.schema.json": "./runtimes/llama-cpp-browser-core/profiles/*/q8-diagnostic-v1.schema.json",
+    "./llama-cpp/profiles/*/q8-diagnostic-v1.functions": {
+      "types": "./runtimes/llama-cpp-browser-core/profiles/*/q8-diagnostic-v1.functions.d.ts"
+    },
+    "./stable-diffusion-cpp/host/abi": {
+      "types": "./runtimes/stable-diffusion-cpp-browser-core/host/abi.d.ts",
+      "import": "./runtimes/stable-diffusion-cpp-browser-core/host/abi.mjs"
+    },
+    "./stable-diffusion-cpp/host": {
+      "types": "./runtimes/stable-diffusion-cpp-browser-core/host/index.d.ts",
+      "import": "./runtimes/stable-diffusion-cpp-browser-core/host/index.mjs"
+    },
+    "./stable-diffusion-cpp/api/functions": {
+      "types": "./runtimes/stable-diffusion-cpp-browser-core/api/functions.d.ts",
+      "import": "./runtimes/stable-diffusion-cpp-browser-core/api/functions.mjs"
+    },
+    "./stable-diffusion-cpp/api/schema.json": "./runtimes/stable-diffusion-cpp-browser-core/api/schema.json",
+    "./stable-diffusion-cpp/api/schema.mjs": {
+      "types": "./runtimes/stable-diffusion-cpp-browser-core/api/schema.d.ts",
+      "import": "./runtimes/stable-diffusion-cpp-browser-core/api/schema.mjs"
+    },
+    "./stable-diffusion-cpp/api/exports.json": "./runtimes/stable-diffusion-cpp-browser-core/api/exports.json",
+    "./stable-diffusion-cpp/profiles/*/core.mjs": {
+      "types": "./runtimes/stable-diffusion-cpp-browser-core/profiles/*/core.d.ts",
+      "import": "./runtimes/stable-diffusion-cpp-browser-core/profiles/*/core.mjs"
+    },
+    "./stable-diffusion-cpp/profiles/*/core.wasm": "./runtimes/stable-diffusion-cpp-browser-core/profiles/*/core.wasm",
+    "./stable-diffusion-cpp/manifest.json": "./runtimes/stable-diffusion-cpp-browser-core/manifest.json",
+    "./stable-diffusion-cpp/native-license-index.json": "./runtimes/stable-diffusion-cpp-browser-core/native-license-index.json",
+    "./stable-diffusion-cpp/licenses/*": "./runtimes/stable-diffusion-cpp-browser-core/licenses/*"
   }
 }

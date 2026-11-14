@@ -1,0 +1,3141 @@
+{
+  "components": [
+    {
+      "id": "big-integer",
+      "name": "big-integer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/tools/ui/src/lib/vendors/big-integer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "cpp-httplib",
+      "name": "cpp-httplib",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/vendor/cpp-httplib/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emdawnwebgpu_pkg/webgpu",
+      "name": "emdawnwebgpu_pkg / webgpu",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/1/webgpu/src/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emdawnwebgpu_pkg/webgpu_cpp",
+      "name": "emdawnwebgpu_pkg / webgpu_cpp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/1/webgpu_cpp/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten",
+      "name": "emscripten",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/SDL",
+      "name": "SDL",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/cache/sysroot/include/SDL/COPYING"
+        },
+        {
+          "path": "licenses/0/system/include/SDL/COPYING"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/ittnotify",
+      "name": "ittnotify",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/musl",
+      "name": "musl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/libc/musl/COPYRIGHT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@discoveryjs/json-ext",
+      "name": "@discoveryjs/json-ext",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@discoveryjs/json-ext/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint-community/eslint-utils",
+      "name": "@eslint-community/eslint-utils",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint-community/eslint-utils/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys",
+      "name": "eslint-visitor-keys",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint-community/regexpp",
+      "name": "@eslint-community/regexpp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint-community/regexpp/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/config-array",
+      "name": "@eslint/config-array",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/config-array/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/config-array/node_modules/balanced-match",
+      "name": "balanced-match",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/config-array/node_modules/balanced-match/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/config-array/node_modules/brace-expansion",
+      "name": "brace-expansion",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/config-array/node_modules/brace-expansion/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/config-array/node_modules/minimatch",
+      "name": "minimatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/config-array/node_modules/minimatch/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/config-helpers",
+      "name": "@eslint/config-helpers",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/config-helpers/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/core",
+      "name": "@eslint/core",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/core/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/eslintrc",
+      "name": "@eslint/eslintrc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/eslintrc/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/eslintrc/node_modules/globals",
+      "name": "globals",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/eslintrc/node_modules/globals/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/js",
+      "name": "@eslint/js",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/js/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/object-schema",
+      "name": "@eslint/object-schema",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/object-schema/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@eslint/plugin-kit",
+      "name": "@eslint/plugin-kit",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@eslint/plugin-kit/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@humanfs/core",
+      "name": "@humanfs/core",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@humanfs/core/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@humanfs/node",
+      "name": "@humanfs/node",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@humanfs/node/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@humanfs/node/node_modules/@humanwhocodes/retry",
+      "name": "@humanwhocodes/retry",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@humanfs/node/node_modules/@humanwhocodes/retry/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@humanwhocodes/module-importer",
+      "name": "@humanwhocodes/module-importer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@humanwhocodes/module-importer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@humanwhocodes/retry",
+      "name": "@humanwhocodes/retry",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@humanwhocodes/retry/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@isaacs/cliui",
+      "name": "@isaacs/cliui",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@isaacs/cliui/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/gen-mapping",
+      "name": "@jridgewell/gen-mapping",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@jridgewell/gen-mapping/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/resolve-uri",
+      "name": "@jridgewell/resolve-uri",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@jridgewell/resolve-uri/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/source-map",
+      "name": "@jridgewell/source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@jridgewell/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/sourcemap-codec",
+      "name": "@jridgewell/sourcemap-codec",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@jridgewell/sourcemap-codec/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@jridgewell/trace-mapping",
+      "name": "@jridgewell/trace-mapping",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@jridgewell/trace-mapping/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@nodelib/fs.scandir",
+      "name": "@nodelib/fs.scandir",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@nodelib/fs.scandir/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@nodelib/fs.stat",
+      "name": "@nodelib/fs.stat",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@nodelib/fs.stat/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@nodelib/fs.walk",
+      "name": "@nodelib/fs.walk",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@nodelib/fs.walk/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@oxc-project/types",
+      "name": "@oxc-project/types",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@oxc-project/types/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@rolldown/pluginutils",
+      "name": "@rolldown/pluginutils",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@rolldown/pluginutils/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@types/esrecurse",
+      "name": "@types/esrecurse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@types/esrecurse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@types/estree",
+      "name": "@types/estree",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@types/estree/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@types/json-schema",
+      "name": "@types/json-schema",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@types/json-schema/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@types/node",
+      "name": "@types/node",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@types/node/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@typescript/typescript-linux-x64",
+      "name": "@typescript/typescript-linux-x64",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@typescript/typescript-linux-x64/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/ast",
+      "name": "@webassemblyjs/ast",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/ast/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/floating-point-hex-parser",
+      "name": "@webassemblyjs/floating-point-hex-parser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/floating-point-hex-parser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/helper-api-error",
+      "name": "@webassemblyjs/helper-api-error",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/helper-api-error/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/helper-buffer",
+      "name": "@webassemblyjs/helper-buffer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/helper-buffer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/helper-numbers",
+      "name": "@webassemblyjs/helper-numbers",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/helper-numbers/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/helper-wasm-bytecode",
+      "name": "@webassemblyjs/helper-wasm-bytecode",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/helper-wasm-bytecode/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/helper-wasm-section",
+      "name": "@webassemblyjs/helper-wasm-section",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/helper-wasm-section/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/ieee754",
+      "name": "@webassemblyjs/ieee754",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/ieee754/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/leb128",
+      "name": "@webassemblyjs/leb128",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/leb128/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/utf8",
+      "name": "@webassemblyjs/utf8",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/utf8/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/wasm-edit",
+      "name": "@webassemblyjs/wasm-edit",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/wasm-edit/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/wasm-gen",
+      "name": "@webassemblyjs/wasm-gen",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/wasm-gen/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/wasm-opt",
+      "name": "@webassemblyjs/wasm-opt",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/wasm-opt/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/wasm-parser",
+      "name": "@webassemblyjs/wasm-parser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/wasm-parser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@webassemblyjs/wast-printer",
+      "name": "@webassemblyjs/wast-printer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@webassemblyjs/wast-printer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@xtuc/ieee754",
+      "name": "@xtuc/ieee754",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@xtuc/ieee754/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/@xtuc/long",
+      "name": "@xtuc/long",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/@xtuc/long/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/acorn",
+      "name": "acorn",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/acorn/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/acorn-import-phases",
+      "name": "acorn-import-phases",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/acorn-import-phases/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/acorn-jsx",
+      "name": "acorn-jsx",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/acorn-jsx/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ajv",
+      "name": "ajv",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ajv/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ajv-formats",
+      "name": "ajv-formats",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ajv-formats/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ajv-formats/node_modules/ajv",
+      "name": "ajv",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ajv-formats/node_modules/ajv/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ajv-formats/node_modules/json-schema-traverse",
+      "name": "json-schema-traverse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ajv-formats/node_modules/json-schema-traverse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ansi-styles",
+      "name": "ansi-styles",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ansi-styles/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/argparse",
+      "name": "argparse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/argparse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/b4a",
+      "name": "b4a",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/b4a/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/balanced-match",
+      "name": "balanced-match",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/balanced-match/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/bare-events",
+      "name": "bare-events",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/bare-events/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/baseline-browser-mapping",
+      "name": "baseline-browser-mapping",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/baseline-browser-mapping/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/brace-expansion",
+      "name": "brace-expansion",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/brace-expansion/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/braces",
+      "name": "braces",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/braces/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/browserslist",
+      "name": "browserslist",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/browserslist/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/buffer-from",
+      "name": "buffer-from",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/buffer-from/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/callsites",
+      "name": "callsites",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/callsites/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/camel-case",
+      "name": "camel-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/camel-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/caniuse-lite",
+      "name": "caniuse-lite",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/caniuse-lite/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/chalk",
+      "name": "chalk",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/chalk/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/chalk/node_modules/supports-color",
+      "name": "supports-color",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/chalk/node_modules/supports-color/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/chrome-trace-event",
+      "name": "chrome-trace-event",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/chrome-trace-event/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clean-css",
+      "name": "clean-css",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/clean-css/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clean-css/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/clean-css/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clone",
+      "name": "clone",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/clone/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/clone-deep",
+      "name": "clone-deep",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/clone-deep/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/color-convert",
+      "name": "color-convert",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/color-convert/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/color-name",
+      "name": "color-name",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/color-name/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/commander",
+      "name": "commander",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/commander/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/concat-map",
+      "name": "concat-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/concat-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/cross-spawn",
+      "name": "cross-spawn",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/cross-spawn/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/debug",
+      "name": "debug",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/debug/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/deep-is",
+      "name": "deep-is",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/deep-is/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/detect-libc",
+      "name": "detect-libc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/detect-libc/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/dot-case",
+      "name": "dot-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/dot-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/electron-to-chromium",
+      "name": "electron-to-chromium",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/electron-to-chromium/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/enhanced-resolve",
+      "name": "enhanced-resolve",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/enhanced-resolve/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/entities",
+      "name": "entities",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/entities/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/envinfo",
+      "name": "envinfo",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/envinfo/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/es-check",
+      "name": "es-check",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/es-check/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/es-check/node_modules/acorn",
+      "name": "acorn",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/es-check/node_modules/acorn/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/es-module-lexer",
+      "name": "es-module-lexer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/es-module-lexer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/escalade",
+      "name": "escalade",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/escalade/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/escape-string-regexp",
+      "name": "escape-string-regexp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/escape-string-regexp/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint",
+      "name": "eslint",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint-config-prettier",
+      "name": "eslint-config-prettier",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint-config-prettier/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint-scope",
+      "name": "eslint-scope",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint-scope/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint-visitor-keys",
+      "name": "eslint-visitor-keys",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint-visitor-keys/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/balanced-match",
+      "name": "balanced-match",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/balanced-match/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/brace-expansion",
+      "name": "brace-expansion",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/brace-expansion/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/eslint-visitor-keys",
+      "name": "eslint-visitor-keys",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/eslint-visitor-keys/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/espree",
+      "name": "espree",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/espree/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/glob-parent",
+      "name": "glob-parent",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/glob-parent/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/eslint/node_modules/minimatch",
+      "name": "minimatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/eslint/node_modules/minimatch/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/espree",
+      "name": "espree",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/espree/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/esquery",
+      "name": "esquery",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/esquery/license.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/estraverse",
+      "name": "estraverse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/estraverse/LICENSE.BSD"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/esutils",
+      "name": "esutils",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/esutils/LICENSE.BSD"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/events",
+      "name": "events",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/events/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/events-universal",
+      "name": "events-universal",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/events-universal/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-deep-equal",
+      "name": "fast-deep-equal",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-deep-equal/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-fifo",
+      "name": "fast-fifo",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-fifo/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-glob",
+      "name": "fast-glob",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-glob/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-json-stable-stringify",
+      "name": "fast-json-stable-stringify",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-json-stable-stringify/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-levenshtein",
+      "name": "fast-levenshtein",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-levenshtein/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fast-uri",
+      "name": "fast-uri",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fast-uri/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fastq",
+      "name": "fastq",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fastq/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/file-entry-cache",
+      "name": "file-entry-cache",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/file-entry-cache/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/fill-range",
+      "name": "fill-range",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/fill-range/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/find-up",
+      "name": "find-up",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/find-up/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/flat",
+      "name": "flat",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/flat/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/flat-cache",
+      "name": "flat-cache",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/flat-cache/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/flatted",
+      "name": "flatted",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/flatted/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/function-bind",
+      "name": "function-bind",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/function-bind/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/glob-parent",
+      "name": "glob-parent",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/glob-parent/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/globals",
+      "name": "globals",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/globals/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/graceful-fs",
+      "name": "graceful-fs",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/graceful-fs/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/has-flag",
+      "name": "has-flag",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/has-flag/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/hasown",
+      "name": "hasown",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/hasown/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/html-minifier-terser",
+      "name": "html-minifier-terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/html-minifier-terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/html-minifier-terser/node_modules/commander",
+      "name": "commander",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/html-minifier-terser/node_modules/commander/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ignore",
+      "name": "ignore",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ignore/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/import-fresh",
+      "name": "import-fresh",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/import-fresh/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/import-local",
+      "name": "import-local",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/import-local/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/interpret",
+      "name": "interpret",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/interpret/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/is-core-module",
+      "name": "is-core-module",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/is-core-module/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/is-extglob",
+      "name": "is-extglob",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/is-extglob/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/is-glob",
+      "name": "is-glob",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/is-glob/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/is-number",
+      "name": "is-number",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/is-number/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/is-plain-object",
+      "name": "is-plain-object",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/is-plain-object/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/isexe",
+      "name": "isexe",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/isexe/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/isobject",
+      "name": "isobject",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/isobject/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/jackspeak",
+      "name": "jackspeak",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/jackspeak/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/jest-worker",
+      "name": "jest-worker",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/jest-worker/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/js-yaml",
+      "name": "js-yaml",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/js-yaml/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/json-buffer",
+      "name": "json-buffer",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/json-buffer/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/json-schema-traverse",
+      "name": "json-schema-traverse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/json-schema-traverse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/json-stable-stringify-without-jsonify",
+      "name": "json-stable-stringify-without-jsonify",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/json-stable-stringify-without-jsonify/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/kind-of",
+      "name": "kind-of",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/kind-of/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/levn",
+      "name": "levn",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/levn/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/lightningcss",
+      "name": "lightningcss",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/lightningcss/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/lightningcss-linux-x64-gnu",
+      "name": "lightningcss-linux-x64-gnu",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/lightningcss-linux-x64-gnu/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/lightningcss-linux-x64-musl",
+      "name": "lightningcss-linux-x64-musl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/lightningcss-linux-x64-musl/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/loader-runner",
+      "name": "loader-runner",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/loader-runner/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/locate-path",
+      "name": "locate-path",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/locate-path/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/lower-case",
+      "name": "lower-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/lower-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/merge-stream",
+      "name": "merge-stream",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/merge-stream/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/merge2",
+      "name": "merge2",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/merge2/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/micromatch",
+      "name": "micromatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/micromatch/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/mime-db",
+      "name": "mime-db",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/mime-db/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/minimatch",
+      "name": "minimatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/minimatch/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/minimist",
+      "name": "minimist",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/minimist/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/minimizer-webpack-plugin",
+      "name": "minimizer-webpack-plugin",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/minimizer-webpack-plugin/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ms",
+      "name": "ms",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ms/license.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/nanoid",
+      "name": "nanoid",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/nanoid/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/neo-async",
+      "name": "neo-async",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/neo-async/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/no-case",
+      "name": "no-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/no-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/node-releases",
+      "name": "node-releases",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/node-releases/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/optionator",
+      "name": "optionator",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/optionator/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/p-limit",
+      "name": "p-limit",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/p-limit/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/p-locate",
+      "name": "p-locate",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/p-locate/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/p-try",
+      "name": "p-try",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/p-try/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/param-case",
+      "name": "param-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/param-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/parent-module",
+      "name": "parent-module",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/parent-module/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pascal-case",
+      "name": "pascal-case",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pascal-case/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/path-exists",
+      "name": "path-exists",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/path-exists/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/path-key",
+      "name": "path-key",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/path-key/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/path-parse",
+      "name": "path-parse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/path-parse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/picocolors",
+      "name": "picocolors",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/picocolors/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/picomatch",
+      "name": "picomatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/picomatch/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pkg-dir",
+      "name": "pkg-dir",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pkg-dir/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pkg-dir/node_modules/find-up",
+      "name": "find-up",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pkg-dir/node_modules/find-up/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pkg-dir/node_modules/locate-path",
+      "name": "locate-path",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pkg-dir/node_modules/locate-path/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pkg-dir/node_modules/p-limit",
+      "name": "p-limit",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pkg-dir/node_modules/p-limit/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/pkg-dir/node_modules/p-locate",
+      "name": "p-locate",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/pkg-dir/node_modules/p-locate/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/postcss",
+      "name": "postcss",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/postcss/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/prelude-ls",
+      "name": "prelude-ls",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/prelude-ls/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/prettier",
+      "name": "prettier",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/prettier/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/punycode",
+      "name": "punycode",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/punycode/LICENSE-MIT.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/queue-microtask",
+      "name": "queue-microtask",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/queue-microtask/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/rechoir",
+      "name": "rechoir",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/rechoir/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/relateurl",
+      "name": "relateurl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/relateurl/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/remove-trailing-separator",
+      "name": "remove-trailing-separator",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/remove-trailing-separator/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/replace-ext",
+      "name": "replace-ext",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/replace-ext/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/require-from-string",
+      "name": "require-from-string",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/require-from-string/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/resolve",
+      "name": "resolve",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/resolve/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/resolve-cwd",
+      "name": "resolve-cwd",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/resolve-cwd/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/resolve-cwd/node_modules/resolve-from",
+      "name": "resolve-from",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/resolve-cwd/node_modules/resolve-from/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/resolve-from",
+      "name": "resolve-from",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/resolve-from/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/reusify",
+      "name": "reusify",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/reusify/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/rolldown",
+      "name": "rolldown",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/rolldown/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/rollup",
+      "name": "rollup",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/rollup/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/run-parallel",
+      "name": "run-parallel",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/run-parallel/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/schema-utils",
+      "name": "schema-utils",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/schema-utils/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/schema-utils/node_modules/ajv",
+      "name": "ajv",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/schema-utils/node_modules/ajv/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/schema-utils/node_modules/ajv-keywords",
+      "name": "ajv-keywords",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/schema-utils/node_modules/ajv-keywords/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/schema-utils/node_modules/json-schema-traverse",
+      "name": "json-schema-traverse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/schema-utils/node_modules/json-schema-traverse/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/shallow-clone",
+      "name": "shallow-clone",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/shallow-clone/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/shebang-command",
+      "name": "shebang-command",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/shebang-command/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/shebang-regex",
+      "name": "shebang-regex",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/shebang-regex/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map-js",
+      "name": "source-map-js",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/source-map-js/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map-support",
+      "name": "source-map-support",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/source-map-support/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/source-map-support/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/source-map-support/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/streamx",
+      "name": "streamx",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/streamx/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/strip-json-comments",
+      "name": "strip-json-comments",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/strip-json-comments/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/supports-color",
+      "name": "supports-color",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/supports-color/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/supports-preserve-symlinks-flag",
+      "name": "supports-preserve-symlinks-flag",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/supports-preserve-symlinks-flag/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tapable",
+      "name": "tapable",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/tapable/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/teex",
+      "name": "teex",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/teex/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/terser",
+      "name": "terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/terser/node_modules/commander",
+      "name": "commander",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/terser/node_modules/commander/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/text-decoder",
+      "name": "text-decoder",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/text-decoder/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tinyglobby",
+      "name": "tinyglobby",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/tinyglobby/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tinyglobby/node_modules/fdir",
+      "name": "fdir",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/tinyglobby/node_modules/fdir/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tinyglobby/node_modules/picomatch",
+      "name": "picomatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/tinyglobby/node_modules/picomatch/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/to-regex-range",
+      "name": "to-regex-range",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/to-regex-range/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/tslib",
+      "name": "tslib",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/tslib/CopyrightNotice.txt"
+        },
+        {
+          "path": "licenses/0/node_modules/tslib/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/type-check",
+      "name": "type-check",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/type-check/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/typescript",
+      "name": "typescript",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/typescript/LICENSE"
+        },
+        {
+          "path": "licenses/0/node_modules/typescript/vendor/vscode-jsonrpc/License.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/undici-types",
+      "name": "undici-types",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/undici-types/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/update-browserslist-db",
+      "name": "update-browserslist-db",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/update-browserslist-db/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/uri-js",
+      "name": "uri-js",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/uri-js/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vinyl",
+      "name": "vinyl",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/vinyl/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map",
+      "name": "source-map",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vite",
+      "name": "vite",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/vite/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/vite/node_modules/picomatch",
+      "name": "picomatch",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/vite/node_modules/picomatch/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/watchpack",
+      "name": "watchpack",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/watchpack/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/webpack",
+      "name": "webpack",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/webpack/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/webpack-merge",
+      "name": "webpack-merge",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/webpack-merge/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/webpack-sources",
+      "name": "webpack-sources",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/webpack-sources/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/webpack/node_modules/eslint-scope",
+      "name": "eslint-scope",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/webpack/node_modules/eslint-scope/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/webpack/node_modules/estraverse",
+      "name": "estraverse",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/webpack/node_modules/estraverse/LICENSE.BSD"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/which",
+      "name": "which",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/which/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/wildcard",
+      "name": "wildcard",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/wildcard/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/word-wrap",
+      "name": "word-wrap",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/word-wrap/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/ws",
+      "name": "ws",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/ws/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/node_modules/yocto-queue",
+      "name": "yocto-queue",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/node_modules/yocto-queue/license"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/compiler-rt",
+      "name": "compiler-rt",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/compiler-rt/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libcxx",
+      "name": "libcxx",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/libcxx/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libcxxabi",
+      "name": "libcxxabi",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/libcxxabi/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/libunwind",
+      "name": "libunwind",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/libunwind/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/llvm-libc",
+      "name": "llvm-libc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/llvm-libc/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/mimalloc",
+      "name": "mimalloc",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/mimalloc/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/system/lib/openmp",
+      "name": "openmp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/system/lib/openmp/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/test-sounds",
+      "name": "Emscripten test sounds",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/test/sounds/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/closure-compiler",
+      "name": "closure-compiler",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/third_party/closure-compiler/node-externs/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/leb128",
+      "name": "leb128",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/third_party/leb128/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "emscripten/third_party/terser",
+      "name": "terser",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/0/third_party/terser/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "gguf-py",
+      "name": "gguf-py",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/gguf-py/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "llama-cpp-browser-core",
+      "name": "llama-cpp-browser-core",
+      "version": "0.1.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "llama.cpp",
+      "name": "llama.cpp",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/LICENSE"
+        },
+        {
+          "path": "licenses/2/cmake/license.cmake"
+        }
+      ]
+    },
+    {
+      "id": "miniaudio",
+      "name": "miniaudio",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/vendor/miniaudio/miniaudio.h.txt",
+          "sourcePath": "licenses/embedded/vendor/miniaudio/miniaudio.h.txt"
+        }
+      ]
+    },
+    {
+      "id": "nerdamer-prime",
+      "name": "nerdamer-prime",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/tools/ui/src/lib/vendors/nerdamer-prime/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "nlohmann-json",
+      "name": "nlohmann/json",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/licenses/LICENSE-jsonhpp"
+        },
+        {
+          "path": "licenses/extracted/vendor/nlohmann/json.hpp.txt",
+          "sourcePath": "licenses/embedded/vendor/nlohmann/json.hpp.txt"
+        },
+        {
+          "path": "licenses/extracted/vendor/nlohmann/json_fwd.hpp.txt",
+          "sourcePath": "licenses/embedded/vendor/nlohmann/json_fwd.hpp.txt"
+        }
+      ]
+    },
+    {
+      "id": "rotate-bits",
+      "name": "rotate-bits",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/vendor/hash/rotate-bits/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "id": "sha1",
+      "name": "SHA-1 by Steve Reid",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/vendor/hash/sha1/sha1.c.txt",
+          "sourcePath": "licenses/embedded/vendor/hash/sha1/sha1.c.txt"
+        }
+      ]
+    },
+    {
+      "id": "sha256",
+      "name": "SHA-256 (vendor/hash/sha256)",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/vendor/hash/sha256/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "stb_image",
+      "name": "stb_image",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/vendor/stb/stb_image.h.txt",
+          "sourcePath": "licenses/embedded/vendor/stb/stb_image.h.txt"
+        }
+      ]
+    },
+    {
+      "id": "subprocess.h",
+      "name": "subprocess.h",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/extracted/vendor/sheredom/subprocess.h.txt",
+          "sourcePath": "licenses/embedded/vendor/sheredom/subprocess.h.txt"
+        }
+      ]
+    },
+    {
+      "id": "xxhash",
+      "name": "xxHash",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/vendor/hash/xxhash/LICENSE"
+        }
+      ]
+    }
+  ]
+}

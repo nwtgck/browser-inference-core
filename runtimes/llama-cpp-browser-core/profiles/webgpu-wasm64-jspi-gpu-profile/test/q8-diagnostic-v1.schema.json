@@ -1,0 +1,533 @@
+{
+  "extensionId": "webgpu-q8-diagnostic-v1",
+  "version": 1,
+  "abiVersion": 1,
+  "baseAbiVersion": 3,
+  "pointerRepresentation": "bigint_u64",
+  "suspension": "jspi",
+  "versionExport": "_lcb_webgpu_q8_diagnostic_version",
+  "schemaHashExport": "_lcb_webgpu_q8_diagnostic_schema_hash",
+  "functions": [
+    {
+      "name": "lcb_webgpu_q8_diagnostic_run_v1",
+      "export": "_lcb_webgpu_q8_diagnostic_run_v1",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "backend",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "dst",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "request",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "report",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        },
+        {
+          "name": "report_capacity",
+          "cType": "uint32_t",
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "lcb_webgpu_q8_diagnostic_version",
+      "export": "_lcb_webgpu_q8_diagnostic_version",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": false
+      },
+      "parameters": [
+        {
+          "name": "backend",
+          "cType": "uint64_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false
+          }
+        }
+      ],
+      "bridge": false
+    }
+  ],
+  "records": [
+    {
+      "name": "ggml_webgpu_q8_diagnostic_report_v1",
+      "cType": "struct ggml_webgpu_q8_diagnostic_report_v1",
+      "id": 17,
+      "size": 112,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "abi_version",
+          "cType": "uint32_t",
+          "id": 0,
+          "offset": 0,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "struct_size",
+          "cType": "uint32_t",
+          "id": 1,
+          "offset": 4,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "status",
+          "cType": "uint32_t",
+          "id": 2,
+          "offset": 8,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "requested_variant",
+          "cType": "uint32_t",
+          "id": 3,
+          "offset": 12,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "phase",
+          "cType": "uint32_t",
+          "id": 4,
+          "offset": 16,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "actual_algorithm",
+          "cType": "uint32_t",
+          "id": 5,
+          "offset": 20,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "workgroup_size",
+          "cType": "uint32_t",
+          "id": 6,
+          "offset": 24,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "logical_subgroup_size",
+          "cType": "uint32_t",
+          "id": 7,
+          "offset": 28,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "real_min_subgroup_size",
+          "cType": "uint32_t",
+          "id": 8,
+          "offset": 32,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "real_max_subgroup_size",
+          "cType": "uint32_t",
+          "id": 9,
+          "offset": 36,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "rows_per_tile",
+          "cType": "uint32_t",
+          "id": 10,
+          "offset": 40,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "outputs_per_workgroup",
+          "cType": "uint32_t",
+          "id": 11,
+          "offset": 44,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "cooperative_subgroup_reduction",
+          "cType": "uint32_t",
+          "id": 12,
+          "offset": 48,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "grid_x",
+          "cType": "uint32_t",
+          "id": 13,
+          "offset": 52,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "grid_y",
+          "cType": "uint32_t",
+          "id": 14,
+          "offset": 56,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "grid_z",
+          "cType": "uint32_t",
+          "id": 15,
+          "offset": 60,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "dispatches",
+          "cType": "uint32_t",
+          "id": 16,
+          "offset": 64,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "codegen_revision",
+          "cType": "uint32_t",
+          "id": 17,
+          "offset": 68,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "shader_identity_id",
+          "cType": "uint32_t",
+          "id": 18,
+          "offset": 72,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "reserved",
+          "cType": "uint32_t",
+          "id": 19,
+          "offset": 76,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "shader_sha256",
+          "cType": "uint8_t[32]",
+          "id": 20,
+          "offset": 80,
+          "size": 32,
+          "kind": "array",
+          "abiType": {
+            "kind": "array",
+            "dimensions": [
+              32
+            ],
+            "element": {
+              "kind": "unsigned",
+              "abiType": {
+                "kind": "integer",
+                "bits": 8,
+                "signed": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ggml_webgpu_q8_diagnostic_request_v1",
+      "cType": "struct ggml_webgpu_q8_diagnostic_request_v1",
+      "id": 18,
+      "size": 24,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "abi_version",
+          "cType": "uint32_t",
+          "id": 0,
+          "offset": 0,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "struct_size",
+          "cType": "uint32_t",
+          "id": 1,
+          "offset": 4,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "variant",
+          "cType": "uint32_t",
+          "id": 2,
+          "offset": 8,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "phase",
+          "cType": "uint32_t",
+          "id": 3,
+          "offset": 12,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "repetitions",
+          "cType": "uint32_t",
+          "id": 4,
+          "offset": 16,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "reserved",
+          "cType": "uint32_t",
+          "id": 5,
+          "offset": 20,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        }
+      ]
+    }
+  ],
+  "constants": [
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_COOPERATIVE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_INDEPENDENT_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_NONE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_AUTO_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BAD_REQUEST_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BUSY_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG128_R2_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG256_R4_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_EXECUTE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R1_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R2_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R4_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MIN_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MIN_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_PREPARE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_REPETITIONS_MAX_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNAVAILABLE_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_VERSION_V1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_WEIGHT_BYTES_MAX_V1"
+  ],
+  "constantValues": {
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_AUTO_V1": "0",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG256_R4_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R4_V1": "2",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R1_V1": "3",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_INDEPENDENT_WG128_R2_V1": "4",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_COOPERATIVE_WG128_R2_V1": "5",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_PREPARE_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_EXECUTE_V1": "2",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_OK_V1": "0",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNAVAILABLE_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BAD_REQUEST_V1": "2",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_UNSUPPORTED_V1": "3",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_NOT_PREPARED_V1": "4",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_BUSY_V1": "5",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_NONE_V1": "0",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_COOPERATIVE_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_ALGORITHM_INDEPENDENT_V1": "2",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_VERSION_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MIN_V1": "32",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_K_MAX_V1": "16384",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MIN_V1": "1",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_M_MAX_V1": "65536",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_WEIGHT_BYTES_MAX_V1": "67108864",
+    "GGML_WEBGPU_Q8_DIAGNOSTIC_REPETITIONS_MAX_V1": "128"
+  },
+  "schemaSha256": "b6f262cbe5a788fe3b72431554c6f80fc47517ea1a5beb5f7ca55590938975dd"
+}
