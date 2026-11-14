@@ -2,7 +2,8 @@
 
 Runtime-specific source, bindings and profiles belong under `runtimes/`.
 Shared development tools belong under `tools/`; runtime-specific typed adapters
-belong under `runtimes/<runtime>/tools/`. Shared tests live under `tests/tools/`,
+belong under `runtimes/<runtime>/tools/`. Workflow and shell tests live under
+`.github/tests/`; shared tool unit tests live under `tests/tools/`,
 and runtime tests/harnesses under `tests/runtimes/`, not a second test tree inside
 `runtimes/`. Use the targeted verification commands below. Local native/host
 checks do not require Emscripten; leave the browser-build matrix to CI when that

@@ -17,6 +17,7 @@ upstream pins.
 | `00-dto/` | External-input structures, public DTO types and named decoders |
 | `tests/` | Namespaced tests for shared tools and runtime-specific build contracts |
 | `.github/workflows/` | Explicit acquisition, offline Docker execution, artifact publication and reporting |
+| `.github/tests/` | Workflow orchestration and shell boundary tests; run `npm run test:workflows` |
 
 ## Repository and setup
 

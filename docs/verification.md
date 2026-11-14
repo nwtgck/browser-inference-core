@@ -9,6 +9,7 @@ checking and emitting unchanged inputs twice is unnecessary.
 | Scope | Command or entry point | Evidence |
 | --- | --- | --- |
 | Shared typed tools | `node --test build/tooling/tests/tools/<area>/*.test.js` | The selected preparation, DTO, package, publication or automation contracts |
+| Workflows and shell boundaries | `CI=true npm run test:workflows` | Current-source strict emit, workflow orchestration and shell contracts through local stand-ins |
 | Llama tools | `node --test build/tooling/tests/runtimes/llama-cpp/tools/*.test.js` | Runtime configuration, preparation and build orchestration |
 | Image tools | `node --test build/tooling/tests/runtimes/stable-diffusion-cpp/tools/*.test.js` | Independent image preparation and build contracts |
 | Browser host helpers | `npm test` | JavaScript helpers and ABI adapters using the suites' declared native doubles |
@@ -68,7 +69,13 @@ its Git objects; local builds explicitly capture working inputs and stay
 unpublishable. An unrelated source archive cannot establish Git provenance.
 Record its actual identity when using one for an isolated experiment.
 
-Shared tests belong under `tests/tools/`; runtime tests and harnesses live under
+Workflow and shell tests live under `.github/tests/`, with workflow-specific
+support beside them. `test:workflows` emits their current source and the real CLI
+entries used by their shell checks. CI uses its existing tooling emit and invokes
+the emitted tests directly, so it does not emit twice. Unit tests for metrics and
+automation implementation remain under `tests/tools/`.
+
+Other shared tests belong under `tests/tools/`; runtime tests and harnesses live under
 `tests/runtimes/`. The underscore-named runtime directories contain C++/JavaScript
 fixtures and independent CPU/CMake test helpers. Frozen source comparisons belong
 to their named historical fixtures and do not admit the current upstream by a

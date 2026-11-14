@@ -14,7 +14,7 @@ import { readJson } from '#tools/shared/json';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import { commitFiles, git, initializeRepository, temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 import { botComment, pullRequest, reportArchive, repository, source, workflowRun } from '#tests/tools/automation/comments.test-support';
-import type { Scenario } from '#tests/tools/automation/service.test-support';
+import type { Scenario } from './automation-service.test-support.js';
 import { createUpdaterFixture } from '#tests/tools/automation/upstream.test-support';
 
 const checkoutRoot = dirname(dirname(fileURLToPath(import.meta.resolve('#source/toolchain.json'))));
@@ -54,7 +54,7 @@ async function serviceEnvironment({ root, value }: { root: string; value: Scenar
   await writeFile(join(root, 'scenario.json'), JSON.stringify(value));
   const bin = join(root, 'bin');
   await mkdir(bin);
-  const service = fileURLToPath(import.meta.resolve('#tests/tools/automation/service.test-support'));
+  const service = fileURLToPath(new URL('./automation-service.test-support.js', import.meta.url));
   await chmod(service, 0o755);
   for (const name of ['gh', 'curl', 'docker', 'git']) {
     await symlink(service, join(bin, name));

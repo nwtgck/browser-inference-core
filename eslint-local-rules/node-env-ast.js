@@ -37,7 +37,7 @@ export function isNodeConsumer({ filename }) {
     return false;
   }
   const name = path.relative(repoRoot, file).split(path.sep).join('/');
-  return /^(?:tools\/|runtimes\/[^/]+\/tools\/|tests\/|eslint-local-rules\/|scripts\/|\.github\/scripts\/)/u.test(name)
+  return /^(?:tools\/|runtimes\/[^/]+\/tools\/|tests\/|eslint-local-rules\/|scripts\/|\.github\/(?:scripts|tests)\/)/u.test(name)
     || /^[^/]+\.config\.[cm]?[jt]s$/u.test(name);
 }
 

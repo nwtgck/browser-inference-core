@@ -54,7 +54,7 @@ test('the reader source permits only lazy, identity-preserving named declaration
 });
 
 test('owned Node TS, JS and MJS tests and build tools all reject direct environment reads and writes', () => {
-  for (const filename of ['tools/run.ts', 'tools/run.js', 'tests/tools/env.test.ts', 'tests/tools/env.test-support.ts', 'tests/tools/env.test.mjs', 'tests/runtimes/llama_cpp/browser-smoke.mjs', 'eslint-local-rules/example.js']) {
+  for (const filename of ['tools/run.ts', 'tools/run.js', 'tests/tools/env.test.ts', 'tests/tools/env.test-support.ts', 'tests/tools/env.test.mjs', 'tests/runtimes/llama_cpp/browser-smoke.mjs', 'eslint-local-rules/example.js', '.github/tests/env.test.ts', '.github/tests/env.test-support.ts']) {
     for (const code of ['process.env.X;', 'process.env.X = "value";', 'delete process.env.X;', 'const copy = { ...process.env };']) {
       assert.ok(lint({ code, filename }).includes('directEnvironment'), `${filename}: ${code}`);
     }
@@ -125,7 +125,7 @@ test('unrelated environment objects, Node process members and virtual processes 
 
 test('reader imports use Node directory ownership rather than individual caller registrations', () => {
   const code = 'import { READ_ENV_PATH } from "#tools/shared/node-env"; READ_ENV_PATH();';
-  for (const filename of ['tools/new-feature.ts', 'runtimes/future/tools/entry.ts', 'tests/tools/new.test.mjs', 'tests/runtimes/llama_cpp/browser-smoke.mjs', 'scripts/future.mjs', '.github/scripts/future.js', 'eslint.config.js']) {
+  for (const filename of ['tools/new-feature.ts', 'runtimes/future/tools/entry.ts', 'tests/tools/new.test.mjs', 'tests/runtimes/llama_cpp/browser-smoke.mjs', 'scripts/future.mjs', '.github/scripts/future.js', '.github/tests/new.test.ts', '.github/tests/helper.test-support.ts', 'eslint.config.js']) {
     assert.deepEqual(lint({ code, filename }), [], filename);
   }
   for (const filename of ['runtimes/llama-cpp/host/index.mjs', 'runtimes/example/host/tools/runtime.ts', '00-dto/shared/value.ts', 'src/browser.ts']) {

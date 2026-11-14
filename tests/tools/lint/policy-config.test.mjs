@@ -29,7 +29,7 @@ test('test permissions depend on exact physical suffixes across platforms', () =
 });
 
 test('the real configuration covers production tooling and browser JS and future TS', async () => {
-  for (const file of ['tools/shared/process.ts', 'tools/future.mjs', 'tools/future.cjs', 'runtimes/llama-cpp/host/index.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts', 'eslint-local-rules/test-resource-ast.js']) {
+  for (const file of ['tools/shared/process.ts', 'tools/future.mjs', 'tools/future.cjs', 'runtimes/llama-cpp/host/index.mjs', 'runtimes/example/host/runtime.js', 'runtimes/example/host/future.ts', 'eslint-local-rules/test-resource-ast.js', '.github/tests/build.test.ts', '.github/tests/workflow.test-support.ts']) {
     const config = await eslint.calculateConfigForFile(file);
     assert.equal(config.rules[ruleId][0], 2, file);
     assert.equal(config.rules[importRuleId][0], 2, file);
@@ -37,6 +37,12 @@ test('the real configuration covers production tooling and browser JS and future
   assert.equal((await eslint.calculateConfigForFile('tools/cli.ts')).rules[namedRuleId][0], 2);
   assert.equal((await eslint.calculateConfigForFile('tests/tools/lint/policy-config.test.mjs')).rules[namedRuleId], undefined);
   assert.equal(await eslint.calculateConfigForFile('runtimes/example/vendor/upstream/runtime.ts'), undefined);
+  for (const file of ['.github/tests/build.test.ts', '.github/tests/automation.test.ts', '.github/tests/run-offline.test.ts', '.github/tests/workflow.test-support.ts']) {
+    const config = await eslint.calculateConfigForFile(file);
+    assert.equal(config.rules['@typescript-eslint/no-explicit-any'][0], 2, file);
+    assert.equal(config.languageOptions.parserOptions.project, './tsconfig.tools.json', file);
+    assert.equal(config.rules['local-rules-node-env/node-env-policy'][0], 2, file);
+  }
 });
 
 test('the real configuration enforces the boundary without requiring a TS project for browser files', async () => {

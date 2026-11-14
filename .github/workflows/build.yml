@@ -133,11 +133,12 @@ jobs:
             node build/tooling/tools/cli.js toolchain prepare \
               --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
             export LCB_TEST_DAWN_PACKAGE="$GITHUB_WORKSPACE/.tools/emdawnwebgpu_pkg"
-            npm run lint -- 00-dto tools runtimes/llama-cpp/tools runtimes/stable-diffusion-cpp/tools tests/tools tests/runtimes/llama-cpp tests/runtimes/stable-diffusion-cpp
+            npm run lint -- 00-dto tools runtimes/llama-cpp/tools runtimes/stable-diffusion-cpp/tools tests/tools tests/runtimes/llama-cpp tests/runtimes/stable-diffusion-cpp .github/tests
             npm run test:lint
             shopt -s globstar
             BIC_METRICS_MODE=off node --test build/tooling/tests/tools/**/*.test.js \
-              build/tooling/tests/runtimes/llama-cpp/tools/**/*.test.js
+              build/tooling/tests/runtimes/llama-cpp/tools/**/*.test.js \
+              build/tooling/.github/tests/*.test.js
             BIC_METRICS_MODE=off node --test tests/tools/cli/*.test.mjs tests/runtimes/llama_cpp/*.test.mjs
             BIC_METRICS_MODE=off python3 -m unittest \
               tests.runtimes.llama_cpp.source.test_native_quantization \

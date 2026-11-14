@@ -50,7 +50,7 @@ for (const filename of ['tools/runtime.ts', 'tools/runtime.mjs', 'runtimes/examp
   });
 }
 
-for (const filename of ['tests/tools/example.test.ts', 'tests/tools/example.test-support.ts']) {
+for (const filename of ['tests/tools/example.test.ts', 'tests/tools/example.test-support.ts', '.github/tests/example.test.ts', '.github/tests/example.test-support.ts']) {
   test(`preserves test-only dependency chains: ${filename}`, () => {
     for (const code of forbidden) {
       assert.deepEqual(lint({ code, filename }), [], code);

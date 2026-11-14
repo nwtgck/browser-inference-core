@@ -10,7 +10,7 @@ import statementLayout from '#lint/statement-layout';
 import forceSwitchForUnion from '#lint/force-switch-for-union';
 import nodeEnvironment from '#lint/node-env-policy';
 
-const typedSources = ['00-dto/**/*.ts', 'tools/**/*.ts', 'runtimes/*/tools/**/*.ts', 'tests/tools/**/*.ts', 'tests/runtimes/*/**/*.ts'];
+const typedSources = ['00-dto/**/*.ts', 'tools/**/*.ts', 'runtimes/*/tools/**/*.ts', 'tests/tools/**/*.ts', 'tests/runtimes/*/**/*.ts', '.github/tests/**/*.ts'];
 const parentImports = {
   group: ['..', '../**'],
   message: 'Use the package imports (#tools, #runtimes, #tests or #dto) instead of a parent-relative import.',

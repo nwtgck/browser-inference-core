@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    ".github/tests/**/*.ts",
+    "runtimes/llama-cpp/tools/cli.ts",
+    "runtimes/stable-diffusion-cpp/tools/cli.ts"
+  ]
+}

@@ -72,7 +72,7 @@ for (const filename of ['tools/runtime.mjs', 'runtimes/example/host/runtime.js',
   });
 }
 
-for (const filename of ['tests/tools/example.test.ts', 'tests/tools/example.test-support.ts']) {
+for (const filename of ['tests/tools/example.test.ts', 'tests/tools/example.test-support.ts', '.github/tests/example.test.ts', '.github/tests/example.test-support.ts']) {
   test(`allows disposal protocols in actual Node test modules: ${filename}`, () => {
     for (const code of [...protocolAccesses, ...nativeRuntimeAccesses]) {
       assert.deepEqual(lint({ code, filename }), [], code);

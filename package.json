@@ -49,6 +49,8 @@
   },
   "scripts": {
     "test": "node --test tests/runtimes/llama_cpp/*.test.mjs tests/runtimes/stable_diffusion_cpp/*.test.mjs",
+    "pretest:workflows": "tsc --project tsconfig.github-tests.json",
+    "test:workflows": "node --test build/tooling/.github/tests/*.test.js",
     "tooling:build": "tsc --project tsconfig.tools.json",
     "tooling:check": "tsc --project tsconfig.tools.json --noEmit",
     "lint": "eslint",

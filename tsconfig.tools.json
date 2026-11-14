@@ -6,6 +6,7 @@
     "runtimes/llama-cpp/tools/**/*.ts",
     "runtimes/stable-diffusion-cpp/tools/**/*.ts",
     "tests/tools/**/*.ts",
+    ".github/tests/**/*.ts",
     "tests/runtimes/llama-cpp/**/*.ts",
     "tests/runtimes/stable-diffusion-cpp/**/*.ts"
   ]
