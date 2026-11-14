@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "llama-cpp",
   "abiVersion": 3,
-  "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+  "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
   "schemaSha256": "56890524292b453d57d52c06ce2fbc838e81547ddfc69f1e5bbdd4a5ed5f32ec",
   "llamaCommit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "licenseRoots": [
@@ -52,8 +52,8 @@
       "path": "api/schema.mjs"
     },
     {
-      "bytes": 7422,
-      "sha256": "f5e619c09595727f12af48e756153130996128dd38c039c6af07a957a5b070d6",
+      "bytes": 7257,
+      "sha256": "2be4a401e5e3217b0992b1b28f72069a154b89360628dcb05e117928fd1a6976",
       "path": "browser-host.md"
     },
     {
@@ -1909,7 +1909,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "browser",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -1948,7 +1948,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -2059,8 +2059,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -37555,7 +37555,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794659703,
+          "builtAtUnix": 1794661701,
           "buildCache": {
             "identity": "c182a588bda086bda29fd057d8fb53de",
             "compilerWrapper": "ccache"
@@ -37614,7 +37614,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "test",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -37653,7 +37653,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -37764,8 +37764,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -73260,7 +73260,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794659828,
+          "builtAtUnix": 1794661713,
           "buildCache": {
             "identity": "e9386b7caffdd66bafb2784be70b9338",
             "compilerWrapper": "ccache"
@@ -73312,7 +73312,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -73351,7 +73351,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -73462,8 +73462,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -110293,7 +110293,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659967,
+          "builtAtUnix": 1794661753,
           "buildCache": {
             "identity": "bbfdfd2bce32aaa7ee1b8c4199c433b7",
             "compilerWrapper": "ccache"
@@ -110340,7 +110340,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -110379,7 +110379,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -110490,8 +110490,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -147321,7 +147321,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659960,
+          "builtAtUnix": 1794661846,
           "buildCache": {
             "identity": "6d148079f619c2923f64447d2e5cf807",
             "compilerWrapper": "ccache"
@@ -147361,7 +147361,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -147400,7 +147400,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -147511,8 +147511,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -184342,7 +184342,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659722,
+          "builtAtUnix": 1794661783,
           "buildCache": {
             "identity": "c6629e302eb28641b484d611d85f2333",
             "compilerWrapper": "ccache"
@@ -184389,7 +184389,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -184428,7 +184428,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -184539,8 +184539,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -221370,7 +221370,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659705,
+          "builtAtUnix": 1794661716,
           "buildCache": {
             "identity": "27289256caeec38a3746d97fc826070c",
             "compilerWrapper": "ccache"
@@ -221410,7 +221410,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -221449,7 +221449,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -221560,8 +221560,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -258428,7 +258428,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659879,
+          "builtAtUnix": 1794661748,
           "buildCache": {
             "identity": "abaae16e6be4ba90e0b82869d19730c2",
             "compilerWrapper": "ccache"
@@ -258475,7 +258475,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -258514,7 +258514,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -258625,8 +258625,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -295493,7 +295493,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659904,
+          "builtAtUnix": 1794661710,
           "buildCache": {
             "identity": "2207c8773a7f9e78af758f6c43c4eae1",
             "compilerWrapper": "ccache"
@@ -295533,7 +295533,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "browser",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -295573,7 +295573,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -295684,8 +295684,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -332601,7 +332601,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659866,
+          "builtAtUnix": 1794661735,
           "buildCache": {
             "identity": "16744b159182c38c3d3d259e68af441a",
             "compilerWrapper": "ccache"
@@ -332648,7 +332648,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "test",
-          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+          "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -332688,7 +332688,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
+            "sourceCommit": "c7762d53d39e8d7ea7922d0a8c0406ad05fddd23",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14862,
@@ -332799,8 +332799,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 93129,
-                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
+                "bytes": 93416,
+                "sha256": "3d5a442fea5cb4f8d9a3006daf6d3d42584f1d842d47b8d91254f0f42a1f4151"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -369716,7 +369716,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794659743,
+          "builtAtUnix": 1794661736,
           "buildCache": {
             "identity": "5423a64cc8f4165e8b18312afc19a7ab",
             "compilerWrapper": "ccache"

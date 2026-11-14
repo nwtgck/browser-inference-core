@@ -135,12 +135,10 @@ Per-build provenance records the preparation's input/output byte counts and
 hashes, and whether the input already contained the annotation. Asset deployment,
 compression and packaging remain separate host responsibilities.
 
-The build CLI also prepares the SDK-generated `core.d.ts` native export
-declarations. With `WASM_BIGINT`, native i64 arguments and results are JavaScript
-`bigint` primitives. The pinned SDK spells these types as the boxed `BigInt`
-interface. The preparation uses TypeScript's syntax tree and symbol resolution
-to correct global `BigInt` type references in native export methods while
-preserving record types, value identifiers, and Embind declarations. Provenance
-records the declaration input/output identities and number of corrected type
-references. This changes declarations only; the JavaScript and Wasm ABI remain
-the compiler's generated artifacts.
+The SDK generates `core.d.ts` during linking. Its declarations follow the same
+native signature conversions as the generated JavaScript: SDK pointer/int53
+wrappers, including `_malloc` and `_free`, accept Number values, while genuine
+i64 exports use primitive `bigint`. The selected JSPI exports return Promises.
+The source checkout's `toolchain/README.md` describes the SDK preparation that
+supplies this declaration contract. JavaScript and Wasm remain the compiler's
+generated artifacts.
