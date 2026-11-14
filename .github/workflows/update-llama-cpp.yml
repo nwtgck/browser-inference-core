@@ -38,7 +38,6 @@ jobs:
     permissions:
       contents: write
     env:
-      UPDATE_STATE: ${{ runner.temp }}/upstream-update
       TARGET: ${{ inputs.target }}
       CUSTOM_REF: ${{ inputs.custom_ref }}
       BASE: ${{ github.ref_name }}
@@ -52,7 +51,9 @@ jobs:
         with:
           node-version: 22.16.0
       - name: Acquire tooling dependencies (online)
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: |
+          printf 'UPDATE_STATE=%s/upstream-update\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Acquire offline automation image (online)
         shell: bash
         run: |

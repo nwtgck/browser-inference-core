@@ -499,6 +499,7 @@ jobs:
             trap - EXIT
           fi
       - name: Prepare, build and stage the selected runtime
+        if: success()
         env:
           DAWN_MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
           DAWN_HIT: ${{ steps.dawn.outputs.cache-hit }}
@@ -509,7 +510,7 @@ jobs:
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_CACHES: ${{ success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
+          SAVE_CACHES: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
@@ -1136,6 +1137,7 @@ jobs:
             trap - EXIT
           fi
       - name: Prepare, build and stage the selected runtime
+        if: success()
         env:
           DAWN_MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
           DAWN_HIT: ${{ steps.dawn.outputs.cache-hit }}
@@ -1146,7 +1148,7 @@ jobs:
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_CACHES: ${{ success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
+          SAVE_CACHES: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \

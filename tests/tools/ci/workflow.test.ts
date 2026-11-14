@@ -54,6 +54,34 @@ test('jobs use the immutable source head, locked dependencies and one strict emi
   assert.deepEqual(object({ value: jobs.publish }).permissions, { contents: 'write' });
 });
 
+test('upstream update state is initialized on the runner and exported for later steps', async () => {
+  const document = object({ value: load(await readFile(join(checkoutRoot, '.github/workflows/update-llama-cpp.yml'), 'utf8')) });
+  const updater = object({ value: object({ value: document.jobs }).update });
+  assert.equal(object({ value: updater.env }).UPDATE_STATE, undefined);
+  const steps = list({ value: updater.steps }).map(value => object({ value }));
+  const acquisition = steps.find(step => step.name === 'Acquire tooling dependencies (online)');
+  assert.ok(acquisition);
+  await using temporary = await temporaryDirectory();
+  const root = temporary.root;
+  const runner = join(root, 'runner temp');
+  const githubEnv = join(root, 'github env');
+  await mkdir(runner);
+  await executable({
+    root,
+    name: 'npm',
+    source: `\
+require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'npm',args:process.argv.slice(2)})+'\\n');
+`,
+  });
+  await executeShell({ root, script: text({ value: acquisition.run }), environment: { RUNNER_TEMP: runner, GITHUB_ENV: githubEnv, CALLS: join(root, 'calls.jsonl') } });
+  const exported = (await readFile(githubEnv, 'utf8')).trimEnd();
+  assert.equal(exported, `UPDATE_STATE=${join(runner, 'upstream-update')}`);
+  const nextState = join(root, 'next-step-state');
+  await executeShell({ root, script: 'printf \'%s\' "$UPDATE_STATE" > "$STATE_FILE"', environment: { UPDATE_STATE: exported.slice('UPDATE_STATE='.length), STATE_FILE: nextState } });
+  assert.equal(await readFile(nextState, 'utf8'), join(runner, 'upstream-update'));
+  assert.deepEqual((await readCalls({ root })).map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund']]);
+});
+
 test('each job actually installs the lock and emits tooling exactly once', async () => {
   for (const name of Object.keys(jobs)) {
     await using temporary = await temporaryDirectory();
@@ -107,13 +135,15 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
 
 test('cache saving and publication respond to actual trust scenarios', () => {
   function condition({ expression, context }: { expression: unknown; context: Record<string, unknown> }): boolean {
-    const value: unknown = runInNewContext(text({ value: expression }), context, { timeout: 100 });
+    const source = text({ value: expression });
+    const value: unknown = runInNewContext(source.startsWith('${{') ? source.slice(3, -2).trim() : source, context, { timeout: 100 });
     assert.equal(typeof value, 'boolean');
     return value === true;
   }
   for (const name of ['compile', 'image-compile']) {
     const saves = actionSteps({ job: name, action: 'actions/cache/save' });
     const restores = actionSteps({ job: name, action: 'actions/cache/restore' });
+    const build = namedStep({ job: name, name: 'Prepare, build and stage the selected runtime' });
     assert.equal(saves.length, 3);
     assert.equal(restores.length, 3);
     for (const restore of restores) {
@@ -144,6 +174,10 @@ test('cache saving and publication respond to actual trust scenarios', () => {
         const steps = Object.fromEntries(['dawn', 'em', 'cc'].map(name => [name, { outputs: { 'cache-hit': scenario.hit } }]));
         const expression = text({ value: save.if }).replaceAll('.cache-hit', "['cache-hit']");
         assert.equal(condition({ expression, context: { github, steps, env: { BIC_CACHE_MODE: scenario.mode }, success: () => scenario.succeeded } }), scenario.allowed);
+        // Step env permits data contexts; status functions belong to step if.
+        const eligible = condition({ expression: object({ value: build.env }).SAVE_CACHES, context: { github, env: { BIC_CACHE_MODE: scenario.mode } } });
+        assert.equal(eligible, scenario.event === 'push' && scenario.ref === 'develop' && scenario.actor === 'human' && scenario.mode === 'enabled');
+        assert.equal(condition({ expression: build.if, context: { success: () => scenario.succeeded } }), scenario.succeeded);
       }
     }
   }
@@ -559,18 +593,32 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'nod
   assert.equal(args[args.indexOf('--commit') + 1], 'a'.repeat(40));
 });
 
-test('the actions lock covers the exact action repositories and versions in the workflow', async () => {
+test('the actions lock covers every workflow usage through an existing resolved action', async () => {
   const locked = object({ value: load(await readFile(join(checkoutRoot, '.github/workflows/actions.lock'), 'utf8')) });
-  const actual = new Set<string>();
-  for (const name of Object.keys(jobs)) {
-    for (const step of jobSteps({ name })) {
-      if (step.uses === undefined) {
-        continue;
+  const indexed = object({ value: locked.workflows });
+  const dependencies = object({ value: locked.dependencies });
+  const filenames = (await readdir(join(checkoutRoot, '.github/workflows'))).filter(name => name.endsWith('.yml')).sort();
+  assert.deepEqual(Object.keys(indexed).sort(), filenames.map(name => '.github/workflows/' + name));
+  for (const filename of filenames) {
+    const document = object({ value: load(await readFile(join(checkoutRoot, '.github/workflows', filename), 'utf8')) });
+    const actual = new Set<string>();
+    for (const job of Object.values(object({ value: document.jobs }))) {
+      for (const value of list({ value: object({ value: job }).steps })) {
+        const step = object({ value });
+        if (step.uses === undefined) {
+          continue;
+        }
+        const [action, version] = text({ value: step.uses }).split('@');
+        assert.ok(action && version);
+        const ref = action.split('/').slice(0, 2).join('/') + '@' + version;
+        actual.add(ref);
+        const resolved = object({ value: dependencies[ref] });
+        assert.equal(resolved.ref, version);
+        assert.match(text({ value: resolved.commit }), /^sha1-[a-f0-9]{40}$/u);
+        assert.equal(typeof resolved.owner_id, 'number');
+        assert.equal(typeof resolved.repo_id, 'number');
       }
-      const [action, version] = text({ value: step.uses }).split('@');
-      assert.ok(action && version);
-      actual.add(action.split('/').slice(0, 2).join('/') + '@' + version);
     }
+    assert.deepEqual([...actual].sort(), list({ value: indexed['.github/workflows/' + filename] }).sort(), filename);
   }
-  assert.deepEqual([...actual].sort(), list({ value: object({ value: locked.workflows })['.github/workflows/build.yml'] }).sort());
 });
