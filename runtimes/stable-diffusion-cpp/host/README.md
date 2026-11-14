@@ -1,20 +1,22 @@
-# Thin host bindings (ABI 2)
+# Thin host bindings (ABI 3)
 
 Import `attachCore`, `schema`, and `mountReadOnlyFile` from
 `browser-inference-core/stable-diffusion-cpp/host`.
 Instantiate a chosen `profiles/<profile>/<variant>/core.mjs` factory yourself,
 then call `attachCore(module, schema, { suspension: 'asyncify' })` for Asyncify
-or `{ suspension: 'direct' }` for JSPI. Do not invoke suspending raw exports
+or `{ suspension: 'jspi' }` for JSPI. Do not invoke suspending raw exports
 without the appropriate Promise bridge.
 
 The helpers have no model singleton, Worker, catalog, download, storage, thread,
 sampler, memory-budget, or generation policy. Functions and record
 layouts in the pinned public SD header are generated; the compiled schema fingerprint
 must match. `api` calls normalize pointers and 64-bit integers to bigint, serialize
-native access, and preserve upstream defaults and results. Record layouts are
-queried from the compiled module, never guessed from JavaScript.
+native access, and preserve upstream defaults and results. The compiled
+fingerprint selects a target's compiler-derived layouts and constants from the
+catalog. Scalar/pointer functions use their original C exports; only by-value
+record functions need ordinary native bridges.
 
-ABI 2 describes this wire convention, not compatibility between upstream API
+ABI 3 describes this wire convention, not compatibility between upstream API
 revisions. A matching schema and Wasm can still require changes in the caller
 when a function signature, record field, ownership rule, or field unit changes.
 
@@ -132,7 +134,7 @@ into a total. Aliased handles can overlap, runtime reports may be stale, and bar
 mappings, file buffers, other allocators and driver costs are excluded. These are
 not physical VRAM, free GPU memory or peak usage. When no snapshot is requested,
 the getters add no work to generation; the context initializer additionally owns
-the previously omitted audio-encoder path with one string copy. This design property is
+the audio-encoder path with one string copy. This design property is
 separate from an actual performance measurement.
 
 ## Opt-in graph-stage logs
@@ -161,7 +163,7 @@ No native timers, additional tensor walks, GPU synchronization or readbacks are
 added. With diagnostics disabled, boundary helpers only check the gate/null
 label and perform no formatting or callback work. Enabled logging has callback
 overhead and is not a performance benchmark. This API requires an artifact built
-with the graph-stage patch; older ABI 2 artifacts do not expose it.
+with the graph-stage capability. Check the selected schema and exports before using it; artifacts without that capability cannot provide graph-stage diagnostics.
 
 ## Public GGML control
 
@@ -171,8 +173,8 @@ contexts/tensors/graphs, choose a backend, allocate buffers, upload inputs, comp
 download results and release resources without adding runtime-specific probes.
 Complete public records such as `ggml_init_params`, `ggml_cplan`, device properties,
 tensor/type traits and `gguf_init_params` use compiled layouts. Enumerated constants
-and selected numeric macros are exported. `schema.ggmlCoverage` and the exclusion
-list describe the supported surface and explicit omissions.
+and selected numeric macros are included in target metadata. Its functions and
+exclusion list describe the supported surface and explicit omissions.
 
 Pointers, byte counts and dimension integers follow the generated schema: pointers
 and `size_t`/`int64_t` use bigint on both Wasm widths. By-value records use caller-owned

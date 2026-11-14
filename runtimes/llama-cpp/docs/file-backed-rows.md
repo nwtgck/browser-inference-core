@@ -6,22 +6,25 @@ promise that the remaining weights fit in browser or device memory.
 
 ## Activation and lifetime
 
-`LCB_FILE_BACKED_PLE=ON` is selected by `build_tools.runtimes.llama_cpp.build` only for memory64
+`LCB_FILE_BACKED_PLE=ON` is selected by `runtimes/llama-cpp/tools/build.ts` only for memory64
 profiles. The build-tree recipe applies the explicit, file-scoped patch and
 records observed input/output identities in `source-preparation.json`.
 Compatibility is checked by C++ compilation, coherent model layout tests, and
 reader/lifetime regressions, not by freezing unrelated source bytes.
 Native Linux checks may enable it explicitly. The upstream checkout stays clean.
 
-The actual module exposes two synchronous metadata functions, never JSPI
-(JavaScript Promise Integration) operations:
+The generated API exposes two metadata functions:
 
-* `_lcb_file_backed_rows_version()`: 1 when compiled in, 0 when disabled; older
-  artifacts may omit it entirely.
-* `_lcb_model_file_backed_shard(modelPointer)`: -1 for a resident model, otherwise
-  the zero-based index in the **exact split-path array used to load the model**.
-  For single-file models this is 0. The argument must identify a live model and
-  no other native operation may be in flight.
+- `await core.api.bicore_file_backed_rows_version()`: 1 when compiled in, 0 when
+  disabled. Older artifacts may lack this surface entirely.
+- `await core.api.bicore_model_file_backed_shard(modelPointer)`: -1 for a resident
+  model, otherwise the zero-based index in the exact split-path array used to
+  load the model. A single-file model uses 0.
+
+Their native implementations are synchronous leaves excluded from JSPI
+suspension, while the ordinary generated host API preserves its Promise contract
+and serialized call boundary. The model pointer must be live and no other native
+operation may be in flight. Use the generated API matching the selected artifact.
 
 Callers opt in with `load_mode=LLAMA_LOAD_MODE_NONE` and
 `lazy_mode=LLAMA_LAZY_MODE_ON`. Only Qwen4Exp uses the positioned reader.
@@ -119,23 +122,23 @@ source set. It does not publish a fabricated upstream commit or modify a gitlink
 
 ## Local checks
 
-From the repository's `runtimes/llama-cpp` directory, with a separately available pinned
-upstream checkout (no download of the large model is needed):
+The [QSA native runner](qsa-all-pools-selection.md) builds independent CPU
+libraries with file-backed rows enabled. After running it with
+`--output-root /tmp/bicore-qsa-regression`, use its coherent reference build for
+the dedicated file-reader/model fixtures. From the repository root:
 
 ```sh
-cmake -S . -B build/file-rows-native -DLCB_NATIVE_CHECK=ON \
-  -DLCB_FILE_BACKED_PLE=ON -DLCB_LLAMA_SOURCE=/absolute/path/to/llama.cpp \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build build/file-rows-native --target core -j2
-cmake -S ../../tests/runtimes/llama_cpp/file-backed-rows -B build/file-rows-tests \
-  -DLCB_LLAMA_SOURCE=/absolute/path/to/llama.cpp \
-  -DLCB_NATIVE_BUILD="$PWD/build/file-rows-native" -DCMAKE_BUILD_TYPE=Release
-cmake --build build/file-rows-tests -j2
-ctest --test-dir build/file-rows-tests --output-on-failure
-LCB_TEST_LLAMA_SOURCE=/absolute/path/to/llama.cpp \
-  python3 -m unittest discover -s ../../tests/runtimes/llama_cpp -t ../.. -p 'test_file_backed_rows*.py'
-node --test ../../tests/runtimes/llama_cpp/read-only-file.test.mjs
+cmake -S tests/runtimes/llama_cpp/file-backed-rows \
+  -B /tmp/bicore-file-rows-tests -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DLCB_LLAMA_SOURCE="$PWD/runtimes/llama-cpp/vendor/llama.cpp" \
+  -DLCB_NATIVE_BUILD=/tmp/bicore-qsa-regression/build/native/reference/browser
+cmake --build /tmp/bicore-file-rows-tests --parallel 2
+ctest --test-dir /tmp/bicore-file-rows-tests --output-on-failure
+node --test tests/runtimes/llama_cpp/read-only-file.test.mjs
 ```
+
+The fixture configuration reads the linked library's prepared-source root rather
+than combining it with pristine model headers. No large model download is needed.
 
 The native fixture compares actual eager/file-backed logits, metadata-only
 first of three shards, IQ4_NL rows, EOS, microbatches, graph reuse, mixed inputs,
@@ -160,18 +163,18 @@ an actual model-load, browser, arbitrary-VFS, or GPU validation.
 The tiny Wasm64 syscall check can be built separately with an installed SDK:
 
 ```sh
-em++ -std=c++17 -O1 -fwasm-exceptions --no-entry -Ibridge \
+em++ -std=c++17 -O1 -fwasm-exceptions --no-entry -Iruntimes/llama-cpp/native/io \
   -sMEMORY64=1 -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=node \
   -sFORCE_FILESYSTEM=1 -sASSERTIONS=1 \
   '-sEXPORTED_RUNTIME_METHODS=["FS","ccall"]' \
   '-sEXPORTED_FUNCTIONS=["_lcb_identity_check","_lcb_identity_again","_lcb_identity_release","_lcb_identity_errno"]' \
-  tests/file-backed-rows/identity.cpp -o /tmp/file-rows-identity.mjs
-node tests/file-backed-rows/identity-wasm.mjs /tmp/file-rows-identity.mjs
+  tests/runtimes/llama_cpp/file-backed-rows/identity.cpp -o /tmp/file-rows-identity.mjs
+node tests/runtimes/llama_cpp/file-backed-rows/identity-wasm.mjs /tmp/file-rows-identity.mjs
 ```
 
 ## Bounded packed-row reuse
 
-The model-owned reader now retains quantized rows across gathers. The cache is
+The model-owned reader retains quantized rows across gathers. The cache is
 four-way set associative, uses per-set least-recently-used replacement, and
 compares the complete row ID on every hit. It does not change n-gram hashing,
 row order, dequantization, or the logits/sampling algorithm. Different models

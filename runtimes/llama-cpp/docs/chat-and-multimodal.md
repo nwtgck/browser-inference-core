@@ -168,29 +168,19 @@ ordinary typed call expressions; this policy does not attempt to freeze overload
 resolution inside every adapter, upstream implementation, or generated C wrapper.
 There is no change to the upstream source overlay or its application checks.
 
-`../../tests/runtimes/llama_cpp/test_embind_overloads.py` guards the bridge's direct-registration style and
-compiles every production signature against synthetic overload sets, including
-extra arguments with defaults, function templates and opposite-const methods.
-It covers both declaration orders, rejects bare-pointer registration, and checks
-that removal of a selected signature fails instead of selecting a substitute.
-A native execution fixture checks bool values, reference identity, mutable and
-const methods, and native clock values. Another syntax test uses the real
-checkout's headers (`LCB_TEST_LLAMA_SOURCE` can supply a local tree). These native
-checks model only the two standard selector templates, not Embind marshalling.
-They run through existing Python test discovery without new dependencies or a
-workflow change. `LCB_TEST_CXX` optionally selects a native C++ compiler for them.
+The ordinary runtime build compiles `native/chat/chat-embind.cpp` against the
+selected upstream and Emscripten headers and emits its real module declarations.
+That checks the complete registrations, selected signatures and adapter bodies.
+A declaration or native type fixture alone does not establish Embind marshalling.
 
-The real generated-module `../../tests/runtimes/llama_cpp/chat-surface.mjs` continues to cover JSON grammar
-conversion with both boolean values and now also exercises static JSON factories,
-const predicates, message methods, native parser reuse, segmented prompts, byte-indexed inputs and
-session snapshots without parser serialization. Only
-the actual runtime build/smoke test verifies the complete Emscripten binding.
-`../../tests/runtimes/llama_cpp/test_chat_binding_surface.py` additionally compiles the complete bridge
-against real upstream headers with a type-only Embind shim, including fields,
-constructors and adapter bodies plus negative controls for removed members.
-`../../tests/runtimes/llama_cpp/chat-native` exercises the actual native chat library and the same pinned
-Qwen3 template without a model or network access. Neither substitutes for Wasm
-marshalling tests; commands are in [the v0.7.0 review](llama-v0.7.0-review.md).
+`tests/runtimes/llama_cpp/chat-surface.mjs` exercises the actual generated module:
+JSON grammar conversion with both boolean values, static JSON factories, const
+predicates, message methods, native parser reuse, segmented prompts, byte-indexed
+inputs and session value copies. The saved-package validation runner includes it
+in the actual runtime smoke boundary. `tests/runtimes/llama_cpp/chat-native`
+links the native chat library and uses the same pinned Qwen3 template without
+model weights or network access. Native parser behavior and Wasm marshalling are
+separate evidence; see [verification](../../../docs/verification.md).
 
 Reference: [Embind select_overload](https://emscripten.org/docs/api_reference/bind.h.html#select-overload-and-select-const).
 

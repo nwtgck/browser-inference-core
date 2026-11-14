@@ -46,26 +46,76 @@ if(NOT EMSCRIPTEN AND NOT LCB_NATIVE_CHECK)
     message(FATAL_ERROR "Use emcmake, or explicitly enable LCB_NATIVE_CHECK for native tests")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-get_filename_component(LCB_REPOSITORY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-find_program(LCB_CLANG NAMES clang REQUIRED)
+set(LCB_CHECKOUT_ROOT "" CACHE PATH "Checkout that owns the running Node tooling")
+set(LCB_COMPILE_ROOT "" CACHE PATH "Snapshot of owned CMake and native compiler inputs")
+set(LCB_TOOLING_ROOT "" CACHE PATH "Compiled TypeScript tooling owned by the checkout")
+set(LCB_NODE "" CACHE FILEPATH "Node executable for project-owned tooling")
+set(LCB_PREPARED_SOURCE "" CACHE PATH "Already prepared coherent llama.cpp tree")
+foreach(LCB_REQUIRED_INPUT LCB_CHECKOUT_ROOT LCB_COMPILE_ROOT LCB_TOOLING_ROOT LCB_NODE)
+    if(NOT ${LCB_REQUIRED_INPUT})
+        message(FATAL_ERROR "${LCB_REQUIRED_INPUT} must be supplied explicitly")
+    endif()
+endforeach()
+if(NOT EXISTS "${LCB_TOOLING_ROOT}/runtimes/llama-cpp/tools/cli.js")
+    message(FATAL_ERROR "Compile the selected runtime tooling before configuring CMake")
+endif()
 set(LCB_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${LCB_GENERATED}")
-execute_process(COMMAND "${Python3_EXECUTABLE}" -m build_tools.runtimes.llama_cpp.bindings
-    --source "${LCB_LLAMA_SOURCE}" --output "${LCB_GENERATED}" --clang "${LCB_CLANG}"
-    WORKING_DIRECTORY "${LCB_REPOSITORY_ROOT}" COMMAND_ERROR_IS_FATAL ANY)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${LCB_REPOSITORY_ROOT}/build_tools/runtimes/llama_cpp/bindings.py"
-    "${LCB_REPOSITORY_ROOT}/build_tools/bindings.py"
-    "${CMAKE_CURRENT_SOURCE_DIR}/native/vision/mtmd-vision-bf16.h"
-    "${LCB_LLAMA_SOURCE}/include/llama.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/ggml.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-alloc.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-backend.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-cpu.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/ggml-opt.h"
-    "${LCB_LLAMA_SOURCE}/ggml/include/gguf.h"
-    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd.h"
-    "${LCB_LLAMA_SOURCE}/tools/mtmd/mtmd-helper.h")
+if(EMSCRIPTEN)
+    set(LCB_PREPARATION_TARGET wasm)
+else()
+    set(LCB_PREPARATION_TARGET native)
+endif()
+if(NOT LCB_PREPARED_SOURCE)
+    set(LCB_PREPARED_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/prepared")
+    execute_process(COMMAND "${LCB_NODE}" "${LCB_TOOLING_ROOT}/runtimes/llama-cpp/tools/cli.js" prepare
+        --compile-root "${LCB_COMPILE_ROOT}" --target "${LCB_PREPARATION_TARGET}" --upstream "${LCB_LLAMA_SOURCE}" --output "${LCB_PREPARED_OUTPUT}"
+        --webgpu "${LCB_WEBGPU}" --gpu-profile "${GGML_WEBGPU_GPU_PROFILE}"
+        --file-rows "${LCB_FILE_BACKED_PLE}" --qsa "${LCB_QSA_ALL_POOLS}"
+        --bf16-projector "${LCB_WEBGPU_BF16_PROJECTOR}" --python "${Python3_EXECUTABLE}"
+        WORKING_DIRECTORY "${LCB_CHECKOUT_ROOT}" COMMAND_ERROR_IS_FATAL ANY)
+    set(LCB_PREPARED_SOURCE "${LCB_PREPARED_OUTPUT}/llama.cpp")
+endif()
+get_filename_component(LCB_PREPARED_PARENT "${LCB_PREPARED_SOURCE}" DIRECTORY)
+set(LCB_PREPARATION_RECEIPT "${LCB_PREPARED_PARENT}/source-preparation.json")
+if(NOT EXISTS "${LCB_PREPARATION_RECEIPT}")
+    message(FATAL_ERROR "Prepared source requires its source-preparation.json receipt")
+endif()
+file(READ "${LCB_PREPARATION_RECEIPT}" LCB_PREPARATION_RECORD)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LCB_PREPARATION_RECEIPT}")
+foreach(LCB_PREPARATION_PAIR "webgpu;LCB_WEBGPU" "gpuProfile;GGML_WEBGPU_GPU_PROFILE"
+        "fileRows;LCB_FILE_BACKED_PLE" "qsa;LCB_QSA_ALL_POOLS")
+    list(GET LCB_PREPARATION_PAIR 0 LCB_PREPARATION_KEY)
+    list(GET LCB_PREPARATION_PAIR 1 LCB_PREPARATION_FLAG)
+    string(JSON LCB_PREPARATION_VALUE GET "${LCB_PREPARATION_RECORD}" options "${LCB_PREPARATION_KEY}")
+    if((LCB_PREPARATION_VALUE AND NOT ${LCB_PREPARATION_FLAG}) OR
+       (NOT LCB_PREPARATION_VALUE AND ${LCB_PREPARATION_FLAG}))
+        message(FATAL_ERROR "Prepared source mode disagrees with ${LCB_PREPARATION_FLAG}")
+    endif()
+endforeach()
+string(JSON LCB_PREPARED_TARGET GET "${LCB_PREPARATION_RECORD}" options target)
+if(NOT LCB_PREPARED_TARGET STREQUAL LCB_PREPARATION_TARGET)
+    message(FATAL_ERROR "Prepared wasm/native source selection disagrees with the target")
+endif()
+string(JSON LCB_PREPARATION_MTMD GET "${LCB_PREPARATION_RECORD}" options mtmdMode)
+if(LCB_WEBGPU AND LCB_WEBGPU_BF16_PROJECTOR)
+    set(LCB_EXPECTED_MTMD webgpu)
+else()
+    set(LCB_EXPECTED_MTMD cpu)
+endif()
+if(NOT LCB_PREPARATION_MTMD STREQUAL LCB_EXPECTED_MTMD)
+    message(FATAL_ERROR "Prepared mtmd source mode disagrees with the target")
+endif()
+set(LCB_LLAMA_SOURCE "${LCB_PREPARED_SOURCE}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/prepared-source-root.txt" "${LCB_LLAMA_SOURCE}\n")
+# Current inputs and transparent patches determine regeneration. Fixed original,
+# intermediate and final source digests are not compatibility gates.
+file(GLOB_RECURSE LCB_PREPARATION_DEPENDENCIES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/native/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/*.patch"
+    "${LCB_COMPILE_ROOT}/tools/abi/*.cmake"
+    "${LCB_COMPILE_ROOT}/tools/abi/*.in")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${LCB_PREPARATION_DEPENDENCIES})
 
 # Flags affecting the ABI must also apply to the outer bridge target.
 if(EMSCRIPTEN)
@@ -128,8 +178,7 @@ if(EMSCRIPTEN AND LCB_ASYNCIFY)
     set_property(TARGET ggml-webgpu PROPERTY INTERFACE_LINK_OPTIONS "${LCB_WEBGPU_LINK_OPTIONS}")
 endif()
 
-# Keep the common generated ABI byte-identical across every profile. The optional
-# extension has its own schema, layout queries and link-only export lists.
+# The selected target's generated ABI owns both complete link export lists.
 set(LCB_LINK_EXPORTS "${LCB_GENERATED}/exports.json")
 set(LCB_LINK_JSPI_EXPORTS "${LCB_GENERATED}/jspi-exports.json")
 if(GGML_WEBGPU_GPU_PROFILE)
@@ -139,35 +188,19 @@ if(GGML_WEBGPU_GPU_PROFILE)
     if(NOT LCB_WEBGPU)
         message(FATAL_ERROR "Q8 diagnostics require the WebGPU GPU-profile build")
     endif()
-    execute_process(COMMAND "${Python3_EXECUTABLE}" -m build_tools.runtimes.llama_cpp.diagnostic_bindings
-        --source "${LCB_LLAMA_SOURCE}" --contract-header "${CMAKE_CURRENT_SOURCE_DIR}/native/diagnostics/webgpu-q8-diagnostic.h"
-        --base-exports "${LCB_GENERATED}/exports.json" --base-jspi "${LCB_GENERATED}/jspi-exports.json"
-        --output "${LCB_GENERATED}" --clang "${LCB_CLANG}"
-        WORKING_DIRECTORY "${LCB_REPOSITORY_ROOT}" COMMAND_ERROR_IS_FATAL ANY)
-    set(LCB_LINK_EXPORTS "${LCB_GENERATED}/q8-diagnostic-exports.json")
-    set(LCB_LINK_JSPI_EXPORTS "${LCB_GENERATED}/q8-diagnostic-jspi-exports.json")
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime")
-    foreach(LCB_Q8_FILE q8-diagnostic-v1.schema.json q8-diagnostic-v1.functions.d.ts)
-        configure_file("${LCB_GENERATED}/${LCB_Q8_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/runtime/${LCB_Q8_FILE}" COPYONLY)
-    endforeach()
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/native/diagnostics/webgpu-q8-diagnostic.h"
-        "${LCB_REPOSITORY_ROOT}/build_tools/runtimes/llama_cpp/diagnostic_bindings.py")
 else()
     # A cache switched back to normal must not package stale diagnostic assets.
     file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/runtime/q8-diagnostic-v1.schema.json"
                 "${CMAKE_CURRENT_BINARY_DIR}/runtime/q8-diagnostic-v1.functions.d.ts")
 endif()
 
-include(cmake/ModelGraphBoundary.cmake)
-
 if(LCB_NATIVE_CHECK)
-    add_library(core SHARED "${LCB_GENERATED}/bindings.cpp")
+    add_library(core SHARED native/abi/bridge.cpp native/abi/metadata.cpp)
     if(UNIX AND NOT APPLE)
         target_link_options(core PRIVATE -Wl,--no-undefined)
     endif()
 else()
-    add_executable(core "${LCB_GENERATED}/bindings.cpp" native/chat/chat-embind.cpp)
+    add_executable(core native/abi/bridge.cpp native/abi/metadata.cpp native/chat/chat-embind.cpp)
     set_target_properties(core PROPERTIES SUFFIX ".mjs" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime")
     target_link_options(core PRIVATE
         --bind --no-entry -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createLlamaCppCore
@@ -206,18 +239,35 @@ if(LCB_FILE_BACKED_PLE)
 endif()
 
 if(LCB_WEBGPU AND GGML_WEBGPU_GPU_PROFILE)
-    target_sources(core PRIVATE native/diagnostics/webgpu-q8-diagnostic.cpp "${LCB_GENERATED}/q8-diagnostic-metadata.cpp")
+    target_sources(core PRIVATE native/diagnostics/webgpu-q8-diagnostic.cpp)
     target_compile_definitions(core PRIVATE LCB_WEBGPU_Q8_DIAGNOSTIC=1)
     target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/diagnostics")
 endif()
 
 # The added header is consumed only by the changed chat TU and leaf bindings.
 target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/model-graph")
-target_sources(core PRIVATE native/model-graph/model-graph.cpp "${LCB_GENERATED}/model-graph-metadata.cpp")
+target_sources(core PRIVATE native/model-graph/model-graph.cpp)
 
 if(LCB_NATIVE_CHECK)
-    add_executable(model-graph-boundary-test "${LCB_REPOSITORY_ROOT}/tests/runtimes/llama_cpp/model-graph/boundary.cpp")
+    add_executable(model-graph-boundary-test "${LCB_COMPILE_ROOT}/tests/runtimes/llama_cpp/model-graph/boundary.cpp")
     target_include_directories(model-graph-boundary-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${LCB_LLAMA_SOURCE}"
         "${LCB_LLAMA_SOURCE}/include" "${LCB_LLAMA_SOURCE}/ggml/include" "${LCB_LLAMA_SOURCE}/common")
     target_link_libraries(model-graph-boundary-test PRIVATE core)
 endif()
+
+# ABI generation uses the actual core target compile command after generation.
+include("${LCB_COMPILE_ROOT}/tools/abi/Bindings.cmake")
+bicore_add_abi(TARGET core RUNTIME llama-cpp CHECKOUT_ROOT "${LCB_CHECKOUT_ROOT}" COMPILE_ROOT "${LCB_COMPILE_ROOT}"
+    TOOLING_ROOT "${LCB_TOOLING_ROOT}" NODE "${LCB_NODE}" OUTPUT "${LCB_GENERATED}"
+    LLAMA_SOURCE "${LCB_LLAMA_SOURCE}")
+
+# CMake owns the actual target source sets, including all mtmd model builders.
+# Consumers record this generated list rather than parsing CMake source text.
+include("${LCB_COMPILE_ROOT}/tools/shared/TargetSources.cmake")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/target-sources")
+foreach(LCB_INPUT_TARGET core llama llama-common mtmd ggml-base ggml-cpu ggml-webgpu)
+    if(TARGET ${LCB_INPUT_TARGET})
+        bicore_record_target_sources(TARGET ${LCB_INPUT_TARGET}
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/target-sources/${LCB_INPUT_TARGET}.txt")
+    endif()
+endforeach()

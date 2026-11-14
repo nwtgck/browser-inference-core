@@ -1,0 +1,4 @@
+#pragma once
+
+// The only substituted data is a validated SHA-256 of this target's ABI metadata.
+#define BICORE_ABI_FINGERPRINT "@BICORE_ABI_FINGERPRINT@"

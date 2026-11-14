@@ -1,4 +1,5 @@
 // Test variants only: real GGML graph construction, no backend or model weights.
+#include "browser-probes.h"
 #include "ggml.h"
 #include "ggml-impl.h"
 #include <cstdio>

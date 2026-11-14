@@ -1,5 +1,6 @@
 // Synthetic arithmetic/placement regression, NOT trained-model image inference.
 // Linked only into test variants/native checks.
+#include "browser-probes.h"
 #include "core/ggml_extend.h"
 #include "core/ggml_runner.h"
 #include "core/compute_workspace.h"

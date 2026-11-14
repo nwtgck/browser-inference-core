@@ -1,5 +1,7 @@
 import type { LowLevelFunctions } from '../api/functions.js';
 import type { ModuleByProfile, Profile, Variant } from './profiles.js';
+import type { AbiSchema } from './abi.js';
+export { createAbiCaller, selectAbiSchema, toNativePointer, fromNativePointer, toEmscriptenPointer, fromEmscriptenPointer } from './abi.js';
 export type { ModuleByProfile, Profile, Variant } from './profiles.js';
 export interface CoreModuleOptions extends Record<string, unknown> {
   /** WebGPU browser variants only. Opaque host handle; no WebGPU types dependency. */
@@ -14,7 +16,7 @@ export interface CoreModule {
 export interface Core<Module extends CoreModule = CoreModule> {
   module: Module;
   api: LowLevelFunctions;
-  schema: object;
+  schema: AbiSchema;
   readonly busy: boolean;
   pointerBytes: number;
   constant(name: string): number;
@@ -36,7 +38,7 @@ export function createCore<P extends Profile, V extends Variant = 'browser'>(opt
   baseURL?: URL | string;
   moduleOptions?: CoreModuleOptions;
 }): Promise<Core<ModuleByProfile[P][V]>>;
-export function attachCore<Module extends CoreModule>(module: Module, schema: object, options: { suspension: 'direct' | 'asyncify' }): Core<Module>;
+export function attachCore<Module extends CoreModule>(module: Module, schema: object, options: { suspension: 'direct' | 'jspi' | 'asyncify' }): Core<Module>;
 export function mountReadOnlyFile(core: Core, path: string, source: {
   size: number;
   read(destination: Uint8Array, offset: number): number;

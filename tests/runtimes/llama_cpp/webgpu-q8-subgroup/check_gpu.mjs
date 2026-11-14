@@ -1,4 +1,4 @@
-// Source-bound numerical checker. Consume prepared factory WGSL, never a copied kernel.
+// Standalone numerical checker over supplied WGSL and experiment metadata.
 // Usage: node check_gpu.mjs SHADER_DIRECTORY REPORT.json MANIFEST.json
 // Set LCB_TEST_WEBGPU_MODULE to the local node-webgpu module's file: URL.
 import { readFile, writeFile } from 'node:fs/promises';
@@ -19,7 +19,7 @@ const buffers = new Set();
 const queries = new Set();
 const report = {
   schema: 1,
-  scope: 'Prepared-factory standalone Q8_0 matvec numerical check; not browser, model, or Apple GPU evidence',
+  scope: 'Supplied Q8_0 matvec WGSL numerical and timing experiment; not production-factory or model validation',
   promotionPolicy: 'The arithmetic bound is a sanity gate only. Review each variant against the Float64 reference and baseline independently; these local timings do not justify target-device promotion.',
   reference: {
     implementation: 'Independent JavaScript Float64 dequantization and dot, using the uploaded Float32 input values',
@@ -32,7 +32,7 @@ const report = {
   },
   cases: [], benchmarks: [], errors: [], ok: false,
 };
-let device;
+let device, GPUBufferUsage, GPUMapMode;
 
 function positiveInteger({ value, name, maximum }) {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
@@ -316,7 +316,7 @@ try {
   if (forcedGc && typeof global.gc !== 'function') throw new Error('Forced GC requested without --expose-gc');
   if (!process.env.LCB_TEST_WEBGPU_MODULE) throw new Error('LCB_TEST_WEBGPU_MODULE is required');
   const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
-  Object.assign(globalThis, globals);
+  ({ GPUBufferUsage, GPUMapMode } = globals);
   globalThis[ownerKey] = create([]);
   const adapter = await globalThis[ownerKey].requestAdapter();
   if (!adapter) throw new Error('No WebGPU adapter');

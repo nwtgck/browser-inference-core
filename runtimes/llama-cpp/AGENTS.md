@@ -15,7 +15,7 @@ Before proposing, adding, expanding, or repairing an upstream/toolchain
 workaround, read
 `upstream-patches-only-as-a-last-resort-with-explicit-user-approval/AGENTS.md`
 and its `README.md` exception register. This requirement applies throughout the
-repository, including `build_tools/`, `cmake/`, `native/`, generated bindings, copied
+repository, including shared and runtime tools, CMake code, native code, generated bindings, copied
 source files, and build-time transformations. It is not limited to `.patch` files.
 
 When existing upstream interfaces cannot meet a request, stop before adding a

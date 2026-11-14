@@ -46,7 +46,7 @@ and semantic divergence even when text-level patch conflicts disappear.
 ## Keep accepted exceptions narrow and removable
 
 Use the `README.md` register to record purpose, accepted scope, alternatives,
-upstream revision, dependencies, ../../tests/runtimes/llama_cpp/limitations, and a removal condition.
+upstream revision, dependencies, tests and limitations, and a removal condition.
 Keep unrelated changes separable. Do not bundle an optional feature into a
 required compatibility fix or make one exception depend on an unrelated one.
 

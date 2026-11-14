@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "00-dto/**/*.ts",
+    "tools/**/*.ts",
+    "runtimes/llama-cpp/tools/**/*.ts",
+    "runtimes/stable-diffusion-cpp/tools/**/*.ts",
+    "tests/tools/**/*.ts",
+    "tests/runtimes/llama-cpp/**/*.ts",
+    "tests/runtimes/stable-diffusion-cpp/**/*.ts"
+  ]
+}

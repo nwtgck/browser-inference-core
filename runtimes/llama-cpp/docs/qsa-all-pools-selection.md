@@ -56,7 +56,7 @@ The trace covers prefill, one-token reuse, a live boundary crossing, state resto
 and re-crossing, copied-prefix sequence divergence/removal, EOS boundaries, and
 mixed token/embedding input, plus simultaneous distinct sequences on a unified
 cache after a supported prefix copy. PLE forbids assigning multiple sequence IDs
-to one input token; the test does not bypass that upstream restriction. `compare.py` requires byte-identical finite logits
+to one input token; the test does not bypass that upstream restriction. `compareQsaTraces` in the typed regression runner requires byte-identical finite logits
 and checks that the executed native graph actually skipped scoring below the
 threshold and resumed it above. Comparing a baseline binary with itself fails
 that graph-coverage requirement.
@@ -76,27 +76,31 @@ The recorded node census is not an individual-operation timing. Do not use its
 run time as a clean performance benchmark. `benchmark` omits the census; even that
 is a synthetic native workload, not an Apple WebGPU or full-model speed result.
 
-## Explicit upstream exception
+## Upstream coupling
 
-The user requested continuation of the all-pools optimization previously supplied
-as snapshot 008 and permitted bicore changes for Q3/Q4 and other models. This
-small, hash-checked build-copy patch is within that requested scope. The source
-layout and semantic hashes must remain fail-closed. The longer-context WebGPU
-LIGHTNING_INDEXER prototype is separate; its standalone shader tests do not prove
-integration into the distributed C++ backend.
+The proof depends on nonnegative scoring, visibility semantics and set-valued
+selection in the pinned Qwen graph. Review those properties when updating the
+upstream; successful patch application or a recorded digest cannot prove them.
+The longer-context WebGPU LIGHTNING_INDEXER prototype is separate. Its isolated
+shader tests do not establish integration into the distributed C++ backend.
 
 ## Reproducible required native gate
 
-On Linux with the pinned submodule initialized, from `llama-cpp` run:
+On Linux with the pinned submodule, Node dependencies and native compiler
+already available, run from the repository root:
 
 ```sh
-python3 ../../tests/runtimes/llama_cpp/qsa-selection/run.py --source vendor/llama.cpp --work build/qsa-regression --jobs 2
+npm run tooling:build
+node build/tooling/tests/runtimes/llama-cpp/tools/qsa.test-support.js \
+  --checkout-root "$PWD" --tooling-root "$PWD/build/tooling" \
+  --output-root /tmp/bicore-qsa-regression --toolchain-root "$PWD/.tools" \
+  --local --jobs 2
 ```
 
 The runner downloads nothing, configures independent reference/optimized builds,
 links two different libraries, and generates local fixtures for F16, Q3_K and
 Q4_K. Commands, exit statuses, fixture/library identities, finite output traces
-and graph censuses are saved in `build/qsa-regression/qsa-results`. `status.json`
+and graph censuses are saved in `<output-root>/qsa-results`. `status.json`
 is authoritative for the most recent run; a failed rerun does not make earlier
 comparison files valid. Compiler intermediates are reusable, but configuration,
 fixtures and traces are not skipped. Constant or nonfinite model outputs, a
@@ -113,17 +117,13 @@ WebGPU numerical validation or a throughput claim.
 
 ## Composed-source provenance
 
-Every distribution variant explicitly states `LCB_QSA_ALL_POOLS=ON/OFF`.
-Reporting rejects missing, repeated, typed or otherwise ambiguous activations.
-The report prepares the same reviewed source composition as CMake and records
-the **final compiled** Qwen translation unit and owning model header for each
-profile/variant. For file-backed rows followed by QSA, the coherent source-set
-hash uses the QSA result rather than its intermediate input. Compact single-set
-fields are emitted only when all affected variants compile the same set;
-mixed activations use the per-variant maps. The upstream updater preflights
-both original-header and file-backed-header compositions before proceeding.
+The runtime build selects QSA explicitly in its typed preparation options. The
+prepared-source receipt identifies the applied patch, final coherent source tree
+and selected options. Freeze reconstructs the expected preparation for each
+profile and compares it with the variant's recorded preparation and actual
+compiler inputs. File-backed PLE and QSA compose in the same private source tree;
+the final Qwen translation unit includes both selected changes.
 
-Disabling QSA is an explicit reference/diagnostic build option, not a model
-name heuristic. No generated runtime commit or consumer integrity hash is
-invented by this source patch; consumers should update their pins only after
-building and validating real distribution artifacts.
+Disabling QSA is an explicit reference/diagnostic build option, not a model-name
+heuristic. Source and artifact digests identify bytes; consumers update their
+pins only after building and validating real distribution artifacts.

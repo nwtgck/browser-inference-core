@@ -1,12 +1,14 @@
-// Opt-in actual prepared/canonical gather and matrix validation.
+// Opt-in real-Dawn validation of supplied gather and matrix WGSL.
 import {readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {dirname, join, resolve} from 'node:path';
+import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {performance} from 'node:perf_hooks';
-if (!process.env.LCB_TEST_WEBGPU_MODULE) throw new Error('Set LCB_TEST_WEBGPU_MODULE to a local webgpu package URL');
+if (!process.argv[2] || !process.env.LCB_TEST_WEBGPU_MODULE) {
+  throw new Error('Usage: LCB_TEST_WEBGPU_MODULE=... node check_gpu.mjs INPUTS [--output REPORT]');
+}
 const {create, globals}=await import(process.env.LCB_TEST_WEBGPU_MODULE);
-Object.assign(globalThis, globals);
+const { GPUBufferUsage, GPUMapMode } = globals;
 const lab=resolve(process.argv[2]), argv=process.argv.slice(3);
 const value=(name,fallback)=>{const i=argv.indexOf(name);return i<0?fallback:argv[i+1];};
 const output=resolve(value('--output',join(lab,'report.json'))), filter=value('--filter',''), limit=Number(value('--limit',Infinity));
@@ -18,7 +20,7 @@ invariant(hash(manifestBytes)===source.fixtureManifestSha256,'Manifest hash mism
 const specs=JSON.parse(manifestBytes).filter(x=>(large||!x.large)&&x.name.includes(filter)).slice(Number(value('--skip',0)),Number(value('--skip',0))+limit);
 invariant(specs.length>0,'No fixtures selected');
 const names=['baseline','candidate'];
-const report={scope:'Actual prepared/canonical gather/factory/emitter; synthetic packed inputs; semantic and byte validation; no model speed claim',status:'started',source,runnerSha256:hash(readFileSync(fileURLToPath(import.meta.url))),adapter:{},device:{},cases:[],benchmarks:[],errors:[]};
+const report={scope:'Supplied gather/baseline/candidate WGSL and synthetic fixtures; numerical/byte validation and optional timestamps, without production provenance or model speed claims',status:'started',source,runnerSha256:hash(readFileSync(fileURLToPath(import.meta.url))),adapter:{},device:{},cases:[],benchmarks:[],errors:[]};
 const owner=create(process.env.LCB_TEST_WEBGPU_BACKEND?['backend='+process.env.LCB_TEST_WEBGPU_BACKEND]:[]);globalThis[Symbol.for('ggml-moe-group-check.owner')]=owner;
 let device;const live=new Set(),queries=new Set();
 try{
@@ -29,7 +31,7 @@ try{
  const features=['shader-f16'];if(benchmark&&adapter.features.has('timestamp-query'))features.push('timestamp-query');
  device=await adapter.requestDevice({requiredFeatures:features,requiredLimits:{maxComputeInvocationsPerWorkgroup:256,maxComputeWorkgroupSizeX:256}});
  report.device.features=[...device.features];report.device.limits={maxComputeInvocationsPerWorkgroup:device.limits.maxComputeInvocationsPerWorkgroup,maxComputeWorkgroupSizeX:device.limits.maxComputeWorkgroupSizeX,maxComputeWorkgroupStorageSize:device.limits.maxComputeWorkgroupStorageSize};
- invariant(device.limits.maxComputeInvocationsPerWorkgroup===256,'Factory gather context/device limit mismatch');
+ invariant(device.limits.maxComputeInvocationsPerWorkgroup===256,'Supplied gather/device limit mismatch');
  device.addEventListener('uncapturederror',e=>report.errors.push(e.error.message));
  device.lost.then(info=>{if(info.reason!=='destroyed')report.errors.push('device lost: '+info.message);});
  function allocate(bytes,usage,label){const buffer=device.createBuffer({size:Math.ceil(bytes/4)*4,usage,label});live.add(buffer);return buffer;}
@@ -75,7 +77,7 @@ try{
    const got=out[p[9]+(t*spec.used+s)*spec.m+m],err=Math.abs(got-dot);nonfinite+=Number(!Number.isFinite(got));maxAbsError=Math.max(maxAbsError,err);maxNormalizedError=Math.max(maxNormalizedError,err/(sumAbs+1e-30));if(gamma!==undefined)envelopeFailures+=Number(err>gamma*sumAbs+2**-20);outputs++;
    if(expert===-1)invariant(Object.is(got,0),'Skipped output must be exact positive zero');
   }
-  return {outputs,nonfinite,envelopeFailures,maxAbsError,maxNormalizedError,f16RoundingEnvelopeGamma:gamma??null,oracle:'Unmodified upstream dequantizer + Float64 dot/sumabs; F16 conservative rounding envelope where n*u<1; baseline byte equality is separate'};
+  return {outputs,nonfinite,envelopeFailures,maxAbsError,maxNormalizedError,f16RoundingEnvelopeGamma:gamma??null,oracle:'Supplied decoded weights + Float64 dot/sumabs; F16 conservative rounding envelope where n*u<1; baseline byte equality is separate'};
  }
  for(const spec of specs){
   const caseBuffers=new Set(live);const data={};
@@ -98,7 +100,7 @@ try{
     gatheredOutput=await read(gatherOutput);const actual=u32(gatheredOutput),liveIds=new Int32Array(idsBytes.buffer,idsBytes.byteOffset,idsBytes.byteLength/4);
     for(let i=0;i<actual.length;i++){const slot=Math.floor((i-p[9])/spec.m),inside=i>=p[9]&&i<p[9]+words;const skipped=inside&&liveIds[p[10]+Math.floor(slot/spec.used)*p[15]+slot%spec.used]===-1;invariant(actual[i]===(skipped?0:initial[i]),'Gather output initialization/guard mismatch '+gather.name);}
     occupancy=gatherCheck(spec,idsBytes,posBytes,tilesBytes,iniPos,iniTiles);
-    if(baselineGatherOutput)invariant(gatheredOutput.equals(baselineGatherOutput),'Prepared/canonical gather output byte mismatch');
+    if(baselineGatherOutput)invariant(gatheredOutput.equals(baselineGatherOutput),'Supplied gather output byte mismatch');
     else baselineGatherOutput=gatheredOutput;
     gatherVariants.push({name:gather.name,shaderSha256:spec.shaderHashes[gather.name],outputSha256:hash(gatheredOutput),occupancy,status:'passed'});
    }
@@ -108,7 +110,7 @@ try{
    const rr={round,idsSha256:hash(idsBytes),gather:occupancy,gatherVariants,zeroTilesOverride:zeroOverride,variants:[]};row.rounds.push(rr);let baseline,baselineCpu;
    for(const lane of lanes){
     // Each matrix variant starts with the exact output state produced by the
-    // actual prepared gather, including its skipped-slot zero initialization.
+    // supplied gather, including its skipped-slot zero initialization.
     device.queue.writeBuffer(lane.dst,0,gatheredOutput);device.queue.submit([encode(lane.p,lane.g,spec.grid)]);const out=await read(lane.dst),actual=u32(out);
     let guardErrors=0,bitDifferences=0;
     for(let i=0;i<actual.length;i++){if(i<p[9]||i>=p[9]+words||zeroOverride)guardErrors+=Number(actual[i]!==gatheredWords[i]);if(baseline)bitDifferences+=Number(actual[i]!==baseline[i]);}
@@ -134,7 +136,9 @@ try{
     }
     const median=a=>{a=[...a].sort((x,y)=>x-y);return (a[Math.floor(a.length/2)]+a[Math.floor((a.length-1)/2)])/2;};
     b.summary=Object.fromEntries(['baseline',candidate.name].map(name=>[name,Object.fromEntries(['gpuMsPerDispatch','cpuEncodeMs','submitWaitMs'].map(key=>[key,b.pairs[0].values[name][key]===undefined?undefined:median(b.pairs.map(p=>p.values[name][key]))]))]));
-    b.gpuSpeedup=b.summary.baseline.gpuMsPerDispatch/b.summary[candidate.name].gpuMsPerDispatch;
+        if (hasTimestamp) {
+          b.gpuSpeedup=b.summary.baseline.gpuMsPerDispatch/b.summary[candidate.name].gpuMsPerDispatch;
+        }
     console.log(JSON.stringify({case:spec.name,candidate:candidate.name,gpuSpeedup:b.gpuSpeedup,summary:b.summary}));
    }
    for(const lane of lanes)invariant(hash(await read(lane.dst))===lastOutputHash,'Benchmark changed output/guards '+lane.name);

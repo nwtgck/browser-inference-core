@@ -10,23 +10,21 @@ Waits, readbacks, command cadence, bindings and slot resets are preserved. The
 mirror holds 74 aligned slots (18,944 bytes at 256-byte alignment); padding increases
 transferred bytes. Fewer API calls alone do not establish a measured speedup.
 
-`prepare_webgpu_source.py` applies this patch and same-device tensor copy to one
-build-tree translation unit. Upstream d81235049384534c167caea52b85a694f6103d14,
-reviewed source inputs, patch bytes and pinned Dawn headers are checked before use.
-The vendor checkout is unchanged. CMake replaces the target source once and keeps
-the MoE header include priority. Provenance records both patch identities, the
-combined compiled-source identity, compile definition and enabled profile/variants.
-Updater preflight fails if the required overlay is incompatible; it does not
-silently omit either patch.
+`runtimes/llama-cpp/tools/recipe.ts` selects the batching and same-device copy
+patches in the final private WebGPU source tree. The upstream checkout remains
+unchanged. Preparation receipts identify the patches and final outputs; actual
+compiler-input records establish which prepared translation units were selected.
+The updater preflight fails on incompatible required patches rather than omitting
+either change.
 
 ## Validation and maintenance
 
-`python3 ../../tests/runtimes/llama_cpp/webgpu-param-upload-batching/check_uploads.py /path/to/upstream`
-checks actual arena and graph code against a CPU queue model. Add
-`--dawn-package /path/to/emdawnwebgpu_pkg` for pinned-header syntax checks.
-`test_webgpu_source_overlay.py` checks source preparation and CMake integration.
-These host checks do not certify browser/GPU correctness, numerical equivalence,
-or device performance; those require the built runtime and target models/devices.
+The current native provider compiles the complete prepared backend with real SDK
+declarations. Its recorder observes parameter bytes, alignment, uploads, submit
+boundaries, cache ownership and empty/tail behavior. The typed preparation tests
+check source composition. See [verification](../../../docs/verification.md) for
+those entries and the separate browser boundary. Recorded queue calls do not
+execute shaders or establish model throughput.
 
 Upstream updates require review of parameter consumers and submit/reset boundaries.
 Unrelated commits with identical reviewed inputs remain compatible.

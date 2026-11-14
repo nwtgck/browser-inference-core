@@ -1,10 +1,12 @@
 // Tiny synthetic files exercise the production loader and parameter allocation.
 // This is not trained-model image inference and is linked into test variants only.
+#include "browser-probes.h"
 #include "core/compute_workspace.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "model_manager.h"
 #include "pipeline/diffusion_engine.h"
+#include "bf16-kernel-contract.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -244,6 +246,7 @@ extern "C" int sdc_test_bf16_weights(const char * backend_name) {
         return -1;
     if (ggml_backend_is_cpu(backend.get()))
         ggml_backend_cpu_set_n_threads(backend.get(), 1);
+    bf16_kernel_contract::run(backend.get());
     for (bool safetensors : {false, true}) {
         for (ggml_type type : {GGML_TYPE_F32, GGML_TYPE_F16}) {
             const int result = check_file(backend.get(), safetensors, type);

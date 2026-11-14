@@ -5,14 +5,12 @@ import subprocess
 import tempfile
 import unittest
 
-from build_tools.project import runtime_root, runtime_test_root
-ROOT = runtime_root('llama-cpp')
-SNAPSHOT = runtime_test_root('llama-cpp') / 'mtmd-overlay/snapshot-target-property.cmake'
+SNAPSHOT = Path(__file__).resolve().parent / 'mtmd-overlay/snapshot-target-property.cmake'
 
 
 @unittest.skipUnless(shutil.which('cmake'), 'CMake is required')
 class CMakePropertySnapshotTests(unittest.TestCase):
-    def configure_snapshots(self, before='', change=''):
+    def configure_snapshots(self, before: str = '', change: str = '') -> dict[str, bytes]:
         # No llama.cpp checkout or C++ compiler is needed: only CMake's actual
         # target-property semantics and the same helper as the overlay fixture.
         with tempfile.TemporaryDirectory(prefix='lcb-property-snapshot-') as temporary:
@@ -39,7 +37,7 @@ lcb_snapshot_target_property(mtmd PRECOMPILE_HEADERS "${{CMAKE_BINARY_DIR}}/afte
             return {name: (build / (name + '.txt')).read_bytes()
                     for name in ('before', 'after', 'legacy-before', 'legacy-after')}
 
-    def test_unset_property_does_not_compare_variable_name_sentinels(self):
+    def test_unset_property_does_not_compare_variable_name_sentinels(self) -> None:
         result = self.configure_snapshots()
         # This is the exact false failure previously seen with llama.cpp v0.5.0.
         self.assertEqual(result['legacy-before'], b'upstream_headers-NOTFOUND\n')
@@ -47,24 +45,24 @@ lcb_snapshot_target_property(mtmd PRECOMPILE_HEADERS "${{CMAKE_BINARY_DIR}}/afte
         self.assertEqual(result['before'], b'0\n\n')
         self.assertEqual(result['after'], result['before'])
 
-    def test_explicitly_empty_property_is_preserved(self):
+    def test_explicitly_empty_property_is_preserved(self) -> None:
         result = self.configure_snapshots('set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS "")')
         self.assertEqual(result['before'], b'1\n\n')
         self.assertEqual(result['after'], result['before'])
 
-    def test_unset_and_explicitly_empty_are_not_conflated(self):
+    def test_unset_and_explicitly_empty_are_not_conflated(self) -> None:
         result = self.configure_snapshots(change='set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS "")')
         self.assertEqual(result['before'], b'0\n\n')
         self.assertEqual(result['after'], b'1\n\n')
         self.assertNotEqual(result['before'], result['after'])
 
-    def test_present_headers_are_preserved_verbatim(self):
+    def test_present_headers_are_preserved_verbatim(self) -> None:
         value = '/tmp/path with spaces/models.h;$<$<COMPILE_LANGUAGE:CXX>:<vector>>;other.h'
         result = self.configure_snapshots(f'set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS [=[{value}]=])')
         self.assertEqual(result['before'], ('1\n' + value + '\n').encode())
         self.assertEqual(result['after'], result['before'])
 
-    def test_real_header_changes_are_still_detected(self):
+    def test_real_header_changes_are_still_detected(self) -> None:
         before = 'set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS "a.h;b.h")'
         for command, expected in (
             ('set_property(TARGET mtmd APPEND PROPERTY PRECOMPILE_HEADERS "c.h")', b'1\na.h;b.h;c.h\n'),
@@ -80,13 +78,13 @@ lcb_snapshot_target_property(mtmd PRECOMPILE_HEADERS "${{CMAKE_BINARY_DIR}}/afte
                 self.assertEqual(result['after'], expected)
                 self.assertNotEqual(result['before'], result['after'])
 
-    def test_adding_headers_to_an_unset_property_is_detected(self):
+    def test_adding_headers_to_an_unset_property_is_detected(self) -> None:
         result = self.configure_snapshots(change='set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS "a.h")')
         self.assertEqual(result['before'], b'0\n\n')
         self.assertEqual(result['after'], b'1\na.h\n')
         self.assertNotEqual(result['before'], result['after'])
 
-    def test_false_like_header_values_are_not_normalized_away(self):
+    def test_false_like_header_values_are_not_normalized_away(self) -> None:
         for value in ('OFF', 'FALSE', '0', 'NOTFOUND', 'headers-NOTFOUND', 'upstream_headers-NOTFOUND'):
             with self.subTest(value=value):
                 result = self.configure_snapshots(f'set_property(TARGET mtmd PROPERTY PRECOMPILE_HEADERS "{value}")')

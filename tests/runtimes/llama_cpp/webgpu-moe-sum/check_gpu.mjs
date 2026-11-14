@@ -1,4 +1,4 @@
-// Production-factory shader vs real upstream binary ADD chain.
+// Supplied expert-sum WGSL versus a supplied binary ADD chain.
 // Standalone GPU check, not compiled-runtime/model validation.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,9 +7,9 @@ if (!referenceDir || !reportPath || process.argv.length !== 4 || !process.env.LC
   throw new Error('Usage: LCB_TEST_WEBGPU_MODULE=... node check_gpu.mjs REFERENCE_DIR REPORT.json');
 }
 const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
-Object.assign(globalThis, globals);
+const { GPUBufferUsage, GPUMapMode } = globals;
 const owner = Symbol('experimental MoE Dawn lifetime');
-const report = { version: 1, scope: 'standalone shader parity; not compiled runtime/model validation', cases: [], benchmarks: [], errors: [], ok: false };
+const report = { version: 1, scope: 'supplied shader parity and optional GPU timestamps; not production-factory or model validation', cases: [], benchmarks: [], errors: [], ok: false };
 let device;
 const live = new Set();
 const sentinel = 0x4f123456;
@@ -37,13 +37,13 @@ try {
   if (benchmark && !adapter.features.has('timestamp-query')) throw new Error('timestamp-query unavailable');
   device = await adapter.requestDevice({ requiredFeatures: ['shader-f16', ...(benchmark ? ['timestamp-query'] : [])] });
   device.addEventListener('uncapturederror', e => report.errors.push(e.error.message));
-  const first = await pipeline(await readFile(join(referenceDir, 'SRC_OVERLAP.wgsl'), 'utf8'), 'upstream-first-ADD');
-  const next = await pipeline(await readFile(join(referenceDir, 'INPLACE.wgsl'), 'utf8'), 'upstream-following-ADD');
+  const first = await pipeline(await readFile(join(referenceDir, 'SRC_OVERLAP.wgsl'), 'utf8'), 'supplied-first-ADD');
+  const next = await pipeline(await readFile(join(referenceDir, 'INPLACE.wgsl'), 'utf8'), 'supplied-following-ADD');
   const variants = new Map();
   for (const experts of [3, 4, 8, 10, 16, 32]) {
     let code = await readFile(join(referenceDir, `moe-${experts}.wgsl`), 'utf8');
     if (process.env.MOE_SUM_NEGATIVE === '1') code = code.replace('= sum;', '= sum + vec4<f32>(1.0);');
-    variants.set(experts, await pipeline(code, `production-${experts}`));
+    variants.set(experts, await pipeline(code, `supplied-${experts}`));
   }
   for (const width of [4, 12, 128, 512, 1024, 2560, 3072, 4096]) for (const experts of [3, 4, 8, 10, 16, 32]) for (const tokens of [1, 3, 31]) for (const shared of [false, true]) {
     const allocated = new Set();
@@ -138,7 +138,7 @@ try {
           for (const [name, ops] of order) pair[name + 'Ms'] = await measure(ops);
           pairs.push(pair);
         }
-        report.benchmarks.push({ width, experts, tokens, scope: 'software GPU; both alternatives use one compute pass; standalone only', pairs });
+        report.benchmarks.push({ width, experts, tokens, scope: 'Dawn GPU timestamps; both alternatives use one compute pass; standalone only', pairs });
       }
       if (typeof global.gc === 'function') global.gc();
     } finally { for (const b of allocated) { b.destroy(); live.delete(b); } }

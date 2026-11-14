@@ -1,10 +1,14 @@
-// Optional real-GPU regression. Requires a separately installed native Dawn module.
+// Optional numerical comparison of supplied HC WGSL with staged GPU expressions.
 // Standalone numerical smoke test; software-GPU results are not target-device speed.
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
+const [shaderDirectory, reportPath] = process.argv.slice(2);
+if (!shaderDirectory || !reportPath || process.argv.length > 6) {
+  throw new Error('Usage: check-gpu.mjs SHADERS REPORT [CASE_START CASE_COUNT]');
+}
 const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE ?? 'webgpu');
 import { join } from 'node:path';
-Object.assign(globalThis, globals);
-const report={version:2,scope:'standalone HC4 kernels against staged GPU expressions; not compiled bicore/model inference',cases:[],errors:[]};
+const { GPUBufferUsage, GPUMapMode } = globals;
+const report={version:2,scope:'supplied HC4 WGSL against staged GPU expressions; not production-factory or model validation',cases:[],errors:[]};
 const gpu=create(['backend=vulkan']);
 // dawn.node owns its native instance through create()'s returned object. A local
 // binding used only for requestAdapter() is not an async lifetime guarantee.
@@ -15,7 +19,6 @@ const forceGc = process.env.LCB_HC_FORCE_GC === '1';
 report.forcedGc = forceGc;
 report.node = process.version;
 const caseStart=Number(process.argv[4]??0), caseCount=Number(process.argv[5]??288);
-const reportPath=process.argv[3]??'hc-gpu-results.json';
 const trace=(...x)=>{if(process.env.LCB_HC_TRACE)console.log(...x);};
 await writeFile(reportPath+'.jsonl','');
 let device;
@@ -30,7 +33,7 @@ try {
   report.adapter={vendor:adapter.info?.vendor,architecture:adapter.info?.architecture,description:adapter.info?.description};
   device=await adapter.requestDevice();
   device.addEventListener('uncapturederror',e=>report.errors.push(String(e.error)));
-  const root=process.argv[2]??new URL('.',import.meta.url).pathname;
+  const root=shaderDirectory;
   const codes=await Promise.all(['hc_pre.wgsl','hc_post.wgsl'].map(n=>readFile(join(root,n),'utf8')));
   const pipelines=[];
   for(let i=0;i<codes.length;i++){
@@ -103,7 +106,7 @@ try {
   if(!aliasError) report.errors.push('Expected writable-alias validation rejection was not observed');
   report.ok=report.errors.length===0&&report.cases.every(x=>x.mismatches===0&&x.guardErrors===0);
 }catch(e){report.ok=false;report.errors.push(e.stack??String(e));}
-finally{for(const b of made)b.destroy();device?.destroy();await writeFile(process.argv[3]??'hc-gpu-results.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({ok:report.ok,cases:report.cases.length,errors:report.errors}));}
+finally{for(const b of made)b.destroy();device?.destroy();await writeFile(reportPath,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({ok:report.ok,cases:report.cases.length,errors:report.errors}));}
 // Native Dawn keeps its event loop alive: this is a standalone, fully awaited test process.
 delete globalThis[gpuLifetime];
 process.exit(report.ok?0:1);

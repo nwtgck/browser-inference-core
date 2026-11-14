@@ -1,16 +1,14 @@
 # Short-input Q8_0 matvec workgroups
 
-This source-bound selection is part of the owner's explicitly requested Qwen Next
-performance work. It is not an alternative quantizer or model pipeline.
+This optimization selects the existing upstream workgroup specialization for
+short-input matvecs. It does not change quantization or the model pipeline.
 
-## Measured motivation and conservative scope
+## Lane utilization and conservative scope
 
-The owner's post-HC profile contains 97 matvecs per generated token with K=320,
-M=10240 and another 48 with K=640, M=2560, in both weight packages. Upstream's
-Q8_0 accumulator assigns four lanes to a 32-weight block (eight weights per lane).
-Its fixed 256-lane workgroup therefore has only 40 or 80 lanes doing input work
-on these shapes. HC fusion is already visible in that profile: 96 PRE and 96 POST
-operations per token, and 3740 rather than 4508 total profiled passes.
+Upstream's Q8_0 accumulator assigns four lanes to a 32-weight block, with eight
+weights per lane. A 256-lane workgroup therefore has only 40 lanes doing input
+work at K=320, or 80 at K=640. These shapes motivate the guarded smaller
+workgroups below; lane utilization alone is not a measured speed result.
 
 The selector uses only the existing upstream `WG_SIZE` specialization. It does
 not change WGSL, quantized bytes, block mapping, per-lane accumulation, output
@@ -31,30 +29,28 @@ claim. At K=320 the common 32-lane-subgroup device uses 64 lanes; at K=640 it us
 
 The compiled workgroup size is part of both the pipeline key equality and hash.
 A K=320 pipeline must never be reused as the K=640 or long-input pipeline.
-The name adds `_wg32`, `_wg64` or `_wg128` only on a tuned path. Existing Naidan
+The name adds `_wg32`, `_wg64` or `_wg128` only on a tuned path. Application
 GPU-profile collection can see these names without a consumer API change.
 
 ## Preparation and publication
 
-`prepare_webgpu_q8_short.py` runs after the reviewed HC composition and checks
-its exact header input, the transitive upstream shader include closure, the
-preprocessor, the emitter, the patch and the resulting header. The canonical
-upstream shader header remains authoritative; no additional embedded shader
-copy is generated. CMake tracks all inputs for reconfiguration. The patch is
-explicitly listed in the policy test and in classified publication provenance.
-CPU builds report no compiled copy or enabled variants for this overlay.
+The runtime's typed recipe applies the individual workgroup patch to the final
+private shader-library source. The unchanged upstream emitter generates headers
+from the selected WGSL inputs. No replacement implementation is hidden in a
+second shader string. Preparation records the actual inputs, patch and final
+outputs; actual compiler inputs establish selection. CPU builds do not claim a
+compiled WebGPU copy.
 
 ## Validation boundaries
 
-Host tests exercise the extracted actual selector, pipeline-key hash/equality
-and pipeline factory with recording dependencies, plus fail-closed preparation,
-CMake reconfiguration and provenance. The optional standalone GPU test uses the
-real pinned emitter/preprocessor and upstream WGSL, comparing against its
-256-lane version with exact output-bit and input/guard checks. Software-Vulkan
-measurements are not Mac throughput or learned-model quality measurements.
-Although useful lanes retain their accumulation order, a different number of
-zero-only subgroups may affect compiler reduction decisions. Real-device model
-validation remains required; no universal bit identity or speed claim is made.
+The current complete-source native provider exercises the selector, pipeline-key
+hash/equality, factory and real dispatch geometry using recorded SDK calls.
+Those observations do not execute shaders. An optional GPU comparison must use
+the same emitted WGSL and compare the smaller specialization with the 256-lane
+reference, including input/guard preservation. Software-adapter results cannot
+establish model quality or physical-device throughput. A different number of
+zero-only subgroups can affect compiler reduction decisions even when useful
+lanes retain their arithmetic order.
 
 No-patch alternative: keep the upstream 256-lane workgroup. No existing public
 runtime setting selects this shape-specific workgroup. Maintenance is limited
@@ -64,21 +60,34 @@ provides suitable short-Q8 selection, or if target-device results reject it.
 
 ## Optional source-bound experiment
 
-With local Node/Dawn, a C++ compiler and the pinned upstream already available:
+The standalone MJS runner consumes supplied WGSL, not a source checkout. Provide
+`q8-32.wgsl`, `q8-64.wgsl`, `q8-128.wgsl` and `q8-256.wgsl` with entry point
+`main` and the bindings/uniform layout expected by the harness. The current
+native provider emits these names for its Q8 cases, but a filename alone does not
+establish that an independently supplied file came from that factory. Record
+and review the input shader bytes separately when making that claim.
+
+With compatible shader inputs and a locally installed Dawn module, run from the
+repository root:
 
 ```sh
-python3 ../../tests/runtimes/llama_cpp/webgpu-q8-short/check_gpu.py \
-  --llama-source /path/to/llama.cpp \
-  --work /path/to/experiment-output \
-  --webgpu-module /path/to/node_modules/webgpu/index.js \
-  --node-command-json '["node"]' --force-gc --benchmarks
+LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
+LCB_Q8_BENCHMARKS=1 \
+node tests/runtimes/llama_cpp/webgpu-q8-short/check_gpu.mjs \
+  /absolute/path/to/shaders /absolute/path/to/q8-report.json
 ```
 
-The output records upstream/patch/prepared-header and emitted-shader identities.
-The 107-case matrix includes all 32-aligned short input widths, tail output rows,
+Omit `LCB_Q8_BENCHMARKS` for numerical checks without timestamps. Benchmark mode
+requires `timestamp-query`; all runs require subgroups and shader-f16. To stress
+native instance ownership, set `LCB_Q8_FORCE_GC=1` and pass `--expose-gc` to Node.
+Missing requested capabilities fail rather than silently disabling the check.
+
+The report records the adapter, requested cases, errors and optional paired
+timings. It does not verify upstream, patch or production-factory provenance.
+The case matrix includes all 32-aligned short input widths, tail output rows,
 nonzero byte offsets, padded strides, multidimensional batches/broadcasting and
 actual 320-by-10240 and 640-by-2560 shapes. Outputs are checked bitwise against
-the unchanged 256-lane specialization; inputs and output guards must remain
+the supplied 256-lane reference; inputs and output guards must remain
 unchanged. Optional GPU timestamp comparisons alternate AB/BA on the same
 buffers, discard four warm-up pairs and retain twelve measured pairs including
 a long-input unchanged-path control. An injected output error must fail rather

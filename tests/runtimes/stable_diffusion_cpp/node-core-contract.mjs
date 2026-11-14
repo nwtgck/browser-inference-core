@@ -8,33 +8,39 @@ import { attachCore } from '../../../runtimes/stable-diffusion-cpp/host/bindings
 import { runArithmeticProbes } from './arithmetic-probes.mjs';
 import { mountReadOnlyFile } from '../../../runtimes/stable-diffusion-cpp/host/read-only-file.mjs';
 import { makeModelIoFixtures } from './model-io-fixtures.mjs';
+import { assertModuleSurface, assertPublicGguf } from './core-contract.mjs';
 
 const [directory, suspension, pointerWidth, ...extra] = process.argv.slice(2);
 const arithmeticEnabled = extra.length === 1 && extra[0] === '--arithmetic';
-if (!directory || !['direct', 'asyncify'].includes(suspension) ||
+if (!directory || !['direct', 'jspi', 'asyncify'].includes(suspension) ||
     !['4', '8'].includes(pointerWidth) || (extra.length && !arithmeticEnabled)) {
-  throw new TypeError('Usage: node node-core-contract.mjs <build-directory> <direct|asyncify> <4|8> [--arithmetic]');
+  throw new TypeError('Usage: node node-core-contract.mjs <build-directory> <direct|jspi|asyncify> <4|8> [--arithmetic]');
 }
 {
   // Every CPU contract must reject attempts to discover or initialize WebGPU.
   const navigator = globalThis.navigator ?? {};
   Object.defineProperty(navigator, 'gpu', {
-    get() { throw Error('Node CPU contracts must not access the GPU API'); },
+    get() {
+      throw Error('Node CPU contracts must not access the GPU API');
+    },
   });
-  if (!globalThis.navigator) Object.defineProperty(globalThis, 'navigator', { value: navigator });
+  if (!globalThis.navigator) {
+    Object.defineProperty(globalThis, 'navigator', { value: navigator });
+  }
 }
 const build = path.resolve(directory);
 const { default: schema } = await import(pathToFileURL(path.join(build, 'generated/schema.mjs')).href);
 const { default: createCore } = await import(pathToFileURL(path.join(build, 'runtime/core.mjs')).href);
 const wasmBinary = new Uint8Array(await readFile(path.join(build, 'runtime/core.wasm')));
 const module = await createCore({ wasmBinary, print: line => console.error(line) });
-assert.equal(schema.abiVersion, 2);
+assert.equal(schema.abiVersion, 3);
 assert.match(schema.schemaSha256, /^[0-9a-f]{64}$/);
-assert.equal(module._sdc_abi_version(), 2);
-assert.equal(module._sdc_model_io_capabilities(), 7);
+assertModuleSurface({ module });
 const core = attachCore(module, schema, { suspension });
 assert.equal(core.pointerBytes, Number(pointerWidth));
 const checks = ['ABI, schema fingerprint and pointer width'];
+await assertPublicGguf({ core });
+checks.push('public GGML type/version queries and GGUF v3 buffer record bridge');
 const retentionVersion = schema.functions.find(item => item.name === 'sd_browser_bf16_retention_version');
 assert.ok(retentionVersion);
 assert.equal(retentionVersion.returnType, 'uint32_t');
@@ -153,15 +159,23 @@ if (arithmeticEnabled) {
         const expected = fixture.expected ? BigInt(fixture.expected[dimension]) : (1n << 64n) - 1n;
         assert.equal(BigInt.asUintN(64, module._sdc_test_gguf_shape(argument(path), argument(name), dimension)), expected, fixture.path);
       }
-      if (fixture.numeric) assert.equal(module._sdc_test_gguf_original_shape_values(argument(path)), 1, fixture.path);
-    } finally { core.free(path); core.free(name); mounted.remove(); }
+      if (fixture.numeric) {
+        assert.equal(module._sdc_test_gguf_original_shape_values(argument(path)), 1, fixture.path);
+      }
+    } finally {
+      core.free(path);
+      core.free(name);
+      mounted.remove();
+    }
   }
   checks.push('GGUF original shapes: production loader dimensions, malformed metadata rejection and CPU matrix arithmetic');
 }
 
 const arithmetic = arithmeticEnabled
   ? await runArithmeticProbes({ module, core, backendNames: ['CPU'] }) : undefined;
-if (arithmeticEnabled) checks.push('shared smoke runner: graph walk, Qwen timestep, all six BF16 weight cases, convolution bias and bounded graph/cache arithmetic');
+if (arithmeticEnabled) {
+  checks.push('shared smoke runner: graph walk, Qwen timestep, all six BF16 weight cases, convolution bias and bounded graph/cache arithmetic');
+}
 
 console.log(JSON.stringify({
   passed: true,

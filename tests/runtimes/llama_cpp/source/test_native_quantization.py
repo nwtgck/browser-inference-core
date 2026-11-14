@@ -7,15 +7,16 @@ import subprocess
 import tempfile
 import unittest
 
-from build_tools.project import runtime_root, runtime_test_root
 from tests.support.llama_cpp.native_quantization import build_reference, source_commit
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 
 class CurrentNativeQuantization(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.upstream = Path(os.environ.get('LCB_TEST_LLAMA_SOURCE',
-                                         runtime_root('llama-cpp') / 'vendor/llama.cpp')).resolve()
+                                         REPOSITORY_ROOT / 'runtimes/llama-cpp/vendor/llama.cpp')).resolve()
         missing = (not (cls.upstream / 'ggml/src/ggml-quants.c').is_file()
                    or not shutil.which(os.environ.get('CC', 'cc'))
                    or not shutil.which(os.environ.get('CXX', 'c++')))
@@ -24,7 +25,7 @@ class CurrentNativeQuantization(unittest.TestCase):
             if os.environ.get('CI') == 'true':
                 raise RuntimeError(message)
             raise unittest.SkipTest(message)
-        cls.harness = runtime_test_root('llama-cpp') / 'webgpu-iq3s-subgroup/oracle-main.c'
+        cls.harness = Path(__file__).resolve().parents[1] / 'webgpu-iq3s-subgroup/oracle-main.c'
 
     def private_source(self, root):
         for part in ('ggml/src', 'ggml/include'):

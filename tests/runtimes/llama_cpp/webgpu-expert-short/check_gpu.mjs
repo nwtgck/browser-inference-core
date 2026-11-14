@@ -1,4 +1,4 @@
-// Standalone test only. Actual factory-generated WGSL; no hand-copied kernel.
+// Optional Dawn experiment over supplied WGSL and case selections.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 const [shaderDirectory, outputPath] = process.argv.slice(2);
@@ -6,13 +6,13 @@ if (!shaderDirectory || !outputPath || process.argv.length !== 4) {
   throw new Error('Usage: check_gpu.mjs SHADER_DIRECTORY REPORT.json');
 }
 const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
-Object.assign(globalThis, globals);
+const { GPUBufferUsage, GPUMapMode } = globals;
 // Dawn's async runner depends on this owner, including during await/mapAsync.
 const ownerKey = Symbol('expert standalone Dawn owner');
 let activeType = 'Q5_1';
 const report = {
   schema: 1,
-  scope: 'Actual prepared expert-matvec factory against unchanged upstream factory; standalone, not real-model performance',
+  scope: 'Supplied expert-matvec WGSL and case selections; not production-factory or model validation',
   cases: [], benchmarks: [], errors: [], ok: false,
 };
 const buffers = new Set();
@@ -51,16 +51,16 @@ try {
     }));
   }
   const cases = JSON.parse(await readFile(join(shaderDirectory, 'cases.json'), 'utf8'));
-  if (!Array.isArray(cases) || !cases.length) throw new Error('No factory-generated cases');
+  if (!Array.isArray(cases) || !cases.length) throw new Error('No experiment cases in cases.json');
   for (const spec of cases) {
     if (!['Q5_1','IQ4_NL'].includes(spec.type) || !Number.isInteger(spec.k) || spec.k <= 0 || spec.k % 32 ||
         !Number.isInteger(spec.m) || spec.m <= 0 || ![128,256].includes(spec.chosen) ||
         ![11,512].includes(spec.storedExperts) || ![0,1,2].includes(spec.mode) ||
-        typeof spec.sharedInput !== 'boolean') throw new Error('Invalid factory case');
+        typeof spec.sharedInput !== 'boolean') throw new Error('Invalid experiment case');
   }
   function select(k, m, type) {
     const row = cases.find(row => row.k === k && row.m === m && row.type === type);
-    if (!row) throw new Error('Benchmark shape lacks actual-factory selection');
+    if (!row) throw new Error('Benchmark shape is missing from cases.json');
     return row.chosen;
   }
   function allocate(size, usage) {

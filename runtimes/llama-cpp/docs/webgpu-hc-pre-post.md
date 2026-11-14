@@ -1,10 +1,8 @@
 # WebGPU four-stream HC PRE/POST
 
-This is a narrow optimization for the explicitly requested Qwen3.8-Flash-Next
-performance investigation. It has not established target-device speed or
-full-model numerical equivalence. Do not describe compilation or host tests as
-GPU execution. The independent input candidate is reduced to HC only and rebased
-onto llama.cpp `620d2225cc436ab0b001e3200e590e3b286ef9ab`.
+This narrow WebGPU fusion preserves the existing model graph and staged
+fallback. Compilation and native recorded-call tests do not establish actual
+GPU execution, target-device speed or full-model numerical equivalence.
 
 ## Scope and fallback
 
@@ -16,8 +14,8 @@ model graph, CPU implementation, public API, profiles and variants do not change
 There is no model-name, filename, quantization-name or adapter-name switch.
 
 For each eligible invocation the staged PRE has seven dispatches and the staged
-POST has three; the candidate has one of each. Two pairs per layer over 48 layers
-would eliminate 768 dispatches per decode (17.0% of the observed 4,508). This is a
+POST has three; the fused path has one of each. Two pairs per layer over 48 layers
+would eliminate 768 dispatches per decode. This is a
 source-derived count, not a measured throughput improvement. The final HC head
 is excluded by upstream's `il >= 0` fusion condition.
 
@@ -31,38 +29,41 @@ signed-zero, exceptional-value or alias behavior on a physical device.
 
 ## Maintenance contract
 
-The preparation checks the previously composed backend and shader-library
-identities, operation definitions, CPU reference, allocator, fusion probe and
-Qwen graph. It never edits the checked-out upstream. New shaders live in a
-dedicated two-symbol header, not a replacement canonical WGSL header. The patch,
-helper and final compiled sources are separately recorded in provenance.
-Unknown inputs, output mismatches and a shadowing canonical header fail closed.
-No experimental indexer, attention-mask, bind-group-cache or other candidate is
-bundled into this exception.
+The typed recipe applies the individual backend and shader-library patches to
+one private coherent source tree. Operation definitions, allocator and fusion
+contracts remain upstream dependencies. Dedicated WGSL inputs use the unchanged
+upstream emitter. Preparation receipts record selected inputs and final outputs;
+the checked-out upstream is never edited. No experimental indexer,
+attention-mask or unrelated candidate is bundled into this exception.
 
-Local checks cover preparation, host admission, dispatcher parameters and
-compile-time interfaces. The standalone Dawn/Mesa software-GPU checker covers
-288 shader/bind-group cases, including pooled buffers and forced garbage
-collection. Full-model/scheduler placement, compiled WebAssembly numerical
-regression and paired Mac throughput measurements remain to be performed. Keeping the staged graph is the no-patch option.
-Remove this exception and its preparation/provenance/tests when equivalent
-upstream support is adopted or the candidate is rejected.
+The current native provider compiles the complete prepared backend and observes
+admission, bindings, parameter bits, launch geometry and fallback using SDK C API
+recorders. It does not execute the shader. Full-model/scheduler placement,
+compiled-Wasm numerical checks and target-device throughput require their own
+measurements. Keeping the staged graph is the no-patch option. Remove the patch,
+preparation and associated checks when equivalent upstream support is adopted or
+the requirement is withdrawn.
 
 ## Optional GPU regression
 
-`../../tests/runtimes/llama_cpp/webgpu-hc/check_gpu.py` extracts the two shader strings from the actual
-prepared, fingerprint-checked C++ embedding and executes them using an externally
-installed Node/Dawn module. Set `LCB_TEST_WEBGPU_MODULE` to its `index.js` absolute
-path, then invoke:
+The standalone MJS runner reads supplied `hc_pre.wgsl` and `hc_post.wgsl`,
+each exposing `main` with the harness's storage/uniform layout. It compares those
+inputs with separately submitted staged GPU expressions. It does not identify
+their upstream/patch provenance or prove agreement with the compiled production
+factory. Record and review input identities separately.
+
+With a locally installed Vulkan-capable Dawn module and compatible inputs, run
+from the repository root:
 
 ```sh
-python3 ../../tests/runtimes/llama_cpp/webgpu-hc/check_gpu.py --source /path/to/llama.cpp --output /tmp/hc-gpu.json
+LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
+node tests/runtimes/llama_cpp/webgpu-hc/check-gpu.mjs \
+  /absolute/path/to/shaders /absolute/path/to/hc-report.json
 ```
 
-Use `--node-command-json '["/path/to/node"]'` for a different interpreter, or
-include a loader and its arguments in that array for an offline Linux bundle.
-`--case-start` and `--case-count` select a contiguous range of the 288 cases.
-The test does not add an npm dependency or run during ordinary inference.
+Optional trailing `CASE_START CASE_COUNT` integers select a contiguous range of
+the 288 cases. The default runs all cases. This runner is numerical/lifetime
+coverage, without a timestamp benchmark.
 
 Coverage includes independent and pooled buffers, distinct binding residues,
 1D/2D launches and padded groups, exact and tail dimensions, finite extremes,
@@ -75,9 +76,9 @@ speed benchmark. Per-case JSON Lines survive a native process crash.
 A deliberately overlapping writable binding is required to fail WebGPU
 validation. Host admission rejects shared tensor/view roots before placement;
 it does not expand the backend with merged-binding kernel permutations.
-Local graph-dispatch tests execute the actual source-extracted C++ dispatcher
-with recording WGPU objects and verify parameter bits, source order and the
-rectangular launch. They are not physical-GPU execution.
+The current native provider executes the complete prepared C++ dispatcher with
+recording WGPU objects and checks parameter bits and rectangular launches. These
+are host decisions rather than physical-GPU execution.
 
 ## Native instance lifetime and continuous regression
 
@@ -86,18 +87,15 @@ keeps an explicit global Symbol-keyed reference until all cleanup and report
 writes finish, then releases it immediately before synchronous process exit.
 A local variable used only to request an adapter is not a sufficient lifetime
 anchor for the rest of the asynchronous program. Device and buffer references
-alone did not prevent instance collection in the supplied Dawn package.
+alone do not establish ownership of the native instance.
 
-To stress this contract, set `LCB_HC_FORCE_GC=1` and include `--expose-gc` in
-`--node-command-json`. The checker rejects that mode when `globalThis.gc` is
+To stress this contract, set `LCB_HC_FORCE_GC=1` and run `node --expose-gc`. The checker rejects that mode when `globalThis.gc` is
 unavailable; it never silently skips the requested collection stress. Collection
 runs between cases, and the report records `forcedGc` and the Node version.
 This only changes the standalone test, not browser inference or profiling.
 
-The previously observed continuous native crash was reproduced in
-`InstanceBase::ProcessEvents`, entered by the Node `AsyncRunner` callback. In a
-controlled test, removing the explicit instance root triggered finalization and
-SIGSEGV; keeping it completed all 288 cases with exact non-NaN output bits and
-intact input/guard regions. Five ordinary full runs and forced-collection full
-runs passed in the supplied software-GPU environment. This resolves the local
-checker failure; it neither diagnoses Mac stalls nor measures model speed.
+A lifetime test must distinguish dropping the native instance owner from keeping
+it rooted, including forced garbage collection and delayed asynchronous work.
+That is a harness ownership check; it does not diagnose browser stalls or measure
+model speed. Numerical reports must identify their adapter and retain
+all requested cases, failures and input/guard checks.

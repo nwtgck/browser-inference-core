@@ -93,13 +93,34 @@ before publishing; no prior artifact gains this API retroactively.
 `hostNavigator` does not change Wasm loading. `wasmBinary`, `instantiateWasm`
 and `locateFile` remain separate Emscripten controls.
 
-The official `python3 -m build_tools.runtimes.llama_cpp.build --profile ... --variant browser` path
-(from the repository root) adds one `/* @vite-ignore */` comment immediately before the first argument of
-the generated sibling `core.wasm` URL after linking. This applies to all five
-browser profiles, including CPU. Vite skips automatic Wasm discovery at this
-expression; other bundlers may differ. The test variant is unchanged. Runtime
-URL acquisition and supplied-byte fallback behavior are preserved. Direct CMake
-linking alone does not perform this preparation.
+The runtime build CLI prepares the generated sibling `core.wasm` URL after
+linking by adding one `/* @vite-ignore */` comment immediately before its first
+argument. This applies to every browser profile, including CPU. Vite skips
+automatic Wasm discovery at this expression; other bundlers may differ. The test
+variant uses the compiler's original expression. Runtime URL acquisition and
+supplied-byte fallback behavior are preserved.
+
+From a source checkout with Node dependencies installed and the pinned toolchain
+prepared under `.tools/`, run from the repository root. The source checkout's
+`toolchain/README.md` describes toolchain acquisition. Keep the project Node
+executable when loading the SDK environment:
+
+```sh
+npm run tooling:build
+BICORE_TOOL_NODE="$(command -v node)"
+source .tools/emsdk/emsdk_env.sh
+"$BICORE_TOOL_NODE" build/tooling/runtimes/llama-cpp/tools/cli.js build \
+  --checkout-root "$PWD" --tooling-root "$PWD/build/tooling" \
+  --output-root /tmp/browser-inference-builds/llama-cpp \
+  --toolchain-root "$PWD/.tools" --local \
+  --profile webgpu-wasm64-jspi --variant browser --kind wasm --jobs 4
+```
+
+The CLI stages the prepared runtime and matching generated declarations under
+`<output-root>/stage/<profile>/<variant>/`. Local builds remain unpublishable;
+release builds require a clean checkout matching `--expected-commit` instead of
+`--local`. Direct CMake linking leaves the generated URL in the compiler's
+original form; use the runtime build CLI for prepared stage artifacts.
 
 Hosts explicitly copy/deploy the matching Wasm alongside its JavaScript, select
 another deployed URL through `locateFile`, or provide `wasmBinary`. A URL callback
@@ -111,5 +132,15 @@ view's entire backing buffer: it also includes bytes outside the selected span.
 or preserve an arbitrary view without this copy.
 
 Per-build provenance records the preparation's input/output byte counts and
-hashes, source-script identity and no-op reruns. Standalone asset ownership,
+hashes, and whether the input already contained the annotation. Asset deployment,
 compression and packaging remain separate host responsibilities.
+
+The build CLI also prepares the SDK-generated `core.d.ts` native export
+declarations. With `WASM_BIGINT`, native i64 arguments and results are JavaScript
+`bigint` primitives. The pinned SDK spells these types as the boxed `BigInt`
+interface. The preparation uses TypeScript's syntax tree and symbol resolution
+to correct global `BigInt` type references in native export methods while
+preserving record types, value identifiers, and Embind declarations. Provenance
+records the declaration input/output identities and number of corrected type
+references. This changes declarations only; the JavaScript and Wasm ABI remain
+the compiler's generated artifacts.

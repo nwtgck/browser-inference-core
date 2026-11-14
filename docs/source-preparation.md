@@ -2,113 +2,69 @@
 
 ## Production composition
 
-`build_tools.runtimes.llama_cpp.webgpu_plan` owns one concrete recipe for the
-accepted normal and GPU-profile compositions. It is not a plugin framework or a
-language for rewriting arbitrary source. Runtime behavior and the individual
-approved upstream patches remain independently reviewable.
+Each runtime owns its typed recipe and preparation functions:
 
-1. The build-input capture selects the upstream Git tree and repository inputs.
-2. The recipe copies the required original files, selected patches and owned
-   diagnostic headers into private temporary trees. It never edits the checkout.
-3. `config/webgpu-patches.json` declares the exact files each patch may change.
-   The shared patch runner rejects unlisted paths, duplicate declarations,
-   symlinks, binary patches and rename/copy representations.
-4. Accepted patches run in the explicit order in `webgpu_plan.py`. Dedicated
-   shader variants start from private source copies, not generated C++ strings.
-   The IQ3 accumulator and aligned-word template have distinct patch scopes.
-5. The unchanged upstream `embed_wgsl.py` generates each of the 13 final shader
-   headers once, after source composition. Its private standard-library-only
-   process does not import user site packages. The canonical upstream embedding
-   keeps its distinct name; `ggml-wgsl-shaders.hpp` must not shadow it.
-6. Every host source, shader header and the `source-preparation.json` receipt is
-   prepared before replacing the previous output directory. Generation failure
-   leaves the previous complete output intact. Unchanged outputs preserve their
-   timestamps, including on warm configuration.
+- `runtimes/llama-cpp/tools/recipe.ts` and `prepare.ts` select model, multimodal
+  and ordinary/diagnostic WebGPU sources.
+- `runtimes/stable-diffusion-cpp/tools/recipe.ts` and `prepare.ts` select its
+  independent image and GGML upstreams and patches.
+- `tools/source/` supplies Git input capture, file-scoped patch application and
+  invocation of the unchanged upstream shader generator.
 
-The shared output helper provides rollback for ordinary filesystem errors. It
-is **not** a transaction across concurrent external readers or hostile writers.
-Build isolation and immutable captured inputs remain required.
+The executing checkout supplies the tool implementation and static configuration.
+Compiler inputs are captured separately into private trees. Preparation applies
+reviewable patches to those trees and copies ordinary owned native sources;
+it leaves checked-out upstreams unchanged. Patch order and target paths are
+explicit in each recipe. The patch runner rejects undeclared paths and failed
+applications instead of silently changing or dropping a patch.
 
-## Observations are not semantic compatibility claims
+The llama WebGPU recipe keeps ordinary shaders, dedicated variants and the
+profile-only diagnostic source distinct. The upstream `embed_wgsl.py` runs on
+the final selected shader inputs; owned tools do not generate C++ implementation
+bodies. Python is needed for that upstream generator. Dedicated variants retain
+separate input sets so one specialization cannot replace an ordinary shader by
+accident. The Q8 diagnostic's public-domain SHA-256 implementation is an owned
+header under `native/diagnostics/`, with its attribution retained.
 
-The receipt records actual original input identities, inventory identity, patch
-order and before/after identities, per-header source identities, and final file
-identities. It does not require the unrelated parts of a source file to retain a
-hard-coded digest. A harmless comment outside a patch hunk is accepted. A changed
-hunk, undeclared file edit or failed generator is not accepted.
+Prepared sources and their receipt are made available together. A failed
+preparation leaves the previous complete output intact. Unchanged output bytes
+preserve timestamps for warm builds. The output helper provides rollback for
+ordinary filesystem errors; concurrent external modification remains outside
+that guarantee.
 
-`webgpu_provenance.py` prepares only the modes selected by built profiles. It
-compares the final output and receipt with the compiled-input manifest through
-the existing immutable capture/report pipeline. `config/webgpu-features.json`
-documents every accepted patch exactly once and preserves the feature's purpose;
-it is not another executable build registry. Per-feature compiled-copy fields
-explicitly refer to the **shared final composition**, not to an imaginary
-independent output of that feature or a historical intermediate stage.
+## Identity and semantic checks
 
-The Q8 diagnostic's SHA-256 code is an owned header under `native/diagnostics/`.
-It retains the public-domain implementation previously extracted from upstream
-OpenCL source. It no longer depends on OpenCL source spelling or extraction
-boundaries. A native test compiles the complete header and verifies known
-vectors, padding boundaries and incremental updates, including under undefined
-behavior instrumentation. This does not assert browser execution.
+`source-preparation.json` records selected input and owned-source identities,
+patches and their order, generated shader inputs, and actual output identities.
+Build provenance also records the compiler's real translation units and target
+sources. These observations let publication compare the selected Git inputs,
+prepared sources and actual compiled inputs.
 
-## Warm CMake configuration
+An observed digest identifies bytes. It does not prove API, layout, arithmetic,
+ownership or model behavior. A harmless edit outside a patch hunk does not need
+a new source-acceptance constant. Changed hunks, undeclared edits and generator
+failures remain preparation errors. Experimental behavior with an explicit
+reviewed-input gate must retain its documented rationale and equivalent
+ownership/lifetime coverage before that gate can be removed.
 
-The CMake hook selects exactly the upstream translation units it replaces and
-fails if the upstream target layout changes. Shader-directory globs track newly
-added or removed WGSL/template files. Module, patch and owned-header dependencies
-also trigger preparation. Before writing Ninja's regeneration rule, dependency
-paths are normalized and deduplicated. In particular, `/root/build_tools/x.py`
-and `/root/runtimes/llama-cpp/../../build_tools/x.py` are the same input, not two
-generated outputs.
+## Build dependencies and coherent source sets
 
-The configuration test really runs CMake/Ninja and the production source recipe,
-then adds, edits and removes an upstream shader input. It does **not** compile the
-runtime: only that test's Python launcher omits the unavailable Dawn-header gate,
-and its explicit configure-only targets never compile placeholder sources.
-Complete prepared-source compilation is a separate test requiring real headers.
+CMake receives separate checkout, emitted-tooling, compiler-input and prepared
+source roots. The build records its actual compile commands and selected target
+sources. Model preparation keeps matching headers and translation units in one
+coherent tree. QSA and file-backed model sources retain their source-specific
+include boundaries and unity-build exclusions.
 
-## Historical reference fixtures and independent model preparation
+The preparation and build tests check recipe order, template isolation, rollback,
+unchanged timestamps, selected compile definitions and captured compiler inputs.
+Current native validation compiles the prepared implementation with complete
+fixtures and the real required headers. Generated Wasm, browser ABI behavior and
+model inference remain separate validation layers.
 
-`tests/support/legacy_webgpu_source.py` retains the previous composer solely for
-historical prefix/reference tests. Their byte guards identify those reference
-fixtures. They are not production upstream-compatibility policy. Tests for the
-new composer exercise actual final inputs/outputs, atomic failure handling,
-private input capture, harmless source changes and exact patch scope.
+## Historical fixtures
 
-Historical stage builders live only in
-`tests/support/llama_cpp/webgpu_stages/`. Production modules and CMake no longer
-import those helpers or enumerate their old dependency chain. CMake reads the
-actual recipe receipt's input and patch inventory, then watches shader-directory
-membership separately. Thus a changed recipe updates the next configuration's
-dependencies without maintaining a parallel registry of historical stages.
-
-Independent QSA-selection and file-backed-row preparation applies the existing
-file-scoped patches with the common runner. It records actual input/output
-identities in `source-preparation.json`, rather than reading test-owned hash
-fixtures. File-backed preparation copies a coherent `src/` header/translation-unit
-set: mixing its model layout with pristine sibling headers is not permitted.
-The QSA source also requires its matching model header, and is excluded from a
-unity build so that the source-specific include boundary remains effective.
-Native numerical, address-layout and I/O tests remain separate from these
-observations. A changed patch hunk still fails; harmless changes elsewhere are
-not rejected merely because a digest differs.
-
-The optional retained-BF16 mode retains its explicit reviewed-source gate. This
-is an admission policy for that experimental memory-lifetime behavior, not a
-claim that arbitrary source digests prove semantic compatibility. Removing it
-requires equivalent ownership/lifetime coverage; directory cleanup alone does
-not authorize weakening that boundary.
-
-The final-preparation recorder test feeds current generated shaders and complete
-factory headers to both Q8 and IQ3 recorders. Both require the real pinned Dawn
-declarations. Their provider-dispatch functions are selected after full-unit
-Clang type checking; this does not execute the entire backend or a GPU.
-Historical fixed/forced and before/after comparisons use explicitly owned frozen
-inputs and are not evidence for arbitrary current upstream compatibility. See
-`validation-tiers.md` for the current/historical boundaries and remaining work.
-
-Native source-bound models, complete translation-unit compilation, Wasm builds,
-browser probes and real-model browser inference are distinct evidence. Do not
-label one as another. Missing pinned upstreams, Dawn headers or SDKs must be
-reported; an unrelated source archive or mock header is not a substitute.
+Historical source composers and fixed before/after comparisons belong under
+`tests/support/` and named `tests/fixtures/` trees. Their identities describe
+those frozen comparisons. They are not production inputs, alternate current
+implementations or a compatibility test for arbitrary new upstream versions.
+See [validation tiers](validation-tiers.md) for the evidence boundaries.

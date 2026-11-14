@@ -153,22 +153,19 @@ properties are not a measured guarantee of equal latency.
 
 ## Maintenance and validation
 
-The vendor checkout is unchanged. A shared build-tree mtmd.cpp copy adds the
-versioned entry and immutable policy; an independent clip.cpp copy contains the
-existing loader integration and both policies. Audio and WebGPU kernel overlays
-remain independent. Source hashes pin the reviewed upstream contracts, including
-private model roles, scheduler, allocator and BF16 shaders. CPU-only builds use
-a separate minimal clip plumbing copy; they do not compile the retained graph
-checks. Configuration fails
-on drift, and all contract files trigger ordinary CMake regeneration.
+The vendor checkout is unchanged. Preparation applies the retained-storage and
+loader patches to one coherent private mtmd subtree. All model consumers use the
+same private declarations, including unity builds. The ordinary C++ source and
+public headers establish the API and role contracts; compatibility checks and
+recorded source identities have distinct responsibilities. CPU builds preserve
+API plumbing without claiming WebGPU retention.
 
-Native CPU contract/numerical tests and synthetic upstream model-graph fixtures
-are distinct from actual model loading, WebGPU execution and image quality. The
-source-extracted entry fixture uses a no-I/O constructor double and does not
-certify loader execution. Generated API tests cover the new scalar signature and
-old layout. Actual runtime loading and browser/device measurements remain
-separate gates. Supplied host evidence reported a CPU function-type sanitizer
-issue in pristine upstream; do not hide an upstream issue by weakening guards.
+Native CPU contracts and synthetic upstream graph fixtures are distinct from
+actual model loading, WebGPU execution and image quality. Current entry/loader
+fixtures exercise the complete prepared translation units with controlled external
+boundaries and small synthetic GGUF inputs. The ABI tests cover the scalar
+signature and target layouts. Actual trained-model loading and device measurements
+remain separate gates.
 
 Retire legacy expansion only after matched target-model evidence supports the
 change. Remove independent loader safety/diagnostics only when upstream provides
@@ -177,16 +174,16 @@ own semantic review and are not implied by this storage API.
 
 ### Gemma4UV regression coverage
 
-The standalone `tests/mtmd-retained` suite uses the pinned upstream graph builder
+The `tests/runtimes/llama-cpp/native/cpu` suite uses the pinned upstream graph builder
 for small fixtures and the 12B projector dimensions (3840-wide embeddings,
 48-pixel effective patches, 1120-entry x/y tables). It checks square/rectangular
 images, including the 70/1120-patch bounds, and exactly one original BF16 image
 projection consumer. It does not run preprocessing or a complete model on WebGPU.
 Role tests reject audio contamination, non-projection BF16 weights, shared-layer
 roles, name-only matches, malformed dimensions and non-contiguous layouts.
-`test_mtmd_retained_mode.py` checks that editing `gemma4uv.cpp` triggers rejection
-on an ordinary build as well as on initial configuration.
+Preparation records the actual `gemma4uv.cpp` input; graph tests check the accepted
+role and dimensions rather than treating every source edit as a behavioral change.
 
-`mtmd-test-logger.cpp` supplies the pinned logger state only for standalone tests
+`tests/runtimes/llama-cpp/native/support/mtmd-logger.cpp` supplies the pinned logger state only for standalone tests
 that omit `clip.cpp`; it is not part of a distributed runtime. The vendor tree,
 model builder, shaders, legacy storage policy and consumer defaults are unchanged.

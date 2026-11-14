@@ -108,31 +108,33 @@ silently skipping an unavailable GPU. The probe and its suspending export are
 absent from ordinary browser artifacts. Native tests execute its CPU path only;
 CMake export-contract tests are not a Wasm build.
 
-`webgpu-param-upload-contract` extracts the actual prepared arena, dispatch
-builder, submission helper and graph loop. An ordered queue double checks both
-per-kernel and batched modes, multiple alignments, command budgets, in-flight
-limits, empty/tail batches, staging lifetime, zero padding and bounds failures.
-It does not replace Wasm compilation or device tests. The evaluated CMake contract
-also checks that every browser/test profile enables the backend definition.
+The `webgpu-backend-*` native contracts compile the complete prepared backend
+with real SDK declarations and observe its external queue API. They check arena
+bounds, batched/per-kernel uploads, alignment, command budgets, in-flight limits,
+empty/tail batches, deferred uniform ownership and zero padding. The mixed-queue
+cases use real VIEW, ARGSORT and SET_ROWS graph nodes to distinguish node counts
+from kernel counts and check the optional SET_ROWS readback boundary. Native
+observation does not execute shaders or replace Wasm and device integration.
 
 ## Browser smoke and publication must agree
 
-The producer and `build_tools.packaging.assemble` use the same source-bound
-`../../tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.json`. Its JavaScript reader and JSON bytes are part
-of the test-input identity checked before and after smoke. Required arithmetic
-evidence includes timestep, BF16 loading, 3D convolution and WebGPU performance
-probes, with exactly the requested backend list for every test profile. Browser
-variants cannot claim test-only arithmetic. CPU-only execution is never relabeled
-as GPU execution. Verified probe evidence is retained separately from the prose
-scope in `validation.browserSmokeEvidence`.
+The browser harness and typed saved-package validator use the same owned
+`runtimes/stable-diffusion-cpp/config/browser-smoke-contract.json` through their
+runtime-owned contract readers. The JSON, browser reader and executing typed
+reader are included in the test-input identity checked around smoke execution.
+Required arithmetic evidence includes timestep, BF16 loading, 3D convolution and
+WebGPU performance probes, with exactly the requested backend list for each test
+profile. Browser variants cannot claim test-only arithmetic. CPU-only execution
+is never relabeled as GPU execution. The recorded browser evidence is separate
+from the prose description of its scope.
 
-The image Python suite runs the root snapshot boundary tests in an isolated process,
-including the actual JavaScript scope producer, so producer/consumer drift is caught
-by image-native CI instead of only after expensive package assembly. That job pins
-Node 22.16.0, matching the package job. These host
-checks use synthetic package bytes and mocked browser invocation; `npm pack` and
-its payload integrity checks are real. Missing evidence prevents a completion
-receipt or final pack. No publication, source-identity or payload check is bypassed.
+`tools/validation/runtime.ts` invokes the external browser runner, checks its
+result against the selected package and writes the typed receipt. Node tests
+under `tests/tools/validation/` exercise captured browser results and input
+identity changes without starting a browser. Package tests use synthetic payloads
+and real npm packing where relevant. A missing or mismatched required result
+prevents validation completion. Native checks, captured-result tests and actual
+browser execution remain separate evidence.
 
 Full-model WebGPU validation must still cover trained weights, device limits,
 GPU memory pressure, graph cuts, cache-enabled/disabled runs, cancellation/device
@@ -155,12 +157,13 @@ budget, barriers, reductions, mask/sink rules and output layout are unchanged.
 Private storage can still be spilled by a real shader compiler; host-model
 access counts are not hardware counters or a measured speedup.
 
-`webgpu-softmax-cache-contract` extracts the three actual prepared shader lane
-loops into a checked CPU model. It covers workgroup/cache boundaries, source and
-output guards, masks, sinks, in-place and out-of-place paths, numerical output,
-and logical storage accesses. It is deliberately not advertised as a WGSL
-compiler or a GPU test. The test-only real-backend probe additionally exercises
-softmax rows up to 16,385 columns, including masked and sink-bearing variants.
+The test-only real-backend probe executes softmax around workgroup/cache
+boundaries through 32,771 columns, with masks, sinks, in-place/out-of-place paths,
+two scales and different input distributions. It checks an independent scalar
+oracle, nonzero input/mask offsets, surrounding guards and repeated graph use.
+Native tests execute CPU operators; explicit WebGPU smoke executes shaders.
+The former WGSL-to-C++ lane model was removed: its logical storage counts did
+not establish compiler register allocation, hardware traffic or GPU speed.
 
 ## Fuse unmasked score scaling without rescaling queries (0029)
 
@@ -200,20 +203,16 @@ against the shared builder bit-for-bit, change the same input storage between
 executions, and construct valid 2/32-layer cut plans with prefix reuse both off
 and on. The optional real-backend probe covers shared rotation arithmetic too.
 
-The supplied 512/1024 benchmark logs have respectively 67,373,064 and 269,486,088
-storage-upload bytes in steady sampling windows. Those values exactly match the
-shape-based attribution `64 * position_matrix_bytes + latent_bytes + 2056` in the
-recorded target-only prefix-reuse case. This is supporting evidence, **not a
-post-patch measurement**. `queue.writeBuffer` bytes describe uploads requested by
-the host, not GPU-internal reads/writes, live residency or physical memory use.
-
-The tested host/native suites do not replace rebuilding the pinned Emscripten
-profiles, actual WebGPU validation, or cooled/warm full-model measurements.
+Graph-local sharing can reduce repeated preparation and associated uploads, but
+the actual byte count depends on graph cuts, input lifetimes and backend
+scheduling. Measure queue uploads separately from GPU-internal traffic, live
+residency and physical memory. Native graph-count and arithmetic checks do not
+replace actual WebGPU validation or cold/warm full-model measurements.
 
 ## Qwen Image 2.1: remove repeated elementwise work (0031–0032)
 
-The 008 shared rotary matrix fix did not remove layer-local modulation work or
-intermediate MLP activations. Qwen's four modulation matrices depend on the
+Rotary matrix sharing leaves separate layer-local modulation work and
+intermediate MLP activations to optimize. Qwen's four modulation matrices depend on the
 current timestep, not on the layer. For an accepted WebGPU graph, prepare their
 scale/tanh rows once and reuse those producers across layers. Prefix reuse needs
 only target rows; an initial full-context graph also prepares the prefix rows.
@@ -234,12 +233,12 @@ For controlled comparisons, the context-creation model argument
 `qwen_image_2_1_webgpu_work=false` preserves the previous three graph choices.
 It does not disable earlier RoPE/softmax/transport patches. Creating a new context
 is required to change this flag; never mutate it while a graph is active. A false
-setting is tested against frozen 008 output bit-for-bit on CPU. Same-artifact
+setting is compared with the frozen pre-work-sharing reference on CPU. Same-artifact
 experiments must still account for run order and cannot infer thermal state from
 timing alone.
 
 `webgpu-qwen-work-test` uses real model methods with synthetic weights, frozen
-008 references, repeated input/timestep values in the same storage, negative
+pre-work-sharing references, repeated input/timestep values in the same storage, negative
 admission/type/layout cases, and real graph-cut binding/cache execution on CPU.
 The optional model-free WebGPU smoke adds requested-backend elementwise checks.
 Policy replay and CPU execution are not GPU speed or trained-image validation.
@@ -275,15 +274,13 @@ inside a kernel or shader arithmetic precision. The distribution across axes can
 have device-dependent scheduling effects: end-to-end performance is unmeasured.
 No Flash setting, tile policy, workgroup size, memory budget or wait is changed.
 
-`webgpu-dispatch-grid-contract` compiles the actual prepared builders/helper and
-translates only the actual shader coordinate/guard expressions into checked CPU
-code. It checks uniform record lengths, bindings and lane/row coverage, including
-large integer domains and fused-operation overlap branches. Small domains are
-exhaustively checked; huge domains use deterministic samples and boundary probes.
-It does not compile WGSL or emulate floating-point shader execution. The existing
+The `webgpu-backend-*` native contracts call the actual builders and grid helper
+from the complete prepared backend. SDK observations check uniform records,
+bindings, large integer domains and fused-operation overlap branches. These are
+host packet checks; they do not translate shader guards or execute WGSL. The
 requested-backend probe also runs NORM, RMS_NORM, RMS_NORM+MUL and masked/sink
 softmax at 66,049 rows, with separate/in-place destinations and changed inputs.
-CPU CI runs its CPU path. Only the explicit WebGPU smoke mode exercises shaders.
+CPU CI runs its CPU path. Only explicit WebGPU smoke exercises shaders.
 
 ## Stable registry/handle ownership (patch 0034)
 
@@ -302,11 +299,12 @@ A late callback may finish its own record but cannot reference a returned stack
 or mutate the shared device. Callback status and non-null handles are checked
 before successful publication. The existing completion-based wait policy remains.
 
-`webgpu-registry-contract` extracts the four actual registry/device functions and
-adapter request helper. Its API double covers browser/native feature branches,
-concurrent and reordered lookups, already allocated buffer/queue ownership,
-creation failures, delayed callbacks, failed waits and lost devices. It is neither
-Dawn nor a browser. The WebGPU-only runtime probe additionally performs repeated
+The `webgpu-registry-*` and `webgpu-native-registry-*` native contracts compile
+the complete backend against browser/native SDK declarations. Their external API
+observer covers concurrent and reordered lookups, retained buffer/queue ownership,
+creation failures, delayed callbacks, failed waits, lost devices and the native
+implicit-synchronization requirement. It executes neither Dawn nor a browser.
+The WebGPU-only runtime probe additionally performs repeated
 registry/device lookups while real test buffers are live; the CPU probe does not
 pretend to check GPU registry state.
 

@@ -3,11 +3,69 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#lint/*": "./eslint-local-rules/*.js",
+    "#source/toolchain.json": "./toolchain/config.json",
+    "#dto/shared": {
+      "types": "./00-dto/shared/index.ts",
+      "default": "./build/tooling/00-dto/shared/index.js"
+    },
+    "#dto/llama-cpp": {
+      "types": "./00-dto/llama-cpp/index.ts",
+      "default": "./build/tooling/00-dto/llama-cpp/index.js"
+    },
+    "#dto/stable-diffusion-cpp": {
+      "types": "./00-dto/stable-diffusion-cpp/index.ts",
+      "default": "./build/tooling/00-dto/stable-diffusion-cpp/index.js"
+    },
+    "#dto-internal/*": {
+      "types": "./00-dto/*.ts",
+      "default": "./build/tooling/00-dto/*.js"
+    },
+    "#tools/*": {
+      "types": "./tools/*.ts",
+      "default": "./build/tooling/tools/*.js"
+    },
+    "#runtimes/*.json": {
+      "types": "./runtimes/*.json",
+      "default": "./runtimes/*.json"
+    },
+    "#runtimes/*.mjs": {
+      "types": "./runtimes/*.d.ts",
+      "default": "./runtimes/*.mjs"
+    },
+    "#runtimes/*": {
+      "types": "./runtimes/*.ts",
+      "default": "./build/tooling/runtimes/*.js"
+    },
+    "#tests/*.mjs": {
+      "types": "./tests/*.d.ts",
+      "default": "./tests/*.mjs"
+    },
+    "#tests/*": {
+      "types": "./tests/*.ts",
+      "default": "./build/tooling/tests/*.js"
+    }
+  },
   "scripts": {
     "test": "node --test tests/runtimes/llama_cpp/*.test.mjs tests/runtimes/stable_diffusion_cpp/*.test.mjs",
-    "test:python": "python3 -m unittest discover -s tests -t . -p 'test_*.py'"
+    "tooling:build": "tsc --project tsconfig.tools.json",
+    "tooling:check": "tsc --project tsconfig.tools.json --noEmit",
+    "lint": "eslint",
+    "test:lint": "node --test tests/tools/lint/*.test.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "@types/yargs": "17.0.35",
+    "eslint": "10.14.0",
+    "js-yaml": "5.5.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "yargs": "18.2.0",
+    "zod": "4.6.7"
   }
 }

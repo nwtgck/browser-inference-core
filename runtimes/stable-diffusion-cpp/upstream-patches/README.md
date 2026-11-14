@@ -4,8 +4,9 @@ The user explicitly authorized the implementing agent to choose upstream patches
 for this image-runtime experiment on 2026-09-24. The exception is local to
 `stable-diffusion-cpp`; it does not relax llama-cpp's approval policy.
 
-`series.json` is the ordered, exact-input/exact-output inventory. Apply only to
-private build-tree copies, leaving both upstream checkouts clean. The independent
+[`tools/recipe.ts`](../tools/recipe.ts) owns patch order, target scopes and reasons.
+Apply only to private build-tree copies, leaving both upstream checkouts clean.
+Receipts record actual patch and input/output identities. The independent
 llama.cpp checkout is used only as a source for its `ggml/` subtree.
 
 1. Model reader: avoid native thread spawning in single-threaded Emscripten.
@@ -210,19 +211,10 @@ patch, relax input hashes, or substitute a different upstream revision.
     The lowering becomes redundant if upstream supplies an equivalent supported
     temporal pointwise path or the backend supports the original operation.
 
-18. Superseded by patch 0019 (retained in the ordered source history).
-    A finite video queue completion budget: allow 180 seconds for submitted GPU
-    work, while keeping buffer-map and event synchronization at 30 seconds.
-    User H3 traces had completed steps around 22-28 seconds before the next
-    30-second queue wait aborted; this does not establish a driver failure.
-    The wait-status and callback-status checks remain unchanged. No repeated
-    wait, queue resubmission, tensor change or precision fallback is added.
-    Timeout messages include the actual selected budget. The extracted-source
-    contract probe checks both call sites and synthetic completion/failure cases;
-    it does not execute WebGPU or H3. All SD WebGPU builds receive this queue
-    budget; the separately built llama runtime is unchanged. Replaced by an
-    upstream configurable finite workload budget with equivalent failure checks.
-
+18. Ordered input for the completion-wait patch: `0019` applies against the
+    source context established by `0018`. Both patch files are required by this
+    reviewed patch composition. The resulting runtime uses the completion-based
+    policy below; it does not retain a separate finite queue-wait deadline.
 
 19. Completion-based WebGPU waits: remove application wall-clock deadlines for
     queue completion, buffer mapping and backend events. Map/event waits can also
@@ -237,9 +229,9 @@ patch, relax input hashes, or substitute a different upstream revision.
     Callers must retain explicit cancellation/Worker termination and device-loss
     handling. This patch does not disable browser/OS driver watchdogs or force
     an unresponsive GPU to recover. All SD WebGPU profiles receive the policy;
-    the separately built llama runtime remains unchanged. The prepared-source
-    probe covers long completions, errors and callback lifetimes; it does not
-    execute GPU work. The patch is removable when the pinned upstream implements
+    the separately built llama runtime remains unchanged. The complete-source
+    native backend fixture records long completions, errors and callback
+    lifetimes through the real SDK API declarations; it does not execute GPU work. The patch is removable when the pinned upstream implements
     equivalent completion-based waits and failure/ownership checks.
 
 20. Single-image causal convolution: when the input has one frame, no saved
@@ -362,8 +354,8 @@ patch, relax input hashes, or substitute a different upstream revision.
     constructor cases retain the original path; multiplication outputs remain
     out-of-place. This is not a persistent timestep cache. The context creation
     argument `qwen_image_2_1_webgpu_work=false` disables all three new choices for
-    same-artifact comparisons without disabling the 008 RoPE/softmax fixes.
-    Native tests compare against the frozen 008 block/model, change input values
+    same-artifact comparisons without disabling rotary matrix sharing or softmax fusion.
+    Native tests compare against the frozen pre-work-sharing block/model, change input values
     in the same storage, verify fallbacks, and execute graph cuts with independent
     per-segment allocations and cache ownership. The existing optional WebGPU
     smoke probe now executes small modulation/GLU graphs too. Remove when pinned

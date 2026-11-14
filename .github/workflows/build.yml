@@ -27,19 +27,18 @@ on:
 
 # Network operations belong at explicit workflow boundaries for auditability.
 # Keep destinations, credentials and remote writes visible here instead of hiding
-# them in repository Python/shell wrappers. Local processing belongs in ordinary Python modules.
+# them in repository Python/shell wrappers. Local processing belongs in ordinary typed modules.
 # PR events normally check out a synthetic merge commit. All jobs deliberately
 # build the immutable PR head instead, so push and PR artifacts share a source
 # identity and comments can match the manifest to the actual PR head.
 env:
-  PYTHONPATH: ${{ github.workspace }}
   BIC_CACHE_MODE: ${{ github.event.inputs.cache_mode || 'enabled' }}
   LCB_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
   BIC_METRICS_MODE: ${{ inputs.metrics_mode || 'basic' }}
 
 defaults:
   run:
-    working-directory: runtimes/llama-cpp
+    working-directory: .
 
 permissions:
   contents: read
@@ -72,7 +71,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip zip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -96,15 +95,11 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - name: Acquire pinned TypeScript compiler (online)
-        working-directory: .
+      - name: Acquire locked development dependencies (online)
         shell: bash
         run: |
-          version="$(jq -er '.typescriptVersion | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' toolchain/config.json)"
-          npm install --prefix .tools/typescript --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "typescript@$version"
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Acquire pinned Dawn headers for native contracts (online)
-        # Native contracts need only Dawn declarations, not an Emscripten install.
-        working-directory: .
         shell: bash
         run: |
           tag="$(jq -er '.dawnTag | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*$"))' toolchain/config.json)"
@@ -115,86 +110,76 @@ jobs:
             "https://github.com/google/dawn/releases/download/${tag}/emdawnwebgpu_pkg-${tag}.zip" \
             --output "$archive"
           printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check -
-      - name: Verify the checked-out source identity
+      - name: Emit the checked-out tools and verify source identity
         shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
           test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
           BICORE_OFFLINE
-      - name: Test host and publication code
+      - name: Test host, tooling and current native contracts
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          (cd "$GITHUB_WORKSPACE" && python3 -m build_tools.toolchain.prepare --dawn-only)
+          node build/tooling/tools/cli.js toolchain prepare \
+            --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
           export LCB_TEST_DAWN_PACKAGE="$GITHUB_WORKSPACE/.tools/emdawnwebgpu_pkg"
-          python3 -m build_tools.metrics run --phase test.node_host -- npm test
-          python3 -m build_tools.metrics run --phase test.publication_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s ../../tests/build_tools -t ../.. -p 'test_*.py'
-          python3 -m build_tools.metrics run --phase test.llama_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s ../../tests/runtimes/llama_cpp -t ../.. -p 'test_*.py'
-          BICORE_OFFLINE
-      - name: Test bounded BF16 weight expansion with native GGML
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics run --phase native.configure -- cmake -S ../../tests/runtimes/llama_cpp/mtmd-bf16 -B build/mtmd-bf16-tests -DLCB_LLAMA_SOURCE="$PWD/vendor/llama.cpp"
-          python3 -m build_tools.metrics run --phase native.build -- cmake --build build/mtmd-bf16-tests --target mtmd-bf16-test --parallel 2
-          python3 -m build_tools.metrics run --phase native.test -- build/mtmd-bf16-tests/mtmd-bf16-test
+          npm run lint -- 00-dto tools runtimes/llama-cpp/tools runtimes/stable-diffusion-cpp/tools tests/tools tests/runtimes/llama-cpp tests/runtimes/stable-diffusion-cpp
+          npm run test:lint
+          shopt -s globstar
+          BIC_METRICS_MODE=off node --test build/tooling/tests/tools/**/*.test.js \
+            build/tooling/tests/runtimes/llama-cpp/tools/**/*.test.js
+          BIC_METRICS_MODE=off node --test tests/tools/cli/*.test.mjs tests/runtimes/llama_cpp/*.test.mjs
+          BIC_METRICS_MODE=off python3 -m unittest \
+            tests.runtimes.llama_cpp.source.test_native_quantization \
+            tests.runtimes.llama_cpp.source.test_q4_reference \
+            tests.runtimes.llama_cpp.source.test_iq3_fixtures \
+            tests.runtimes.llama_cpp.test_cmake_property_snapshot
+          node --test build/tooling/tests/runtimes/llama-cpp/native-validation.test.js
           BICORE_OFFLINE
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -233,7 +218,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -254,70 +239,81 @@ jobs:
       - name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: git submodule update --init --recursive --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
-      - name: Verify the checked-out source identity
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '22.16.0'
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit the checked-out tools and verify source identity
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
           test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
           BICORE_OFFLINE
       - name: Compare separate reference and optimized native builds
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics run --phase native.qsa_regression -- python3 ../../tests/runtimes/llama_cpp/qsa-selection/run.py --source "$PWD/vendor/llama.cpp" --work "$PWD/build/qsa-regression" --jobs 2
+          node build/tooling/tests/runtimes/llama-cpp/tools/qsa.test-support.js \
+            --checkout-root "$GITHUB_WORKSPACE" --tooling-root "$GITHUB_WORKSPACE/build/tooling" \
+            --output-root "$GITHUB_WORKSPACE/build/qsa-regression" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
+            --expected-commit "$LCB_SOURCE_COMMIT" --jobs 2
           BICORE_OFFLINE
       - name: Upload native comparison traces and logs
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: qsa-native-${{ github.run_attempt }}
-          path: runtimes/llama-cpp/build/qsa-regression/qsa-results/
+          path: build/qsa-regression/qsa-results/
           if-no-files-found: warn
           retention-days: 14
           compression-level: 1
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -372,7 +368,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -396,109 +392,37 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - name: Plan cache partitions and regenerate ccache policy
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit tools and plan cache partitions
         id: plan
         shell: bash
-        working-directory: .
-        env:
-          RUNTIME: llama-cpp
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e RUNTIME -e PROFILE -e VARIANT \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.cache --runtime "$RUNTIME" --profile "$PROFILE" --variant "$VARIANT"
-          BICORE_OFFLINE
-      - name: Empty the single download restore target
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission clear-dawn
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: dawn
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.dawn-path }}
-          key: ${{ steps.plan.outputs.dawn-key }}
-      - name: Admit dawn cache or recover clean inputs
-        id: admit-dawn
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.dawn-key }}
-          MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
-          HIT: ${{ steps.dawn.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.dawn.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind dawn --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      # Acquisition is intentionally inline: remote hosts and commands remain auditable.
-      - name: Read pinned acquisition settings
-        id: toolchain-inputs
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          node node_modules/typescript/bin/tsc --project tsconfig.llama-cpp.json
+          node build/tooling/runtimes/llama-cpp/tools/cli.js cache-plan \
+            --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
+            --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \
+            --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1)" \
+            --environment "$BIC_OFFLINE_ENVIRONMENT" --os "$RUNNER_OS" --arch "$RUNNER_ARCH" \
+            --output "$GITHUB_WORKSPACE/build/cache-plan.json"
+          jq -r '"dawn-key=\(.dawnKey)\nem-key=\(.emKey)\nem-prefix=\(.emRestorePrefix)\ncc-key=\(.ccKey)\ncc-prefix=\(.ccRestorePrefix)\nem-staging=\(.emStagingPath)\ncc-staging=\(.ccStagingPath)"' build/cache-plan.json >> "$GITHUB_OUTPUT"
+          jq -r '.environment | to_entries[] | "\(.key)=\(.value)"' build/cache-plan.json >> "$GITHUB_ENV"
           jq -er '
             if (.emsdkVersion | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
                (.emscriptenRelease | test("^[0-9a-f]{40}$")) and
@@ -508,12 +432,35 @@ jobs:
             else error("Invalid pinned acquisition settings") end
           ' toolchain/config.json >> "$GITHUB_OUTPUT"
           BICORE_OFFLINE
+      - uses: actions/cache/restore@v6.1.0
+        id: dawn
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.dawn-key }}
+          path: .cache/restored/dawn
+      - uses: actions/cache/restore@v6.1.0
+        id: em
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.em-key }}
+          path: ${{ steps.plan.outputs.em-staging }}
+          restore-keys: ${{ steps.plan.outputs.em-prefix }}
+      - uses: actions/cache/restore@v6.1.0
+        id: cc
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.cc-key }}
+          path: ${{ steps.plan.outputs.cc-staging }}
+          restore-keys: ${{ steps.plan.outputs.cc-prefix }}
       - name: Acquire pinned compiler (online)
         shell: bash
         working-directory: .
         env:
-          EMSDK_VERSION: ${{ steps.toolchain-inputs.outputs.emsdk-version }}
-          EMSCRIPTEN_RELEASE: ${{ steps.toolchain-inputs.outputs.emscripten-release }}
+          EMSDK_VERSION: ${{ steps.plan.outputs.emsdk-version }}
+          EMSCRIPTEN_RELEASE: ${{ steps.plan.outputs.emscripten-release }}
         run: |
           if [[ ! -d .tools/emsdk ]]; then
             git clone --depth 1 --branch "$EMSDK_VERSION" \
@@ -525,15 +472,22 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
       - name: Acquire pinned Dawn archive (online on cache miss)
-        shell: bash
-        working-directory: .
         env:
-          DAWN_TAG: ${{ steps.toolchain-inputs.outputs.dawn-tag }}
-          DAWN_SHA256: ${{ steps.toolchain-inputs.outputs.dawn-sha256 }}
+          DAWN_TAG: ${{ steps.plan.outputs.dawn-tag }}
+          DAWN_SHA256: ${{ steps.plan.outputs.dawn-sha256 }}
+          REQUESTED: ${{ steps.plan.outputs.dawn-key }}
+          MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
+          RESTORE_OUTCOME: ${{ steps.dawn.outcome }}
+        shell: bash
         run: |
           mkdir -p .tools/downloads
           archive=".tools/downloads/emdawnwebgpu_pkg-${DAWN_TAG}.zip"
-          test ! -L "$archive"
+          restored=".cache/restored/dawn/emdawnwebgpu_pkg-${DAWN_TAG}.zip"
+          if [[ "$RESTORE_OUTCOME" == success && "$MATCHED" == "$REQUESTED" && -f "$restored" && ! -L "$restored" ]]; then
+            if printf '%s  %s\n' "$DAWN_SHA256" "$restored" | sha256sum --check -; then
+              cp "$restored" "$archive"
+            fi
+          fi
           if [[ ! -f "$archive" ]]; then
             temporary="$(mktemp .tools/downloads/dawn-download.XXXXXX)"
             trap 'rm -f "$temporary"' EXIT
@@ -544,485 +498,161 @@ jobs:
             mv "$temporary" "$archive"
             trap - EXIT
           fi
-      - name: Verify and prepare local compiler inputs (no downloads)
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics run --phase sdk.prepare -- python3 -m build_tools.toolchain.prepare
-          BICORE_OFFLINE
-      - name: Park the clean SDK cache before any restore can overwrite it
-        shell: bash
-        working-directory: .
+      - name: Prepare, build and stage the selected runtime
         env:
-          REQUESTED: ${{ steps.plan.outputs.em-key }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission park-em --requested "$REQUESTED"
-          python3 -m build_tools.toolchain.admission clear-cc --path "$CC_PATH"
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: em
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.em-path }}
-          key: ${{ steps.plan.outputs.em-key }}
-      - name: Admit em cache or recover clean inputs
-        id: admit-em
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.em-key }}
-          MATCHED: ${{ steps.em.outputs.cache-matched-key }}
-          HIT: ${{ steps.em.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.em.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind em --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: cc
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.cc-path }}
-          key: ${{ steps.plan.outputs.cc-key }}
-          # Only source snapshots within this exact compiler/runtime/profile/variant.
-          restore-keys: ${{ steps.plan.outputs.cc-prefix }}
-      - name: Admit cc cache or recover clean inputs
-        id: admit-cc
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.cc-key }}
-          MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
-          HIT: ${{ steps.cc.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.cc.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind cc --path "$CC_PATH" --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      - name: Reset counters (not cached objects)
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          ccache --zero-stats
-          BICORE_OFFLINE
-      - name: Observe requested and restored cache identities
-        if: always()
-        continue-on-error: true
-        shell: bash
-        working-directory: .
-        env:
-          DAWN_REQUESTED: ${{ steps.plan.outputs.dawn-key }}
           DAWN_MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
           DAWN_HIT: ${{ steps.dawn.outputs.cache-hit }}
           DAWN_OUTCOME: ${{ steps.dawn.outcome }}
-          EM_REQUESTED: ${{ steps.plan.outputs.em-key }}
           EM_MATCHED: ${{ steps.em.outputs.cache-matched-key }}
           EM_HIT: ${{ steps.em.outputs.cache-hit }}
           EM_OUTCOME: ${{ steps.em.outcome }}
-          CC_REQUESTED: ${{ steps.plan.outputs.cc-key }}
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_ELIGIBLE: ${{ env.BIC_CACHE_MODE != 'cold' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.actor != 'dependabot[bot]' }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e DAWN_REQUESTED -e DAWN_MATCHED -e DAWN_HIT -e DAWN_OUTCOME -e EM_REQUESTED \
-            -e EM_MATCHED -e EM_HIT -e EM_OUTCOME -e CC_REQUESTED -e CC_MATCHED \
-            -e CC_HIT -e CC_OUTCOME -e SAVE_ELIGIBLE \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics cache --kind dawn --requested "$DAWN_REQUESTED" --matched "$DAWN_MATCHED" --hit "$DAWN_HIT" --outcome "$DAWN_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          python3 -m build_tools.metrics cache --kind em --requested "$EM_REQUESTED" --matched "$EM_MATCHED" --hit "$EM_HIT" --outcome "$EM_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          python3 -m build_tools.metrics cache --kind cc --requested "$CC_REQUESTED" --matched "$CC_MATCHED" --hit "$CC_HIT" --outcome "$CC_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          BICORE_OFFLINE
-      - name: Build profile
+          SAVE_CACHES: ${{ success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
-        env:
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PROFILE -e VARIANT \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e EM_MATCHED -e EM_OUTCOME \
+            -e CC_MATCHED -e CC_OUTCOME -e SAVE_CACHES -e DAWN_MATCHED -e DAWN_HIT \
+            -e DAWN_OUTCOME -e EM_HIT -e CC_HIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
+          if [[ "$BIC_METRICS_MODE" == basic ]]; then
+            node build/tooling/tools/ci/cli.js cache --kind dawn --requested "$(jq -r .dawnKey build/cache-plan.json)" \
+              --matched "$DAWN_MATCHED" --hit "$DAWN_HIT" --outcome "$DAWN_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+            node build/tooling/tools/ci/cli.js cache --kind em --requested "$(jq -r .emKey build/cache-plan.json)" \
+              --matched "$EM_MATCHED" --hit "$EM_HIT" --outcome "$EM_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+            node build/tooling/tools/ci/cli.js cache --kind cc --requested "$(jq -r .ccKey build/cache-plan.json)" \
+              --matched "$CC_MATCHED" --hit "$CC_HIT" --outcome "$CC_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+          fi
+          node build/tooling/tools/toolchain/cli.js prepare \
+            --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools"
+          node --input-type=module <<'ADOPT_CACHES'
+          import { lstat, mkdir, readFile, rename, rm } from 'node:fs/promises';
+          import { dirname } from 'node:path';
+          import { cacheRestoreDecision } from './build/tooling/tools/toolchain/cache.js';
+          const plan = JSON.parse(await readFile('build/cache-plan.json', 'utf8'));
+          for (const [kind, requestedKey, staging, destination, restorePrefix] of [
+            ['EM', plan.emKey, plan.emStagingPath, plan.emCachePath, plan.emRestorePrefix],
+            ['CC', plan.ccKey, plan.ccStagingPath, plan.ccCachePath, plan.ccRestorePrefix],
+          ]) {
+            const matchedKey = process.env[`${kind}_MATCHED`] || undefined;
+            const outcome = process.env[`${kind}_OUTCOME`] === 'success' ? 'success' : 'failure';
+            const directory = await lstat(staging).catch(error => {
+              if (error.code === 'ENOENT') return undefined;
+              throw error;
+            });
+            if (directory?.isDirectory() && cacheRestoreDecision({ requestedKey, matchedKey, outcome, restorePrefix }) === 'accept') {
+              await rm(destination, { recursive: true, force: true });
+              await mkdir(dirname(destination), { recursive: true });
+              await rename(staging, destination);
+            } else {
+              await rm(staging, { recursive: true, force: true });
+            }
+          }
+          ADOPT_CACHES
           planned_em_cache="$EM_CACHE"
-          source ../../.tools/emsdk/emsdk_env.sh
-          # SDK activation can unset EM_CACHE; reapply the plan afterwards.
+          source .tools/emsdk/emsdk_env.sh
+          # SDK activation can unset EM_CACHE; restore the typed plan afterwards.
           export EM_CACHE="$planned_em_cache"
-          python3 -m build_tools.metrics environment
-          python3 -m build_tools.metrics run --phase build.total -- python3 -m build_tools.runtimes.llama_cpp.build --fresh --profile "$PROFILE" --variant "$VARIANT"
-          BICORE_OFFLINE
-      - name: Stage package inputs
-        shell: bash
-        env:
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PROFILE -e VARIANT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
+          ccache --zero-stats
           extra=()
-          if [[ "$PROFILE" == "webgpu-wasm64-jspi" && "$VARIANT" == "browser" ]]; then
+          if [[ "$BIC_METRICS_PROFILE" == "webgpu-wasm64-jspi" && "$BIC_METRICS_VARIANT" == browser ]]; then
             extra+=(--include-toolchain-notices)
           fi
-          python3 -m build_tools.metrics run --phase build.stage_upload -- python3 -m build_tools.runtimes.llama_cpp.staging --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+          node build/tooling/runtimes/llama-cpp/tools/cli.js build \
+            --checkout-root "$GITHUB_WORKSPACE" --tooling-root "$GITHUB_WORKSPACE/build/tooling" \
+            --output-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
+            --expected-commit "$LCB_SOURCE_COMMIT" --kind wasm --fresh \
+            --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" --jobs 4 "${extra[@]}"
+          if [[ "$BIC_METRICS_PROFILE" == cpu-wasm32 && "$BIC_METRICS_VARIANT" == browser ]]; then
+            BICORE_EMSDK_ROOT="$GITHUB_WORKSPACE/.tools/emsdk" BICORE_EMSDK_NODE="$EMSDK_NODE" \
+              EM_CONFIG="$GITHUB_WORKSPACE/.tools/emsdk/.emscripten" \
+              node --test build/tooling/tests/tools/abi/wasm.test.js
+          fi
+          if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
+            BICORE_LLAMA_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/llama-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \
+              node --test build/tooling/tests/tools/abi/current-api.test.js
+          fi
+          ccache --show-stats
+          if [[ "$SAVE_CACHES" == true ]]; then
+            node --input-type=module <<'STAGE_CACHES'
+          import { cp, mkdir, readFile, rename, rm } from 'node:fs/promises';
+          import { dirname } from 'node:path';
+          const plan = JSON.parse(await readFile('build/cache-plan.json', 'utf8'));
+          for (const [source, destination] of [[plan.emCachePath, plan.emStagingPath], [plan.ccCachePath, plan.ccStagingPath]]) {
+            await rm(destination, { recursive: true, force: true });
+            await mkdir(dirname(destination), { recursive: true });
+            await rename(source, destination);
+          }
+          await rm('.cache/restored/dawn', { recursive: true, force: true });
+          await cp('.tools/downloads', '.cache/restored/dawn', { recursive: true });
+          STAGE_CACHES
+          fi
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: profile-build-${{ matrix.profile }}-${{ matrix.variant }}
-          path: runtimes/llama-cpp/build/ci-upload/
+          path: |
+            build/runtimes/llama-cpp/stage/
+            build/runtimes/llama-cpp/toolchain-licenses/
           if-no-files-found: error
-          # The staging script copies runtime/API/provenance and license files only.
           include-hidden-files: true
           compression-level: 1
           retention-days: 14
-      - name: Compiler cache statistics
-        if: always() && steps.admit-cc.outcome == 'success'
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          ccache --show-stats
-          BICORE_OFFLINE
-      - name: Check live dawn cache before saving
-        id: check-dawn
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-dawn.outputs.save-allowed == 'true' && steps.admit-dawn.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.dawn-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind dawn --path "$CACHE_PATH"
-          BICORE_OFFLINE
       - uses: actions/cache/save@v6.1.0
         id: save-dawn
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-dawn.outputs.save-allowed == 'true' && steps.admit-dawn.outputs.hit != 'true' && steps.check-dawn.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.dawn-path }}
           key: ${{ steps.plan.outputs.dawn-key }}
-      - name: Check live em cache before saving
-        id: check-em
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-em.outputs.save-allowed == 'true' && steps.admit-em.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.em-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind em --path "$CACHE_PATH"
-          BICORE_OFFLINE
+          path: .cache/restored/dawn
       - uses: actions/cache/save@v6.1.0
         id: save-em
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-em.outputs.save-allowed == 'true' && steps.admit-em.outputs.hit != 'true' && steps.check-em.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.em-path }}
           key: ${{ steps.plan.outputs.em-key }}
-      - name: Check live cc cache before saving
-        id: check-cc
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-cc.outputs.save-allowed == 'true' && steps.admit-cc.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind cc --path "$CACHE_PATH"
-          BICORE_OFFLINE
+          path: ${{ steps.plan.outputs.em-staging }}
       - uses: actions/cache/save@v6.1.0
         id: save-cc
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-cc.outputs.save-allowed == 'true' && steps.admit-cc.outputs.hit != 'true' && steps.check-cc.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.cc-path }}
           key: ${{ steps.plan.outputs.cc-key }}
-      - name: Observe cache save outcomes (not just eligibility)
-        if: always()
-        continue-on-error: true
-        shell: bash
-        working-directory: .
-        env:
-          DAWN_SAVE: ${{ steps.save-dawn.outcome }}
-          EM_SAVE: ${{ steps.save-em.outcome }}
-          CC_SAVE: ${{ steps.save-cc.outcome }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e DAWN_SAVE -e EM_SAVE -e CC_SAVE \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics cache-save --kind dawn --outcome "$DAWN_SAVE"
-          python3 -m build_tools.metrics cache-save --kind em --outcome "$EM_SAVE"
-          python3 -m build_tools.metrics cache-save --kind cc --outcome "$CC_SAVE"
-          BICORE_OFFLINE
-      - name: Report source changes after a failure
-        if: failure()
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          git status --short --untracked-files=all --ignore-submodules=none
-          git diff --stat
-          git diff --cached --stat
-          git submodule foreach --recursive 'git status --short --untracked-files=all --ignore-submodules=none'
-          BICORE_OFFLINE
-      - name: Observe Ninja output intervals
-        if: always() && env.BIC_METRICS_MODE == 'basic'
-        continue-on-error: true
-        env:
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PROFILE -e VARIANT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --ninja "build/$PROFILE/$VARIANT/.ninja_log"
-          BICORE_OFFLINE
+          path: ${{ steps.plan.outputs.cc-staging }}
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js cache-save --kind dawn --outcome "${{ steps.save-dawn.outcome }}"
+          node build/tooling/tools/ci/cli.js cache-save --kind em --outcome "${{ steps.save-em.outcome }}"
+          node build/tooling/tools/ci/cli.js cache-save --kind cc --outcome "${{ steps.save-cc.outcome }}"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics" --ninja "build/runtimes/llama-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/.ninja_log"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -1059,7 +689,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -1083,105 +713,111 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit the checked-out tools and verify source identity
+        shell: bash
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
+          BICORE_OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
           pattern: profile-build-*
-          path: runtimes/llama-cpp/build/
-          # Every shard owns one profile/variant pair; only wasm64 WebGPU JSPI/browser supplies notices.
+          path: build/runtimes/llama-cpp/
           merge-multiple: true
       - name: Assemble runtime-only package
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.runtimes.llama_cpp.package --defer-npm-pack \
-            --license-root vendor/llama.cpp \
-            --license-root build/toolchain-licenses/emscripten \
-            --license-root build/toolchain-licenses/emdawnwebgpu_pkg
+          node build/tooling/tools/cli.js package runtime --runtime llama-cpp \
+            --checkout-root "$GITHUB_WORKSPACE" --build-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp/stage" \
+            --output "$GITHUB_WORKSPACE/build/runtime-packages/llama-cpp" --defer-npm-pack \
+            --license-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp/toolchain-licenses/emscripten" \
+            --license-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp/toolchain-licenses/emdawnwebgpu_pkg" \
+            --license-root "$GITHUB_WORKSPACE/runtimes/llama-cpp/vendor/llama.cpp"
           BICORE_OFFLINE
-      - name: Install browser test harness
-        run: npm install --prefix ../../.tools/browser --no-save --package-lock=false playwright@1.58.2
-      - name: Prepare Chromium and OS dependencies
-        run: PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" ../../.tools/browser/node_modules/.bin/playwright install chromium
+      - name: Install browser test harness (online)
+        shell: bash
+        run: |
+          npm install --prefix .tools/browser --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
+      - name: Prepare Chromium (online)
+        shell: bash
+        run: |
+          PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" .tools/browser/node_modules/.bin/playwright install chromium
       - name: Test and finalize the same runtime snapshot
-        # Includes all existing Node/Chromium checks, clean-source verification,
-        # complete payload hashes and exactly one final npm pack (also on fork PRs).
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.validation.runtime --runtime llama-cpp --package dist/package
+          node build/tooling/tools/cli.js validation runtime --runtime llama-cpp \
+            --checkout-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/build/runtime-packages/llama-cpp" \
+            --receipt "$GITHUB_WORKSPACE/build/runtime-validation/llama-cpp.json"
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: llama-runtime-package
-          path: runtimes/llama-cpp/dist/package/
+          path: build/runtime-packages/llama-cpp/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
-      - name: Report source changes after a failure
-        if: failure()
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          git status --short --untracked-files=all --ignore-submodules=none
-          git diff --stat
-          git diff --cached --stat
-          git submodule foreach --recursive 'git status --short --untracked-files=all --ignore-submodules=none'
-          BICORE_OFFLINE
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -1199,9 +835,6 @@ jobs:
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: runtimes/stable-diffusion-cpp
     env:
       BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
@@ -1222,7 +855,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -1246,69 +879,82 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - name: Test exact patch preparation and host code
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Acquire pinned Dawn headers for native contracts (online)
+        shell: bash
+        run: |
+          tag="$(jq -er '.dawnTag | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*$"))' toolchain/config.json)"
+          checksum="$(jq -er '.dawnSha256 | select(test("^[a-f0-9]{64}$"))' toolchain/config.json)"
+          mkdir -p .tools/downloads
+          archive=".tools/downloads/emdawnwebgpu_pkg-${tag}.zip"
+          curl --fail --location --retry 3 --proto '=https' --proto-redir '=https' \
+            "https://github.com/google/dawn/releases/download/${tag}/emdawnwebgpu_pkg-${tag}.zip" \
+            --output "$archive"
+          printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check -
+      - name: Emit the checked-out tools and verify source identity
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics run --phase test.image_python -- env BIC_METRICS_MODE=off python3 -m unittest discover -s ../../tests/runtimes/stable_diffusion_cpp -t ../.. -p 'test_*.py'
-          python3 -m build_tools.metrics run --phase test.image_node -- node --test ../../tests/runtimes/stable_diffusion_cpp/*.test.mjs
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
           BICORE_OFFLINE
-      - name: Native bridge and actual patched normalization tests
+      - name: Test image tooling, host and current native contracts
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          (cd "$GITHUB_WORKSPACE" && python3 -m build_tools.metrics run --phase native.prepare -- python3 -m build_tools.runtimes.stable_diffusion_cpp.source --output runtimes/stable-diffusion-cpp/build/native-src)
-          python3 -m build_tools.metrics run --phase native.configure -- cmake -S . -B build/native -G Ninja \
-            -DSDCB_NATIVE_CHECK=ON -DSDCB_PROVENANCE="$PWD/build/native-src/patch-provenance.json" -DCMAKE_BUILD_TYPE=Release \
-            '-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG' \
-            -DSDCB_SOURCE="$PWD/build/native-src/stable-diffusion" \
-            -DSDCB_GGML_SOURCE="$PWD/build/native-src/ggml/ggml"
-          python3 -m build_tools.metrics run --phase native.build -- cmake --build build/native --parallel 2
-          python3 -m build_tools.metrics run --phase native.test -- ctest --test-dir build/native --output-on-failure
+          node build/tooling/tools/cli.js toolchain prepare \
+            --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
+              shopt -s globstar
+          BIC_METRICS_MODE=off node --test build/tooling/tests/runtimes/stable-diffusion-cpp/tools/**/*.test.js
+          node --test tests/runtimes/stable_diffusion_cpp/*.test.mjs
+          node --test build/tooling/tests/runtimes/stable-diffusion-cpp/native-validation.test.js
           BICORE_OFFLINE
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -1327,9 +973,6 @@ jobs:
     name: Image ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    defaults:
-      run:
-        working-directory: runtimes/stable-diffusion-cpp
     strategy:
       fail-fast: false
       matrix:
@@ -1362,7 +1005,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -1386,109 +1029,37 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - name: Plan cache partitions and regenerate ccache policy
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit tools and plan cache partitions
         id: plan
         shell: bash
-        working-directory: .
-        env:
-          RUNTIME: stable-diffusion-cpp
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e RUNTIME -e PROFILE -e VARIANT \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.cache --runtime "$RUNTIME" --profile "$PROFILE" --variant "$VARIANT"
-          BICORE_OFFLINE
-      - name: Empty the single download restore target
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission clear-dawn
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: dawn
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.dawn-path }}
-          key: ${{ steps.plan.outputs.dawn-key }}
-      - name: Admit dawn cache or recover clean inputs
-        id: admit-dawn
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.dawn-key }}
-          MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
-          HIT: ${{ steps.dawn.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.dawn.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind dawn --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      # Acquisition is intentionally inline: remote hosts and commands remain auditable.
-      - name: Read pinned acquisition settings
-        id: toolchain-inputs
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          node node_modules/typescript/bin/tsc --project tsconfig.stable-diffusion-cpp.json
+          node build/tooling/runtimes/stable-diffusion-cpp/tools/cli.js cache-plan \
+            --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
+            --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \
+            --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1)" \
+            --environment "$BIC_OFFLINE_ENVIRONMENT" --os "$RUNNER_OS" --arch "$RUNNER_ARCH" \
+            --output "$GITHUB_WORKSPACE/build/cache-plan.json"
+          jq -r '"dawn-key=\(.dawnKey)\nem-key=\(.emKey)\nem-prefix=\(.emRestorePrefix)\ncc-key=\(.ccKey)\ncc-prefix=\(.ccRestorePrefix)\nem-staging=\(.emStagingPath)\ncc-staging=\(.ccStagingPath)"' build/cache-plan.json >> "$GITHUB_OUTPUT"
+          jq -r '.environment | to_entries[] | "\(.key)=\(.value)"' build/cache-plan.json >> "$GITHUB_ENV"
           jq -er '
             if (.emsdkVersion | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
                (.emscriptenRelease | test("^[0-9a-f]{40}$")) and
@@ -1498,12 +1069,35 @@ jobs:
             else error("Invalid pinned acquisition settings") end
           ' toolchain/config.json >> "$GITHUB_OUTPUT"
           BICORE_OFFLINE
+      - uses: actions/cache/restore@v6.1.0
+        id: dawn
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.dawn-key }}
+          path: .cache/restored/dawn
+      - uses: actions/cache/restore@v6.1.0
+        id: em
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.em-key }}
+          path: ${{ steps.plan.outputs.em-staging }}
+          restore-keys: ${{ steps.plan.outputs.em-prefix }}
+      - uses: actions/cache/restore@v6.1.0
+        id: cc
+        if: env.BIC_CACHE_MODE != 'cold'
+        continue-on-error: true
+        with:
+          key: ${{ steps.plan.outputs.cc-key }}
+          path: ${{ steps.plan.outputs.cc-staging }}
+          restore-keys: ${{ steps.plan.outputs.cc-prefix }}
       - name: Acquire pinned compiler (online)
         shell: bash
         working-directory: .
         env:
-          EMSDK_VERSION: ${{ steps.toolchain-inputs.outputs.emsdk-version }}
-          EMSCRIPTEN_RELEASE: ${{ steps.toolchain-inputs.outputs.emscripten-release }}
+          EMSDK_VERSION: ${{ steps.plan.outputs.emsdk-version }}
+          EMSCRIPTEN_RELEASE: ${{ steps.plan.outputs.emscripten-release }}
         run: |
           if [[ ! -d .tools/emsdk ]]; then
             git clone --depth 1 --branch "$EMSDK_VERSION" \
@@ -1515,15 +1109,22 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
       - name: Acquire pinned Dawn archive (online on cache miss)
-        shell: bash
-        working-directory: .
         env:
-          DAWN_TAG: ${{ steps.toolchain-inputs.outputs.dawn-tag }}
-          DAWN_SHA256: ${{ steps.toolchain-inputs.outputs.dawn-sha256 }}
+          DAWN_TAG: ${{ steps.plan.outputs.dawn-tag }}
+          DAWN_SHA256: ${{ steps.plan.outputs.dawn-sha256 }}
+          REQUESTED: ${{ steps.plan.outputs.dawn-key }}
+          MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
+          RESTORE_OUTCOME: ${{ steps.dawn.outcome }}
+        shell: bash
         run: |
           mkdir -p .tools/downloads
           archive=".tools/downloads/emdawnwebgpu_pkg-${DAWN_TAG}.zip"
-          test ! -L "$archive"
+          restored=".cache/restored/dawn/emdawnwebgpu_pkg-${DAWN_TAG}.zip"
+          if [[ "$RESTORE_OUTCOME" == success && "$MATCHED" == "$REQUESTED" && -f "$restored" && ! -L "$restored" ]]; then
+            if printf '%s  %s\n' "$DAWN_SHA256" "$restored" | sha256sum --check -; then
+              cp "$restored" "$archive"
+            fi
+          fi
           if [[ ! -f "$archive" ]]; then
             temporary="$(mktemp .tools/downloads/dawn-download.XXXXXX)"
             trap 'rm -f "$temporary"' EXIT
@@ -1534,439 +1135,156 @@ jobs:
             mv "$temporary" "$archive"
             trap - EXIT
           fi
-      - name: Verify and prepare local compiler inputs (no downloads)
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics run --phase sdk.prepare -- python3 -m build_tools.toolchain.prepare
-          BICORE_OFFLINE
-      - name: Park the clean SDK cache before any restore can overwrite it
-        shell: bash
-        working-directory: .
+      - name: Prepare, build and stage the selected runtime
         env:
-          REQUESTED: ${{ steps.plan.outputs.em-key }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission park-em --requested "$REQUESTED"
-          python3 -m build_tools.toolchain.admission clear-cc --path "$CC_PATH"
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: em
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.em-path }}
-          key: ${{ steps.plan.outputs.em-key }}
-      - name: Admit em cache or recover clean inputs
-        id: admit-em
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.em-key }}
-          MATCHED: ${{ steps.em.outputs.cache-matched-key }}
-          HIT: ${{ steps.em.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.em.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind em --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      - uses: actions/cache/restore@v6.1.0
-        id: cc
-        if: env.BIC_CACHE_MODE != 'cold'
-        continue-on-error: true
-        with:
-          path: ${{ steps.plan.outputs.cc-path }}
-          key: ${{ steps.plan.outputs.cc-key }}
-          # Only source snapshots within this exact compiler/runtime/profile/variant.
-          restore-keys: ${{ steps.plan.outputs.cc-prefix }}
-      - name: Admit cc cache or recover clean inputs
-        id: admit-cc
-        shell: bash
-        working-directory: .
-        env:
-          REQUESTED: ${{ steps.plan.outputs.cc-key }}
-          MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
-          HIT: ${{ steps.cc.outputs.cache-hit }}
-          RESTORE_OUTCOME: ${{ steps.cc.outcome }}
-          CACHE_USE_MODE: ${{ env.BIC_CACHE_MODE }}
-          CC_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e REQUESTED -e MATCHED -e HIT -e RESTORE_OUTCOME -e CACHE_USE_MODE \
-            -e CC_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission finish --kind cc --path "$CC_PATH" --requested "$REQUESTED" --matched "$MATCHED" --hit "$HIT" --outcome "$RESTORE_OUTCOME" --mode "$CACHE_USE_MODE"
-          BICORE_OFFLINE
-      - name: Reset counters (not cached objects)
-        shell: bash
-        working-directory: .
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          ccache --zero-stats
-          BICORE_OFFLINE
-      - name: Observe requested and restored cache identities
-        if: always()
-        continue-on-error: true
-        shell: bash
-        working-directory: .
-        env:
-          DAWN_REQUESTED: ${{ steps.plan.outputs.dawn-key }}
           DAWN_MATCHED: ${{ steps.dawn.outputs.cache-matched-key }}
           DAWN_HIT: ${{ steps.dawn.outputs.cache-hit }}
           DAWN_OUTCOME: ${{ steps.dawn.outcome }}
-          EM_REQUESTED: ${{ steps.plan.outputs.em-key }}
           EM_MATCHED: ${{ steps.em.outputs.cache-matched-key }}
           EM_HIT: ${{ steps.em.outputs.cache-hit }}
           EM_OUTCOME: ${{ steps.em.outcome }}
-          CC_REQUESTED: ${{ steps.plan.outputs.cc-key }}
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_ELIGIBLE: ${{ env.BIC_CACHE_MODE != 'cold' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.actor != 'dependabot[bot]' }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e DAWN_REQUESTED -e DAWN_MATCHED -e DAWN_HIT -e DAWN_OUTCOME -e EM_REQUESTED \
-            -e EM_MATCHED -e EM_HIT -e EM_OUTCOME -e CC_REQUESTED -e CC_MATCHED \
-            -e CC_HIT -e CC_OUTCOME -e SAVE_ELIGIBLE \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics cache --kind dawn --requested "$DAWN_REQUESTED" --matched "$DAWN_MATCHED" --hit "$DAWN_HIT" --outcome "$DAWN_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          python3 -m build_tools.metrics cache --kind em --requested "$EM_REQUESTED" --matched "$EM_MATCHED" --hit "$EM_HIT" --outcome "$EM_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          python3 -m build_tools.metrics cache --kind cc --requested "$CC_REQUESTED" --matched "$CC_MATCHED" --hit "$CC_HIT" --outcome "$CC_OUTCOME" --save-eligible "$SAVE_ELIGIBLE"
-          BICORE_OFFLINE
-      - name: Build image profile
-        env:
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
+          SAVE_CACHES: ${{ success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PROFILE -e VARIANT \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e EM_MATCHED -e EM_OUTCOME \
+            -e CC_MATCHED -e CC_OUTCOME -e SAVE_CACHES -e DAWN_MATCHED -e DAWN_HIT \
+            -e DAWN_OUTCOME -e EM_HIT -e CC_HIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
+          if [[ "$BIC_METRICS_MODE" == basic ]]; then
+            node build/tooling/tools/ci/cli.js cache --kind dawn --requested "$(jq -r .dawnKey build/cache-plan.json)" \
+              --matched "$DAWN_MATCHED" --hit "$DAWN_HIT" --outcome "$DAWN_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+            node build/tooling/tools/ci/cli.js cache --kind em --requested "$(jq -r .emKey build/cache-plan.json)" \
+              --matched "$EM_MATCHED" --hit "$EM_HIT" --outcome "$EM_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+            node build/tooling/tools/ci/cli.js cache --kind cc --requested "$(jq -r .ccKey build/cache-plan.json)" \
+              --matched "$CC_MATCHED" --hit "$CC_HIT" --outcome "$CC_OUTCOME" --save-eligible "$SAVE_CACHES" || printf '%s\n' '[pipeline-metrics] Optional cache observation unavailable.' >&2
+          fi
+          node build/tooling/tools/toolchain/cli.js prepare \
+            --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools"
+          node --input-type=module <<'ADOPT_CACHES'
+          import { lstat, mkdir, readFile, rename, rm } from 'node:fs/promises';
+          import { dirname } from 'node:path';
+          import { cacheRestoreDecision } from './build/tooling/tools/toolchain/cache.js';
+          const plan = JSON.parse(await readFile('build/cache-plan.json', 'utf8'));
+          for (const [kind, requestedKey, staging, destination, restorePrefix] of [
+            ['EM', plan.emKey, plan.emStagingPath, plan.emCachePath, plan.emRestorePrefix],
+            ['CC', plan.ccKey, plan.ccStagingPath, plan.ccCachePath, plan.ccRestorePrefix],
+          ]) {
+            const matchedKey = process.env[`${kind}_MATCHED`] || undefined;
+            const outcome = process.env[`${kind}_OUTCOME`] === 'success' ? 'success' : 'failure';
+            const directory = await lstat(staging).catch(error => {
+              if (error.code === 'ENOENT') return undefined;
+              throw error;
+            });
+            if (directory?.isDirectory() && cacheRestoreDecision({ requestedKey, matchedKey, outcome, restorePrefix }) === 'accept') {
+              await rm(destination, { recursive: true, force: true });
+              await mkdir(dirname(destination), { recursive: true });
+              await rename(staging, destination);
+            } else {
+              await rm(staging, { recursive: true, force: true });
+            }
+          }
+          ADOPT_CACHES
           planned_em_cache="$EM_CACHE"
-          source ../../.tools/emsdk/emsdk_env.sh
-          # SDK activation can unset EM_CACHE; reapply the plan afterwards.
+          source .tools/emsdk/emsdk_env.sh
+          # SDK activation can unset EM_CACHE; restore the typed plan afterwards.
           export EM_CACHE="$planned_em_cache"
-          python3 -m build_tools.metrics environment
+          ccache --zero-stats
           extra=()
-          if [[ "$PROFILE" == "webgpu-wasm32-jspi" && "$VARIANT" == "browser" ]]; then
+          if [[ "$BIC_METRICS_PROFILE" == "webgpu-wasm32-jspi" && "$BIC_METRICS_VARIANT" == browser ]]; then
             extra+=(--include-toolchain-notices)
           fi
-          python3 -m build_tools.metrics run --phase build.total -- python3 -m build_tools.runtimes.stable_diffusion_cpp.build --fresh --profile "$PROFILE" --variant "$VARIANT" "${extra[@]}"
+          node build/tooling/runtimes/stable-diffusion-cpp/tools/cli.js build \
+            --checkout-root "$GITHUB_WORKSPACE" --tooling-root "$GITHUB_WORKSPACE/build/tooling" \
+            --output-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
+            --expected-commit "$LCB_SOURCE_COMMIT" --kind wasm --fresh \
+            --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" --jobs 4 "${extra[@]}"
+          if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
+            BICORE_SD_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \
+              node --test build/tooling/tests/tools/abi/current-api.test.js
+          fi
+          ccache --show-stats
+          if [[ "$SAVE_CACHES" == true ]]; then
+            node --input-type=module <<'STAGE_CACHES'
+          import { cp, mkdir, readFile, rename, rm } from 'node:fs/promises';
+          import { dirname } from 'node:path';
+          const plan = JSON.parse(await readFile('build/cache-plan.json', 'utf8'));
+          for (const [source, destination] of [[plan.emCachePath, plan.emStagingPath], [plan.ccCachePath, plan.ccStagingPath]]) {
+            await rm(destination, { recursive: true, force: true });
+            await mkdir(dirname(destination), { recursive: true });
+            await rename(source, destination);
+          }
+          await rm('.cache/restored/dawn', { recursive: true, force: true });
+          await cp('.tools/downloads', '.cache/restored/dawn', { recursive: true });
+          STAGE_CACHES
+          fi
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: image-build-${{ matrix.profile }}-${{ matrix.variant }}
-          path: runtimes/stable-diffusion-cpp/build/ci-upload/
+          path: |
+            build/runtimes/stable-diffusion-cpp/stage/
+            build/runtimes/stable-diffusion-cpp/toolchain-licenses/
           if-no-files-found: error
           include-hidden-files: true
           compression-level: 1
           retention-days: 14
-      - name: Compiler cache statistics
-        if: always() && steps.admit-cc.outcome == 'success'
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          ccache --show-stats
-          BICORE_OFFLINE
-      - name: Check live dawn cache before saving
-        id: check-dawn
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-dawn.outputs.save-allowed == 'true' && steps.admit-dawn.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.dawn-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind dawn --path "$CACHE_PATH"
-          BICORE_OFFLINE
       - uses: actions/cache/save@v6.1.0
         id: save-dawn
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-dawn.outputs.save-allowed == 'true' && steps.admit-dawn.outputs.hit != 'true' && steps.check-dawn.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.dawn-path }}
           key: ${{ steps.plan.outputs.dawn-key }}
-      - name: Check live em cache before saving
-        id: check-em
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-em.outputs.save-allowed == 'true' && steps.admit-em.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.em-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind em --path "$CACHE_PATH"
-          BICORE_OFFLINE
+          path: .cache/restored/dawn
       - uses: actions/cache/save@v6.1.0
         id: save-em
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-em.outputs.save-allowed == 'true' && steps.admit-em.outputs.hit != 'true' && steps.check-em.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.em-path }}
           key: ${{ steps.plan.outputs.em-key }}
-      - name: Check live cc cache before saving
-        id: check-cc
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-cc.outputs.save-allowed == 'true' && steps.admit-cc.outputs.hit != 'true'
-        shell: bash
-        working-directory: .
-        env:
-          CACHE_PATH: ${{ steps.plan.outputs.cc-path }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e CACHE_PATH \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.toolchain.admission check-save --kind cc --path "$CACHE_PATH"
-          BICORE_OFFLINE
+          path: ${{ steps.plan.outputs.em-staging }}
       - uses: actions/cache/save@v6.1.0
         id: save-cc
-        if: >-
-          success() && github.event_name == 'push' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' &&
-          steps.admit-cc.outputs.save-allowed == 'true' && steps.admit-cc.outputs.hit != 'true' && steps.check-cc.outputs.allowed == 'true'
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
-          path: ${{ steps.plan.outputs.cc-path }}
           key: ${{ steps.plan.outputs.cc-key }}
-      - name: Observe cache save outcomes (not just eligibility)
-        if: always()
-        continue-on-error: true
-        shell: bash
-        working-directory: .
-        env:
-          DAWN_SAVE: ${{ steps.save-dawn.outcome }}
-          EM_SAVE: ${{ steps.save-em.outcome }}
-          CC_SAVE: ${{ steps.save-cc.outcome }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e DAWN_SAVE -e EM_SAVE -e CC_SAVE \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics cache-save --kind dawn --outcome "$DAWN_SAVE"
-          python3 -m build_tools.metrics cache-save --kind em --outcome "$EM_SAVE"
-          python3 -m build_tools.metrics cache-save --kind cc --outcome "$CC_SAVE"
-          BICORE_OFFLINE
-      - name: Observe Ninja output intervals
-        if: always() && env.BIC_METRICS_MODE == 'basic'
-        continue-on-error: true
-        env:
-          PROFILE: ${{ matrix.profile }}
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PROFILE -e VARIANT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --ninja "build/$PROFILE/$VARIANT/.ninja_log"
-          BICORE_OFFLINE
+          path: ${{ steps.plan.outputs.cc-staging }}
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js cache-save --kind dawn --outcome "${{ steps.save-dawn.outcome }}"
+          node build/tooling/tools/ci/cli.js cache-save --kind em --outcome "${{ steps.save-em.outcome }}"
+          node build/tooling/tools/ci/cli.js cache-save --kind cc --outcome "${{ steps.save-cc.outcome }}"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics" --ninja "build/runtimes/stable-diffusion-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/.ninja_log"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -1983,9 +1301,6 @@ jobs:
     needs: [image-native, image-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: runtimes/stable-diffusion-cpp
     env:
       BIC_METRICS_RUNTIME: stable-diffusion-cpp
     steps:
@@ -2006,7 +1321,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -2030,81 +1345,110 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit the checked-out tools and verify source identity
+        shell: bash
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
+          BICORE_OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
           pattern: image-build-*
-          path: runtimes/stable-diffusion-cpp/build/
+          path: build/runtimes/stable-diffusion-cpp/
           merge-multiple: true
-      - name: Package image runtime
+      - name: Assemble runtime-only package
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.runtimes.stable_diffusion_cpp.package --defer-npm-pack \
-            --license-root build/toolchain-licenses/emscripten \
-            --license-root build/toolchain-licenses/emdawnwebgpu_pkg
+          node build/tooling/tools/cli.js package runtime --runtime stable-diffusion-cpp \
+            --checkout-root "$GITHUB_WORKSPACE" --build-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/stage" \
+            --output "$GITHUB_WORKSPACE/build/runtime-packages/stable-diffusion-cpp" --defer-npm-pack \
+            --license-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/toolchain-licenses/emscripten" \
+            --license-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/toolchain-licenses/emdawnwebgpu_pkg"
           BICORE_OFFLINE
-      - name: Install browser test harness
-        run: npm install --prefix ../../.tools/browser --no-save --package-lock=false playwright@1.58.2
-      - name: Prepare Chromium and OS dependencies
-        run: PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" ../../.tools/browser/node_modules/.bin/playwright install chromium
+      - name: Install browser test harness (online)
+        shell: bash
+        run: |
+          npm install --prefix .tools/browser --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
+      - name: Prepare Chromium (online)
+        shell: bash
+        run: |
+          PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" .tools/browser/node_modules/.bin/playwright install chromium
       - name: Test and finalize the same runtime snapshot
-        # Includes all existing Node/Chromium checks, clean-source verification,
-        # complete payload hashes and exactly one final npm pack (also on fork PRs).
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.validation.runtime --runtime stable-diffusion-cpp --package dist/package
+          node build/tooling/tools/cli.js validation runtime --runtime stable-diffusion-cpp \
+            --checkout-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/build/runtime-packages/stable-diffusion-cpp" \
+            --receipt "$GITHUB_WORKSPACE/build/runtime-validation/stable-diffusion-cpp.json"
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: image-runtime-package
-          path: runtimes/stable-diffusion-cpp/dist/package/
+          path: build/runtime-packages/stable-diffusion-cpp/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
@@ -2118,9 +1462,6 @@ jobs:
           retention-days: 14
   publish:
     needs: [build, image-build]
-    defaults:
-      run:
-        working-directory: .
     # Ordinary same-repository PR heads have the same publication trust as
     # source pushes. Fork PRs and Dependabot runs never receive write credentials.
     if: >-
@@ -2151,7 +1492,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq \
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
               libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
               libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
@@ -2169,11 +1510,34 @@ jobs:
             bash -euo pipefail -c 'dpkg-query -W; node --version; npm --version; python3 --version' >> "$image_context/environment"
           fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
           printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
-      - name: Check out the upstream needed for consumer provenance
-        run: git submodule update --init --checkout --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
+      - name: Check out the pinned upstreams used by source verification
+        run: git submodule update --init --checkout --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
+      - name: Acquire locked development dependencies (online)
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emit the checked-out tools and verify source identity
+        shell: bash
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
+            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME"
+          test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
+          npm run tooling:build
+          BICORE_OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
           name: llama-runtime-package
@@ -2182,72 +1546,30 @@ jobs:
         with:
           name: image-runtime-package
           path: build/package-inputs/stable-diffusion-cpp/
-      - name: Assemble both source-bound runtimes
-        # All payload/provenance checks still run. The publisher checks actual
-        # npm pack output for both runtimes and the root before any push.
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 -m build_tools.packaging.assemble --defer-npm-pack
-          BICORE_OFFLINE
-      - name: Verify package source before publication
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-          python3 - <<'PYVERIFY'
-          import json, os
-          from pathlib import Path
-          source = json.loads(Path('dist/package/manifest.json').read_text())['sourceCommit']
-          if source != os.environ['LCB_SOURCE_COMMIT']:
-              raise SystemExit('Runtime package does not match the selected source commit; publication is blocked.')
-          PYVERIFY
-          BICORE_OFFLINE
-      - name: Freeze the validated publication tree
+      - name: Assemble and freeze the source-bound publication tree
         id: freeze
         shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-
-          python3 -m build_tools.publication.artifacts freeze --package dist/package \
-            --work build/publication/package --receipt build/publication/frozen.json --source "$LCB_SOURCE_COMMIT" \
-            --source-repo "$GITHUB_WORKSPACE"
+          node build/tooling/tools/cli.js package assemble --checkout-root "$GITHUB_WORKSPACE" \
+            --inputs "$GITHUB_WORKSPACE/build/package-inputs" --output "$GITHUB_WORKSPACE/dist/package" --defer-npm-pack
+          node build/tooling/tools/cli.js publication freeze --checkout-root "$GITHUB_WORKSPACE" \
+            --directory "$GITHUB_WORKSPACE/dist/package" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
+            --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --branch artifacts \
+            --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3
+          jq -r '"tree=\(.tree)\nsource-commit=\(.sourceCommit)"' build/publication/frozen.json >> "$GITHUB_OUTPUT"
           BICORE_OFFLINE
       - name: Publish append-only artifact commit
         id: publish
@@ -2320,55 +1642,29 @@ jobs:
           done
           echo 'Publication conflicted repeatedly; rerun this job. No history was overwritten.' >&2
           exit 1
-      - name: Confirm the published commit and manifest
-        id: confirmed
-        shell: bash
+      - name: Confirm publication and prepare a fresh npm fixture
         env:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e ARTIFACT_COMMIT \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.publication.artifacts confirm --work build/publication/package \
-            --receipt build/publication/frozen.json --commit "$ARTIFACT_COMMIT" --source-repo "$GITHUB_WORKSPACE"
-          BICORE_OFFLINE
-      - name: Prepare a fresh npm resolution fixture
         shell: bash
-        env:
-          ARTIFACT_COMMIT: ${{ steps.confirmed.outputs.commit }}
-          PUBLISHED_MANIFEST_SHA256: ${{ steps.confirmed.outputs.manifest-sha256 }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e ARTIFACT_COMMIT -e PUBLISHED_MANIFEST_SHA256 \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e ARTIFACT_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-
-          python3 -m build_tools.publication.npm_lock prepare --package dist/package --commit "$ARTIFACT_COMMIT" \
-            --published-manifest-sha256 "$PUBLISHED_MANIFEST_SHA256" --directory build/consumer-lock
+          node build/tooling/tools/cli.js publication confirm --work-root "$GITHUB_WORKSPACE/build/publication/package" \
+            --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT"
+          version="$(jq -er '.report.data.package.version' build/publication/frozen.json)"
+          node build/tooling/tools/cli.js publication npm-fixture --directory "$GITHUB_WORKSPACE/build/consumer-lock" \
+            --repository "$GITHUB_REPOSITORY" --commit "$ARTIFACT_COMMIT" --version "$version"
           BICORE_OFFLINE
       - name: Resolve the published npm dependency (online)
         shell: bash
@@ -2380,30 +1676,29 @@ jobs:
           export NPM_CONFIG_CACHE="$PWD/cache" NPM_CONFIG_USERCONFIG="$PWD/empty.npmrc"
           export NPM_CONFIG_GLOBALCONFIG="$PWD/empty-global.npmrc" GIT_TERMINAL_PROMPT=0
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3
-      - name: Generate npm lock and consumer integration metadata
-        shell: bash
+      - name: Generate consumer integration metadata from the confirmed receipt
         env:
-          ARTIFACT_COMMIT: ${{ steps.confirmed.outputs.commit }}
-          PUBLISHED_MANIFEST_SHA256: ${{ steps.confirmed.outputs.manifest-sha256 }}
+          ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e ARTIFACT_COMMIT -e PUBLISHED_MANIFEST_SHA256 \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e ARTIFACT_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-
-          python3 -m build_tools.publication.consumer --package dist/package --commit "$ARTIFACT_COMMIT" \
-            --lock-directory build/consumer-lock --published-manifest-sha256 "$PUBLISHED_MANIFEST_SHA256"
+          node build/tooling/tools/cli.js publication report --work-root "$GITHUB_WORKSPACE/build/publication/package" \
+            --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --repository "$GITHUB_REPOSITORY" --npm-fixture "$GITHUB_WORKSPACE/build/consumer-lock" \
+            --output "$GITHUB_WORKSPACE/build/consumer-update"
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -2415,20 +1710,19 @@ jobs:
         if: failure() && steps.publish.outputs.commit != ''
         env:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e ARTIFACT_COMMIT \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e ARTIFACT_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
           echo "Runtime artifact $ARTIFACT_COMMIT is already published; consumer reporting failed." >> "$GITHUB_STEP_SUMMARY"
@@ -2436,22 +1730,22 @@ jobs:
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
+        shell: bash
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e NPM_CONFIG_OFFLINE=true \
+            -e GIT_NO_LAZY_FETCH=1 \
             -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
             -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -e RUNNER_ARCH -e LCB_SOURCE_COMMIT -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE \
+            -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT -e BIC_CACHE_MODE -e EM_CACHE -e EM_COMPILER_WRAPPER \
+            -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
-          python3 -m build_tools.metrics_summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
           BICORE_OFFLINE
       - name: Upload optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'

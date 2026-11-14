@@ -1,41 +1,74 @@
 # Verification scopes and prerequisites
 
-Run Python commands from the repository root. Test code and native/browser
-harnesses belong under `tests/runtimes/llama_cpp` and
-`tests/runtimes/stable_diffusion_cpp`; a runtime source directory does not own a
-second test discovery tree. Historical WebGPU stage composers are test support,
-not production build tools. Do not import `tests` from a production generator.
+Run tool and test commands from the repository root. `npm run tooling:build`
+performs strict TypeScript checking and emits the Node tools and tests under
+`build/tooling/`. Use the selected runtime project when its independent build
+scope is sufficient. `npm run tooling:check` checks types without emitting;
+checking and emitting unchanged inputs twice is unnecessary.
 
-| Scope | Local command or entry point | What it does not establish |
+| Scope | Command or entry point | Evidence |
 | --- | --- | --- |
-| Shared tools | `python3 -m unittest discover -s tests/build_tools -t .` | Actual runtime compilation or GPU execution |
-| Llama contracts | `python3 -m unittest discover -s tests/runtimes/llama_cpp -t .` | Every Emscripten/profile combination |
-| Image contracts | `python3 -m unittest discover -s tests/runtimes/stable_diffusion_cpp -t .` | Browser/WebGPU inference |
-| Browser host helpers | `npm test` | Execution of generated Wasm |
-| All Python scopes | `npm run test:python` | Availability of optional native tools and upstream checkouts |
-| Native integration | Runtime CMake with `LCB_NATIVE_CHECK` or `SDCB_NATIVE_CHECK` | Wasm address width, JavaScript glue or suspension behavior |
-| Native QSA parity | `python3 tests/runtimes/llama_cpp/qsa-selection/run.py --source <llama> --work <output> --jobs 2` | Real-model performance or WebGPU execution |
+| Shared typed tools | `node --test build/tooling/tests/tools/<area>/*.test.js` | The selected preparation, DTO, package, publication or automation contracts |
+| Llama tools | `node --test build/tooling/tests/runtimes/llama-cpp/tools/*.test.js` | Runtime configuration, preparation and build orchestration |
+| Image tools | `node --test build/tooling/tests/runtimes/stable-diffusion-cpp/tools/*.test.js` | Independent image preparation and build contracts |
+| Browser host helpers | `npm test` | JavaScript helpers and ABI adapters using the suites' declared native doubles |
+| CLI adapters | `node --test tests/tools/cli/*.test.mjs` | Typed dispatch, argument validation, metrics and exit-status handling with command stubs |
+| Local lint rules | `npm run test:lint` | Parser/configuration behavior and protected formatting boundaries |
+| Generated package consumers | `node --test build/tooling/tests/tools/package/public-types.test.js` | Type resolution through a real assembled package's public exports |
+| Current native integration | `node --test build/tooling/tests/runtimes/<runtime>/native-validation.test.js` | Prepared C/C++ sources and complete native fixtures |
+| Independent CPU and CMake checks | The explicit unittest command below | Real quantization arithmetic, fixture boundaries and target-property snapshots |
+| Native QSA parity | The [QSA runner](../runtimes/llama-cpp/docs/qsa-all-pools-selection.md) | Independent reference/optimized synthetic model traces and graph coverage |
+| Saved runtime packages | `node build/tooling/tools/cli.js validation runtime --help` | Entry to the explicit Wasm/browser validation boundary used by CI |
 
-Narrow any Python discovery directory further, or select fully-qualified test
-modules, for a focused change. The all-scope command is optional locally: report
-the selected modules, failures and skips instead of claiming whole-repository
-success. C++ probes require an ordinary native compiler and, where indicated,
-real pinned Dawn headers. Type checks use the pinned TypeScript compiler.
+Select affected files or directories instead of substituting a broad build.
+Tests can require initialized upstream checkouts, Clang, CMake/Ninja, pinned
+Dawn headers or already compiled runtime artifacts. Read those tests' input
+requirements and report missing inputs and skips. A missing dependency is not
+a passing contract check.
 
-Emscripten is not required for these source/native scopes. Actual Emscripten
-compilation, linkage, generated JavaScript and browser-runtime checks remain
-mandatory in the CI build and publication graph. Local tests must not weaken or
-replace those gates. Do not require a user-side duplicate Wasm build merely to
-compensate for an offline agent lacking the compiler.
+Native checks do not establish Wasm pointer width, JSPI/Asyncify completion,
+Embind marshalling or WebGPU execution. The CI matrix separately compiles the
+actual targets and validates their matching generated schemas, declarations,
+JavaScript and Wasm. Browser smoke uses bounded synthetic inputs; real-model
+quality, ordinary generation throughput and prefill performance require their
+own measurements. See [validation tiers](validation-tiers.md).
 
-The production build captures selected Git objects. A supplied source-only
-archive can be used to exercise preparation and native behavior, but it is not
-proof of upstream Git-object identity. Keep the declared archive identity and
-observed file hashes separate from verified Git provenance. Do not fabricate a
-matching commit for a pruned archive.
+## Independent CPU and CMake checks
 
-Acquisition is visible inline in workflow YAML; execution of local source code
-is directly wrapped by `docker run --network none`. Local verification without
-Docker is not evidence that the isolation boundary ran. Runtime publication
-also binds browser harness files, fixture/configuration inputs and package bytes
-to the same source and result session; moved tests must remain in that inventory.
+The host CI job runs these standard-library Python tests once inside its
+existing offline execution boundary:
+
+```sh
+python3 -m unittest \
+  tests.runtimes.llama_cpp.source.test_native_quantization \
+  tests.runtimes.llama_cpp.source.test_q4_reference \
+  tests.runtimes.llama_cpp.source.test_iq3_fixtures \
+  tests.runtimes.llama_cpp.test_cmake_property_snapshot
+```
+
+The numerical tests compile the initialized llama upstream's real C sources
+with small synthetic inputs. They require a native compiler, not model weights
+or a GPU. The property tests use CMake's actual unset, empty and false-like
+target-property values without compiling an upstream runtime. These tests do
+not depend on the production tool pipeline or source-body extraction.
+
+## Source and execution boundaries
+
+Production preparation runs from the executing checkout's typed tools and
+static configuration. Release builds require the selected source commit and
+its Git objects; local builds explicitly capture working inputs and stay
+unpublishable. An unrelated source archive cannot establish Git provenance.
+Record its actual identity when using one for an isolated experiment.
+
+Shared tests belong under `tests/tools/`; runtime tests and harnesses live under
+`tests/runtimes/`. The underscore-named runtime directories contain C++/JavaScript
+fixtures and independent CPU/CMake test helpers. Frozen source comparisons belong
+to their named historical fixtures and do not admit the current upstream by a
+whole-file hash.
+Production tools never import test-only helpers.
+
+Acquisition, credentials and remote writes remain visible in workflow YAML.
+Local stages use explicit `docker run --network none` boundaries there. Running
+a local test directly establishes its functional result, not Docker isolation.
+Saved-package validation binds runtime/test inputs and package bytes to its
+result before recording browser-smoke provenance.

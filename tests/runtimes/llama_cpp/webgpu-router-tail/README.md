@@ -1,45 +1,25 @@
-# WebGPU gather normalization tail checks
+# Router-tail WGSL alias comparison
 
-The ordinary source stage fuses six raw nodes (GET_ROWS, RESHAPE, SUM_ROWS,
-CLAMP, DIV, RESHAPE) into one compute dispatch. It keeps the original reduction
-tree, clamp and direct division. The one-token variant can merge overlapping
-probability/output bindings after all selected loads and a full-lane storage
-barrier. Multi-token overlap retains the original staged path.
-
-All storage bindings intentionally use `read_write`, matching ordinary ggml
-shaders, although probabilities and IDs are only loaded. WebGPU usage scopes
-cover the whole GPUBuffer: mixing read-only storage with writable storage is
-invalid even for disjoint ranges in the same allocator buffer. Full aligned
-binding disjointness remains required. The GPU fixture exercises both fused
-variants with probabilities, IDs and output in one physical buffer as well as
-separate ID buffers.
-
-`test_webgpu_router_tail.py` prepares the normal and GPU-profile sources, checks
-all stage identities and configure dependencies, executes actual ggml graph/use
-count/view/allocator tests with extracted dispatcher code, and compares processed
-factory WGSL at workgroup sizes 256/512/1024. Set
-`LCB_TEST_GGML_BASE_LIBRARY` to a matching pinned-upstream `libggml-base.a` to run
-the native graph/allocator fixture. No core build or GPU execution is implicit.
-
-The opt-in GPU harness uses an existing local Node WebGPU module. It compiles
-only a small native factory emitter. Baseline and candidate own independent,
-identical union arenas, so the baseline's final write cannot alter candidate
-input. It compares exact output bits, classifies special values separately and
-checks every arena byte outside the allowed output range, IDs, uniforms and
-intermediate guards. All fixtures are synthetic; no model or fixture binaries
-are distributed.
+This optional Dawn script compares caller-supplied one-token fused and staged
+WGSL using independent alias arenas. It checks exact output bits, special-value
+classes, buffer guards, IDs and uniforms. It records no GPU timestamps and makes
+no speed, graph integration or production provenance claim.
 
 ```sh
-python3 tests/runtimes/llama_cpp/webgpu-router-tail/check_gpu.py \
-  --llama-source vendor/llama.cpp --work /tmp/router-tail-check \
-  --webgpu-module /path/to/local/webgpu/index.js \
-  --node-command-json '["node"]' --backend vulkan
+node tests/runtimes/llama_cpp/webgpu-router-tail/run_gpu.mjs \
+  --work /absolute/path/to/inputs --output /tmp/router-report.json \
+  --webgpu-module /absolute/path/to/webgpu/index.js --backend vulkan \
+  --workgroups 256,512,1024
 ```
 
-Use `--prepare-only` to generate source-bound shaders/manifest without a GPU.
-`--profile` uses the actual GPU-profile preparation including its optional Q8
-diagnostic stage; the router and baseline shader bytes must remain identical.
-The harness records actual adapter properties and device limits and does not
-override subgroup information. Software GPU correctness or timing does not
-establish target-device performance or full-model quality. Actual Wasm graph
-eligibility and model regression checks remain separate validation.
+For each selected WG, supply `generated/<WG>/{get_rows,sum_rows,clamp,
+clamp_inplace,div,router_tail,router_tail_merged}.wgsl` with the layouts consumed
+by the script. `manifest.json` contains `shaderSha256[WG]` entries for the two
+router shaders and `baselineShaderSha256[WG]` entries for the five staged
+shaders, keyed by filename. Optional `source` metadata is copied into the report.
+Hashes check the integrity of caller-supplied inputs; they do not prove their
+relationship to a production factory. `--filter` and `--limit` select synthetic
+cases; each WG must be supported by the selected adapter.
+
+The caller supplies the shaders, manifest and an installed Dawn module. No
+repository producer or external private lab is required or provided.

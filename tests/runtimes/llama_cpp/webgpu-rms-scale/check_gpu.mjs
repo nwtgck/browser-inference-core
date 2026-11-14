@@ -1,18 +1,20 @@
-// Actual factory WGSL and untouched staged RMS/SCALE references. No browser.
+// Numerical and optional timestamp comparison of explicitly supplied WGSL.
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 const [directory, output, mode, scaleWgArgument] = process.argv.slice(2);
 const scaleWorkgroupSize=Number(scaleWgArgument);
 if (!directory || !output || !['numerical','benchmark'].includes(mode) || process.argv.length !== 6 || !Number.isInteger(scaleWorkgroupSize) || scaleWorkgroupSize<1 || scaleWorkgroupSize>1024) throw new Error('Usage: check_gpu.mjs SHADERS REPORT MODE SCALE_WORKGROUP_SIZE');
-const report = { schema:1,scope:'Actual prepared RMS/scale shader vs unchanged upstream staged shaders; standalone, no browser/model/target-device claim',stagedLayout:'RMS writes the final allocation and SCALE runs in place, matching allocator reuse',tolerance:{absolute:3e-6,relative:3e-5},node:process.version,nonfinitePolicy:"Only observed staged/fused classification parity is required for overflow, nonfinite and zero-epsilon probes; CPU classes are recorded without claiming universal WGSL nonfinite behavior",cases:[],benchmarks:[],errors:[],ok:false };
+const report = { schema:1,scope:'Supplied fused and staged RMS/scale WGSL; numerical and optional GPU timestamp comparison, without production provenance or model throughput claims',stagedLayout:'RMS writes the final allocation and SCALE runs in place, matching allocator reuse',tolerance:{absolute:3e-6,relative:3e-5},node:process.version,nonfinitePolicy:"Only observed staged/fused classification parity is required for overflow, nonfinite and zero-epsilon probes; CPU classes are recorded without claiming universal WGSL nonfinite behavior",cases:[],benchmarks:[],errors:[],ok:false };
 const hash=x=>createHash('sha256').update(x).digest('hex'),invariant=(ok,message)=>{if(!ok)throw new Error(message);};
 const buffers=new Set(),ownerKey=Symbol('RMS/scale Dawn owner');let device;
 try{
- const{create,globals}=await import(process.env.LCB_TEST_WEBGPU_MODULE);Object.assign(globalThis,globals);globalThis[ownerKey]=create([]);
+ const{create,globals}=await import(process.env.LCB_TEST_WEBGPU_MODULE);
+  const { GPUBufferUsage, GPUMapMode } = globals;
+  globalThis[ownerKey]=create([]);
  const adapter=await globalThis[ownerKey].requestAdapter();invariant(adapter,'No WebGPU adapter');
  report.adapter=Object.fromEntries(['vendor','architecture','device','description','subgroupMinSize','subgroupMaxSize'].map(k=>[k,adapter.info[k]]));
- invariant(scaleWorkgroupSize===adapter.limits.maxComputeInvocationsPerWorkgroup && scaleWorkgroupSize<=adapter.limits.maxComputeWorkgroupSizeX,'Reference SCALE WG must match the production adapter maximum: '+adapter.limits.maxComputeInvocationsPerWorkgroup);
+ invariant(scaleWorkgroupSize===adapter.limits.maxComputeInvocationsPerWorkgroup && scaleWorkgroupSize<=adapter.limits.maxComputeWorkgroupSizeX,'Supplied SCALE WG must match the requested adapter maximum: '+adapter.limits.maxComputeInvocationsPerWorkgroup);
  report.workgroupSizes={rms:128,fused:128,scale:scaleWorkgroupSize};
  const timed=mode==='benchmark';invariant(!timed||adapter.features.has('timestamp-query'),'Missing timestamp-query');
  device=await adapter.requestDevice({requiredFeatures:timed?['timestamp-query']:[],requiredLimits:{minStorageBufferOffsetAlignment:adapter.limits.minStorageBufferOffsetAlignment,maxComputeInvocationsPerWorkgroup:scaleWorkgroupSize,maxComputeWorkgroupSizeX:scaleWorkgroupSize}});

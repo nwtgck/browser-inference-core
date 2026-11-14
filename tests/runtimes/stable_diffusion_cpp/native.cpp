@@ -1,3 +1,4 @@
+#include "browser-probes.h"
 #include "ggml.h"
 #include "ggml-cpu.h"
 #include "stable-diffusion.h"
@@ -10,27 +11,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-extern "C" uint32_t sdc_abi_version();
-extern "C" uint32_t sdc_sd_browser_bf16_retention_version();
-extern "C" int sdc_test_qwen_timestep(const char *);
-extern "C" int sdc_test_bf16_weights(const char *);
-extern "C" int sdc_test_graph_walk();
-extern "C" int sdc_test_conv3d_bias(const char *);
-extern "C" int sdc_test_webgpu_performance(const char *);
-extern "C" uint32_t sdc_model_io_capabilities();
-extern "C" uint64_t sdc_test_safetensors_offset(const char *);
-extern "C" uint32_t sdc_test_safetensors_value(const char *);
-extern "C" uint32_t sdc_test_model_tensor_count(const char *);
-extern "C" void sdc_sd_ctx_params_init(uint64_t);
-extern "C" void sdc_sd_img_gen_params_init(uint64_t);
-extern "C" void sdc_sd_vid_gen_params_init(uint64_t);
-extern "C" int32_t sdc_generate_image(uint64_t, uint64_t, uint64_t);
-extern "C" int32_t sdc_generate_video(uint64_t, uint64_t, uint64_t);
-extern "C" uint64_t sdc_test_gguf_offset(const char *);
-extern "C" uint32_t sdc_test_gguf_value(const char *);
-extern "C" void sdc_test_callbacks();
-extern "C" void sdc_sd_set_log_callback(uint64_t, uint64_t);
-extern "C" void sdc_sd_set_progress_callback(uint64_t, uint64_t);
+extern "C" uint32_t bicore_abi_version();
+extern "C" uint32_t bicore_model_io_capabilities();
 static int logs_seen = 0, progress_seen = 0;
 static std::string placement_message;
 static std::vector<std::string> placement_ops_messages;
@@ -137,7 +119,7 @@ static void gguf_shard(const char * path, int index, const std::string & name, i
     u32(out, 0x3f800000);
 }
 static void model_io_checks() {
-    check(sdc_model_io_capabilities() == 7, "file capability bits include GGUF original shapes");
+    check(bicore_model_io_capabilities() == 7, "file capability bits include GGUF original shapes");
     for (uint64_t gib : {0ULL, 2ULL, 4ULL, 8ULL, 20ULL}) {
         const char * file = "sparse.safetensors";
         const uint64_t offset = sparse_safetensors(file, gib << 30);
@@ -209,13 +191,12 @@ static void model_io_checks() {
 
 int main() {
     try {
-        check(sdc_abi_version() == 2, "ABI version");
-        check(sd_browser_bf16_retention_version() == 1 && sdc_sd_browser_bf16_retention_version() == 1,
-              "BF16 retention public and generated version contract");
+        check(bicore_abi_version() == 3, "ABI version");
+        check(sd_browser_bf16_retention_version() == 1, "BF16 retention public version contract");
         check(sdc_test_graph_walk() == 1, "deep graph traversal, selection, ordering and shared operand counts");
-        sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)), 17);
+        sd_set_log_callback(log_callback, reinterpret_cast<void *>(17));
         check(sdc_test_qwen_timestep("CPU") == 1, "Qwen BF16 timestep activation placement and numerical parity");
-        sdc_sd_set_log_callback(0, 0);
+        sd_set_log_callback(nullptr, nullptr);
         check(placement_message.find("bf16=1 inspected=1 cpu_bf16=1 webgpu_bf16=0 other_bf16=0") != std::string::npos,
               "CPU workspace reports the original BF16 weight matmul");
         check(placement_message.find(
@@ -227,7 +208,7 @@ int main() {
         check(sdc_test_conv3d_bias("CPU") == 1, "3D convolution bias placement and numerical parity");
         check(sdc_test_webgpu_performance("CPU") == 1, "Bounded graph arithmetic and cache ownership");
         check(placement_ops_messages.empty(), "Per-operation diagnostics default off");
-        sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)), 17);
+        sd_set_log_callback(log_callback, reinterpret_cast<void *>(17));
         sd_set_graph_diagnostics(true);
         check(sdc_test_qwen_timestep("CPU") == 1, "Opt-in operation placement graph");
         check(placement_ops_messages.size() == 1 && placement_ops_messages[0].find("MUL_MAT:2") != std::string::npos &&
@@ -240,10 +221,10 @@ int main() {
         sd_set_graph_diagnostics(false);
         check(sdc_test_qwen_timestep("CPU") == 1 && placement_ops_messages.size() == 1,
               "Disabled operation diagnostics emit nothing");
-        sdc_sd_set_log_callback(0, 0);
+        sd_set_log_callback(nullptr, nullptr);
         model_io_checks();
         sd_ctx_params_t context{};
-        sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
+        sd_ctx_params_init(&context);
         sd_ctx_params_t reference{};
         sd_ctx_params_init(&reference);
         check(context.n_threads == reference.n_threads && context.enable_mmap == reference.enable_mmap &&
@@ -252,19 +233,19 @@ int main() {
               "binding must retain upstream defaults");
         check(context.webgpu_bf16_type == SD_TYPE_F32, "BF16 WebGPU policy defaults to exact F32 widening");
         context.webgpu_bf16_type = SD_TYPE_BF16;
-        sdc_sd_ctx_params_init(uint64_t(uintptr_t(&context)));
+        sd_ctx_params_init(&context);
         check(context.webgpu_bf16_type == SD_TYPE_F32, "Reinitialization clears explicit BF16 retention");
         sd_img_gen_params_t image{};
-        sdc_sd_img_gen_params_init(uint64_t(uintptr_t(&image)));
+        sd_img_gen_params_init(&image);
         sd_img_gen_params_t defaults{};
         sd_img_gen_params_init(&defaults);
         check(image.width == defaults.width && image.height == defaults.height &&
                   image.batch_count == defaults.batch_count &&
                   image.sample_params.sample_method == defaults.sample_params.sample_method,
               "no generation policy in core");
-        { // Exercise the generated video ABI, not a TypeScript field mock.
+        { // Exercise the public C API and owned result slots.
             sd_vid_gen_params_t video{}, reference_video{};
-            sdc_sd_vid_gen_params_init(uint64_t(uintptr_t(&video)));
+            sd_vid_gen_params_init(&video);
             sd_vid_gen_params_init(&reference_video);
             check(video.video_frames == reference_video.video_frames && video.fps == reference_video.fps &&
                       video.seed == reference_video.seed &&
@@ -273,12 +254,12 @@ int main() {
                   "video bindings preserve native defaults");
             sd_video_generation_result_t sentinel_video{};
             sd_video_generation_result_t * video_result = &sentinel_video;
-            check(sdc_generate_video(0, uint64_t(uintptr_t(&video)), uint64_t(uintptr_t(&video_result))) == 0,
+            check(!generate_video(nullptr, &video, &video_result),
                   "null-context video generation fails without inference");
             check(video_result == nullptr, "video failure clears the owned result slot");
             sd_image_generation_result_t sentinel_image{};
             sd_image_generation_result_t * image_result = &sentinel_image;
-            check(sdc_generate_image(0, uint64_t(uintptr_t(&image)), uint64_t(uintptr_t(&image_result))) == 0,
+            check(!generate_image(nullptr, &image, &image_result),
                   "null-context image generation fails without inference");
             check(image_result == nullptr, "image failure clears the owned result slot");
             free_sd_image_generation_result(nullptr);
@@ -369,12 +350,12 @@ int main() {
             std::printf("metadata-gap=%llu offset=%llu: passed\n", (unsigned long long)gap, (unsigned long long)offset);
             std::remove(path);
         }
-        sdc_sd_set_log_callback(uint64_t(uintptr_t(&log_callback)), 17);
-        sdc_sd_set_progress_callback(uint64_t(uintptr_t(&progress_callback)), 19);
+        sd_set_log_callback(log_callback, reinterpret_cast<void *>(17));
+        sd_set_progress_callback(progress_callback, reinterpret_cast<void *>(19));
         sdc_test_callbacks();
         check(logs_seen == 1 && progress_seen == 1, "native callback registration/data");
-        sdc_sd_set_log_callback(0, 0);
-        sdc_sd_set_progress_callback(0, 0);
+        sd_set_log_callback(nullptr, nullptr);
+        sd_set_progress_callback(nullptr, nullptr);
         sdc_test_callbacks();
         check(logs_seen == 1 && progress_seen == 1, "native callback removal");
         for (int batch : {1, 2}) {

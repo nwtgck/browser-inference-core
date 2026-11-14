@@ -4,7 +4,7 @@
 
 The build publishes llama.cpp, selected backends, generated C bindings, and Embind registrations for upstream C++ chat types. It does not own model catalogs, downloads, storage paths, chat sessions, generation loops, UI, or worker protocols. `host/` is always shipped as tested reference code for application host implementations. Its use is optional; changing application host code does not require rebuilding Wasm.
 
-The `lcb_` prefix identifies normalized C bindings while retaining upstream function names. There is no application-specific JSON command dispatcher. Deprecated, variadic, and unsupported video declarations are listed with exclusion reasons in the C schema. GGML graph-building declarations accepted by the C binding generator are exposed with generated types and schema checks. The published schema is the inventory for that build; this is not a guarantee that every upstream helper is exported or that every backend implements every operation. See [native chat and multimodal bindings](chat-and-multimodal.md) for the separate Embind surface and generated `mtmd` APIs. The conventions below describe the C bindings and optional reference wrapper.
+The generated ABI 3 facade retains upstream function names. Scalar signatures use the original C exports; ordinary `bicore_` bridges adapt records where required by the Wasm/JavaScript ABI. There is no application-specific JSON command dispatcher. Deprecated, variadic, and unsupported video declarations are listed with exclusion reasons in the C schema. GGML graph-building declarations accepted by the C binding generator are exposed with generated types and schema checks. The published schema is the inventory for that build; this is not a guarantee that every upstream helper is exported or that every backend implements every operation. See [native chat and multimodal bindings](chat-and-multimodal.md) for the separate Embind surface and generated `mtmd` APIs. The conventions below describe the C bindings and optional reference wrapper.
 
 Upstream v1.0.0 removes `ggml_diag_mask_inf`, `ggml_diag_mask_inf_inplace`,
 `ggml_diag_mask_zero`, and `ggml_diag_mask_zero_inplace` from the generated C
@@ -17,15 +17,15 @@ helpers outside that header collection remain outside the generated surface.
 
 ## Calling convention
 
-| Native type | Normalized binding | JavaScript type |
-|---|---|---|
-| Object, buffer, or function pointer | `uint64_t`, checked against the target pointer width | `bigint`; null is `0n` |
-| `size_t` or `uint64_t` | `uint64_t`; conversion to `size_t` checks address width | `bigint` |
-| `int64_t` | `int64_t` | `bigint` |
-| 32-bit integer, enum, or bool | 32-bit integer | `number`; bool is 0 or 1 |
-| float or double | Original floating-point type | `number` |
-| Structure passed by value | Pointer to the structure; dereferenced by the binding | `bigint` |
-| Structure returned by value | Additional first argument pointing to return storage | Promise resolving to `void` |
+| Native type | Host representation and native call |
+| --- | --- |
+| Object, buffer, or function pointer | Checked `bigint`; null is `0n`. Converted to the selected target's pointer width at the call boundary. |
+| `size_t` | Checked `bigint`, converted according to the target's actual native width. |
+| `uint64_t` or `int64_t` | `bigint`. |
+| 32-bit integer, enum, or bool | `number`; bool is 0 or 1. |
+| float or double | `number`. |
+| Structure passed by value | Caller-owned record pointer; an ordinary bridge passes the record by value. |
+| Structure returned by value | Explicit caller-owned return-storage pointer; the Promise resolves to `void`. |
 
 For example, `llama_model_default_params()` becomes:
 
@@ -36,22 +36,23 @@ await core.api.llama_model_default_params(params);
 core.free(params);
 ```
 
-The native core reports structure sizes, alignments, and field offsets. Do not treat a C++ structure as a JavaScript object or reuse offsets from another build. Types and schemas are generated together; a mismatched schema fingerprint is rejected when attaching the core.
+The native core reports structure sizes, alignments, and field offsets. Do not treat a C++ structure as a JavaScript object or reuse offsets from another build. Types and the target schema catalog are generated together; attachment selects the layout using the actual module ABI version and fingerprint.
 
 Every reference `core.api` function returns a Promise, including CPU functions. This gives JSPI and Asyncify WebGPU calls the same interface; it does not move synchronous CPU work to another thread. Overlapping calls through that wrapper are rejected. Applications provide sequencing across all C and Embind calls; direct native calls bypass the reference wrapper's checks.
 
 Both `webgpu-wasm32-jspi` and `webgpu-wasm64-jspi` expose JSPI Promise exports
 through the default reference wrapper. The wasm32 variant needs no memory64 and
-has a 4 GiB linear-memory ceiling. Its normalized pointer and 64-bit arguments
-still use `bigint`; pointer width does not select a different binding ABI.
+has a 4 GiB linear-memory ceiling. The public host API uses `bigint` for pointers and 64-bit arguments; its target
+adapter performs the actual Wasm32/Wasm64 scalar conversion.
 
 With `webgpu-wasm32-asyncify`, the reference loader uses Emscripten's
 `ccall(name, returnType, argumentTypes, arguments, { async: true })`. Raw Asyncify
 exports can return before a GPU operation finishes; merely awaiting that return
 is insufficient. When attaching a module yourself, pass
-`attachCore(module, schema, { suspension: 'asyncify' })`. Normalized `lcb_` pointer,
-record, and 64-bit arguments remain `bigint` even with 32-bit Wasm memory. Raw
-upstream exports instead retain their native ABI. Synchronous layout/allocation
+`attachCore(module, schema, { suspension: 'asyncify', createApi })`, supplying the
+generated API factory. Host pointer, record-address and 64-bit arguments remain
+`bigint` even with 32-bit Wasm memory. Direct exports require their actual target
+scalar types; the generated facade performs that conversion. Synchronous layout/allocation
 helpers and Embind chat operations do not require suspension wrappers.
 
 ## Memory and lifetime

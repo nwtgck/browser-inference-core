@@ -22,10 +22,7 @@ on:
 # jobs.update.permissions overrides it with the write access needed for git push.
 defaults:
   run:
-    working-directory: runtimes/llama-cpp
-
-env:
-  PYTHONPATH: ${{ github.workspace }}
+    working-directory: .
 
 permissions:
   contents: read
@@ -40,11 +37,22 @@ jobs:
     # Branch preparation only: no PR writes or workflow-dispatch permission.
     permissions:
       contents: write
+    env:
+      UPDATE_STATE: ${{ runner.temp }}/upstream-update
+      TARGET: ${{ inputs.target }}
+      CUSTOM_REF: ${{ inputs.custom_ref }}
+      BASE: ${{ github.ref_name }}
+      ALLOW_NON_FAST_FORWARD: ${{ inputs.allow_non_fast_forward }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           submodules: false
           persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22.16.0
+      - name: Acquire tooling dependencies (online)
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Acquire offline automation image (online)
         shell: bash
         run: |
@@ -52,47 +60,37 @@ jobs:
           # This context contains only the inline image recipe, never repository code.
           image_context="$(mktemp -d "$RUNNER_TEMP/bicore-automation.XXXXXX")"
           cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
+          FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
-          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 jq \
+          COPY --from=node /usr/local/ /usr/local/
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 jq unzip patch \
               && rm -rf /var/lib/apt/lists/*
           BICORE_DOCKERFILE
           docker build --pull --tag "bicore-automation:$GITHUB_JOB" "$image_context"
           printf 'BIC_OFFLINE_IMAGE=bicore-automation:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
+      - name: Emit the current checkout tooling
+        id: request
+        shell: bash
+        run: |
+          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
+            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
+            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
+            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
+          mkdir -p "$HOME" "$UPDATE_STATE"
+          npm run tooling:build
+          node build/tooling/tools/automation/cli.js upstream-validate --checkout-root "$GITHUB_WORKSPACE" \
+            --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+            --custom-ref "$CUSTOM_REF"
+          BICORE_OFFLINE
       - name: Acquire the current pinned upstream (online)
         shell: bash
         run: |
 
-          git submodule update --init --recursive --depth=1 -- vendor/llama.cpp
-      - name: Validate the source and update request
-        id: request
-        shell: bash
-        env:
-          TARGET: ${{ inputs.target }}
-          CUSTOM_REF: ${{ inputs.custom_ref }}
-          BASE: ${{ github.ref_name }}
-          ALLOW_NON_FAST_FORWARD: ${{ inputs.allow_non_fast_forward }}
-        run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e TARGET -e CUSTOM_REF -e BASE -e ALLOW_NON_FAST_FORWARD \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          extra=()
-          if [[ "$ALLOW_NON_FAST_FORWARD" == true ]]; then extra+=(--allow-non-fast-forward); fi
-          python3 -m build_tools.runtimes.llama_cpp.update request --root "$PWD" --state "$PWD/build/upstream-update" --target "$TARGET" --custom-ref "$CUSTOM_REF" \
-            --base "$BASE" "${extra[@]}"
-          BICORE_OFFLINE
+          git submodule update --init --recursive --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
       - name: Acquire the requested release metadata (online)
         shell: bash
         env:
@@ -102,7 +100,8 @@ jobs:
 
           # The stable endpoint must really be a published vX.Y.Z release. The released
           # nightly is the first published bNNNN prerelease in the service's list order.
-          state="$GITHUB_WORKSPACE/runtimes/llama-cpp/build/upstream-update"
+          state="$UPDATE_STATE"
+          mkdir -p "$state"
           if [[ "$TARGET" == latest ]]; then
             gh api --hostname github.com --method GET repos/ggml-org/llama.cpp/releases/latest > "$state/releases.json"
           elif [[ "$TARGET" == latest-unstable ]]; then
@@ -125,35 +124,36 @@ jobs:
       - name: Select the requested upstream ref
         id: selection
         shell: bash
+        env:
+          REQUEST_SOURCE: ${{ steps.request.outputs.source }}
+          REQUEST_PREVIOUS: ${{ steps.request.outputs.previous }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
+            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT -e REQUEST_SOURCE -e REQUEST_PREVIOUS \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.runtimes.llama_cpp.update select --root "$PWD" --state "$PWD/build/upstream-update"
+          mkdir -p "$HOME" "$UPDATE_STATE"
+          node build/tooling/tools/automation/cli.js upstream-select --checkout-root "$GITHUB_WORKSPACE" \
+            --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" --base "$BASE" --target "$TARGET" \
+            --custom-ref "$CUSTOM_REF" --releases "$UPDATE_STATE/releases.json" \
+            --expected-source "$REQUEST_SOURCE" --expected-previous "$REQUEST_PREVIOUS"
           BICORE_OFFLINE
       - name: Fetch the exact upstream and comparison (online)
+        id: resolution
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          SELECTED_REF: ${{ steps.selection.outputs.selected-ref }}
-          PREVIOUS_COMMIT: ${{ steps.request.outputs.previous-commit }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          PREVIOUS_COMMIT: ${{ steps.selection.outputs.previous }}
         run: |
 
           # The validated ref is data, never an endpoint or shell expression. Git peels
           # annotated tags locally after fetching; an unqualified tag/branch ambiguity fails.
-          state="$GITHUB_WORKSPACE/runtimes/llama-cpp/build/upstream-update"
+          state="$UPDATE_STATE"
           upstream="$GITHUB_WORKSPACE/runtimes/llama-cpp/vendor/llama.cpp"
           remote=https://github.com/ggml-org/llama.cpp.git
           if [[ "$SELECTED_REF" =~ ^[0-9a-f]{40}$ || "$SELECTED_REF" == refs/tags/* || "$SELECTED_REF" == refs/heads/* ]]; then
@@ -170,30 +170,35 @@ jobs:
           commit="$(git -C "$upstream" rev-parse --verify 'FETCH_HEAD^{commit}')"
           [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$SELECTED_REF" =~ ^[0-9a-f]{40}$ ]]; then test "$commit" = "$SELECTED_REF"; fi
-          jq -n --arg ref "$SELECTED_REF" --arg commit "$commit" '{ref: $ref, commit: $commit}' > "$state/resolved.json"
+          printf 'ref=%s\ncommit=%s\n' "$SELECTED_REF" "$commit" >> "$GITHUB_OUTPUT"
           if [[ "$PREVIOUS_COMMIT" != "$commit" ]]; then
             gh api --hostname github.com --method GET "repos/ggml-org/llama.cpp/compare/$PREVIOUS_COMMIT...$commit" > "$state/comparison.json"
           fi
       - name: Plan the source-bound candidate branch
         id: plan
         shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
+            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.runtimes.llama_cpp.update plan --root "$PWD" --state "$PWD/build/upstream-update"
+          mkdir -p "$HOME" "$UPDATE_STATE"
+          node build/tooling/tools/automation/cli.js upstream-plan --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+            --comparison "$UPDATE_STATE/comparison.json"
           BICORE_OFFLINE
       - name: Inspect the existing candidate branch (online)
         id: existing
@@ -206,7 +211,7 @@ jobs:
 
           # Existing human repairs survive. ls-remote establishes existence only; the
           # fetched tip is the immutable snapshot subsequently validated and reported.
-          state="$GITHUB_WORKSPACE/runtimes/llama-cpp/build/upstream-update"
+          state="$UPDATE_STATE"
           remote="https://github.com/$GITHUB_REPOSITORY.git"
           export GIT_TERMINAL_PROMPT=0
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
@@ -218,60 +223,71 @@ jobs:
             git fetch --no-tags --depth=1 "$remote" "refs/heads/$BRANCH"
             commit="$(git rev-parse --verify FETCH_HEAD)"
             [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
-            jq -n --arg commit "$commit" '{commit: $commit}' > "$state/existing.json"
+            printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
             printf 'exists=true\n' >> "$GITHUB_OUTPUT"
           else
-            printf '{"commit":null}\n' > "$state/existing.json"
             printf 'exists=false\n' >> "$GITHUB_OUTPUT"
           fi
       - name: Check out the already fetched candidate source
         if: steps.plan.outputs.changed == 'true' && steps.existing.outputs.exists == 'false'
         shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
+          RELATION: ${{ steps.plan.outputs.relation }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
+            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.runtimes.llama_cpp.update checkout --root "$PWD" --state "$PWD/build/upstream-update"
+          mkdir -p "$HOME" "$UPDATE_STATE"
+          node build/tooling/tools/automation/cli.js upstream-checkout --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" --relation "$RELATION"
           BICORE_OFFLINE
       - name: Acquire the selected nested upstreams (online)
         if: steps.plan.outputs.changed == 'true' && steps.existing.outputs.exists == 'false'
         shell: bash
         run: |
 
-          git -C vendor/llama.cpp submodule update --init --recursive
+          git -C runtimes/llama-cpp/vendor/llama.cpp submodule update --init --recursive
       - name: Validate or prepare the candidate commit
         id: candidate
         if: steps.plan.outputs.changed == 'true'
         shell: bash
+        env:
+          SOURCE: ${{ steps.selection.outputs.source }}
+          PREVIOUS: ${{ steps.selection.outputs.previous }}
+          SELECTED_REF: ${{ steps.selection.outputs.ref }}
+          REQUESTED: ${{ steps.selection.outputs.requested }}
+          TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
+          RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
+          RELATION: ${{ steps.plan.outputs.relation }}
+          EXISTING_COMMIT: ${{ steps.existing.outputs.commit }}
         run: |
           docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
             -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
+            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
+            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
+            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+            -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
+            -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.runtimes.llama_cpp.update candidate --root "$PWD" --state "$PWD/build/upstream-update"
+          mkdir -p "$HOME" "$UPDATE_STATE"
+          node build/tooling/tools/automation/cli.js upstream-candidate --checkout-root "$GITHUB_WORKSPACE" --state "$UPDATE_STATE" --repository "$GITHUB_REPOSITORY" \
+            --base "$BASE" --source "$SOURCE" --previous "$PREVIOUS" --ref "$SELECTED_REF" \
+            --resolved-ref "$RESOLVED_REF" --commit "$TARGET_COMMIT" --requested "$REQUESTED" \
+            --allow-non-fast-forward "$ALLOW_NON_FAST_FORWARD" \
+            --relation "$RELATION" --existing "$EXISTING_COMMIT"
           BICORE_OFFLINE
       - name: Push the candidate branch (online)
         id: push
@@ -295,29 +311,26 @@ jobs:
         shell: bash
         env:
           PUSH_OUTCOME: ${{ steps.push.outcome }}
+          CANDIDATE_STATUS: ${{ steps.candidate.outputs.status }}
+          CHANGED: ${{ steps.plan.outputs.changed }}
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e PYTHONPATH="$GITHUB_WORKSPACE" \
-            -e NPM_CONFIG_OFFLINE=true -e GIT_NO_LAZY_FETCH=1 \
-            -e PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" \
-            -e BICORE_TYPESCRIPT_COMPILER="$GITHUB_WORKSPACE/.tools/typescript/node_modules/typescript/bin/tsc" \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_ENV -e GITHUB_STEP_SUMMARY -e GITHUB_REPOSITORY \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e RUNNER_TEMP -e RUNNER_OS \
-            -e RUNNER_ARCH -e ImageOS -e ImageVersion -e LCB_SOURCE_COMMIT -e BIC_CACHE_MODE \
-            -e BIC_METRICS_MODE -e BIC_METRICS_RUNTIME -e BIC_METRICS_PROFILE -e BIC_METRICS_VARIANT -e BIC_OFFLINE_ENVIRONMENT \
-            -e EM_CACHE -e EM_COMPILER_WRAPPER -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID \
-            -e PUSH_OUTCOME \
-            "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
-          mkdir -p "$HOME"
-
-          python3 -m build_tools.runtimes.llama_cpp.update report --root "$PWD" --state "$PWD/build/upstream-update" --push-outcome "$PUSH_OUTCOME"
-          BICORE_OFFLINE
+          {
+            printf '## llama.cpp update branch\n\n'
+            if [[ "$CANDIDATE_STATUS" == branch_exists ]]; then
+              cat "$UPDATE_STATE/handoff.md"
+            elif [[ "$PUSH_OUTCOME" == success ]]; then
+              printf '**Candidate branch push succeeded.**\n\n'
+              cat "$UPDATE_STATE/handoff.md"
+            elif [[ "$CHANGED" != false ]]; then
+              printf '**The candidate push did not complete.** Inspect the failed step and rerun to inspect any surviving branch.\n'
+            fi
+            if [[ -f "$UPDATE_STATE/details.md" ]]; then cat "$UPDATE_STATE/details.md"; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ -d "$UPDATE_STATE" ]]; then printf '%s\n' "$PUSH_OUTCOME" > "$UPDATE_STATE/push-outcome.txt"; fi
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: upstream-update-report
-          path: runtimes/llama-cpp/build/upstream-update/
+          path: ${{ runner.temp }}/upstream-update/
           if-no-files-found: ignore
           retention-days: 14

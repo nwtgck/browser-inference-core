@@ -4,15 +4,18 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [shaderDirectory, output, webgpuModule, order] = process.argv.slice(2);
+if (!shaderDirectory || !output || !webgpuModule || !['forward', 'reverse'].includes(order) || process.argv.length !== 6) {
+  throw new Error('Usage: check-gpu.mjs SHADERS REPORT WEBGPU_MODULE forward|reverse');
+}
 const hash = value => createHash('sha256').update(value).digest('hex');
 const report = {
-  ok: false, scope: 'Actual factory-generated shader versus exact upstream staged shader and independent F32 CPU reference; software adapter does not establish browser/model/target throughput',
+  ok: false, scope: 'Supplied fused and staged WGSL versus an independent F32 CPU reference; numerical validation only, without production provenance or model throughput claims',
   node: process.version, executable: process.execPath, arguments: process.execArgv, pipelineOrder: order,
   tolerance: { absolute: 2e-6, relative: 2e-5, scope: 'Predeclared finite-output limits, checked independently against staged GPU and F32 CPU arithmetic. Bit differences are reported separately.' },
   nonfinitePolicy: 'No sanitize/clamp/new algebra is introduced. NaN/Inf CPU classification and staged/fused classifications are reported separately; only observed staged/fused classification parity is checked. This does not promise IEEE NaN payloads or universal WGSL nonfinite behavior.',
   cases: [], errors: [], shaderSha256: {}, compilationMessages: [],
 };
-let device, owner;
+let device, owner, GPUBufferUsage, GPUMapMode;
 const buffers = new Set();
 const programs = new Map();
 const invariant = (condition, message) => { if (!condition) throw new Error(message); };
@@ -129,7 +132,7 @@ async function execute(test, staged) {
 }
 try {
   const { create, globals } = await import(pathToFileURL(webgpuModule).href);
-  Object.assign(globalThis, globals);
+  ({ GPUBufferUsage, GPUMapMode } = globals);
   owner = create(['backend=vulkan', 'enable-dawn-features=allow_unsafe_apis']);
   globalThis[Symbol.for('scale-unary-test.gpu-owner')] = owner;
   const adapter = await owner.requestAdapter();

@@ -7,16 +7,19 @@ from functional browser bring-up.
 
 ## Boundary: native capability, application policy
 
-ABI 2 is generated from the patched `include/stable-diffusion.h` and the pinned
+ABI 3 is generated from the patched `include/stable-diffusion.h` and the pinned
 public `ggml.h`, `ggml-backend.h`, `ggml-cpu.h`, `ggml-alloc.h` and `gguf.h` headers.
 Supported public declarations and complete public records are exposed, including
 tensor/graph construction, allocation, transfer, execution and CPU cancellation.
 Variadic calls, FILE-pointer APIs without a matching host ownership surface and
 the pinned upstream's unimplemented thread-count getter remain explicitly excluded.
-The generated schema records each exclusion and per-header coverage. Native
-pointers and 64-bit integers are represented as `bigint` on both Wasm widths.
-Record sizes, offsets and constants come from the compiled binary. A SHA-256
-schema fingerprint prevents mismatching JavaScript helpers and Wasm layouts.
+The generated schema records each exclusion. Raw exports use the native target
+calling convention: Wasm32 pointers use `number`, while Wasm64 pointers and
+64-bit integers use `bigint`. The host API presents pointers and 64-bit values
+as `bigint`, checks their ranges and converts to the target's native width.
+Record sizes, offsets and constants are derived using the actual target compiler
+inputs. The Wasm exports its pointer width and matching SHA-256 schema fingerprint,
+which selects that target's layouts from the packaged ABI catalog.
 New public declarations in these headers do not need a per-function export-list
 change. Required names and representative signature tests detect incompatible
 pin updates; unsupported C types fail generation instead of receiving guessed types.
@@ -24,14 +27,16 @@ pin updates; unsupported C types fail generation instead of receiving guessed ty
 There is **no** `sdb_load(JSON)`/`sdb_generate(JSON)` dispatcher, singleton model,
 fixed model directory, preset sampler, resolution limit, memory budget or model
 specific configuration in the bridge. Upstream parameter initialization retains
-upstream defaults. This is a breaking replacement of the experimental ABI 1;
-old artifacts must not be relabeled as ABI 2.
+upstream defaults. ABI 3 changes the experimental ABI 1/2 wire convention;
+artifacts built for those versions must be regenerated.
 
 The application owns model selection, file acquisition/storage, mounting paths,
 profile selection, resource budgets, sampler/scheduler, generation settings,
 context lifetime, callbacks, image encoding, Worker protocol and cancellation.
-The raw upstream API and normalized `sdc_*` calls are available; optional helpers
-in `host/` add typed record access and serialization, not policy.
+Scalar and pointer functions retain their original C exports. Ordinary native
+bridges handle records passed or returned by value, using caller-owned record
+storage. Optional helpers in `host/` add typed record access, width conversion
+and serialization. They do not select application policy.
 See [host contract](host/README.md).
 
 For example, the caller initializes `sd_ctx_params_t`, fills its chosen file
@@ -39,7 +44,7 @@ paths, calls `new_sd_ctx`, initializes/fills `sd_img_gen_params_t`, then calls
 `generate_image` with an output pointer for `sd_image_generation_result_t`.
 Copy each item's image data and any needed generation metadata before calling
 `free_sd_image_generation_result`. This pinned upstream replaces the previous
-image-array/count result API; ABI 2 alone does not imply that old calls remain
+image-array/count result API; ABI 3 alone does not imply that old calls remain
 compatible. VAE tile dimensions now use `tile_size_w`/`tile_size_h` in image pixels.
 The caller frees the context before releasing its disk-backed file sources.
 Log, legacy progress, and preview registrations are upstream module-global state;
@@ -72,12 +77,12 @@ remains unsupported even when its file is readable.
 
 ### Safetensors and already-sharded repositories
 
-`_sdc_model_io_capabilities()` is an additive ABI 2 capability query. Bit 0
+`module._bicore_model_io_capabilities()` reports compiled loader capabilities. Bit 0
 means 64-bit safetensors file positions with bounded metadata validation; bit 1
 means complete standard GGUF shard-group loading; bit 2 (value `4`) means bounded
 Comfy GGUF original-shape restoration. This build returns `7`. A
-consumer must not infer these capabilities from ABI 2 alone: older ABI 2 builds
-did not contain these loader changes. The image manifest also records
+consumer must check these capabilities separately from the ABI transport version.
+The image manifest also records
 `safetensorsFileOffsetBits: 64`, `ggufShards: true`, and `ggufOriginalShapes: true`.
 
 `comfy.gguf.orig_shape.<tensor-name>` stores PyTorch-order integer dimensions.
@@ -116,7 +121,7 @@ features and presets remain application responsibilities.
 implementation (`0` in a non-browser upstream build). The source-bound image
 manifest records `bf16WeightRetention: true` separately from the unchanged
 model-I/O capability mask. Callers must check the feature before selecting
-`sd_ctx_params_t.webgpu_bf16_type = SD_TYPE_BF16`; ABI 2 alone is insufficient.
+`sd_ctx_params_t.webgpu_bf16_type = SD_TYPE_BF16`; the ABI version alone is insufficient.
 F32 remains the initializer's default, and explicit F16 keeps its existing meaning.
 No profile, precision, memory budget or application preset is selected automatically.
 
@@ -129,8 +134,8 @@ silently retrying retained weights on CPU or converting them to F32. Destructive
 LoRA weight updates are rejected when retained weights are present.
 Caller-owned source files and existing quantized/F16/F32 parameter bytes are unchanged.
 
-The image-only patch inventory combines four parts, each with exact input/output
-hashes and regression coverage:
+The image-only patch inventory combines four reviewable source patches with
+observed identities and regression coverage:
 
 - `0036` backports the upstream BF16-left WebGPU matrix and row-lookup kernels.
   Remove it when the image ggml pin supplies equivalent kernels and admission.
@@ -147,7 +152,7 @@ Packaging requires these four patches in canonical order with matching targets
 and SHA-256 identities across every profile/variant, as well as the generated
 version API contract. A version declaration alone does not establish the feature.
 
-Source extraction, native CPU arithmetic and CPU-only Wasm contracts do not prove
+Native CPU arithmetic and CPU-only Wasm contracts do not prove
 GPU shader execution, trained-model image quality, peak memory or browser stability.
 The feature does not imply that every BF16 parameter or operation can be retained.
 
@@ -157,9 +162,12 @@ Acquire the compiler and Dawn using the root [toolchain contract](../../toolchai
 Then run from the repository root:
 
 ```sh
-python3 -m build_tools.toolchain.prepare
+node node_modules/typescript/bin/tsc --project tsconfig.stable-diffusion-cpp.json
 . .tools/emsdk/emsdk_env.sh
-python3 -m build_tools.runtimes.stable_diffusion_cpp.build --profile webgpu-wasm32-jspi --variant browser
+node build/tooling/runtimes/stable-diffusion-cpp/tools/cli.js build \
+  --checkout-root "$PWD" --tooling-root "$PWD/build/tooling" \
+  --toolchain-root "$PWD/.tools" --output-root /tmp/image-runtime-build \
+  --local --kind wasm --profile webgpu-wasm32-jspi --variant browser
 ```
 
 Initialize submodules first. Profiles are `webgpu-wasm32-asyncify`,
@@ -168,15 +176,18 @@ Initialize submodules first. Profiles are `webgpu-wasm32-asyncify`,
 possible and are not the same thing as native pthreads.
 
 Shared toolchain pins are in repository-root `toolchain/config.json`. Image
-source commits in a clean build are selected by the captured parent commit's
-submodule gitlinks. Local development preparation can use staged gitlinks;
-`config/upstreams.json` declares their roles and paths. Preparation reads the
-selected Git objects. The build captures its CMake, generator and patch inputs
-before compilation and verifies their identities before staging. All
-required nested checkouts must be initialized before offline preparation.
+source commits in a release build come from the clean checkout HEAD's gitlinks.
+Local development uses `--local` for owned working-tree inputs and staged gitlinks;
+release builds require `--expected-commit <full-commit>` to match checkout HEAD.
+`config/upstreams.json` declares the independent upstream roles and paths. Preparation reads the
+selected Git objects. The build snapshots its CMake, native, template and patch
+inputs before compilation and verifies their identities before staging. Configuration and
+recipe values come from the running checkout's static imports. All
+nested checkouts selected by the build graph must be initialized before offline preparation.
+Disabled CUDA, WebP, WebM and example projects do not need initialized checkouts.
 
 The independent `vendor/ggml-webgpu-source` checkout contributes **only** `ggml/`;
-stable-diffusion.cpp's nested ggml is not linked. `upstream-patches/series.json`
+stable-diffusion.cpp's nested ggml is not linked. `tools/recipe.ts`
 declares each patch's target files, order and purpose. The generated
 `prepared/patch-provenance.json` records the actual source and patch identities;
 these observations do not prove numerical or ownership correctness. Changes to
@@ -187,20 +198,35 @@ an unchanged composition preserves file timestamps and avoids recompilation of
 identical native inputs. A preparation failure does not replace the previous
 complete output, and a changed source commit during compilation prevents staging
 publishable artifacts. Explicit `--fresh` discards only the selected build tree.
+The output directory holds private compiler inputs and upstream trees. The
+checkout's tooling is compiled once and calls preparation, configuration,
+compilation and staging in the same Node process; dependencies and tooling are
+not copied. Local and native builds remain private; release Wasm builds alone
+produce a CI upload candidate.
+
+Compiler output is under `build/<kind>/<profile>/<variant>` in the selected
+output root. A release Wasm build stages its candidate separately under
+`stage/<profile>/<variant>`. The local example above compiles private output
+without creating a publishable candidate.
 
 Compile/packaging jobs are parallel to llama's jobs; final aggregate publication
 waits for both. Toolchain and license transfer is independent. See the shared
 [cache policy](../../toolchain/README.md). The inner image manifest is format 2,
-ABI 2, with schema fingerprint and large-file capabilities. The format-4 parent
+ABI 3, with large-file capabilities. Each packaged profile/variant has its own
+`abi.json`; `api/schema.json` and `api/schema.mjs` contain the catalog indexed by
+compiled target fingerprint. The manifest's `schemaSha256` is the catalog's
+canonical schema fingerprint; its file inventory separately binds the actual
+`api/schema.json` bytes. The format-5 parent
 package uses the name `browser-inference-core` and stores this component under
-`runtimes/stable-diffusion-cpp/`. Public imports use
+`runtimes/stable-diffusion-cpp-browser-core/`. Public imports use
 `browser-inference-core/stable-diffusion-cpp/host` and the corresponding
 `/profiles/<profile>/<variant>/core.mjs` path. See the
 [root package layout](../../README.md).
 
 ## Verification scope
 
-Native checks use real generated bindings, sparse unsplit GGUF files whose last
+Native checks compile the prepared SD/GGML source and ordinary C++ fixtures. They
+use sparse unsplit GGUF files whose last
 tensor starts beyond 2/4/8 GiB, actual C++ file reads, malformed metadata, callback
 registration and numerical comparison of patched normalization to upstream CPU.
 They also read sparse safetensors beyond 20 GiB and validate complete/missing/
@@ -251,12 +277,17 @@ patch does not update an installed Wasm: rebuild/publish through the existing
 source-bound artifact workflow, then update the application's artifact pin.
 
 
-From the repository root, run the image-runtime Python tests with:
+From the repository root, compile the tooling and run the image-runtime tool tests with:
 
 ```sh
-python3 -m unittest discover -s tests/runtimes/stable_diffusion_cpp -t .
+npm run tooling:build
+node --test build/tooling/tests/runtimes/stable-diffusion-cpp/tools/*.test.js
 ```
 
-The binding generator and build driver use ordinary Python package imports under
-`build_tools.runtimes.stable_diffusion_cpp`. CMake invokes that same generator;
-there is no separate copied generator or direct-script import bootstrap.
+The selected-runtime TypeScript project builds independently of other runtime
+checkouts. CMake receives separate checkout, compiler-input and emitted-tooling
+roots and invokes the selected Node ABI tooling against its actual target compile
+commands. The raw `core.d.ts`, its `module-options.d.ts`, exports and target schema
+are generated or copied together. Native
+checks use ordinary complete C++ fixtures. Upstream-owned WGSL generation remains
+with the unchanged upstream generator.

@@ -8,22 +8,20 @@ The hook checks device and layout compatibility, byte ranges, resource identity,
 alignment and buffer usage before queuing a copy on the existing GPU queue.
 It does not change model/checkpoint policy or add a public capability API.
 
-`prepare_webgpu_source.py` composes this patch with parameter upload batching in
-one build-tree translation unit. The vendor checkout is never edited. Preparation
-checks reviewed upstream d81235049384534c167caea52b85a694f6103d14 inputs, patch bytes,
-combined output identity and pinned Dawn headers. Provenance records the inputs,
-patch and compiled source per profile/variant. Existing build and publication
-validation remain in use; incompatible required patches fail updater preflight.
+`runtimes/llama-cpp/tools/recipe.ts` composes this patch with parameter upload
+batching in one private coherent source tree. Preparation records selected input,
+patch and output identities; publication compares those facts with the actual
+compiled inputs. The vendor checkout remains unchanged, and required patch
+conflicts fail the updater preflight.
 
 ## Validation and maintenance
 
-`python3 ../../tests/runtimes/llama_cpp/webgpu-tensor-copy/check_hook.py /path/to/upstream` exercises the
-actual hook with mock buffers and a queue. Add
-`--dawn-package /path/to/emdawnwebgpu_pkg` for actual-header syntax checks.
-The overlay unit tests check guards, source preservation, CMake source replacement
-and coexistence with other overlays. These checks do not certify target-browser
-GPU correctness, copy lifetime, numerical equivalence, performance or ON_DEVICE
-checkpoint capacity. Validate those separately with the built runtime.
+The complete-source native provider exercises the actual copy hook with a
+recorded WebGPU C API, real ggml layout decisions and deferred queue operations.
+It checks same-device admission, aliases, buffer ranges and cross-device fallback.
+These observations do not establish target-browser GPU correctness, shader
+execution, model performance or ON_DEVICE checkpoint capacity. Validate those
+separately using the built runtime. See [verification](../../../docs/verification.md).
 
 Unrelated upstream commits with identical reviewed inputs remain compatible.
 Review upstream changes to backend fallback, queue order and buffer lifetime.

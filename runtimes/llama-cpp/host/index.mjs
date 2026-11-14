@@ -1,8 +1,13 @@
 import schema from '../api/schema.mjs';
-import { attachCore } from './bindings.mjs';
-export { attachCore } from './bindings.mjs';
+import { createLowLevelFunctions } from '../api/functions.mjs';
+import { attachCore as attachBindings } from './bindings.mjs';
+export { createAbiCaller, selectAbiSchema, toNativePointer, fromNativePointer, toEmscriptenPointer, fromEmscriptenPointer } from './abi.mjs';
 export { mountReadOnlyFile } from './read-only-file.mjs';
 export { schema };
+
+export function attachCore(module, metadata, options = {}) {
+  return attachBindings(module, metadata, { ...options, createApi: createLowLevelFunctions });
+}
 
 /** No automatic download, model selection, fallback, or Worker creation. */
 export async function createCore({ profile, variant = 'browser', baseURL = new URL('../profiles/', import.meta.url), moduleOptions = {} } = {}) {
@@ -19,6 +24,6 @@ export async function createCore({ profile, variant = 'browser', baseURL = new U
     ...moduleOptions,
   });
   return attachCore(module, schema, {
-    suspension: profile === 'webgpu-wasm32-asyncify' ? 'asyncify' : 'direct',
+    suspension: profile === 'webgpu-wasm32-asyncify' ? 'asyncify' : profile.includes('-jspi') ? 'jspi' : 'direct',
   });
 }

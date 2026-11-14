@@ -1,5 +1,6 @@
 // Synthetic arithmetic/placement regression, NOT trained-model image inference.
 // This translation unit is linked only into test variants/native checks.
+#include "browser-probes.h"
 #include "model/diffusion/qwen_image.hpp"
 #include "core/compute_workspace.h"
 #include "ggml-backend.h"

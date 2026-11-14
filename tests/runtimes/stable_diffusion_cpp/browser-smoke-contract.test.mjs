@@ -3,13 +3,13 @@ import { test } from 'node:test';
 import { imageSmokeContract, imageSmokeScope } from './browser-smoke-contract.mjs';
 
 test('image smoke scope distinguishes optional WebGPU execution without model claims', () => {
-  assert.ok(imageSmokeScope(false).includes('CPU (no GPU inference)'));
-  assert.ok(imageSmokeScope(true).includes('CPU and WebGPU'));
+  assert.ok(imageSmokeScope({ testWebGpu: false }).includes('CPU (no GPU inference)'));
+  assert.ok(imageSmokeScope({ testWebGpu: true }).includes('CPU and WebGPU'));
   for (const enabled of [false, true]) {
-    assert.ok(imageSmokeScope(enabled).includes('bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy'));
-    assert.ok(imageSmokeScope(enabled).includes('large-row arithmetic'));
-    assert.ok(imageSmokeScope(enabled).includes('WebGPU mode also checks live-registry queries'));
-    assert.ok(imageSmokeScope(enabled).endsWith('no trained-model image generation'));
+    assert.ok(imageSmokeScope({ testWebGpu: enabled }).includes('bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy'));
+    assert.ok(imageSmokeScope({ testWebGpu: enabled }).includes('large-row arithmetic'));
+    assert.ok(imageSmokeScope({ testWebGpu: enabled }).includes('WebGPU mode also checks live-registry queries'));
+    assert.ok(imageSmokeScope({ testWebGpu: enabled }).endsWith('no trained-model image generation'));
   }
 });
 
@@ -21,6 +21,6 @@ test('all four arithmetic probes remain mandatory in test variants', () => {
 
 test('a string or missing WebGPU flag cannot label CPU evidence as WebGPU', () => {
   for (const value of [undefined, null, 0, 1, '0', '1', 'false', 'true']) {
-    assert.throws(() => imageSmokeScope(value), TypeError);
+    assert.throws(() => imageSmokeScope({ testWebGpu: value }), TypeError);
   }
 });

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "runtimes/stable-diffusion-cpp/tools/**/*.ts",
+    "tools/toolchain/cli.ts",
+    "tools/ci/cli.ts",
+    "tests/tools/abi/current-api.test.ts"
+  ]
+}

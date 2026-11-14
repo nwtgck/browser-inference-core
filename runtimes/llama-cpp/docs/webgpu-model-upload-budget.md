@@ -72,25 +72,19 @@ not covered by ordinary C++ RAII. No generic setter or inference path is changed
 
 ## Source and validation
 
-Reviewed upstream is 8642541b255bfb5dc39cd351a178be09013a55d6 (v0.8.0).
-Exact source, API, file-reader, patch and generated-output identities are checked
-by the existing preparation/provenance flow; input drift fails closed. The
-backend overlay and normal build/publication route remain unchanged.
+The selected source gitlink and typed recipe identify the upstream loader,
+individual upload patch and final compiled source. Preparation digests record
+those identities; they do not reject harmless source edits as behavioral changes.
+C++ compilation checks the actual loader/helper against the selected public
+backend declarations.
 
-Run the focused tests with `LCB_TEST_LLAMA_SOURCE` pointing at that pristine
-checkout, and optionally `LCB_TEST_DAWN_PACKAGE` at the pinned Dawn package:
+The important regression properties are charged-byte accounting across tensor
+boundaries, device handoff, pre-write reservation, initialization failure and
+cleanup after cancellation or exceptions. Integer-width reasoning must distinguish
+32-bit and 64-bit host arithmetic from actual Wasm ABI execution. A copied helper
+or a simulated queue is not a substitute for the real loader's integration.
 
-- `python3 -m unittest discover -s llama-cpp/tests -p test_webgpu_model_upload_budget.py`
-- `python3 -m unittest discover -s llama-cpp/tests -p test_webgpu_source_overlay.py`
-
-The budget suite compiles the actual generated helper against deterministic CPU
-queue stubs, asserts actual loader wiring, and syntax-checks the complete loader
-against upstream headers. Integer-width fixtures exercise the same prepared
-helper with 32-bit and 64-bit arithmetic, including independent sequential and
-cycle-skipping reference states, size limits, pure device-switch selection,
-exact-multiple fallback, cross-tensor counterexamples, and a positive adoption
-case that prevents an always-original policy from passing. These integer-width
-fixtures do not execute Wasm ABIs. Overlay tests configure real CMake targets. These
-focused checks establish source/native contracts only. Browser model-load tests
-are required to establish runtime behavior, peak memory, throughput, cancellation
-and failure behavior; compilation alone does not establish those properties.
+The [verification guide](../../../docs/verification.md) identifies current native
+and runtime boundaries. Browser model-load tests are required to establish peak
+memory, throughput, cancellation and device-failure behavior. Source preparation
+and compilation alone do not establish those properties.

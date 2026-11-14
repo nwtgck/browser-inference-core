@@ -1,6 +1,7 @@
 #ifndef GGML_WEBGPU_Q8_DIAGNOSTIC_V1_H
 #define GGML_WEBGPU_Q8_DIAGNOSTIC_V1_H
-// Optional GPU-profile-only contract. Records use generated layout queries.
+// Optional GPU-profile-only contract. Record layouts come from the compiled
+// target's fingerprinted ABI metadata.
 #include "ggml-backend.h"
 #include <stdint.h>
 #ifdef __cplusplus

@@ -16,28 +16,21 @@ paths' bounds checks. The host dispatch still allocates
 the matching unsigned 32-bit uniforms. Its unrelated multi-token MoE tile-gather
 changes remain upstream; this retirement does not revert or optimize them.
 
-The CMake option, preparation script, patch, include-precedence hook and old
-patch-specific tests have been removed together. All WebGPU profiles now use the
-upstream-generated `ggml-wgsl-shaders.hpp`. The independently prepared shader-library
-header for single-token SSM convolution remains; it does not contain embedded WGSL.
-Reconfiguration tests poison a stale `moe-direct-slot-overlay` header to ensure it
-is not selected. Build commands no longer emit `LCB_WEBGPU_MOE_DIRECT_SLOT`.
+All WebGPU profiles use the upstream-generated `ggml-wgsl-shaders.hpp` for this
+selected-slot path. The retired patch and its activation/include hook are absent
+from the production recipe. Other independently prepared shader-library and
+specialized shader inputs remain selected by their own contracts; they must not
+restore the obsolete expert scan or shadow this upstream implementation.
 
-`upstream_provenance.py` records retirement separately from active `sourceOverlays`
-and rejects build records containing the retired option. No old artifact manifest
-or published identity is rewritten. This is a source-bound report change, not a
-new runtime-manifest schema or a claim to have rebuilt all profiles.
+Existing published artifacts remain immutable. The absence of an active patch
+in a new preparation receipt does not rewrite older manifests.
 
-## Regression evidence and limits
+## Validation boundary
 
-`../../tests/runtimes/llama_cpp/test_upstream_moe_direct_slot.py` checks the actual pinned shader/dispatch
-expressions and independently enumerates address mappings for selected experts,
-broadcasts, nonzero offsets, partial rows and rectangular workgroup tails. These
-are source and host-arithmetic tests, **not GPU execution or performance results**.
-`../../tests/runtimes/llama_cpp/test_webgpu_source_overlay.py` retains upstream target/header-generation
-checks, including the stale-header negative control.
-
-Historical downstream experiments were performed before this retirement; they do
-not certify v0.7.0. Real browser, hardware GPU and trained-model validation still
-belongs to the ordinary build and consumer-validation pipeline. See
-[the v0.7.0 review](llama-v0.7.0-review.md).
+The complete-source native provider records the current factory/dispatch choices
+and emitted shaders, with actual ggml types and SDK declarations. It does not
+execute the GPU shader. Source address reasoning, native recorded calls,
+software-GPU numerical comparisons and trained-model hardware measurements
+establish different properties. Use the current entries in
+[verification](../../../docs/verification.md); old downstream experiments do not
+certify a later upstream artifact. See [v0.7.0 compatibility](llama-v0.7.0-review.md).

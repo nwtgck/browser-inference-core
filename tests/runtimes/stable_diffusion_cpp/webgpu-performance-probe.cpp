@@ -1,11 +1,13 @@
 // Small synthetic graphs on the requested REAL backend. Optional browser smoke
 // runs this on WebGPU; native runs use CPU only. No model files or speed claims.
+#include "browser-probes.h"
 #include "image-performance-test-utils.h"
 #include "core/ggml_extend.h"
 #include "core/runner_cache.h"
 #include "model/common/rope.hpp"
 #include "model/diffusion/qwen_image_2_1.hpp"
 #include "ggml-backend-impl.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #ifdef __EMSCRIPTEN__
@@ -166,29 +168,90 @@ std::vector<float> run_parameter_batches(ggml_backend_t backend, int branches) {
 
 // Exercise the production softmax shader around private-cache boundaries.
 // The requested backend must execute the operator, never an implicit fallback.
-std::vector<float> run_softmax_rows(ggml_backend_t backend, int width, bool inplace, bool masked, bool sink) {
-    auto params = context(), computation = context();
-    auto input = ggml_new_tensor_3d(params.get(), GGML_TYPE_F32, width, 3, 2);
-    auto mask = masked ? ggml_new_tensor_2d(params.get(), GGML_TYPE_F16, width, 3) : nullptr;
-    auto sinks = sink ? ggml_new_tensor_1d(params.get(), GGML_TYPE_F32, 2) : nullptr;
-    Buffer parameters(ggml_backend_alloc_ctx_tensors(params.get(), backend), ggml_backend_buffer_free);
-    require(parameters != nullptr, "softmax parameter allocation");
-    if (mask)
-        write(mask, values(ggml_nelements(mask), 7, 16));
-    if (sinks)
-        write(sinks, {std::log(435.f), std::log(17.f)});
-    auto output = inplace ? ggml_soft_max_ext_inplace(computation.get(), input, mask, .0883883476f, 0.f)
-                          : ggml_soft_max_ext(computation.get(), input, mask, .0883883476f, 0.f);
+std::vector<float> run_softmax_rows(ggml_backend_t backend, int width, bool inplace, bool masked, bool sink,
+                                    float scale) {
+    auto ctx = context();
+    constexpr int input_offset = 7, mask_offset = 5, rows = 3, heads = 2;
+    constexpr float sentinel = -991.f;
+    auto source = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, input_offset + width * rows * heads + 13);
+    auto input = ggml_view_3d(ctx.get(), source, width, rows, heads, width * sizeof(float),
+                              width * rows * sizeof(float), input_offset * sizeof(float));
+    auto mask_source = masked ? ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F16, mask_offset + width * rows + 19) : nullptr;
+    auto mask = masked ? ggml_view_2d(ctx.get(), mask_source, width, rows, width * sizeof(ggml_fp16_t),
+                                      mask_offset * sizeof(ggml_fp16_t))
+                       : nullptr;
+    auto sinks = sink ? ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, heads) : nullptr;
+    auto before = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, 32);
+    auto output = inplace ? ggml_soft_max_ext_inplace(ctx.get(), input, mask, scale, 0.f)
+                          : ggml_soft_max_ext(ctx.get(), input, mask, scale, 0.f);
+    auto after = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, 32);
     if (sinks)
         ggml_soft_max_add_sinks(output, sinks);
     require(ggml_backend_supports_op(backend, output), "backend rejected softmax cache probe");
-    auto graph = image_test::graph(computation.get(), output);
-    auto allocation = allocate(backend, graph);
+    auto graph = image_test::graph(ctx.get(), output);
+    Buffer allocation(ggml_backend_alloc_ctx_tensors(ctx.get(), backend), ggml_backend_buffer_free);
+    require(allocation != nullptr, "softmax parameter/output allocation");
+    const std::vector<float> sink_values{std::log(435.f), std::log(17.f)};
+    if (sinks)
+        write(sinks, sink_values);
     std::vector<float> result;
-    for (unsigned seed : {3u, 23u}) {
-        write(input, values(ggml_nelements(input), seed, 8));
+    for (unsigned seed : {0u, 23u}) {
+        std::vector<float> source_values(ggml_nelements(source), sentinel);
+        std::vector<float> mask_values(masked ? ggml_nelements(mask_source) : 0, sentinel);
+        for (int row = 0; row < rows; ++row)
+            for (int column = 0; column < width; ++column) {
+                const auto i = unsigned(column) + seed;
+                // Three independent patterns exercise stable exponentiation,
+                // equal logits and cache spill with the same real dispatch.
+                const float value = row == 0   ? float(int((i * 37) % 113) - 56) / 19.f
+                                    : row == 1 ? float(int(i % 7) - 3) * 50.f
+                                               : 0.f;
+                for (int head = 0; head < heads; ++head)
+                    source_values[input_offset + (head * rows + row) * width + column] = value;
+                if (masked)
+                    mask_values[mask_offset + row * width + column] =
+                        column % 7 == 3 ? -INFINITY : float(int(i % 11) - 5) / 4.f;
+            }
+        write(source, source_values);
+        if (mask_source)
+            write(mask_source, mask_values);
+        write(before, std::vector<float>(32, sentinel));
+        write(after, std::vector<float>(32, sentinel));
         compute(backend, graph);
         auto current = read(output);
+        // The oracle uses a scalar double reduction and the authored inputs;
+        // it never translates or executes a second copy of the WGSL operator.
+        for (int head = 0; head < heads; ++head)
+            for (int row = 0; row < rows; ++row) {
+                std::vector<double> logits(width);
+                double maximum = sink ? sink_values[head] : -INFINITY;
+                for (int column = 0; column < width; ++column) {
+                    logits[column] = float(source_values[input_offset + (head * rows + row) * width + column] * scale +
+                                           (masked ? mask_values[mask_offset + row * width + column] : 0.f));
+                    maximum = std::max(maximum, logits[column]);
+                }
+                double denominator = sink ? std::exp(sink_values[head] - maximum) : 0;
+                for (const auto value : logits)
+                    denominator += std::exp(value - maximum);
+                for (int column = 0; column < width; ++column) {
+                    const double expected = std::exp(logits[column] - maximum) / denominator;
+                    const float actual = current[(head * rows + row) * width + column];
+                    require(std::isfinite(actual) && std::abs(actual - expected) <= 2e-7 + 2e-5 * expected,
+                            "softmax scalar oracle/cache boundary");
+                }
+            }
+        const auto observed_source = read(source);
+        for (size_t i = 0; i < source_values.size(); ++i)
+            if (!inplace || i < input_offset || i >= input_offset + ggml_nelements(input))
+                require(observed_source[i] == source_values[i], "softmax source offset/guard");
+        if (mask_source) {
+            std::vector<ggml_fp16_t> observed(mask_values.size());
+            ggml_backend_tensor_get(mask_source, observed.data(), 0, observed.size() * sizeof(ggml_fp16_t));
+            for (size_t i = 0; i < observed.size(); ++i)
+                require(observed[i] == ggml_fp32_to_fp16(mask_values[i]), "softmax mask/guard was modified");
+        }
+        for (auto guard : {before, after})
+            close(std::vector<float>(32, sentinel), read(guard));
         result.insert(result.end(), current.begin(), current.end());
     }
     return result;
@@ -369,14 +432,16 @@ extern "C" int sdc_test_webgpu_performance(const char * backend_name) {
             auto actual = run_parameter_batches(backend.get(), branches);
             close(expected, actual, 2e-5f, 2e-4f);
         }
-        for (int width : {17, 257, 4095, 4096, 4097, 16385}) {
+        for (int width : {1,   15,  16,  17,   31,   32,   33,   63,   64,   65,    255,   256,   257,
+                          511, 512, 513, 1023, 1024, 1025, 4095, 4096, 4097, 16383, 16384, 16385, 32771}) {
             for (bool inplace : {false, true})
                 for (bool masked : {false, true})
-                    for (bool sink : {false, true}) {
-                        auto expected = run_softmax_rows(reference.get(), width, inplace, masked, sink);
-                        auto actual = run_softmax_rows(backend.get(), width, inplace, masked, sink);
-                        close(expected, actual, 3e-6f, 3e-4f);
-                    }
+                    for (bool sink : {false, true})
+                        for (float scale : {1.f, .0883883476f}) {
+                            auto expected = run_softmax_rows(reference.get(), width, inplace, masked, sink, scale);
+                            auto actual = run_softmax_rows(backend.get(), width, inplace, masked, sink, scale);
+                            close(expected, actual, 3e-6f, 3e-4f);
+                        }
         }
         close(run_shared_rope(reference.get(), false), run_shared_rope(backend.get(), true), 2e-5f, 2e-4f);
         for (int kind = 0; kind < 4; ++kind)

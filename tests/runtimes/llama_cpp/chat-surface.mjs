@@ -1,8 +1,16 @@
-/** Real generated-module checks; independent of the example runtime. */
-export async function checkChatSurface(native, template) {
-  const check = (value, label) => { if (!value) throw new Error(label); };
+/** Actual generated Embind module and public C facade; no example runtime. */
+export async function checkChatSurface({ core, template }) {
+  const native = core.module;
+  const check = (value, label) => {
+    if (!value) {
+      throw new Error(label);
+    }
+  };
   const objects = [];
-  const own = value => { objects.push(value); return value; };
+  const own = value => {
+    objects.push(value);
+    return value;
+  };
   const json = value => own(native.common_json.parse(JSON.stringify(value)));
   const toJS = value => JSON.parse(value.dump(-1));
   const input = text => own(new native.common_chat_input(text));
@@ -27,15 +35,20 @@ export async function checkChatSurface(native, template) {
     const parsedExtra = own(native.common_chat_msgs_parse_oaicompat(json([{ role: 'user', content: 'hello', routing: 'parsed' }])));
     check(JSON.parse(own(parsedExtra.get(0)).extra_json).routing === 'parsed', 'Extra message metadata missing from parser');
     const reference = own(new native.common_chat_msg_content_part());
-    reference.type = 'tool_reference'; reference.name = 'lookup';
+    reference.type = 'tool_reference';
+    reference.name = 'lookup';
     const referenceParts = own(new native.common_chat_content_parts());
     referenceParts.push_back(reference);
     const referenceMessage = own(new native.common_chat_msg());
-    referenceMessage.role = 'user'; referenceMessage.content_parts = referenceParts;
+    referenceMessage.role = 'user';
+    referenceMessage.content_parts = referenceParts;
     check(toJS(own(referenceMessage.to_json_oaicompat(false))).content[0].name === 'lookup', 'Tool reference name lost');
     const deferred = own(new native.common_chat_tool());
     check(deferred.defer_loading === false, 'Deferred tool default changed');
-    deferred.name = 'later'; deferred.description = ''; deferred.parameters = '{}'; deferred.defer_loading = true;
+    deferred.name = 'later';
+    deferred.description = '';
+    deferred.parameters = '{}';
+    deferred.defer_loading = true;
     const deferredTools = own(new native.common_chat_tools());
     deferredTools.push_back(deferred);
     check(toJS(own(native.common_chat_tools_to_json_oaicompat(deferredTools)))[0].function.defer_loading === true, 'Deferred tool flag lost');
@@ -49,10 +62,14 @@ export async function checkChatSurface(native, template) {
     const capabilities = toJS(caps);
     check(caps.is_object() && typeof capabilities.supports_tool_calls === 'boolean', 'Template capabilities must retain the upstream JSON object');
     check(Array.isArray(capabilities.reasoning_effort_levels) && capabilities.reasoning_effort_levels.every(level => typeof level === 'string'), 'Reasoning effort levels missing');
-    const tools = [{ type: 'function', function: {
-      name: 'lookup', description: 'Find weather',
-      parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
-    } }];
+    const tools = [{
+      type: 'function',
+      function: {
+        name: 'lookup',
+        description: 'Find weather',
+        parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      },
+    }];
     const messages = [{ role: 'user', content: 'Weather in Tokyo?' }];
     const inputs = own(new native.common_chat_templates_inputs());
     check(Number(own(inputs.messages).size()) === 0, 'Native empty message default changed');
@@ -128,7 +145,9 @@ export async function checkChatSurface(native, template) {
     try {
       snapshot = own(standalone.feed(input('hel')));
       check(own(standalone.finish(input('lo'))).content === 'hello', 'Plain session stream failed');
-    } finally { standalone.delete(); }
+    } finally {
+      standalone.delete();
+    }
     check(snapshot.content === 'hel', 'Session deletion invalidated an owned result');
     // Keep the public JSON + force_gbnf signature even when upstream adds
     // schema-document overloads. Both calls use the same owned common_json.
@@ -156,17 +175,20 @@ export async function checkChatSurface(native, template) {
 
     const starts = own(new native.llama_token_sequences());
     const ends = own(new native.llama_token_sequences());
-    const start = own(new native.llama_tokens()); start.push_back(1);
-    const end = own(new native.llama_tokens()); end.push_back(2);
-    starts.push_back(start); ends.push_back(end);
+    const start = own(new native.llama_tokens());
+    start.push_back(1);
+    const end = own(new native.llama_tokens());
+    end.push_back(2);
+    starts.push_back(start);
+    ends.push_back(end);
     const budget = native.common_reasoning_budget_init(0n, starts, ends, end, 4,
       native.common_reasoning_budget_state.REASONING_BUDGET_IDLE);
     let endCopy;
     try {
       check(Number(own(native.common_reasoning_budget_get_end_match_copy(budget)).size()) === 0, 'Unexpected reasoning end match');
-      await native._lcb_llama_sampler_accept(budget, 1);
+      await core.api.llama_sampler_accept(budget, 1);
       check(native.common_reasoning_budget_get_state(budget) === native.common_reasoning_budget_state.REASONING_BUDGET_COUNTING, 'Reasoning counting transition failed');
-      await native._lcb_llama_sampler_accept(budget, 2);
+      await core.api.llama_sampler_accept(budget, 2);
       check(native.common_reasoning_budget_get_state(budget) === native.common_reasoning_budget_state.REASONING_BUDGET_DONE, 'Reasoning completion transition failed');
       endCopy = own(native.common_reasoning_budget_get_end_match_copy(budget));
       check(Number(endCopy.size()) === 1 && endCopy.get(0) === 2, 'Reasoning end copy is unreadable');
@@ -176,45 +198,62 @@ export async function checkChatSurface(native, template) {
       check(native.common_reasoning_budget_get_state(budget) === native.common_reasoning_budget_state.REASONING_BUDGET_DONE, 'Deleting the owned copy changed sampler state');
       endCopy.set(0, 3);
       check(own(native.common_reasoning_budget_get_end_match_copy(budget)).get(0) === 2, 'Reasoning end copy aliases sampler state');
-      await native._lcb_llama_sampler_reset(budget);
+      await core.api.llama_sampler_reset(budget);
       check(Number(own(native.common_reasoning_budget_get_end_match_copy(budget)).size()) === 0, 'Reasoning reset retained the end match');
       check(endCopy.get(0) === 3, 'Reasoning reset invalidated the owned copy');
-      await native._lcb_llama_sampler_accept(budget, 1);
+      await core.api.llama_sampler_accept(budget, 1);
       check(native.common_reasoning_budget_force(budget), 'Reasoning force failed');
       check(native.common_reasoning_budget_get_state(budget) === native.common_reasoning_budget_state.REASONING_BUDGET_FORCING, 'Reasoning force transition failed');
-    } finally { await native._lcb_llama_sampler_free(budget); }
+    } finally {
+      await core.api.llama_sampler_free(budget);
+    }
     check(endCopy.get(0) === 3, 'Sampler release invalidated the owned copy');
 
     // Bulk data stays in linear memory through the generated C ABI.
-    const rgb = native._lcb_malloc(3n);
+    const rgb = core.alloc(3);
     check(rgb !== 0n, 'RGB allocation failed');
     let bitmap = 0n;
     try {
-      native.HEAPU8.set([13, 29, 47], Number(rgb));
-      bitmap = await native._lcb_mtmd_bitmap_init(1, 1, rgb);
-      check(bitmap !== 0n && (await native._lcb_mtmd_bitmap_get_n_bytes(bitmap)) === 3n, 'RGB bitmap failed');
-      check(native.HEAPU8[Number(await native._lcb_mtmd_bitmap_get_data(bitmap)) + 2] === 47, 'RGB pixels changed');
+      core.bytes(rgb, 3).set([13, 29, 47]);
+      bitmap = await core.api.mtmd_bitmap_init(1, 1, rgb);
+      check(bitmap !== 0n && (await core.api.mtmd_bitmap_get_n_bytes(bitmap)) === 3n, 'RGB bitmap failed');
+      check(core.bytes(await core.api.mtmd_bitmap_get_data(bitmap), 3)[2] === 47, 'RGB pixels changed');
     } finally {
-      if (bitmap) await native._lcb_mtmd_bitmap_free(bitmap);
-      native._lcb_free(rgb);
+      if (bitmap) {
+        await core.api.mtmd_bitmap_free(bitmap);
+      }
+      core.free(rgb);
     }
-    const pcm = native._lcb_malloc(8n);
+    const pcm = core.alloc(8);
     check(pcm !== 0n, 'PCM allocation failed');
     let audio = 0n;
     try {
-      const view = new DataView(native.HEAPU8.buffer, Number(pcm), 8);
-      view.setFloat32(0, 0.25, true); view.setFloat32(4, -0.5, true);
-      audio = await native._lcb_mtmd_bitmap_init_from_audio(2n, pcm);
-      check(audio !== 0n && (await native._lcb_mtmd_bitmap_is_audio(audio)) === 1, 'PCM bitmap failed');
+      const bytes = core.bytes(pcm, 8);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      view.setFloat32(0, 0.25, true);
+      view.setFloat32(4, -0.5, true);
+      audio = await core.api.mtmd_bitmap_init_from_audio(2n, pcm);
+      check(audio !== 0n && (await core.api.mtmd_bitmap_is_audio(audio)) === 1, 'PCM bitmap failed');
     } finally {
-      if (audio) await native._lcb_mtmd_bitmap_free(audio);
-      native._lcb_free(pcm);
+      if (audio) {
+        await core.api.mtmd_bitmap_free(audio);
+      }
+      core.free(pcm);
     }
-    check((await native._lcb_mtmd_helper_support_video(0n)) === 0, 'Unexpected subprocess video support');
-    return { directGeneratedModule: true, nativeChatToolsAndHistory: true, reusedParser: true,
-      nativeEnumsAndDefaults: true, reasoningSampler: true, multimodalBitmaps: true,
-      trainedModelTools: false, multimodalModelInference: false };
+    check((await core.api.mtmd_helper_support_video(0n)) === 0, 'Unexpected subprocess video support');
+    return {
+      directGeneratedModule: true,
+      nativeChatToolsAndHistory: true,
+      reusedParser: true,
+      nativeEnumsAndDefaults: true,
+      reasoningSampler: true,
+      multimodalBitmaps: true,
+      trainedModelTools: false,
+      multimodalModelInference: false,
+    };
   } finally {
-    for (const object of objects.reverse()) object.delete();
+    for (const object of objects.reverse()) {
+      object.delete();
+    }
   }
 }

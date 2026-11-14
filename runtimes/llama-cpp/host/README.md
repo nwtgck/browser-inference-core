@@ -21,13 +21,17 @@ synthetic model loading/decode/state operations; host tests cover the helpers.
 The generated low-level surface includes public `ggml.h`, `ggml-alloc.h`,
 `ggml-backend.h` and `gguf.h` functions, as well as `ggml-cpu.h` and `ggml-opt.h`
 declarations included transitively by `llama.h`. Named public record layouts and
-selected integer macro constants are included. Each generated function has a
-normalized `lcb_` entry and a direct native export. Deprecated, variadic and
+selected integer macro constants are included. Scalar and pointer functions use
+their original C exports; by-value records use ordinary `bicore_` bridges.
+Deprecated, variadic and
 unavailable declarations are listed with reasons in `schema.excluded`.
 `ggml_threadpool_get_n_threads` is declared but has no implementation in this
 upstream pin, so it is not exported; the implemented threadpool APIs remain.
 Callback pointers are raw native addresses, so callers must manage their
-lifetime and ABI.
+lifetime and ABI. A callback returning an aggregate requires a native thunk
+matching the compiler's callback ABI; scalar JS callback signatures do not
+represent a structure return. Callback declarations are included in the target
+metadata.
 
 The default `variant: 'browser'` omits Node.js support and Emscripten assertions.
 Use `createCore({ profile: 'cpu-wasm32', variant: 'test' })` for Node.js tests;
@@ -50,9 +54,11 @@ remain synchronous. The 32-bit profile's linear-memory ceiling is 4 GiB; actual
 model capacity also depends on device limits and native staging allocations.
 
 `webgpu-wasm32-jspi` uses the same 4 GiB linear-memory ceiling without requiring
-memory64. It requires JSPI instead of Asyncify; its Promise exports use the same
-explicit `{ suspension: 'direct' }` attachment path as `webgpu-wasm64-jspi`. Normalized `lcb_` pointer and
-64-bit arguments remain `bigint` on both pointer widths. The application selects
+memory64. It requires JSPI instead of Asyncify; attach it with
+`{ suspension: 'jspi' }`, as for `webgpu-wasm64-jspi`. Public pointer and
+64-bit arguments remain `bigint` on both pointer widths. The shared caller
+converts them to the actual native wire representation. It selects layout and
+constants from the catalog target matching the compiled fingerprint. The application selects
 an explicit profile after checking capabilities; the example performs no fallback.
 
 Alternatively import `browser-inference-core/llama-cpp/profiles/cpu-wasm32/browser/core.mjs` directly.

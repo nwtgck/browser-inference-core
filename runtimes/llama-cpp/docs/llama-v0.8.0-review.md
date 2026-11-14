@@ -1,47 +1,51 @@
-# llama.cpp v0.8.0 integration review
+# llama.cpp v0.8.0 compatibility notes
 
-The llama runtime pin advances from `338fce6511c744893cc0d3d958b275f40552c7a4`
-to `8642541b255bfb5dc39cd351a178be09013a55d6`. Shared compiler/Dawn pins and
-the independent stable-diffusion runtime pins remain unchanged.
+These notes describe the upstream transition from
+`338fce6511c744893cc0d3d958b275f40552c7a4` to v0.8.0
+`8642541b255bfb5dc39cd351a178be09013a55d6`. They explain API and source decisions
+needed when reviewing later pins; they do not select the current pin or certify
+an artifact built from it. The source gitlink is authoritative.
 
-## Retained overlays
+## Graph and overlay contracts
 
-The upstream WebGPU source, shader templates, allocator, backend interfaces and
-`llama.h` are byte-identical. Every retained patch applies without modification.
-The complete normal 22-file and profile 24-file WebGPU compositions retain
-their previous bytes, including all historical stage and final output pins.
+This transition preserves the WebGPU source, shader templates, allocator,
+backend interfaces and `llama.h` used by the retained overlays. Source preparation
+still applies individual reviewable patches to private copies. A matching old
+output digest is an identity comparison rather than a requirement to freeze all
+future upstream source bytes.
 
-Reviewed semantic-input hashes change for the LFM decision/context updates and
-the model-header declarations. They preserve the existing sampler, optional
-snapshot, HC, router, MoE sum, QSA and file-backed-row behavior. The graph delta
-changes non-causal attention masks, while the separate context change controls
-selected outputs for decoders without memory. Neither changes the checked
-Qwen graph builders, indexed-matmul ABI, shader math or queue/copy lifecycle.
-File-backed models retain coherent ownership of the complete copied source
-tree. Vision/audio overlays preserve the upstream LFM3 video additions.
+The graph changes non-causal attention masks; a separate context change controls
+selected outputs for decoders without memory. The Qwen graph, indexed-matmul ABI,
+shader arithmetic and queue/copy lifecycle still require their own checks.
+File-backed rows require coherent model declarations across the complete private
+source tree. Vision/audio preparation must preserve upstream LFM3 video support.
 
-## Generated API and chat surface
+## C API and record layouts
 
-The 978 existing generated C functions retain their names and signatures.
 Upstream adds `mtmd_bitmap_set_is_video`, the by-value `mtmd_get_video_config`,
-its five-field record, three video-template constants, and a final
-`no_soundtrack` field in `mtmd_helper_video_init_params`. Existing record and
-field IDs stay unchanged. The generated layout queries and fingerprint bind
-these changed layouts to the matching artifact; wire ABI version remains 1.
-Return-record storage remains caller-owned. Subprocess video helpers remain
-excluded, and the existing deprecated compatibility exports remain present.
+its five-field record, three video-template constants, and a `no_soundtrack`
+field in `mtmd_helper_video_init_params`. Return-record storage remains
+caller-owned. Subprocess video helpers remain excluded; the explicitly retained
+deprecated compatibility functions remain direct upstream exports.
+
+Regenerate the API from the selected public headers. The current binding contract
+is ABI 3 with a target schema catalog and module-reported fingerprint. Do not
+reuse a historical record/field ID, offset or wire convention merely because an
+upstream function name survived this transition. See
+[the current API contract](core-contract.md).
+
+## Chat capability metadata
 
 Upstream changes `common_chat_templates_get_caps` from a boolean map to
 `common_json`, adding a `reasoning_effort_levels` array. The bridge selects that
-signature explicitly and returns the owned JSON object without dropping new
-information. The existing `bool_map` registration stays available. See
+signature explicitly and returns the owned JSON value without dropping new
+information. The `bool_map` registration remains a separate type. See
 [chat and multimodal bindings](chat-and-multimodal.md) for ownership and usage.
 
-## Validation boundaries
+## Verification boundary
 
-Checked preparation, generated-schema comparison, source/native tests and
-Node/Wasm surface checks cover distinct contracts. Hosted CI uses its pinned
-Node version; a local run is not a claim about a remote CI result. Real browser,
-GPU/model inference, new-model quality and target-device performance require
-separate validation. Publication remains append-only and source-bound, with
-the existing workflow and package contract unchanged.
+Preparation, native contracts, generated declarations, actual Wasm adapters and
+browser/model execution establish different properties. Later upstream support
+or a successful compilation does not certify new-model quality or target-device
+performance. The [verification guide](../../../docs/verification.md) identifies
+the current entry points. Published artifacts remain immutable and source-bound.

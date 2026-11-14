@@ -16,15 +16,27 @@ const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     if (pathname === '/') {
-      res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Core smoke test</title>'); return;
+      res.setHeader('Content-Type', 'text/html');
+      res.end('<!doctype html><title>Core smoke test</title>');
+      return;
     }
     const file = pathname === '/fixture.gguf' ? modelFile : pathname === '/chat-surface.mjs' ? chatTestFile : pathname === '/file-mount-lifetime.mjs' ? fileMountTestFile : resolve(packageRoot, '.' + pathname);
-    if (file !== modelFile && file !== chatTestFile && file !== fileMountTestFile && !file.startsWith(packageRoot + sep)) { res.writeHead(403); res.end(); return; }
+    if (file !== modelFile && file !== chatTestFile && file !== fileMountTestFile && !file.startsWith(packageRoot + sep)) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
     res.setHeader('Content-Type', mime[extname(file)] || 'application/octet-stream');
     res.end(await readFile(file));
-  } catch { res.writeHead(404); res.end(); }
+  } catch {
+    res.writeHead(404);
+    res.end();
+  }
 });
-await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+await new Promise((resolve, reject) => {
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', resolve);
+});
 const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
@@ -42,16 +54,22 @@ try {
         }
         let adapterRequests = 0;
         let fallbackAdapterRequests = 0;
-        const hostNavigator = { gpu: { requestAdapter: async () => {
-          adapterRequests++;
-          await new Promise(resolve => setTimeout(resolve, 0));
-          return null;
-        } } };
-        const ambientGpu = variant === 'browser' ? { requestAdapter: async () => {
-          fallbackAdapterRequests++;
-          await new Promise(resolve => setTimeout(resolve, 0));
-          return null;
-        } } : hostNavigator.gpu;
+        const hostNavigator = {
+          gpu: {
+            requestAdapter: async () => {
+              adapterRequests++;
+              await new Promise(resolve => setTimeout(resolve, 0));
+              return null;
+            },
+          },
+        };
+        const ambientGpu = variant === 'browser' ? {
+          requestAdapter: async () => {
+            fallbackAdapterRequests++;
+            await new Promise(resolve => setTimeout(resolve, 0));
+            return null;
+          },
+        } : hostNavigator.gpu;
         Object.defineProperty(navigator, 'gpu', {
           configurable: true,
           value: ambientGpu,
@@ -60,7 +78,9 @@ try {
         addEventListener('unhandledrejection', event => failures.push(String(event.reason)));
         const { createCore } = await import('/host/index.mjs');
         const moduleOptions = { print() {}, printErr() {} };
-        if (variant === 'browser') moduleOptions.hostNavigator = hostNavigator;
+        if (variant === 'browser') {
+          moduleOptions.hostNavigator = hostNavigator;
+        }
         const core = await createCore({ profile, variant, moduleOptions });
         // Create the fallback instance before either acquisition. A shared
         // navigator binding would redirect the first instance to ambientGpu.
@@ -68,14 +88,20 @@ try {
           ? await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } })
           : undefined;
         const expectedPointerBytes = profile.includes('wasm64') ? 8 : 4;
-        if (core.pointerBytes !== expectedPointerBytes) throw new Error('Unexpected pointer width');
-        const fileRowsVersion = core.module._lcb_file_backed_rows_version();
-        if (fileRowsVersion !== (expectedPointerBytes === 8 ? 1 : 0)) throw new Error('Unexpected file-backed rows capability');
+        if (core.pointerBytes !== expectedPointerBytes) {
+          throw new Error('Unexpected pointer width');
+        }
+        const fileRowsVersion = await core.api.bicore_file_backed_rows_version();
+        if (fileRowsVersion !== (expectedPointerBytes === 8 ? 1 : 0)) {
+          throw new Error('Unexpected file-backed rows capability');
+        }
 
         async function checkMissingAdapter(selectedCore) {
           // Keep this first: backend registry initialization must reach requestAdapter.
           const pending = selectedCore.api.ggml_backend_init_by_type(selectedCore.constant('GGML_BACKEND_DEVICE_TYPE_GPU'), 0n);
-          if (!selectedCore.busy) throw new Error('The wrapper released the pending suspended call');
+          if (!selectedCore.busy) {
+            throw new Error('The wrapper released the pending suspended call');
+          }
           let timer;
           try {
             const backend = await Promise.race([
@@ -88,7 +114,9 @@ try {
             if (backend !== 0n || selectedCore.busy || failures.length) {
               throw new Error(`Invalid suspension completion: ${JSON.stringify({ backend: String(backend), busy: selectedCore.busy, failures })}`);
             }
-          } finally { clearTimeout(timer); }
+          } finally {
+            clearTimeout(timer);
+          }
         }
         await checkMissingAdapter(core);
         if (adapterRequests !== 1 || fallbackAdapterRequests !== 0) {
@@ -100,10 +128,22 @@ try {
             throw new Error('The independent module did not use the default navigator');
           }
         }
-        if (navigator.gpu !== ambientGpu) throw new Error('The native module changed the ambient GPU object');
-        return { profile, variant, pointerBytes: core.pointerBytes, fileRowsVersion, adapterRequests, mockedAdapter: true,
-          hostNavigatorInjection: variant === 'browser', defaultNavigatorFallback: true,
-          independentFactories: variant === 'browser', suspension: true, passed: true };
+        if (navigator.gpu !== ambientGpu) {
+          throw new Error('The native module changed the ambient GPU object');
+        }
+        return {
+          profile,
+          variant,
+          pointerBytes: core.pointerBytes,
+          fileRowsVersion,
+          adapterRequests,
+          mockedAdapter: true,
+          hostNavigatorInjection: variant === 'browser',
+          defaultNavigatorFallback: true,
+          independentFactories: variant === 'browser',
+          suspension: true,
+          passed: true,
+        };
       }, { profile, variant });
       results.push(suspensionResult);
       console.log(JSON.stringify(suspensionResult));
@@ -113,22 +153,33 @@ try {
   for (const variant of ['browser', 'test']) {
     for (const profile of ['cpu-wasm32']) {
       const page = await browser.newPage();
-      page.on('console', msg => { if (msg.type() === 'error') console.error(msg.text()); });
+      page.on('console', msg => {
+        if (msg.type() === 'error') {
+          console.error(msg.text());
+        }
+      });
       await page.goto(url);
       const result = await page.evaluate(async ({ profile, variant, chatTemplate }) => {
         const { default: createNative } = await import(`/profiles/${profile}/${variant}/core.mjs`);
         const native = await createNative({ print() {}, printErr() {} });
+        const { createCore, attachCore, schema, mountReadOnlyFile } = await import('/host/index.mjs');
         const { checkChatSurface } = await import('/chat-surface.mjs');
-        const chatSurface = await checkChatSurface(native, chatTemplate);
-        const { createCore, mountReadOnlyFile } = await import('/host/index.mjs');
+        const chatCore = attachCore(native, schema, { suspension: 'direct' });
+        const chatSurface = await checkChatSurface({ core: chatCore, template: chatTemplate });
         const core = await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } });
-        const fileRowsVersion = core.module._lcb_file_backed_rows_version();
-        if (fileRowsVersion !== 0) throw new Error('Unexpected file-backed rows capability');
+        const fileRowsVersion = await core.api.bicore_file_backed_rows_version();
+        if (fileRowsVersion !== 0) {
+          throw new Error('Unexpected file-backed rows capability');
+        }
         await core.api.llama_backend_init();
         const bytes = new Uint8Array(await (await fetch('/fixture.gguf')).arrayBuffer());
         const mounted = mountReadOnlyFile(core, '/models/test.gguf', {
           size: bytes.length,
-          read(view, position) { const chunk = bytes.subarray(position, position + view.length); view.set(chunk); return chunk.length; },
+          read(view, position) {
+            const chunk = bytes.subarray(position, position + view.length);
+            view.set(chunk);
+            return chunk.length;
+          },
         }, { maxChunkBytes: 1024 });
         const { checkFileMountLifetime } = await import('/file-mount-lifetime.mjs');
         const fileMountLifetime = checkFileMountLifetime(core, mountReadOnlyFile);
@@ -139,37 +190,52 @@ try {
         core.setField('llama_model_params', params, 'lazy_mode', core.constant(fileRowsVersion ? 'LLAMA_LAZY_MODE_ON' : 'LLAMA_LAZY_MODE_OFF'));
         const path = core.utf8(mounted.path);
         const model = await core.api.llama_model_load_from_file(path, params);
-        if (!model) throw new Error('Synthetic model load failed');
-        if (core.module._lcb_model_file_backed_shard(model) !== -1) throw new Error('Unexpected retained shard for the synthetic Llama model');
+        if (!model) {
+          throw new Error('Synthetic model load failed');
+        }
+        if (await core.api.bicore_model_file_backed_shard(model) !== -1) {
+          throw new Error('Unexpected retained shard for the synthetic Llama model');
+        }
         const cp = core.allocRecord('llama_context_params');
         await core.api.llama_context_default_params(cp);
         for (const [key, value] of Object.entries({ n_ctx: 128, n_batch: 16, n_ubatch: 16, n_threads: 1, n_threads_batch: 1 })) {
           core.setField('llama_context_params', cp, key, value);
         }
         const ctx = await core.api.llama_init_from_model(model, cp);
-        if (!ctx) throw new Error('Context creation failed');
+        if (!ctx) {
+          throw new Error('Context creation failed');
+        }
         const token = core.alloc(4);
         const tokenView = core.bytes(token, 4);
         new DataView(tokenView.buffer, tokenView.byteOffset, 4).setInt32(0, 1, true);
         const batch = core.allocRecord('llama_batch');
         await core.api.llama_batch_get_one(batch, token, 1);
-        if (await core.api.llama_decode(ctx, batch) !== 0) throw new Error('Decode failed');
+        if (await core.api.llama_decode(ctx, batch) !== 0) {
+          throw new Error('Decode failed');
+        }
         const sampler = await core.api.llama_sampler_init_greedy();
         const sampled = await core.api.llama_sampler_sample(sampler, ctx, -1);
-        if (sampled < 0 || sampled >= 259) throw new Error('Invalid sampled token');
+        if (sampled < 0 || sampled >= 259) {
+          throw new Error('Invalid sampled token');
+        }
         const size = await core.api.llama_state_get_size(ctx);
         const state = core.alloc(size);
         const used = await core.api.llama_state_get_data(ctx, state, size);
-        if (used <= 0n || await core.api.llama_state_set_data(ctx, state, used) !== used) throw new Error('State roundtrip failed');
+        if (used <= 0n || await core.api.llama_state_set_data(ctx, state, used) !== used) {
+          throw new Error('State roundtrip failed');
+        }
         await core.api.llama_sampler_free(sampler);
         await core.api.llama_free(ctx);
         await core.api.llama_model_free(model);
-        for (const pointer of [params, path, cp, token, batch, state]) core.free(pointer);
+        for (const pointer of [params, path, cp, token, batch, state]) {
+          core.free(pointer);
+        }
         mounted.remove();
         await core.api.llama_backend_free();
         return { profile, variant, fileRowsVersion, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, fileMountLifetime, passed: true };
       }, { profile, variant, chatTemplate });
-      results.push(result); await page.close();
+      results.push(result);
+      await page.close();
     }
   }
   const resultFile = process.env.BIC_BROWSER_RESULTS_FILE || 'build/browser-results.json';
@@ -177,4 +243,7 @@ try {
     ? { session: JSON.parse(process.env.BIC_BROWSER_SESSION_JSON), results } : results;
   await writeFile(resultFile, JSON.stringify(output, null, 2)+'\n');
   console.log(JSON.stringify(results, null, 2));
-} finally { await browser.close(); server.close(); }
+} finally {
+  await browser.close();
+  server.close();
+}

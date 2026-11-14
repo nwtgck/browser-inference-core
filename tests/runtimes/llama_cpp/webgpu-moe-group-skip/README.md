@@ -1,25 +1,34 @@
-# MoE matrix inactive groups
+# MoE gather and matrix WGSL comparison
 
-The ordinary Python test executes canonical and prepared factories with the
-pinned include expander/preprocessor, checks complete generated WGSL byte
-relations, cache hits, parameters and tiling, and syntax-checks the full backend
-with normal and optional profiling definitions. It does not execute a GPU.
+This optional Dawn experiment executes supplied gather, baseline and candidate
+WGSL over caller-supplied synthetic fixtures. It checks routing, skipped-slot
+zeros, decoded-weight Float64 dot references, exact baseline/candidate output
+bytes, guards and input/metadata preservation. It does not prove production
+factory provenance or model throughput.
 
-`check_gpu.py` is an explicit, opt-in native Dawn check. Supply a local upstream,
-Node and the local `webgpu` package; it downloads nothing and uses no browser.
-It generates self-authored F32/Q8_0/IQ3_S bytes, uses unchanged pinned CPU
-dequantizers, executes the actual upstream gather, and validates every output
-byte against canonical matrix shaders. It checks routing membership, guards,
-source/metadata immutability, changing IDs, shared/slot-specific input, offsets,
-partial groups, vectorized tails and zero-tile to normal reuse.
+```sh
+LCB_TEST_WEBGPU_MODULE=file:///absolute/path/to/webgpu/index.js \
+node tests/runtimes/llama_cpp/webgpu-moe-group-skip/check_gpu.mjs \
+  /absolute/path/to/inputs --output /tmp/moe-group-report.json
+```
 
-The default contains 40 small cases. `--large` adds bounded K256/1024/2560,
-M32/E512/used10/tokens128 uniform and concentrated cases. No model weights or
-fixture binaries are distributed. GPU work is serialized and buffers are freed
-between cases. The gather uses the actual requested 256-invocation device limit;
-the smaller test grid-planning bound exercises flattening without pretending
-that it is the hardware's limit. All actual dispatch dimensions are checked.
+The input directory contains `source.json` with `fixtureManifestSha256` and
+`manifest.json`, an array of case objects. Each case supplies `name`, `type`,
+`k`, `m`, `experts`, `used`, `tokens`, `args` (the address/stride layout),
+`gatherParams`, `mainParams`, `grid`, `maxTiles`, `hashes` for `weights`, `input`, `ids`, `dequantized`, and
+`shaderHashes` for `gather-baseline`, `gather`, `baseline`, `candidate`. Supply the matching
+`shaders/<name>-{gather-baseline,gather,baseline,candidate}.wgsl` and
+`fixtures/<name>/{weights,input,ids,dequantized}.bin`. Decoded weights are F32;
+the caller is responsible for their independent correctness. Optional case
+flags and shapes must match the layouts consumed by the script.
 
-Optional `--benchmarks` reports isolated kernel timestamps and wall intervals
-separately. Repeated warm-input measurements and native software-adapter results
-are not model throughput or browser/Mac performance claims.
+`--large` selects `source-large.json`/`manifest-large.json`. `--filter`,
+`--skip` and `--limit` select cases. Set `LCB_TEST_WEBGPU_BACKEND` to choose a
+Dawn backend. `--benchmark` adds paired kernel measurements with bounded
+`--dispatches` and `--rounds`. GPU timing/speedup is reported only when
+`timestamp-query` is available; CPU encoding and submission wait intervals
+remain separate measurements.
+
+Input hashes establish transfer integrity only. The caller supplies complete
+inputs and an installed Dawn module. There is no repository shader/fixture
+producer for this experiment; the former body-extraction generator is retired.

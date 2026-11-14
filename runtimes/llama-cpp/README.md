@@ -49,24 +49,30 @@ See the [API and ownership contract](docs/core-contract.md) and the [OPFS worker
 
 ## Build from source
 
-Prerequisites: Linux, Git, Python 3.11 or later, Clang, CMake 3.24 or later, Ninja, and Node.js 22. Downloading the toolchain requires network access.
+Prerequisites: Linux, Git, Python 3.11 or later, Clang, CMake 3.24 or later, Ninja, jq, and Node.js 22.12 or later. Python runs the unchanged upstream WGSL generator; project-owned tools run as emitted TypeScript. Toolchain acquisition requires network access.
 
 Acquire the pinned compiler and Dawn as described in the root
 [toolchain contract](../../toolchain/README.md), then run from the repository root:
 
 ```sh
 git submodule update --init --recursive
-python3 -m build_tools.toolchain.prepare
+npm ci
+npm run tooling:build
+node build/tooling/tools/toolchain/cli.js prepare --checkout-root "$PWD" --tools-root "$PWD/.tools"
+BICORE_TOOL_NODE="$(command -v node)"
 source .tools/emsdk/emsdk_env.sh
 for profile in cpu-wasm32 webgpu-wasm32-asyncify webgpu-wasm32-jspi webgpu-wasm64-jspi webgpu-wasm64-jspi-gpu-profile; do
   for variant in browser test; do
-    python3 -m build_tools.runtimes.llama_cpp.build --profile "$profile" --variant "$variant"
+    "$BICORE_TOOL_NODE" build/tooling/runtimes/llama-cpp/tools/cli.js build \
+      --checkout-root "$PWD" --tooling-root "$PWD/build/tooling" --local \
+      --output-root /tmp/browser-inference-builds/llama-cpp \
+      --toolchain-root "$PWD/.tools" --profile "$profile" --variant "$variant" --kind wasm \
+      --jobs 4 --python "$(command -v python3)"
   done
 done
-python3 -m build_tools.runtimes.llama_cpp.package
 ```
 
-Within `runtimes/llama-cpp/`, build outputs go to `build/<profile>/<variant>/runtime/` and the assembled package goes to `dist/package/`. Do not commit generated binaries to source branches. The shared compiler/Dawn pins are in `../../toolchain/config.json`; the llama upstream pin is in `config/toolchain.json`; profile and variant settings are in `config/profiles.json` and `config/variants.json`.
+Build outputs go to `<output-root>/build/<kind>/<profile>/<variant>/runtime/`, and Wasm builds stage matching runtime assets and provenance under `<output-root>/stage/<profile>/<variant>/`. The `--local` mode captures owned working files and remains unpublishable; release builds require a clean checkout whose HEAD matches `--expected-commit` instead. Do not commit generated binaries to source branches. The shared compiler/Dawn pins are in `../../toolchain/config.json`; the llama upstream pin is the Git submodule entry. Profile and variant settings are in `config/profiles.json` and `config/variants.json`.
 
 | Profile | Pointer width | Maximum linear memory | Backends |
 |---|---:|---:|---|
@@ -93,23 +99,24 @@ its 4 GiB linear-memory ceiling.
 From the repository root:
 
 ```sh
-npm --prefix runtimes/llama-cpp test
-npm --prefix runtimes/llama-cpp run test:python
+npm run tooling:build
+node --test build/tooling/tests/runtimes/llama-cpp/tools/*.test.js
+node --test tests/runtimes/llama_cpp/*.test.mjs
 ```
 
 Native integration tests can run without Emscripten:
 
 ```sh
-cd runtimes/llama-cpp
-cmake -S . -B build/native -G Ninja -DLCB_NATIVE_CHECK=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build/native --target core -j 4
-python3 ../../tests/runtimes/llama_cpp/make_test_model.py build/fixture.gguf
-python3 ../../tests/runtimes/llama_cpp/native_smoke.py --library build/native/libcore.so \
-  --schema build/native/generated/schema.json --model build/fixture.gguf \
-  --output build/native-results.json
+cmake -S runtimes/llama-cpp -B /tmp/browser-inference-native -G Ninja \
+  -DLCB_NATIVE_CHECK=ON -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DLCB_CHECKOUT_ROOT="$PWD" -DLCB_COMPILE_ROOT="$PWD" \
+  -DLCB_TOOLING_ROOT="$PWD/build/tooling" \
+  -DLCB_NODE="$(command -v node)"
+cmake --build /tmp/browser-inference-native --target core -j 4
 ```
 
-The generated model is a small, deterministic, untrained GGUF fixture. Its purpose is to exercise loading and execution, not language quality or compatibility with large trained models. Native tests, host-side mocks, and browser Wasm tests cover different execution paths.
+Native fixtures use small synthetic inputs to exercise typed boundaries, ownership and numerical behavior. They do not establish language quality or compatibility with large trained models. Native tests, host-side mocks, and browser Wasm tests cover different execution paths.
 
 ## Distribution
 

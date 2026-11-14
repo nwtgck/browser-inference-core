@@ -1,13 +1,17 @@
-// Source-bound real-Dawn T1 alias comparison. Each lane owns an independent union arena.
+// Real-Dawn comparison of supplied WGSL. Each lane owns an independent union arena.
 import {readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 const argv = process.argv.slice(2);
 const option = (key, fallback) => {const i = argv.indexOf(key); return i < 0 ? fallback : argv[i + 1];};
-const lab = resolve(option('--work', '.'));
-const {create, globals} = await import(pathToFileURL(resolve(option('--webgpu-module', ''))).href);
-Object.assign(globalThis, globals);
+const inputDirectory = option('--work', undefined), webgpuModule = option('--webgpu-module', undefined);
+if (!inputDirectory || !webgpuModule) {
+  throw new Error('Usage: run_gpu.mjs --work INPUTS --webgpu-module MODULE [--output REPORT]');
+}
+const lab = resolve(inputDirectory);
+const {create, globals} = await import(pathToFileURL(resolve(webgpuModule)).href);
+const { GPUBufferUsage, GPUMapMode } = globals;
 const output = resolve(option('--output', join(lab, 'merged-correctness.json')));
 const workgroups = option('--workgroups', '256,512,1024').split(',').map(Number);
 const limit = Number(option('--limit', Infinity));
@@ -22,9 +26,8 @@ const classify = x => (x & 0x7fffffff) > 0x7f800000 ? 'nan' : (x & 0x7fffffff) =
 const integrated = JSON.parse(readFileSync(join(lab, 'manifest.json')));
 const pins = integrated.source;
 const original = {generatedShaderSha256: integrated.baselineShaderSha256};
-const report = {status: 'started', scope: 'T1 only, actual extracted fused factory + exact production baseline WGSL; independent alias arenas; actual selected backend, no actual graph or model throughput claim.',
-    runnerSha256: hash(readFileSync(fileURLToPath(import.meta.url))), pins, factoryShaderSha256: integrated.shaderSha256, adapter: {}, devices: [], cases: [], errors: []};
-check(integrated.status === 'prepared', 'Source-bound preparation must finish before GPU');
+const report = {status: 'started', scope: 'One-token supplied fused and baseline WGSL; independent alias arenas; numerical validation without production provenance, graph integration or throughput claims.',
+    runnerSha256: hash(readFileSync(fileURLToPath(import.meta.url))), suppliedMetadata: pins, shaderSha256: integrated.shaderSha256, adapter: {}, devices: [], cases: [], errors: []};
 const backend = option('--backend', undefined);
 const owner = create(backend ? ['backend=' + backend] : []); globalThis[Symbol.for('router-tail-merged-lab.owner')] = owner;
 const live = new Set(); let device;
@@ -72,7 +75,7 @@ try {
         check([256, 512, 1024].includes(wg) && wg <= adapter.limits.maxComputeInvocationsPerWorkgroup, 'WG unsupported');
         device = await adapter.requestDevice({requiredFeatures: ['shader-f16'], requiredLimits: {maxComputeInvocationsPerWorkgroup: wg, maxComputeWorkgroupSizeX: wg}});
         const alignment = device.limits.minStorageBufferOffsetAlignment;
-        check(alignment === 256 && device.limits.maxComputeInvocationsPerWorkgroup === wg, 'Factory/fixture limits mismatch');
+        check(alignment === 256 && device.limits.maxComputeInvocationsPerWorkgroup === wg, 'Shader/fixture limits mismatch');
         device.addEventListener('uncapturederror', event => report.errors.push(event.error.message));
         device.lost.then(info => {if (info.reason !== 'destroyed') report.errors.push('Device lost: ' + info.message);});
         const deviceRow = {wg, features: [...device.features], alignment, pipelines: []}; report.devices.push(deviceRow);
@@ -81,7 +84,7 @@ try {
         for (const name of ['get_rows', 'sum_rows', 'clamp', 'clamp_inplace', 'div', 'router_tail', 'merged']) {
             const path = name === 'merged' ? join(lab, 'generated', String(wg), 'router_tail_merged.wgsl') : join(lab, 'generated', String(wg), name + '.wgsl');
             const code = readFileSync(path), expected = name === 'merged' ? integrated.shaderSha256[String(wg)]["router_tail_merged.wgsl"] : name === 'router_tail' ? integrated.shaderSha256[String(wg)]['router_tail.wgsl'] : original.generatedShaderSha256[String(wg)][name + '.wgsl'];
-            check(hash(code) === expected, 'Factory shader hash mismatch');
+            check(hash(code) === expected, 'Supplied shader hash mismatch');
             device.pushErrorScope('validation');
             const module = device.createShaderModule({code: code.toString(), label: name}), info = await module.getCompilationInfo();
             check(!info.messages.some(m => m.type === 'error'), 'WGSL compilation error: ' + JSON.stringify(info.messages));

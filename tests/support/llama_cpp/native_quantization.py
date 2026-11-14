@@ -12,7 +12,14 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from build_tools.source.checkout import git_environment
+
+def git_environment() -> dict[str, str]:
+    """Read only the named local worktree, without inherited Git overrides."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    env.update({'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull,
+                'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_LAZY_FETCH': '1',
+                'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_REPLACE_OBJECTS': '1'})
+    return env
 
 
 def source_commit(upstream: Path) -> str | None:

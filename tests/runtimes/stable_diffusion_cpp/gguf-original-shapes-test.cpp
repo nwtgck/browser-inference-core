@@ -1,5 +1,6 @@
 // Self-authored GGUFs exercise the production loader, shape validation and CPU
 // arithmetic. They do not contain trained weights or perform model inference.
+#include "browser-probes.h"
 #include "ggml.h"
 #include "model_io/gguf_io.h"
 #include <array>
@@ -10,10 +11,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-extern "C" uint64_t sdc_test_gguf_shape(const char *, const char *, int);
-extern "C" uint32_t sdc_test_model_tensor_count(const char *);
-extern "C" int sdc_test_gguf_original_shape_values(const char *);
 
 static void check(bool value, const char * message) {
     if (!value)

@@ -1,7 +1,7 @@
 # Anima image performance changes
 
-This change uses the pinned upstream patch inventory; it does not update vendor
-submodule commits or the llama-cpp runtime.
+The image runtime applies the following patches to its private copy of the
+pinned upstream source. The llama runtime has an independent source and build.
 
 * `0020` selects a single-image causal convolution only with no frame history,
   compatible temporal shape/stride/dilation, supported operations, and no temporal
@@ -25,8 +25,9 @@ Graph-local copies and allocator reservation are additional.
 
 Native tests use deterministic synthetic weights, a real small AnimaRunner,
 ModelManager and RunnerCache. They do not establish trained-model output quality,
-GPU timing, WebGPU device-loss behavior, or WASM build success. The accompanying
-handoff records the actual pass/fail results.
+GPU timing, WebGPU device-loss behavior, or Wasm build success. See
+[verification](../../../docs/verification.md) for the native and packaged-runtime
+checks and their boundaries.
 
 Unconditional CONT removal, per-layer Anima KV caching and preview callback
 changes remain outside this implementation unit. The subsequent WebGPU transport

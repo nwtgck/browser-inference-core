@@ -1,91 +1,103 @@
 # Build and artifact distribution
 
-## Version boundaries
+## Source and toolchain identities
 
-Source commits pin llama.cpp through a submodule gitlink. Use `git submodule update --init --recursive`; do not advance to a moving upstream tip with `--remote` during a build. The submodule HEAD must match `llamaCommit` in `config/toolchain.json`.
+The source commit pins llama.cpp through its submodule gitlink. Initialize the
+selected revision with `git submodule update --init --recursive`; do not use
+`--remote` during a release build. Runtime configuration and build tools are read
+from the executing checkout. Private compiler inputs are prepared from the
+selected Git objects, and publication rejects a dirty or mismatched source.
 
-The pinned Emscripten Asyncify runtime needs its existing argument-preservation logic
-enabled for Wasm32 bigint exports as well as Memory64. Toolchain setup changes only
-the four relevant preprocessor guards; input and output SHA-256 pins are recorded
-in repository-root `toolchain/config.json` and artifact provenance. Unknown source is rejected,
-repeat setup is safe, and Asyncify builds verify that the selected compiler is patched.
+The pinned Emscripten Asyncify runtime needs its existing argument-preservation
+logic enabled for Wasm32 bigint exports as well as Memory64. Toolchain preparation
+applies the reviewed guard correction and records the source and result
+identities. Unknown inputs are rejected and repeated setup is safe. This SDK
+workaround is separate from the runtime's individual upstream patches.
 
-The source commit, llama.cpp commit, and artifact commit are distinct identifiers. The manifest records the first two. The artifact commit is reported after publication through the Actions output and summary; embedding its own hash in the committed manifest would create a circular reference.
+Source, upstream and artifact commits have distinct meanings. Manifests record
+the first two; publication reports the artifact commit after it exists. Embedding
+that commit in its own package would create a circular identity.
 
 ## Runtime package
 
-The following layout describes the independently assembled llama component. The
-public aggregate package places it under `runtimes/llama-cpp/`, uses a format-4
-root manifest, and exposes it through `browser-inference-core/llama-cpp/*`. Each
-component retains its format-2 manifest. See the [root package layout](../../../README.md).
+The aggregate package stores this independently assembled runtime under
+`runtimes/llama-cpp-browser-core/` and exposes
+`browser-inference-core/llama-cpp/*`. The root manifest uses format 5 and the
+runtime manifest uses format 2. See the [package layout](../../../README.md).
 
-The artifact root gets a separate `package.json`, not a copy of the development manifest. It has no build scripts, workspaces, dependencies, submodules, or build intermediates. `private: true` prevents accidental npm registry publication without changing the Git-based distribution model.
+The artifact has its own dependency-free `package.json`, without development
+scripts, workspaces, submodules or compiler intermediates. `private: true`
+prevents accidental registry publication; Git commit installation remains
+supported. Each profile contains both `browser` and `test` variants. Browser
+targets `web,worker` with assertions disabled; test also targets Node and retains
+assertions. Their JavaScript and Wasm must stay together.
 
-Each profile/variant runtime directory is copied as a unit to `profiles/<profile>/<variant>/`. `browser` disables Emscripten assertions and targets `web,worker`; `test` enables assertions and targets `web,worker,node`. Both are always included. Assertions can affect linked Wasm, so variants use independent build directories and their JavaScript/Wasm files must never be mixed. Do not assume every build produces exactly two files. Types, schemas, host helpers, a manifest, and license notices accompany the runtime. Manifest format 2 records separate provenance and validation under `profiles[profile].variants[variant]`. It covers every other file's path, size, and SHA-256; unexpected files are rejected. `npm pack` output is checked against the actual package tree.
+Typed staging and packaging functions copy the complete selected runtime output,
+generated API/schema files, host helpers, documentation and notices. Do not assume
+that every runtime consists of exactly two files. Each inner manifest inventories
+its payload; the root inventory binds root files and the two inner manifests.
+Final `npm pack` verification checks the actual aggregate package payload.
 
-Mixing source commits, upstream commits, or binding schemas across profiles is rejected. Dirty source builds cannot be published. A single file of 100 MiB or more is rejected before pushing. Exceeding that guard requires an explicit distribution change, not a silent conversion to Git LFS pointers.
+Mixing source commits, upstream commits or target schemas is rejected. Dirty
+source builds cannot be published. A file of 100 MiB or more is rejected before
+publication; changing this limit needs a deliberate distribution decision.
 
-## Publication
+## Parallel builds and validation
 
-The first artifact commit has no parent. Later commits use the previous artifact tip as their parent. Each commit replaces the complete package tree so obsolete auxiliary files do not survive. Publication uses normal pushes only, never force-pushes.
+`build.yml` has independent native/host checks and runtime build matrices: five
+llama profiles and three image profiles, each in both variants. Matrix jobs emit
+and check the selected runtime's tools, build private compiler inputs, and upload
+staged runtime files and provenance. They do not upload SDK executables, object
+files, static libraries or CMake caches as runtime artifacts.
 
-When concurrent builds race, the losing publisher fetches the new tip and recreates its candidate commit on that parent. Existing commits and hashes remain intact. After 20 failed attempts, the job fails and can be rerun. A concurrency configuration that cancels earlier pending builds is deliberately not used.
+The matrices use `fail-fast: false` and no artificial `max-parallel` cap. Runner
+availability still limits concurrency. Each runtime assembly waits for its own
+required checks and shards. The publication job joins the two validated runtime
+packages and never publishes a partial profile set. Assembly does not compile the
+core again. The native QSA comparison is a separate required gate.
 
-Human pushes and `pull_request` opened/reopened/synchronize events build independently.
-PR jobs check out the exact head commit, not the synthetic merge commit, and a
-same-repository PR can publish before merge. Duplicate push/synchronize builds
-are accepted; no cancellation or deduplication mechanism is added. Artifact
-branches are excluded from source builds. The publisher checks the assembled
-manifest against the selected source commit before writing to the remote.
+`validation runtime` runs the saved package's browser matrix and writes a
+source-bound receipt. CPU smoke uses a small synthetic GGUF, not trained-model
+quality or large-model acceptance. WebGPU build coverage and mock-adapter
+suspension checks do not establish physical GPU inference. The manifest records
+what each variant actually exercised. Production browser files and test files
+need their own checks; passing one does not validate the other.
 
-The test, profile-build, and assembly jobs have read permission; only the publication job has write permission. Credentials are supplied through a process-local HTTP header rather than stored in the remote URL. Anyone who can push a source branch can change the resulting artifact; the workflow does not grant publication credentials to external pull requests or Dependabot-triggered runs. Fork PRs can still run the read-only build and test jobs.
+The real-Wasm Asyncify regression suspends a bigint-argument backend call on an
+asynchronous mock adapter and verifies rewind completion. It needs neither a
+model nor a physical GPU and makes no GPU correctness claim. See
+[verification](../../../docs/verification.md) for the separate evidence levels.
 
-## Parallel profile builds
+## Append-only publication
 
-Host/publication tests and the ten profile/variant builds run independently. Each pair
-has its own runner, checkout, toolchain, and `build/<profile>/<variant>/` directory. The matrix
-intentionally omits `max-parallel` so every pair can start as soon as a runner is
-available, reducing build wait time. Do not add an artificial matrix parallelism
-cap. A failing pair does not cancel the other profiles, so their diagnostics remain
-available. Runner availability and account/repository limits still determine when
-jobs actually start.
+Publication freezes one validated aggregate snapshot, verifies its Git tree and
+source binding, and creates an artifact commit. The initial commit has no parent;
+later commits use the observed artifact tip as parent and replace the complete
+package tree. Obsolete auxiliary files cannot survive from an older tree.
 
-`python3 -m build_tools.runtimes.llama_cpp.staging` (from the repository root) transfers only the runtime directory, four generated API
-files, and provenance for one profile/variant pair. CMake caches, object files, static libraries,
-and SDK executables are not uploaded. The wasm64 WebGPU JSPI/browser job additionally supplies the
-standalone Emscripten and Dawn notices using the same selection rules as local
-packaging. Each shard has distinct paths; the assembly job merges them under
-`build/`. That job checks out llama.cpp for its notices and browser-test templates,
-but does not install Emscripten or compile the core again.
+Pushes are ordinary fast-forward pushes. A publisher that loses a race fetches
+the new tip and recreates its candidate on that parent, preserving existing
+commits. After the bounded retry limit it fails; it never force-pushes.
+Freeze/confirm/report reuse the same job's verified state as described in
+[publication processing](../../../docs/publication-performance.md).
 
-The existing `build` job remains the aggregate success check. Assembly requires
-the host tests and every matrix build to succeed. It then uses
-the existing packager, CPU Chromium tests (including the chat/tool surface),
-transactional browser-validation recorder, and final package checks. No partial profile set is published.
-Only the resulting `runtime-package` is passed to the single publication job.
-The local, sequential build commands remain supported.
+PR builds select the exact PR head commit; push and manual runs select their
+event commit. Push and PR builds for the same source may both run and publish.
+Artifact branches are excluded from source triggers. Test/build jobs have read
+permissions; only the publisher has content writes. Publication excludes external
+PR heads and Dependabot-triggered runs. Source writers can change the resulting
+runtime build, so source-write access remains a trust boundary.
 
-Parallel runners reduce elapsed time rather than the total amount of compilation.
-They also repeat setup work and add artifact transfers; total runner usage can
-increase. Profile build times and queueing determine the actual speedup.
-
-## Release checks
-
-Publication requires all five profiles in both variants, Chromium checks, and package verification. Chromium tests exercise both variants of the CPU profile and all four WebGPU profiles with JSPI/Asyncify suspension. Testing the assertions-enabled variant alone does not validate the browser variant; production files are exercised directly. The workflow compiles WebGPU but does not record GPU inference as verified. CPU smoke tests use a small untrained synthetic GGUF, not a quality benchmark or a multi-GiB model acceptance test.
-
-An additional Node.js real-Wasm Asyncify regression uses the test variant and suspends a bigint-argument backend call
-on an asynchronous mock adapter request, then verifies completion after rewind.
-It requires neither a model nor a physical GPU and does not certify GPU inference.
-
-Reproducible tests and CI verification logic belong in the source repository. Per-run logs and test-result JSON belong in ignored build output or CI artifacts, not committed documentation. Artifact manifests retain build provenance and the scope of checks actually performed.
+Network acquisition, cache/artifact transfers, npm resolution and remote writes
+are explicit in workflow YAML. Local stages use literal
+`docker run --network none` commands there. Reports and per-run logs stay outside
+the installed runtime package. See [upstream updates and reports](update-automation.md)
+for candidate branches, manual PR handoff and source-aware comments.
 
 ## Retention
 
-Consumers may depend on older artifact hashes, so do not delete or replace artifact history. Binary history still occupies space in the shared repository even when source branches contain no binaries. Limit fetch scope and depth where appropriate, and only compact storage in ways that preserve referenced commits.
-
-## Update automation and consumer reporting
-
-[Upstream updates and consumer reports](update-automation.md) describes the
-browser-only stable/nightly/custom updater, artifact publication before PR
-merge, exact npm lock fragments, compact consumer YAML and source-aware PR
-comments. Reporting is outside the runtime package and does not change its format.
+Consumers can depend on old artifact commits. Preserve their objects and
+contents; do not replace artifact history or rewrite an existing commit's bytes.
+Binary history occupies repository storage even when source branches contain no
+binaries. Limit fetch scope where appropriate and compact only while preserving
+referenced commits.

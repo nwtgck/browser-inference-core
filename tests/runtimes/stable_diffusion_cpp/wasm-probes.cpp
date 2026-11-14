@@ -1,5 +1,6 @@
 // Test builds only: exercise the actual patched GGUF reader and C++ stream.
 // These probes neither allocate a model nor perform inference.
+#include "browser-probes.h"
 #include "stable-diffusion.h"
 #include "model_io/gguf_io.h"
 #include "core/util.h"

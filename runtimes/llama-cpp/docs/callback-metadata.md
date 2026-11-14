@@ -1,61 +1,82 @@
 # Synchronous metadata getters inside native evaluation callbacks
 
-JSPI (JavaScript Promise Integration) makes the ordinary generated exports return
-Promises even when their implementation does not suspend. They cannot be called
-as synchronous numeric/pointer getters from an in-progress native evaluation
-callback. Awaiting a getter there would violate the native callback contract.
+An evaluation callback needs synchronous metadata while native evaluation is in
+progress. Awaiting a getter there would violate the native callback contract.
+For native evaluation callbacks, the ABI keeps these reviewed public C getters
+outside the JSPI suspending-export list:
 
-The binding generator now emits an explicit, narrow, synchronous surface:
-`lcb_callback_metadata_version()` returns `1`, and seven
-`lcb_callback_<public-name>` exports forward only to the public metadata getters
-listed in `CALLBACK_METADATA_GETTERS`. The existing pointer/size representation
-and checked conversion are reused. Ordinary generated function exports and their
-Promise contract are unchanged. The callback aliases are exported, but **not**
-listed in `JSPI_EXPORTS`; the schema records their version and identity, so the
-ordinary schema hash and distribution provenance include this addition.
+- `ggml_op_desc`
+- `ggml_backend_buffer_name`
+- `ggml_backend_buffer_is_host`
+- `ggml_backend_dev_count`
+- `ggml_backend_dev_get`
+- `ggml_backend_dev_name`
+- `ggml_backend_dev_supports_op`
+
+These are the original C exports. The generated ABI 3 schema identifies them in
+`callbackMetadata`, whose metadata-contract version is `2`. Record adapters and
+ordinary model operations do not acquire synchronous callback access. The
+ordinary generated API remains asynchronous and serialized. Other reviewed
+synchronous leaves, such as the file-backed-row handshake, have their own idle
+state and lifetime requirements; their presence is not permission to call them
+from evaluation callbacks.
+
+## Calling the reviewed leaves
+
+The host exports `createAbiCaller`. Use the same module and selected schema as
+the active core, and the suspension mode of that profile:
+
+```js
+import { createAbiCaller } from 'browser-inference-core/llama-cpp/host';
+
+const caller = createAbiCaller({
+  module: core.module,
+  schema: core.schema,
+  suspension: 'jspi',
+  gate: undefined,
+});
+// Inside the native callback; tensorPointer belongs to this invocation.
+const descriptionPointer = caller.callSync({
+  name: 'ggml_op_desc',
+  args: [tensorPointer],
+});
+```
+
+`callSync` permits only the schema's reviewed leaves, performs the target's
+scalar/pointer conversion, and rejects a Promise result. Select the schema using
+the actual module's ABI version and layout fingerprint; do not combine schema
+and module files from different artifacts. See the [host API](../host/README.md)
+for pointer conversion and UTF-8 reading.
 
 ## Scope and lifetime
 
 The getters read operation descriptions, backend registry/device capability,
 and destination-buffer metadata. They do not submit work, map GPU buffers, read
-tensor values, create/free contexts, or implement model operations. Pointer
-arguments must be live native objects belonging to the currently active module.
-A tensor pointer is valid only while the evaluation callback owns it. Do not
-retain native pointers or use these exports as a general reentrant API.
+tensor values, create or free contexts, or implement model operations. Pointer
+arguments must be live native objects belonging to the active module. A tensor
+pointer is valid only while the evaluation callback owns it. Do not retain it or
+use these leaves as a general reentrant API.
 
-Buffer location and a device's `supports_op` result **do not identify the actual
-scheduler-selected execution backend**, a CPU fallback reason, or GPU time.
-Installing an evaluation callback can itself alter synchronization; isolate that
-instrumented run from normal performance measurements. The aliases by themselves
-install no callback and change no scheduling in ordinary inference.
+Buffer location and a device's `supports_op` result do not identify the actual
+scheduler-selected execution backend, a CPU fallback reason, or GPU time.
+Installing an evaluation callback can alter synchronization; isolate that run
+from ordinary performance measurements. Exposing these leaves installs no
+callback and changes no scheduling by itself.
 
-## Compatibility and maintenance
+## Compatibility and validation
 
-This is a binding-layer addition using public upstream functions. No upstream
-source, existing exception patch, compiler transformation, or private runtime
-export is rewritten. No WebAssembly export-table bypass is needed in consumers.
-The name set and wire signatures fail closed if public declarations disappear,
-are deprecated, or change incompatibly. Inspect the implementations at every
-upstream update to keep the synchronous, non-submitting property true; signature
-checks alone cannot prove that property. Add only reviewed metadata getters,
-never make this a wildcard exemption for all native functions.
+`runtimes/llama-cpp/tools/bindings.ts` owns the reviewed name set. ABI generation
+requires those declarations to exist and be direct scalar exports. The ordinary
+`native/abi/metadata.cpp` translation unit checks their C signatures. Inspect the
+upstream implementations at each update: a compatible signature cannot prove
+that a function remains synchronous and non-submitting. Add only reviewed
+metadata leaves, never a wildcard exemption.
 
-A consumer can feature-detect `_lcb_callback_metadata_version`. Existing JSPI
-artifacts without it must omit these fields or use validated tensor layout data;
-they must not invoke ordinary Promise exports synchronously. Build fresh native
-artifacts, keep their real source/schema identities, then use the normal consumer
-pin-update procedure. This patch does not publish or invent artifacts or hashes.
-
-## Validation
-
-`python -m unittest discover -s llama-cpp/tests -p test_callback_metadata_bindings.py -v`
-checks the export/JSPI split, schema hash, missing/deprecated/signature changes,
-and compiles/runs the generated wrappers with a host C++ fixture. This is not a
-browser Wasm build or a real WebGPU execution test. The two existing partial-AST
-binding tests explicitly omit the new getter set because their fixtures do not
-represent the full public headers; real generation never disables the set.
-
-The development environment for this patch has no pinned upstream checkout or
-Emscripten toolchain. Real rebuilt WebGPU/JSPI artifacts still require build and
-browser verification before use; do not replace source-bound artifact checks with
-fixture results.
+The ABI generator tests under `tests/tools/abi/` cover the actual public-header
+surface, export split, generated declarations and Wasm adapter behavior. Host
+tests cover rejected synchronous calls and pointer conversion. Run the relevant
+emitted Node tests as described in [verification](../../../docs/verification.md).
+Source/native fixtures, tiny Wasm regressions, browser execution and real-model
+performance are separate evidence; a fixture result does not establish the last
+two. Consumers of older experimental artifacts must rebuild and validate a
+matching module/schema pair rather than infer this surface from a legacy alias.

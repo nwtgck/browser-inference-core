@@ -1,13 +1,13 @@
-// Standalone numerical check using actual factory-generated upstream WGSL.
+// Standalone comparison of supplied Q4 WGSL with supplied CPU references.
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fixture } from './fixtures.mjs';
 const [directory, outputPath] = process.argv.slice(2);
 if (!directory || !outputPath || process.argv.length !== 4) throw new Error('Usage: check_gpu.mjs SHADERS REPORT.json');
 const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
-Object.assign(globalThis, globals);
+const { GPUBufferUsage, GPUMapMode } = globals;
 const ownerKey = Symbol('Q4 standalone Dawn owner');
-const report = { schema: 1, scope: 'Actual prepared Q4_K factory vs unchanged upstream WG256, and actual upstream CPU dequantizer; standalone, no real-model or target-device speed claim', cases: [], benchmarks: [], errors: [], ok: false };
+const report = { schema: 1, scope: 'Supplied Q4_K WGSL and CPU references with optional GPU timing; not production-factory or model validation', cases: [], benchmarks: [], errors: [], ok: false };
 const buffers = new Set();
 let device;
 try {
@@ -34,7 +34,7 @@ try {
     pipelines.set(kind + size, await device.createComputePipelineAsync({ layout: 'auto', compute: { module, entryPoint: 'main' } }));
   }
   const cases = JSON.parse(await readFile(join(directory, 'cases.json'), 'utf8'));
-  if (!Array.isArray(cases) || !cases.length) throw new Error('No actual-factory cases');
+  if (!Array.isArray(cases) || !cases.length) throw new Error('No experiment cases in cases.json');
   function allocate(size, usage) {
     const buffer = device.createBuffer({ size: Math.ceil(size / 4) * 4, usage });
     buffers.add(buffer);
@@ -97,7 +97,7 @@ try {
     return inputErrors;
   }
   for (const [caseIndex, spec] of cases.entries()) {
-    if (!['ordinary', 'indexed'].includes(spec.kind) || !Number.isInteger(spec.k) || spec.k <= 0 || spec.k % 256 || !Number.isInteger(spec.m) || spec.m <= 0 || ![0, 1, 2].includes(spec.mode) || typeof spec.sharedInput !== 'boolean' || typeof spec.broadcast !== 'boolean' || ![32, 64, 128, 256].includes(spec.workgroups?.[sg])) throw new Error('Invalid actual-factory case');
+    if (!['ordinary', 'indexed'].includes(spec.kind) || !Number.isInteger(spec.k) || spec.k <= 0 || spec.k % 256 || !Number.isInteger(spec.m) || spec.m <= 0 || ![0, 1, 2].includes(spec.mode) || typeof spec.sharedInput !== 'boolean' || typeof spec.broadcast !== 'boolean' || ![32, 64, 128, 256].includes(spec.workgroups?.[sg])) throw new Error('Invalid experiment case');
     const chosen = spec.workgroups[sg], data = fixture(spec);
     const cpuBytes = await readFile(join(process.env.LCB_Q4_CPU_REFERENCE_DIR, `${caseIndex}.f64`));
     if (cpuBytes.length !== data.outputWords * 16) throw new Error('CPU reference output count mismatch');
@@ -119,7 +119,7 @@ try {
     const median = values => { const sorted = [...values].sort((a, b) => a - b), n = sorted.length; return (sorted[Math.floor(n / 2)] + sorted[Math.ceil(n / 2) - 1]) / 2; };
     for (const [kind, k, m] of [['ordinary', 2048, 2048], ['ordinary', 2048, 10752], ['ordinary', 2048, 6144], ['ordinary', 10752, 2048], ['indexed', 512, 2048], ['indexed', 2048, 512]]) {
       const spec = cases.find(row => row.kind === kind && row.k === k && row.m === m && !row.sharedInput && !row.broadcast);
-      if (!spec) throw new Error('Benchmark lacks actual-factory case');
+      if (!spec) throw new Error('Benchmark shape is missing from cases.json');
       const data = fixture(spec), chosen = spec.workgroups[sg];
       const cpuBytes = await readFile(join(process.env.LCB_Q4_CPU_REFERENCE_DIR, `${cases.indexOf(spec)}.f64`));
       if (cpuBytes.length !== data.outputWords * 16) throw new Error('Benchmark CPU reference count mismatch');

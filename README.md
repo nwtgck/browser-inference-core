@@ -13,7 +13,8 @@ upstream pins.
 | `runtimes/llama-cpp/` | Native integration, browser host, profiles, independent upstream pin and approved patches |
 | `runtimes/stable-diffusion-cpp/` | Image bindings, browser host, profiles, independent upstream pins and experimental browser patches |
 | `toolchain/config.json` | Shared browser compiler, Dawn and compiler correction pins |
-| `build_tools/` | Ordinary Python modules for local preparation, generation, packaging and publication decisions |
+| `tools/` | Typed preparation, ABI metadata, packaging, publication and automation tools |
+| `00-dto/` | External-input structures, public DTO types and named decoders |
 | `tests/` | Namespaced tests for shared tools and runtime-specific build contracts |
 | `.github/workflows/` | Explicit acquisition, offline Docker execution, artifact publication and reporting |
 
@@ -23,34 +24,32 @@ The source repository is **Browser Inference Core** (`nwtgck/browser-inference-c
 The installable aggregate package name is `browser-inference-core`;
 publication URLs and install commands use the actual `GITHUB_REPOSITORY` value.
 
-Run Python tests and namespaced build-tool entry points from the repository root.
-`npm test` runs both Node host suites; `npm run test:python` discovers the complete namespaced `tests/` tree once. For a focused check, use
-`python3 -m unittest discover -s tests/runtimes/llama_cpp/build -t .` or select
-`tests/runtimes/stable_diffusion_cpp`. Legacy llama source-composition tests can
-be selected with `python3 -m unittest discover -s tests/runtimes/llama_cpp -t . -p 'test_webgpu_aligned_word_load.py'`.
-Local Python, Node, TypeScript, source-preparation and native C++ checks do not
-require Emscripten. The compiler is required for the actual browser build, not
-as a blanket prerequisite for contributing. Use the relevant local scope and
-report its limits; CI owns the full Emscripten compile/link and browser matrix.
-A missing local browser toolchain does not justify substituting mock results for
-that matrix or requiring users to run a second manual Docker build. See
-[local verification scopes](docs/verification.md).
+Use Node.js 22.12 or later and the locked development dependencies. Emit the
+private tools with `npm run tooling:build`; `npm run tooling:check` checks their
+types without emitting. `npm test` runs the two JavaScript host-helper suites.
+Run affected emitted tests under `build/tooling/tests/` with Node's test runner;
+[verification scopes](docs/verification.md) identify the relevant entries.
+Local tool, source-preparation and native C++ checks do not require Emscripten.
+The CI browser matrix compiles and links the actual Wasm and exercises the
+shipped variants. Native or mocked tests establish their own narrower contracts.
 
-For a browser build, acquire the pinned compiler and Dawn inputs using the explicit commands in
-`.github/workflows/build.yml` (see `toolchain/README.md`). Then prepare them
-without network access from the repository root:
+For a browser build, acquire the pinned compiler and Dawn inputs through the
+explicit acquisition steps in `.github/workflows/build.yml`; see the
+[toolchain contract](toolchain/README.md). Prepare the acquired inputs offline:
 
 ```sh
-python3 -m build_tools.toolchain.prepare
+npm run tooling:build
+node build/tooling/tools/cli.js toolchain prepare \
+  --checkout-root "$PWD" --tools-root "$PWD/.tools"
 source .tools/emsdk/emsdk_env.sh
 ```
 
 Compiler, Dawn and the Asyncify correction are pinned in
-`toolchain/config.json`. The llama pin stays in
-`runtimes/llama-cpp/config/toolchain.json`. Clean image builds select upstream
-commits from the captured parent commit's submodule gitlinks. Local development
-preparation can use staged gitlinks; source roles are declared in
-`runtimes/stable-diffusion-cpp/config/upstreams.json`. Their versions are not coupled.
+`toolchain/config.json`. Both runtimes select upstream commits from their
+source commit's submodule gitlinks. Local development can use staged gitlinks;
+image source roles are declared in
+`runtimes/stable-diffusion-cpp/config/upstreams.json`. Each runtime keeps its own
+upstream versions.
 
 ## Parallel builds and bounded caches
 
@@ -75,17 +74,17 @@ invalidation, and the cold-cache path.
 Network operations are intentionally inline in the workflow YAML so acquisition
 destinations, credentials and remote writes remain visible. Builds, tests and
 local package preparation run in directly specified `docker run --network none`
-containers. Offline Python modules handle file transformations and validation;
+containers. Typed local tools handle preparation, transformation and validation;
 the workflow owns the network boundary.
 
-## Runtime package layout (manifest format 4)
+## Runtime package layout (manifest format 5)
 
 | Public import | Physical package location |
 | --- | --- |
 | `browser-inference-core/manifest.json` | `manifest.json` |
 | `browser-inference-core/llama-cpp/host` | `runtimes/llama-cpp-browser-core/host/index.mjs` and its declaration |
 | `browser-inference-core/stable-diffusion-cpp/host` | `runtimes/stable-diffusion-cpp-browser-core/host/index.mjs` and its declaration |
-| `browser-inference-core/<runtime>/api/functions` | `runtimes/<runtime-package>/api/functions.d.ts` (type-only import) |
+| `browser-inference-core/<runtime>/api/functions` | `runtimes/<runtime-package>/api/functions.d.ts` and typed JavaScript facade |
 | `browser-inference-core/<runtime>/api/schema.mjs` | `runtimes/<runtime-package>/api/schema.mjs` |
 | `browser-inference-core/<runtime>/profiles/<profile>/<variant>/core.mjs` | Matching factory and declaration under `runtimes/<runtime-package>/profiles/` |
 | `browser-inference-core/<runtime>/profiles/<profile>/<variant>/core.wasm` | Matching WebAssembly binary under `runtimes/<runtime-package>/profiles/` |
@@ -95,9 +94,9 @@ Here `<runtime>` is `llama-cpp` or `stable-diffusion-cpp`, while
 `stable-diffusion-cpp-browser-core`. This distinction applies to the artifacts
 branch as well as the installed package; source directories keep their shorter names.
 
-Each format-2 inner manifest keeps runtime-specific provenance and validation. The root
-manifest hashes the complete tree, including both inner manifests, and refuses
-mixed source commits. Public exports select the runtime explicitly; direct
+Each format-2 runtime manifest owns its payload inventory, provenance and
+validation. The root manifest binds root files and both runtime manifests; the
+combined inventories cover the complete tree and reject mixed source commits. Public exports select the runtime explicitly; direct
 filesystem consumers use the physical paths above. No duplicate
 Wasm payloads are shipped. Publication waits for both complete runtime packages;
 there is no last-writer-wins replacement of one runtime with the other.
@@ -109,7 +108,7 @@ application imports, manifest paths and lock metadata must follow the same
 artifact. Native instances and upstream pins remain independent. Never put a
 fictional artifact commit into a consumer lockfile. A local `dist/package` may
 also be selected explicitly for development. See the
-[installed-package guide](build_tools/packaging/runtime-readme.md) for examples.
+[installed-package guide](tools/package/runtime-readme.md) for examples.
 
 The image runtime is experimental. Native tests, browser ABI smoke checks and
 compilation are distinct from actual GPU image generation. Consult each profile's

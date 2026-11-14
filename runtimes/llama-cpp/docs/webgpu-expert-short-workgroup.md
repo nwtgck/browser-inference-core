@@ -25,33 +25,57 @@ its zero-initialized size; the multi-token factory is otherwise unchanged.
 
 ## Checked build and publication
 
-`prepare_webgpu_expert_short.py` composes after the existing HC, short-Q8 and
-ordered-expert-sum overlays. It checks the exact input and output C++ identities
-and the upstream quantization templates, selected-slot shader, embedded-shader
-emitter and preprocessor. The upstream checkout stays unchanged. The final
-source/header are recorded in source-overlay provenance only when WebGPU is
-compiled. All contract files and the patch are CMake reconfiguration inputs.
+The typed runtime recipe composes the expert-workgroup patch with the other
+selected WebGPU changes in the final private source tree. The unchanged upstream
+emitter uses the selected quantization templates and shader inputs. The upstream
+checkout remains unchanged. Preparation records the actual patch, input and final
+output identities; actual compiler inputs establish which files were selected.
 
 Remove this overlay, preparation hook, patch-policy entry, provenance entry and
-associated tests when upstream provides equivalent guarded selection. Do not
-refresh hashes without reviewing the lane mapping and reductions.
+associated tests when upstream provides equivalent guarded selection. Review
+lane mapping and reductions when the upstream changes; a recorded digest is not
+a numerical check.
 
 ## Validation and limits
 
-Host tests execute the actual selector, cache and factory with recorded pipeline
-creation. Their baseline is the unchanged upstream factory, not a hand-written
-shader. They cover unsupported formats, shapes, limits, cache collisions,
-full-subgroup ranges and per-lane input-block correspondence. The GPU checker
-runs the emitted shader pair and checks bits, untouched inputs and buffer guards.
-Its reports identify the adapter and all tests; it is opt-in, needs local tools,
-and makes no network requests.
+The normal build compiles the actual factory against the selected upstream and
+SDK declarations. Current complete-source native contracts observe selected
+factory/cache/dispatch decisions through recorded API calls; see
+[verification](../../../docs/verification.md) for their scope. Compilation and
+recorded pipeline creation do not execute shader arithmetic.
 
-Run the host checks from the repository root:
+The supplied-shader runner below checks numerical bits, unchanged inputs and
+buffer guards independently of production factory selection. Adapter identity,
+case results and optional timestamp pairs remain separate from browser/model
+inference and quality measurements.
+
+## Optional supplied-shader comparison
+
+The standalone runner reads supplied WGSL from a directory containing
+`Q5_1-128.wgsl`, `Q5_1-256.wgsl`, `IQ4_NL-128.wgsl`, `IQ4_NL-256.wgsl` and
+`cases.json`. Each shader must expose `main` with the harness's bindings and
+uniform layout. The case file is a nonempty array of objects with `type`
+(`Q5_1` or `IQ4_NL`), positive 32-aligned `k`, positive `m`, `chosen` (128 or 256),
+`storedExperts` (11 or 512), `mode` (0, 1 or 2) and boolean `sharedInput`.
+Benchmark mode requires both `(k, m) = (640, 2560)` and `(1056, 256)` for each type.
+The supplied `chosen` value is an input, not proof of the current production
+selector. Keep input identities and any factory comparison as separate evidence.
+
+From the repository root, with local Dawn and compatible inputs:
 
 ```sh
-python3 -m unittest discover -s llama-cpp/tests -p 'test_webgpu_expert_short_overlay.py' -v
+LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
+LCB_EXPERT_BENCHMARKS=1 \
+node tests/runtimes/llama_cpp/webgpu-expert-short/check_gpu.mjs \
+  /absolute/path/to/shaders /absolute/path/to/expert-report.json
 ```
 
-Follow `../../tests/runtimes/llama_cpp/webgpu-expert-short/README.md` for the GPU experiment. Standalone software-GPU timing is not Mac performance.
-The published model must still be measured with the ordinary profile; the GPU
-profile's partitioning and readback waits are not an ordinary wall-time breakdown.
+Omit `LCB_EXPERT_BENCHMARKS` for numerical-only checks. Benchmark mode also needs
+`timestamp-query`; all runs need subgroups and shader-f16. Set
+`LCB_EXPERT_FORCE_GC=1` and use `node --expose-gc` to stress native ownership.
+The report records adapter, cases, failures and optional timing pairs; it does not
+establish the supplied shaders' source or agreement with a compiled artifact.
+
+The published model still needs measurements in the ordinary profile. Profiling
+partitioning and readback waits are not an ordinary wall-time breakdown, and
+software-adapter timing is not target-device throughput.

@@ -1,54 +1,54 @@
-# Opt-in production expert-matvec comparison
+# Optional expert-matvec Dawn comparison
 
-This is a standalone numerical and microbenchmark harness, not a model or browser
-benchmark. Nothing is downloaded. The normal inference runtime never invokes it.
+This developer experiment consumes supplied Q5_1/IQ4_NL WGSL and experiment cases.
+It compares a 256-lane baseline with each case's selected pipeline. The caller
+supplies the shader files, case choices, and their provenance; the report covers
+those experiment inputs.
 
-## Required local inputs
+The current `webgpu-provider` native fixture emits the four shaders and
+`cases.json` into its configured shader output directory. Its small cases record
+the current factory's 128/256 choices and warm cache reuse. The Dawn script still
+validates whichever directory the caller supplies.
 
-Use the pinned llama.cpp checkout, a C++ compiler (`g++`), Node.js, and a compatible
-Dawn `webgpu` Node package. The adapter needs subgroups and shader-f16. Timing also
-needs timestamp-query. Keep reports from software adapters distinct from real
-hardware performance.
+Supply these files in one input directory:
 
-From the repository root, with tools already present locally:
+- `Q5_1-128.wgsl` and `Q5_1-256.wgsl`.
+- `IQ4_NL-128.wgsl` and `IQ4_NL-256.wgsl`.
+- `cases.json`, a nonempty array of objects with `type`, `k`, `m`, `chosen`,
+  `storedExperts`, `mode`, and `sharedInput`.
 
-```sh
-python3 tests/runtimes/llama_cpp/webgpu-expert-short/check_gpu.py \
-  --llama-source /absolute/path/to/llama.cpp \
-  --work /absolute/path/outside/source-trees/expert-check \
-  --webgpu-module /absolute/path/to/node_modules/webgpu/index.js \
-  --force-gc --benchmarks
+The shaders must use the entry point and indexed-matvec parameter/buffer layout
+in `check_gpu.mjs`. Cases accept `type` Q5_1/IQ4_NL, positive K divisible by 32,
+positive M, `chosen` 128/256, `storedExperts` 11/512, `mode` 0/1/2, and a boolean
+`sharedInput`. These are experiment inputs, not an inferred production policy.
+For example, a timing input can contain:
+
+```json
+[
+  {"type":"Q5_1","k":640,"m":2560,"chosen":128,"storedExperts":11,"mode":2,"sharedInput":false},
+  {"type":"Q5_1","k":1056,"m":256,"chosen":256,"storedExperts":11,"mode":2,"sharedInput":false},
+  {"type":"IQ4_NL","k":640,"m":2560,"chosen":128,"storedExperts":11,"mode":2,"sharedInput":false},
+  {"type":"IQ4_NL","k":1056,"m":256,"chosen":256,"storedExperts":11,"mode":2,"sharedInput":false}
+]
 ```
 
-`--node-command-json` accepts a JSON array, for example `["node"]` or a loader,
-library path and Node binary for an offline runtime. `--force-gc` adds
-`--expose-gc` and fails if garbage collection is unavailable. The Dawn owner is
-kept strongly reachable through device teardown and report writing.
+With Node and a compatible Dawn Node module already installed locally:
 
-## What is compared
+```sh
+LCB_TEST_WEBGPU_MODULE=/absolute/path/to/webgpu/index.js \
+LCB_EXPERT_BENCHMARKS=1 \
+node tests/runtimes/llama_cpp/webgpu-expert-short/check_gpu.mjs \
+  /absolute/path/to/shaders /absolute/path/to/report.json
+```
 
-The C++ harness extracts the actual prepared factory, uses upstream's WGSL
-preprocessor and emitter, and emits both the selected shader and the original
-upstream-factory shader. Case admission is recorded by the real selector, rather
-than reimplemented in JavaScript. The actual C++ dispatcher is also executed with
-a recording device to check parameters and workgroup dimensions; that recording
-check is not GPU execution.
+The adapter needs `subgroups` and `shader-f16`; timing also needs
+`timestamp-query`. Omit `LCB_EXPERT_BENCHMARKS=1` for numerical checks only. Timing
+requires both `(k=640,m=2560)` and `(k=1056,m=256)` for each type in `cases.json`.
+Set `LCB_EXPERT_FORCE_GC=1` and add `--expose-gc` to Node for owner-lifetime stress.
 
-The GPU cases cover Q5_1 and IQ4_NL, supported and rejected widths, output tails,
-strided rows and experts, nonzero offsets, shared/per-slot inputs, repeated expert
-IDs and two-dimensional dispatch tails. They compare output bits, untouched
-inputs and output guards. The shader declares 512 experts. Most fixtures allocate
-only the low expert IDs actually selected; additional fixtures allocate all 512
-and select the last expert. None is a full-model memory-residency experiment.
-
-Optional timing uses the same input buffers for both paths, four warmup pairs,
-twelve measured pairs and alternating AB/BA order. An unsupported-width case uses
-the same 256-lane pipeline twice as a noise control. Report every trial, not just
-the best result. A software-adapter speed ratio is not a predicted Mac speedup.
-
-`source.json` records source and generated shader hashes; `report.json` records
-adapter, cases, numerical failures and optional per-pair timings. The process
-returns nonzero for any numerical/guard/input mismatch or validation failure.
-The original quantization and reduction WGSL is unchanged, but arbitrary GPU
-compilers can still choose different subgroup/reduction implementations. Model
-and target-device correctness/quality tests remain necessary.
+Synthetic cases compare output bits, untouched inputs, and output guards.
+Optional timing reports every GPU timestamp pair after four warmups and twelve
+measured pairs in alternating AB/BA order with the same buffers. Results concern
+the supplied kernels and adapter; they are not model throughput or a prediction
+for another device. The native Dawn owner stays alive through teardown and report
+writing. No dependency installation or source preparation runs implicitly.

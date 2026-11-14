@@ -1,4 +1,4 @@
-// Actual factory output and upstream CPU references; no browser/model/timing claim.
+// Supplied IQ3 WGSL and CPU reference fixtures; numerical checks only.
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -12,19 +12,19 @@ if (process.argv.length !== 6 || !shaderDirectory || !fixtureDirectory || !repor
 const subgroup = Number(subgroupText);
 const hash = data => createHash('sha256').update(data).digest('hex');
 const require = (condition, message) => { if (!condition) throw new Error(message); };
-const ownerKey = Symbol('IQ3_S actual factory WebGPU owner');
+const ownerKey = Symbol('IQ3_S experiment WebGPU owner');
 const report = {
   schema: 1,
-  scope: 'Actual prepared IQ3_S indexed factory/dispatch decisions and upstream CPU dequantization plus Float64 dot; synthetic inputs only, no model quality or target-device speed claim',
+  scope: 'Supplied IQ3_S indexed WGSL, case choices and CPU reference fixtures; not production-factory or model validation',
   promotionPolicy: 'The conservative error bound is an arithmetic sanity gate. Baseline/Float64 error observations require independent review.',
-  reference: 'Every output, Float64 [dot,sumabs] from unchanged pinned CPU dequantize_row_iq3_s and actual uploaded Float32 input; normal half scales only',
+  reference: 'Supplied Float64 [dot,sumabs] for every output and uploaded Float32 input; make_fixtures.py uses the complete current CPU dequantizer',
   status: 'started', cases: [], errors: [],
 };
 const buffers = new Set();
 let device;
 try {
   const { create, globals } = await import(process.env.LCB_TEST_WEBGPU_MODULE);
-  Object.assign(globalThis, globals);
+  const { GPUBufferUsage, GPUMapMode } = globals;
   globalThis[ownerKey] = create([]);
   const adapter = await globalThis[ownerKey].requestAdapter();
   require(adapter, 'No WebGPU adapter');
@@ -87,13 +87,13 @@ try {
   const pipelines = new Map();
   for (const file of new Set(['iq3s-baseline.wgsl', ...decisions.map(row => row.selectedFile)])) {
     const code = await readFile(join(shaderDirectory, file));
-    require(hash(code) === identity.shaderSha256[file], 'Factory WGSL hash mismatch: ' + file);
+    require(hash(code) === identity.shaderSha256[file], 'Shader input hash mismatch: ' + file);
     pipelines.set(file, await pipeline(code.toString(), file));
   }
   const caseOutputs = new Map();
   for (const spec of fixtures) {
     const decision = decisions.find(row => row.name === spec.name);
-    require(decision && spec.params.length === 13, 'Missing actual factory decision');
+    require(decision && spec.params.length === 13, 'Missing supplied case decision');
     const data = {};
     for (const key of ['weights', 'input', 'ids', 'reference']) {
       data[key] = await readFile(join(fixtureDirectory, spec[key + 'File']));

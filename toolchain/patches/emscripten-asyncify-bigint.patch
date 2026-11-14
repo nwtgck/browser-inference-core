@@ -1,0 +1,38 @@
+--- a/src/lib/libasync.js
++++ b/src/lib/libasync.js
+@@ -38,7 +38,7 @@
+     //
+     // Asyncify code that is shared between mode 1 (original) and mode 2 (JSPI).
+     //
+-#if ASYNCIFY == 1 && MEMORY64
++#if ASYNCIFY == 1 && (MEMORY64 || WASM_BIGINT)
+     rewindArguments: new Map(),
+ #endif
+     instrumentWasmImports(imports) {
+@@ -102,7 +102,7 @@
+         }
+       }
+     },
+-#if ASYNCIFY == 1 && MEMORY64
++#if ASYNCIFY == 1 && (MEMORY64 || WASM_BIGINT)
+     saveRewindArguments(func, passedArguments) {
+       return Asyncify.rewindArguments.set(func, Array.from(passedArguments));
+     },
+@@ -122,7 +122,7 @@
+ #endif
+         Asyncify.exportCallStack.push(original);
+         try {
+-#if MEMORY64
++#if MEMORY64 || WASM_BIGINT
+           Asyncify.saveRewindArguments(original, args);
+ #endif
+           return original(...args);
+@@ -316,7 +316,7 @@
+       // Once we have rewound and the stack we no longer need to artificially
+       // keep the runtime alive.
+       {{{ runtimeKeepalivePop(); }}}
+-#if MEMORY64
++#if MEMORY64 || WASM_BIGINT
+       // When re-winding, the arguments to a function are ignored.  For i32 arguments we
+       // can just call the function with no args at all since the engine will produce zeros
+       // for all arguments.  However, for i64 arguments we get `undefined cannot be converted to
