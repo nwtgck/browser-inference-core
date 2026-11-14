@@ -30,7 +30,7 @@
     {
       "path": "runtimes/llama-cpp-browser-core/manifest.json",
       "bytes": 18865650,
-      "sha256": "f6a46bf7579888d6f70fefe5f471e20b5a35ef368b97125f832c60f94a491c28"
+      "sha256": "12754243d3254a7d247f0fe497001a15cdad32008c70377244edcd9fddd83f34"
     },
     {
       "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
