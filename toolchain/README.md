@@ -68,8 +68,13 @@ patches, and checks; a hit never substitutes a previously built runtime.
 | Emscripten cache | Exact compiler, environment, runtime, profile, and variant partition; source-specific save keys | Reuse earlier source snapshots inside that partition; let the SDK check and resolve required cache entries; a miss retains the fresh SDK cache |
 | ccache | Exact compiler, environment, runtime, profile, and variant partition; source-specific save keys | Permit earlier source keys only inside that partition and let ccache check individual commands and dependencies |
 
-Only successful default-branch pushes are trusted cache writers. Pull requests
-may restore but do not save. A restore is adopted only after the restore step
+Successful push, pull request and manual runs can save on every branch unless
+the workflow's `cache_mode` input is `cold` or the key was an exact hit. The cold
+mode disables both restore and save. Saving remains subject to GitHub's
+[ref-based cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache):
+pull request caches belong to `refs/pull/<number>/merge` and can be restored by
+reruns of that pull request. The workflow does not expand cache write permissions.
+A restore is adopted only after the restore step
 succeeds and its matched key belongs to the requested partition; a miss or
 failure keeps the fresh cache. Cache keys describe the selected compiler/environment and runtime profile
 partition; a hit remains an accelerator, not a source or artifact receipt.
@@ -81,6 +86,6 @@ final JavaScript, Wasm, types, and model data are not cache inputs. Their
 validation and publication remain separate from cache use.
 
 Dawn's archive digest checks the downloaded bytes. Emscripten and ccache
-entries depend on their trusted writer and key partition; they are not a
+entries depend on GitHub's cache scope and the key partition; they are not a
 cryptographic proof of the build. Do not put secrets in caches. Measure cold
 and warm runs before claiming a performance improvement.

@@ -469,7 +469,7 @@ jobs:
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_CACHES: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
+          SAVE_CACHES: ${{ env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
         run: |
           bash .github/scripts/run-offline.sh \
@@ -566,21 +566,21 @@ jobs:
           retention-days: 14
       - uses: actions/cache/save@v6.1.0
         id: save-dawn
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.dawn-key }}
           path: .cache/restored/dawn
       - uses: actions/cache/save@v6.1.0
         id: save-em
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.em-key }}
           path: ${{ steps.plan.outputs.em-staging }}
       - uses: actions/cache/save@v6.1.0
         id: save-cc
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.cc-key }}
@@ -1047,7 +1047,7 @@ jobs:
           CC_MATCHED: ${{ steps.cc.outputs.cache-matched-key }}
           CC_HIT: ${{ steps.cc.outputs.cache-hit }}
           CC_OUTCOME: ${{ steps.cc.outcome }}
-          SAVE_CACHES: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' }}
+          SAVE_CACHES: ${{ env.BIC_CACHE_MODE != 'cold' }}
         shell: bash
         run: |
           bash .github/scripts/run-offline.sh \
@@ -1139,21 +1139,21 @@ jobs:
           retention-days: 14
       - uses: actions/cache/save@v6.1.0
         id: save-dawn
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.dawn.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.dawn-key }}
           path: .cache/restored/dawn
       - uses: actions/cache/save@v6.1.0
         id: save-em
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.em.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.em-key }}
           path: ${{ steps.plan.outputs.em-staging }}
       - uses: actions/cache/save@v6.1.0
         id: save-cc
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.actor != 'dependabot[bot]' && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
+        if: success() && env.BIC_CACHE_MODE != 'cold' && steps.cc.outputs.cache-hit != 'true'
         continue-on-error: true
         with:
           key: ${{ steps.plan.outputs.cc-key }}
@@ -1421,7 +1421,7 @@ jobs:
           node build/tooling/tools/cli.js publication freeze --checkout-root "$GITHUB_WORKSPACE" \
             --directory "$GITHUB_WORKSPACE/dist/package" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
             --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --branch artifacts \
-            --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3
+            --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3 > /dev/null
           jq -r '"tree=\(.tree)\nsource-commit=\(.sourceCommit)"' build/publication/frozen.json >> "$GITHUB_OUTPUT"
           BICORE_OFFLINE
       - name: Publish append-only artifact commit

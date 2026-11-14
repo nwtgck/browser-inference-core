@@ -134,7 +134,7 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
   }
 });
 
-test('cache saving and publication respond to actual trust scenarios', () => {
+test('cache policy and publication trust are evaluated independently', () => {
   function condition({ expression, context }: { expression: unknown; context: Record<string, unknown> }): boolean {
     const source = text({ value: expression });
     const value: unknown = runInNewContext(source.startsWith('${{') ? source.slice(3, -2).trim() : source, context, { timeout: 100 });
@@ -163,21 +163,23 @@ test('cache saving and publication respond to actual trust scenarios', () => {
       assert.equal(save['continue-on-error'], true);
       const contexts = [
         { event: 'push', ref: 'develop', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
-        { event: 'pull_request', ref: 'develop', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: false },
-        { event: 'push', ref: 'feature/change', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: false },
-        { event: 'push', ref: 'develop', actor: 'dependabot[bot]', mode: 'enabled', succeeded: true, hit: 'false', allowed: false },
-        { event: 'push', ref: 'develop', actor: 'human', mode: 'cold', succeeded: true, hit: 'false', allowed: false },
-        { event: 'push', ref: 'develop', actor: 'human', mode: 'enabled', succeeded: false, hit: 'false', allowed: false },
-        { event: 'push', ref: 'develop', actor: 'human', mode: 'enabled', succeeded: true, hit: 'true', allowed: false },
+        { event: 'pull_request', ref: '7/merge', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
+        { event: 'push', ref: 'feature/change', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
+        { event: 'push', ref: 'develop', actor: 'dependabot[bot]', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
+        { event: 'pull_request', ref: '8/merge', actor: 'dependabot[bot]', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
+        { event: 'workflow_dispatch', ref: 'feature/change', actor: 'human', mode: 'enabled', succeeded: true, hit: 'false', allowed: true },
+        { event: 'push', ref: 'feature/change', actor: 'human', mode: 'cold', succeeded: true, hit: 'false', allowed: false },
+        { event: 'pull_request', ref: '7/merge', actor: 'human', mode: 'enabled', succeeded: false, hit: 'false', allowed: false },
+        { event: 'workflow_dispatch', ref: 'feature/change', actor: 'human', mode: 'enabled', succeeded: true, hit: 'true', allowed: false },
       ];
       for (const scenario of contexts) {
-        const github = { event_name: scenario.event, ref_name: scenario.ref, actor: scenario.actor, event: { repository: { default_branch: 'develop' } } };
+        const github = { event_name: scenario.event, ref_name: scenario.ref, actor: scenario.actor, repository: 'owner/repo', event: { repository: { default_branch: 'develop' }, pull_request: { head: { repo: { full_name: 'someone/fork' } } } } };
         const steps = Object.fromEntries(['dawn', 'em', 'cc'].map(name => [name, { outputs: { 'cache-hit': scenario.hit } }]));
         const expression = text({ value: save.if }).replaceAll('.cache-hit', "['cache-hit']");
         assert.equal(condition({ expression, context: { github, steps, env: { BIC_CACHE_MODE: scenario.mode }, success: () => scenario.succeeded } }), scenario.allowed);
         // Step env permits data contexts; status functions belong to step if.
-        const eligible = condition({ expression: object({ value: build.env }).SAVE_CACHES, context: { github, env: { BIC_CACHE_MODE: scenario.mode } } });
-        assert.equal(eligible, scenario.event === 'push' && scenario.ref === 'develop' && scenario.actor === 'human' && scenario.mode === 'enabled');
+        const eligible = condition({ expression: object({ value: build.env }).SAVE_CACHES, context: { env: { BIC_CACHE_MODE: scenario.mode } } });
+        assert.equal(eligible, scenario.mode === 'enabled');
         assert.equal(condition({ expression: build.if, context: { success: () => scenario.succeeded } }), scenario.succeeded);
       }
     }
@@ -588,6 +590,46 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
       assert.equal(check.environment?.[selected], join(root, `build/runtimes/${scenario.runtime}/build/wasm/${scenario.profile}/browser/generated/schema.json`));
       assert.equal(check.environment?.[other], '');
     }
+  }
+});
+
+test('publication freezing keeps its saved receipt and errors without echoing the receipt', async () => {
+  const step = namedStep({ job: 'publish', name: 'Assemble and freeze the source-bound publication tree' });
+  for (const code of [0, 7]) {
+    await using temporary = await temporaryDirectory();
+    const root = temporary.root;
+    const source = 'a'.repeat(40);
+    const tree = 'b'.repeat(40);
+    const output = join(root, 'outputs');
+    await executable({
+      root,
+      name: 'node',
+      source: `\
+const fs=require('node:fs');
+const path=require('node:path');
+const args=process.argv.slice(2);
+if(args[1]==='publication'&&args[2]==='freeze'){
+  const receipt=args[args.indexOf('--receipt')+1];
+  fs.mkdirSync(path.dirname(receipt),{recursive:true});
+  fs.writeFileSync(receipt,JSON.stringify({tree:process.env.TREE,sourceCommit:process.env.LCB_SOURCE_COMMIT}));
+  process.stdout.write('receipt stdout\\n');
+  process.stderr.write('freeze diagnostic\\n');
+  process.exit(Number(process.env.FREEZE_EXIT));
+}
+process.stdout.write('assembly ready\\n');
+`,
+    });
+    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, LCB_SOURCE_COMMIT: source, TREE: tree, FREEZE_EXIT: String(code) } });
+    if (code === 0) {
+      const result = await operation;
+      assert.equal(result.stdout.toString(), 'assembly ready\n');
+      assert.equal(result.stderr.toString(), 'freeze diagnostic\n');
+      assert.equal(await readFile(output, 'utf8'), `tree=${tree}\nsource-commit=${source}\n`);
+    } else {
+      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === 'assembly ready\n');
+      await assert.rejects(readFile(output));
+    }
+    assert.deepEqual(JSON.parse(await readFile(join(root, 'build/publication/frozen.json'), 'utf8')), { tree, sourceCommit: source });
   }
 });
 

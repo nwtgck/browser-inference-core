@@ -65,9 +65,10 @@ Runner availability can still limit actual parallelism.
 CI caches the SHA-256-verified Dawn download, Emscripten's system-library cache,
 and strictly partitioned ccache objects. It always verifies the pinned toolchain,
 configures a fresh build tree and links the current runtime. It never restores
-finished runtime artifacts as a shortcut to a successful build. Cache saving is
-restricted to successful default-branch push builds; PR and other branch builds
-only restore through these configured actions. See
+finished runtime artifacts as a shortcut to a successful build. Successful push,
+pull request and manual runs can save caches on every branch when cache use is
+enabled and the key was not an exact hit. GitHub's ref-based cache scope governs
+access between branches and pull requests. See
 [the cache and toolchain contract](toolchain/README.md) for trust limits,
 invalidation, and the cold-cache path.
 
