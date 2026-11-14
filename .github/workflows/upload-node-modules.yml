@@ -1,0 +1,74 @@
+name: Upload node_modules
+
+run-name: Upload node_modules (${{ inputs.target_ref }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Branch, tag, or commit SHA to install
+        type: string
+        required: true
+        default: develop
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout target ref
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.target_ref }}
+          submodules: false
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '22.16.0'
+      - name: Install locked development dependencies (online)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if npm ci --include=dev --ignore-scripts --no-audit --no-fund; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo '::error::npm ci failed after 3 attempts'
+              exit 1
+            fi
+            delay=$((attempt * 15))
+            echo "::warning::npm ci failed (attempt ${attempt}/3); retrying in ${delay}s"
+            sleep "$delay"
+          done
+      - name: Create compressed archive
+        shell: bash
+        env:
+          TARGET_REF: ${{ inputs.target_ref }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/bicore-node-modules.tar.zst"
+          test -d node_modules
+          tar -cf - node_modules | zstd --ultra -22 -T2 -o "$archive"
+          test -s "$archive"
+          zstd -t "$archive"
+          {
+            echo '### node_modules archive'
+            printf -- '- Requested ref: `%s`\n' "$TARGET_REF"
+            printf -- '- Source commit: `%s`\n' "$(git rev-parse HEAD)"
+            printf -- '- Runner: %s/%s; Node %s; npm %s\n' "$RUNNER_OS" "$RUNNER_ARCH" "$(node --version)" "$(npm --version)"
+            printf -- '- File: `%s`\n' "$(basename "$archive")"
+            printf -- '- Size: %s\n' "$(du -h "$archive" | cut -f1)"
+            printf -- '- SHA-256: `%s`\n' "$(sha256sum "$archive" | cut -d' ' -f1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload archive
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          path: ${{ runner.temp }}/bicore-node-modules.tar.zst
+          if-no-files-found: error
+          archive: false
+          retention-days: 14
