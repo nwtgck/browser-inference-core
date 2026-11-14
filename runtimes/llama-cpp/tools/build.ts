@@ -93,6 +93,10 @@ export type CapturedSources = { snapshot: SourceSnapshot; inputs: CompileInputs;
 export type BuiltProfile = { kind: 'built'; buildDirectory: string; runtimeDirectory: string; generatedDirectory: string; provenance: LlamaProvenance };
 export type ConfiguredProfile = { kind: 'configured'; buildDirectory: string; compilationDatabase: string };
 
+function toolchainPaths({ toolchainRoot }: { toolchainRoot: string }) {
+  return { emscriptenRoot: join(toolchainRoot, 'emsdk/upstream/emscripten'), dawnPackage: join(toolchainRoot, 'emdawnwebgpu_pkg') };
+}
+
 /** Stabilize only compiler inputs; the current checkout continues to own Node tools. */
 export async function prepareBuildInputs({ context, source, selection, additionalInputs }: { context: BuildContext; source: SourceState; selection: { profile: string; variant: string; kind: 'native' | 'wasm' }; additionalInputs: readonly string[] }): Promise<CapturedSources> {
   let revision: string | undefined;
@@ -178,8 +182,7 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   if (pthreads) {
     throw new Error('Threaded runtime profiles require a pthread build integration');
   }
-  const emscriptenRoot = join(context.toolchainRoot, 'emsdk/upstream/emscripten');
-  const dawnPackage = join(context.toolchainRoot, 'emdawnwebgpu_pkg');
+  const { emscriptenRoot, dawnPackage } = toolchainPaths({ toolchainRoot: context.toolchainRoot });
   let emccVersion = 'native';
   const cache = join(buildRoot, 'CMakeCache.txt');
   if (await optionalStat({ path: cache })) {
@@ -335,6 +338,20 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   return { kind: 'built', buildDirectory: buildRoot, runtimeDirectory, generatedDirectory: join(buildRoot, 'generated'), provenance };
 }
 
+/** Stage the built profile and notices for the runtime package job. */
+export async function stageBuiltProfile({ context, selection, built }: { context: BuildContext; selection: { profile: string; variant: string; includeToolchainNotices: boolean }; built: BuiltProfile }): Promise<void> {
+  const runtimeFiles = (await readdir(built.runtimeDirectory)).sort().filter(name => /[.]mjs$|[.]wasm$|[.]d[.]ts$|[.]json$/u.test(name)).map(name => ({ source: join(built.runtimeDirectory, name), name }));
+  const { emscriptenRoot, dawnPackage } = toolchainPaths({ toolchainRoot: context.toolchainRoot });
+  await stageProfile({
+    buildDirectory: join(context.outputRoot, 'stage', selection.profile, selection.variant),
+    generatedDirectory: built.generatedDirectory,
+    runtimeFiles,
+    provenance: built.provenance,
+    noticeRoots: selection.includeToolchainNotices ? [emscriptenRoot, dawnPackage] : [],
+    noticeDestination: selection.includeToolchainNotices ? join(context.outputRoot, 'toolchain-licenses') : undefined,
+  });
+}
+
 export async function buildRuntime({ context, selection, mode }: { context: BuildContext; selection: BuildSelection; mode: SourceMode }): Promise<BuiltProfile | ConfiguredProfile> {
   if (!Number.isSafeInteger(selection.jobs) || selection.jobs <= 0) {
     throw new Error('Build jobs must be a positive integer');
@@ -364,15 +381,7 @@ export async function buildRuntime({ context, selection, mode }: { context: Buil
     switch (selection.kind) {
     case 'native': break;
     case 'wasm': {
-      const runtimeFiles = (await readdir(result.runtimeDirectory)).sort().filter(name => /[.]mjs$|[.]wasm$|[.]d[.]ts$|[.]json$/u.test(name)).map(name => ({ source: join(result.runtimeDirectory, name), name }));
-      await stageProfile({
-        buildDirectory: join(context.outputRoot, 'stage', selection.profile, selection.variant),
-        generatedDirectory: result.generatedDirectory,
-        runtimeFiles,
-        provenance: result.provenance,
-        noticeRoots: selection.includeToolchainNotices ? [join(context.toolchainRoot, 'emsdk'), join(context.toolchainRoot, 'emdawnwebgpu_pkg')] : [],
-        noticeDestination: selection.includeToolchainNotices ? join(context.outputRoot, 'toolchain-licenses') : undefined,
-      });
+      await stageBuiltProfile({ context, selection, built: result });
       break;
     }
     default: {

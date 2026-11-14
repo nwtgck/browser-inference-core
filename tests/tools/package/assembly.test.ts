@@ -5,6 +5,8 @@ import { access, chmod, readFile, rename, rm } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 import { buildPackage } from '#runtimes/llama-cpp/tools/package';
+import { stageBuiltProfile } from '#runtimes/llama-cpp/tools/build';
+import { decodeLlamaProvenance } from '#dto/llama-cpp';
 import { verifyRuntimePackage as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
 import { verifyRuntimePackage as verifyImage } from '#runtimes/stable-diffusion-cpp/tools/verify';
 import { freezePackage } from '#tools/publication/artifacts';
@@ -12,6 +14,37 @@ import { assemblePackage, validatePackage } from '#tools/package/aggregate';
 import { artifactDirectories } from '#tools/shared/contracts';
 import { decodePackageMetadata } from '#dto/shared';
 import { makeRuntime, packageFixture, rehashRuntime, sourceRoot, fixtureSource, write } from './fixtures.test-support.js';
+
+test('the llama build stages compiler notices where the package consumer reads them', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = temporary.root;
+  await makeRuntime({ root, runtime: 'llama-cpp', selection: 'minimal' });
+  const context = { checkoutRoot: sourceRoot, toolingRoot: join(sourceRoot, 'build/tooling'), outputRoot: join(root, 'output'), toolchainRoot: join(root, 'toolchain') };
+  await write({ path: join(context.toolchainRoot, 'emsdk/LICENSE'), data: 'SDK manager notice fixture\n' });
+  await write({ path: join(context.toolchainRoot, 'emsdk/upstream/emscripten/LICENSE'), data: 'Compiler notice fixture\n' });
+  await write({ path: join(context.toolchainRoot, 'emsdk/upstream/emscripten/system/lib/libc/musl/COPYRIGHT'), data: 'Musl attribution fixture\n' });
+  await write({ path: join(context.toolchainRoot, 'emdawnwebgpu_pkg/webgpu/LICENSE'), data: 'Dawn attribution fixture\n' });
+  for (const variant of ['browser', 'test']) {
+    const buildDirectory = join(root, 'build-inputs/llama-cpp/cpu-wasm32', variant);
+    const provenance = decodeLlamaProvenance({ input: JSON.parse(await readFile(join(buildDirectory, 'provenance.json'), 'utf8')) });
+    await stageBuiltProfile({
+      context,
+      selection: { profile: 'cpu-wasm32', variant, includeToolchainNotices: variant === 'browser' },
+      built: { kind: 'built', buildDirectory, runtimeDirectory: join(buildDirectory, 'runtime'), generatedDirectory: join(buildDirectory, 'generated'), provenance },
+    });
+  }
+  const notices = join(context.outputRoot, 'toolchain-licenses');
+  const compilerNotices = join(notices, 'emscripten');
+  const dawnNotices = join(notices, 'emdawnwebgpu_pkg');
+  const upstream = join(root, 'llama.cpp');
+  await write({ path: join(upstream, 'LICENSE'), data: 'Upstream notice fixture\n' });
+  const destination = join(root, 'package');
+  const packaged = await buildPackage({ sourceRoot, buildRoot: join(context.outputRoot, 'stage'), destination, profiles: ['cpu-wasm32'], licenseRoots: [compilerNotices, dawnNotices, upstream], checkNpmPack: false });
+  assert.equal(await readFile(join(destination, 'licenses/0/LICENSE'), 'utf8'), 'Compiler notice fixture\n');
+  assert.equal(await readFile(join(destination, 'licenses/0/system/lib/libc/musl/COPYRIGHT'), 'utf8'), 'Musl attribution fixture\n');
+  assert(packaged.input.licenseIndex.components.some(component => component.id === 'emscripten/musl'));
+  assert(packaged.input.licenseIndex.components.some(component => component.id === 'emdawnwebgpu_pkg/webgpu'));
+});
 
 test('runtime assembly preserves its previous valid output on payload, schema, notice and npm failures', async () => {
   await using temporary = await temporaryDirectory();
