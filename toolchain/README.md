@@ -8,12 +8,35 @@ the version of the TypeScript module actually loaded; dependency installation
 is responsible for keeping the installed packages consistent with the lockfile.
 
 The Emscripten Asyncify/BigInt correction is the existing four-guard change in
-`patches/emscripten-asyncify-bigint.patch`. Preparation checks the pinned input
-and output identities and applies the patch to the installed SDK; it does not
-change upstream checkouts. Reapplying it to the expected patched version is a
-no-op. A different source or result fails and requires review.
-These identities select the approved 6.0.9 patch input and output; they do not
-replace a behavioral test of Asyncify argument preservation.
+`patches/emscripten-asyncify-bigint.patch`. It preserves genuine i64 arguments
+across 32-bit Asyncify rewind. The actual SDK fixture described below exercises
+sleep and rewind with a large bigint; patch application alone does not prove
+this behavior.
+
+The declaration correction in `patches/emscripten-typescript-signatures.patch`
+connects the SDK's `--emit-tsd` output to its existing native signature
+conversions. Under MEMORY64, exports wrapped by the SDK use Number for p/P
+pointer and int53 slots; unrelated i64 exports use primitive `bigint`. The
+existing JSPI export selection still determines Promise returns. The generated
+JavaScript and native ABI are unchanged. No post-link declaration rewriting is
+needed.
+
+Both SDK corrections use forward/reverse patch-context checks on private file
+copies, then atomically replace their owned SDK sources. Repeated preparation is a
+no-op; unsupported or ambiguous context fails without changing the SDK source.
+They do not use whole-file source acceptance hashes. Each patch file's observed
+identity belongs to compiler-cache partitions and build provenance. Use an SDK
+owned by the tools root, not a symlink to a shared installation. The llama link
+depends on the actual SDK generator and native signature source, so preparing a
+warm SDK also regenerates declarations on the next ordinary build. Both runtimes'
+links also depend on the SDK's Asyncify implementation.
+
+`tests/tools/toolchain/tsd-sdk.test.ts` compiles an actual SDK fixture and imports
+the resulting declarations with strict TypeScript. It checks Number allocation,
+p/P conversions, primitive i64, selected JSPI promises, and actual BigInt
+Asyncify rewind in Node. It does not require a browser or GPU. On an SDK update,
+review the wrapper/declaration generation boundary; remove the patch and its
+preparation when the SDK supplies these declarations itself.
 
 ## Offline preparation
 

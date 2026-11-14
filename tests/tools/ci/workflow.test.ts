@@ -506,23 +506,24 @@ if(command==='npm') process.exit(Number(process.env.NPM_EXIT));
 
 test('the actual build shell adopts complete cache restores and keeps fresh caches after failed or absent restores', async () => {
   for (const scenario of [
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'exact' },
-    { outcome: 'failure', restored: true, save: false, expected: 'fresh', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'prefix' },
-    { outcome: 'success', restored: false, save: false, expected: 'fresh', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'prefix' },
-    { outcome: 'success', restored: true, save: true, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'prefix' },
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'basic', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'exact' },
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'webgpu-wasm32-jspi', emMatch: 'exact' },
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'stable-diffusion-cpp', profile: 'webgpu-wasm32-jspi', emMatch: 'prefix' },
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', emMatch: 'other' },
-    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'stable-diffusion-cpp', profile: 'webgpu-wasm32-jspi', emMatch: 'malformed' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'exact' },
+    { outcome: 'failure', restored: true, save: false, expected: 'fresh', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'prefix' },
+    { outcome: 'success', restored: false, save: false, expected: 'fresh', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'prefix' },
+    { outcome: 'success', restored: true, save: true, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'prefix' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'basic', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'exact' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'exact' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'stable-diffusion-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'prefix' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'other' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'stable-diffusion-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'malformed' },
+    { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'test', emMatch: 'exact' },
   ]) {
     const script = offlineScript({ step: namedStep({ job: scenario.runtime === 'llama-cpp' ? 'compile' : 'image-compile', name: 'Prepare, build and stage the selected runtime' }) });
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
     const emCachePath = '.tools/emsdk/upstream/emscripten/cache';
-    const ccCachePath = `.cache/ccache/${scenario.runtime}/${scenario.profile}/browser`;
-    const emStagingPath = `.cache/restored/${scenario.runtime}/${scenario.profile}/browser/em`;
-    const ccStagingPath = `.cache/restored/${scenario.runtime}/${scenario.profile}/browser/cc`;
+    const ccCachePath = `.cache/ccache/${scenario.runtime}/${scenario.profile}/${scenario.variant}`;
+    const emStagingPath = `.cache/restored/${scenario.runtime}/${scenario.profile}/${scenario.variant}/em`;
+    const ccStagingPath = `.cache/restored/${scenario.runtime}/${scenario.profile}/${scenario.variant}/cc`;
     const prefix = 'partition-cc-';
     const ccKey = prefix + 'a'.repeat(40);
     const emRestorePrefix = 'partition-em-';
@@ -557,7 +558,7 @@ if(args[0]==='--input-type=module'){
   const result=cp.spawnSync(process.env.REAL_NODE,args,{stdio:'inherit'});
   process.exit(result.status??1);
 }
-fs.appendFileSync(process.env.CALLS,JSON.stringify({command:'node',args,environment:{EM_CACHE:process.env.EM_CACHE??'',BICORE_LLAMA_ABI_SCHEMA:process.env.BICORE_LLAMA_ABI_SCHEMA??'',BICORE_SD_ABI_SCHEMA:process.env.BICORE_SD_ABI_SCHEMA??''}})+'\\n');
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command:'node',args,environment:{EM_CACHE:process.env.EM_CACHE??'',BICORE_LLAMA_ABI_SCHEMA:process.env.BICORE_LLAMA_ABI_SCHEMA??'',BICORE_SD_ABI_SCHEMA:process.env.BICORE_SD_ABI_SCHEMA??'',BICORE_EMSDK_ROOT:process.env.BICORE_EMSDK_ROOT??'',BICORE_EMSDK_NODE:process.env.BICORE_EMSDK_NODE??'',EM_CONFIG:process.env.EM_CONFIG??''}})+'\\n');
 `,
     });
     await executable({
@@ -568,7 +569,7 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
 `,
     });
     const planned = join(root, emCachePath);
-    await executeShell({ root, script, environment: { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, LCB_SOURCE_COMMIT: 'a'.repeat(40), BIC_METRICS_MODE: scenario.mode, BIC_METRICS_RUNTIME: scenario.runtime, BIC_METRICS_PROFILE: scenario.profile, BIC_METRICS_VARIANT: 'browser', DAWN_MATCHED: '', DAWN_HIT: '', DAWN_OUTCOME: 'skipped', EM_CACHE: planned, EM_MATCHED: emMatched, EM_HIT: scenario.emMatch === 'exact' ? 'true' : 'false', CC_MATCHED: prefix + 'b'.repeat(40), CC_HIT: 'false', EM_OUTCOME: scenario.outcome, CC_OUTCOME: scenario.outcome, SAVE_CACHES: String(scenario.save), EMSDK_NODE: process.execPath, REAL_NODE: process.execPath, CALLS: join(root, 'calls.jsonl') } });
+    await executeShell({ root, script, environment: { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, LCB_SOURCE_COMMIT: 'a'.repeat(40), BIC_METRICS_MODE: scenario.mode, BIC_METRICS_RUNTIME: scenario.runtime, BIC_METRICS_PROFILE: scenario.profile, BIC_METRICS_VARIANT: scenario.variant, DAWN_MATCHED: '', DAWN_HIT: '', DAWN_OUTCOME: 'skipped', EM_CACHE: planned, EM_MATCHED: emMatched, EM_HIT: scenario.emMatch === 'exact' ? 'true' : 'false', CC_MATCHED: prefix + 'b'.repeat(40), CC_HIT: 'false', EM_OUTCOME: scenario.outcome, CC_OUTCOME: scenario.outcome, SAVE_CACHES: String(scenario.save), EMSDK_NODE: process.execPath, REAL_NODE: process.execPath, CALLS: join(root, 'calls.jsonl') } });
     const expectedEm = scenario.emMatch === 'other' || scenario.emMatch === 'malformed' ? 'fresh' : scenario.expected;
     assert.equal(await readFile(join(root, scenario.save ? emStagingPath : emCachePath, 'marker'), 'utf8'), expectedEm);
     assert.equal(await readFile(join(root, scenario.save ? ccStagingPath : ccCachePath, 'marker'), 'utf8'), scenario.expected);
@@ -579,8 +580,19 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
     assert.ok(build);
     assert.equal(build.environment?.EM_CACHE, planned);
     assert.equal(build.args[build.args.indexOf('--kind') + 1], 'wasm');
+    assert.equal(build.args[build.args.indexOf('--variant') + 1], scenario.variant);
     assert.equal(build.args[build.args.indexOf('--expected-commit') + 1], 'a'.repeat(40));
     assert.ok(build.args.includes('--fresh'));
+    const sdkChecks = calls.filter(call => call.args[0] === '--test' && call.args.includes('build/tooling/tests/tools/toolchain/tsd-sdk.test.js'));
+    assert.equal(sdkChecks.length, scenario.runtime === 'llama-cpp' && scenario.profile === 'cpu-wasm32' && scenario.variant === 'browser' ? 1 : 0);
+    if (sdkChecks.length) {
+      const check = sdkChecks[0];
+      assert.ok(check);
+      assert.ok(check.args.includes('build/tooling/tests/tools/abi/wasm.test.js'));
+      assert.equal(check.environment?.BICORE_EMSDK_ROOT, join(root, '.tools/emsdk'));
+      assert.equal(check.environment?.BICORE_EMSDK_NODE, process.execPath);
+      assert.equal(check.environment?.EM_CONFIG, join(root, '.tools/emsdk/.emscripten'));
+    }
     const apiChecks = calls.filter(call => call.args[0] === '--test' && call.args[1]?.endsWith('/current-api.test.js'));
     assert.equal(apiChecks.length, scenario.profile === 'webgpu-wasm32-jspi' ? 1 : 0);
     if (scenario.profile === 'webgpu-wasm32-jspi') {

@@ -69,12 +69,14 @@ for (const outcome of ['success', 'failed_exit', 'spawn_error', 'second_open_err
     const open = filesystem.open;
     const rm = filesystem.rm;
     const handles: FileHandle[] = [];
+    const closed: FileHandle[] = [];
+    const secondOpenFailure = new Error('second capture file open failed');
     let removed = false;
     const interceptedOpen = context.mock.method(filesystem, 'open', async (...args: Parameters<typeof open>) => {
       switch (outcome) {
       case 'second_open_error':
         if (handles.length === 1) {
-          throw new Error('second capture file open failed');
+          throw secondOpenFailure;
         }
         break;
       case 'success':
@@ -87,6 +89,11 @@ for (const outcome of ['success', 'failed_exit', 'spawn_error', 'second_open_err
       }
       const handle = await open(...args);
       handles.push(handle);
+      const close = handle.close.bind(handle);
+      context.mock.method(handle, 'close', async () => {
+        await close();
+        closed.push(handle);
+      });
       return handle;
     });
     const interceptedRemoval = context.mock.method(filesystem, 'rm', async (...args: Parameters<typeof rm>) => {
@@ -94,6 +101,7 @@ for (const outcome of ['success', 'failed_exit', 'spawn_error', 'second_open_err
       for (const handle of handles) {
         assert.equal(handle.fd, -1, 'Capture descriptor must close before removing its directory');
       }
+      assert.deepEqual(closed, [...handles].reverse(), 'Capture descriptors must close in reverse acquisition order');
       await rm(...args);
       removed = true;
     });
@@ -121,7 +129,7 @@ for (const outcome of ['success', 'failed_exit', 'spawn_error', 'second_open_err
       break;
     case 'second_open_error':
       expectedHandles = 1;
-      await assert.rejects(runProcess({ command: process.execPath, args: ['-e', ''], cwd: process.cwd(), capture: 'file' }), /second capture file open failed/u);
+      await assert.rejects(runProcess({ command: process.execPath, args: ['-e', ''], cwd: process.cwd(), capture: 'file' }), error => error === secondOpenFailure);
       break;
     default: {
       const _ex: never = outcome;

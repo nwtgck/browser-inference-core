@@ -6,45 +6,23 @@ import { directory, fileIdentity, regularFile, relativePath } from '#tools/share
 import { readJson } from '#tools/shared/json';
 import { withOutputDirectories } from '#tools/shared/output';
 import { runProcess } from '#tools/shared/process';
-import { loadToolchainConfiguration, type AsyncifyPatchConfig } from '#tools/toolchain/config';
+import { loadToolchainConfiguration, type SdkPatch } from '#tools/toolchain/config';
+import { applySdkPatch, verifySdkPatch } from '#tools/toolchain/patch';
 
-const asyncifySource = 'src/lib/libasync.js';
-const patchPath = 'toolchain/patches/emscripten-asyncify-bigint.patch';
-
-export async function verifyAsyncifyBigIntPatch({ emscriptenRoot, patchConfig }: { emscriptenRoot: string; patchConfig: AsyncifyPatchConfig }): Promise<void> {
-  const source = join(emscriptenRoot, asyncifySource);
-  if ((await fileIdentity({ path: source })).sha256 !== patchConfig.patchedSha256) {
-    throw new Error('Asyncify requires the pinned bigint rewind patch; prepare the local toolchain');
-  }
+export async function verifyAsyncifyBigIntPatch({ checkoutRoot, emscriptenRoot, patch }: { checkoutRoot: string; emscriptenRoot: string; patch: SdkPatch }): Promise<void> {
+  await verifySdkPatch({ checkoutRoot, emscriptenRoot, source: 'src/lib/libasync.js', patch });
 }
 
-/** Apply the already approved four-guard change to a private copy first. */
-export async function applyAsyncifyBigIntPatch({ checkoutRoot, emscriptenRoot, patchConfig }: { checkoutRoot: string; emscriptenRoot: string; patchConfig: AsyncifyPatchConfig }): Promise<void> {
-  const target = await regularFile({ path: join(emscriptenRoot, asyncifySource) });
-  const input = await fileIdentity({ path: target });
-  if (input.sha256 === patchConfig.patchedSha256) {
-    return;
-  }
-  if (input.sha256 !== patchConfig.sourceSha256) {
-    throw new Error('Unexpected Emscripten Asyncify source');
-  }
-  const patch = await regularFile({ path: join(checkoutRoot, patchPath) });
-  const temporary = await mkdtemp(join(dirname(target), '.asyncify-patch-'));
-  try {
-    const copied = join(temporary, asyncifySource);
-    await mkdir(dirname(copied), { recursive: true });
-    await copyFile(target, copied);
-    await runProcess({ command: 'patch', args: ['--batch', '--forward', '--fuzz=0', '-p1', '-i', patch], cwd: temporary });
-    if ((await fileIdentity({ path: copied })).sha256 !== patchConfig.patchedSha256) {
-      throw new Error('Patched Emscripten Asyncify source does not match its pin');
-    }
-    if ((await fileIdentity({ path: target })).sha256 !== input.sha256) {
-      throw new Error('Emscripten Asyncify source changed while applying patch');
-    }
-    await rename(copied, target);
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+export async function applyAsyncifyBigIntPatch({ checkoutRoot, emscriptenRoot, patch }: { checkoutRoot: string; emscriptenRoot: string; patch: SdkPatch }): Promise<void> {
+  await applySdkPatch({ checkoutRoot, emscriptenRoot, source: 'src/lib/libasync.js', patch });
+}
+
+export async function verifyTypeScriptPatch({ checkoutRoot, emscriptenRoot, patch }: { checkoutRoot: string; emscriptenRoot: string; patch: SdkPatch }): Promise<void> {
+  await verifySdkPatch({ checkoutRoot, emscriptenRoot, source: 'tools/emscripten.py', patch });
+}
+
+export async function applyTypeScriptPatch({ checkoutRoot, emscriptenRoot, patch }: { checkoutRoot: string; emscriptenRoot: string; patch: SdkPatch }): Promise<void> {
+  await applySdkPatch({ checkoutRoot, emscriptenRoot, source: 'tools/emscripten.py', patch });
 }
 
 /** Verify and extract the exact pinned release, without downloading it. */
@@ -112,7 +90,8 @@ export async function prepareToolchain({ checkoutRoot, toolsRoot, dawnOnly }: { 
     if (releases.releases[config.emsdkVersion] !== config.emscriptenRelease) {
       throw new Error('emsdk release identity differs from pinned configuration');
     }
-    await applyAsyncifyBigIntPatch({ checkoutRoot, emscriptenRoot: join(sdk, 'upstream/emscripten'), patchConfig: config.emscriptenAsyncifyBigIntPatch });
+    await applyAsyncifyBigIntPatch({ checkoutRoot, emscriptenRoot: join(sdk, 'upstream/emscripten'), patch: config.emscriptenAsyncifyBigIntPatch });
+    await applyTypeScriptPatch({ checkoutRoot, emscriptenRoot: join(sdk, 'upstream/emscripten'), patch: config.emscriptenTypeScriptPatch });
   }
   await prepareDawn({ toolsRoot, dawnTag: config.dawnTag, dawnSha256: config.dawnSha256 });
 }

@@ -15,7 +15,7 @@ await symlink(join(root, 'node_modules'), join(temporary, 'node_modules'), 'dir'
 await writeFile(join(temporary, 'package.json'), JSON.stringify({ type: 'module', imports: { '#source/toolchain.json': './toolchain/config.json', '#tools/*': './tools/*.js', '#runtimes/*': './runtimes/*.js' } }));
 // Emit only the CLI and its passive Node helpers. Every command module is
 // supplied by the test; no real preparation/build/publication module is loaded.
-for (const file of ['tools/cli.ts', 'tools/shared/process.ts', 'tools/shared/contracts.ts', 'tools/shared/files.ts', 'tools/shared/node-env.ts', 'tools/ci/metrics.ts', 'tools/toolchain/cli-options.ts', 'tests/tools/shared/node-env.test-support.ts']) {
+for (const file of ['tools/cli.ts', 'tools/shared/process.ts', 'tools/shared/contracts.ts', 'tools/shared/files.ts', 'tools/shared/node-env.ts', 'tools/shared/temporary-directory.ts', 'tools/ci/metrics.ts', 'tools/toolchain/cli-options.ts', 'tests/tools/shared/node-env.test-support.ts']) {
   const source = await readFile(join(root, file), 'utf8');
   const { outputText } = ts.transpileModule(source, { fileName: file, compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, verbatimModuleSyntax: true } });
   const target = join(temporary, file.replace(/\.ts$/u, '.js'));

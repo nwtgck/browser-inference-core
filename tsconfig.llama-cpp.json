@@ -6,6 +6,8 @@
     "tools/ci/cli.ts",
     "tests/tools/abi/wasm.test.ts",
     "tests/tools/abi/wasm.test-support.ts",
-    "tests/tools/abi/current-api.test.ts"
+    "tests/tools/abi/current-api.test.ts",
+    "tests/tools/toolchain/tsd-sdk.test.ts",
+    "tests/tools/toolchain/tsd-runtime.test-support.ts"
   ]
 }

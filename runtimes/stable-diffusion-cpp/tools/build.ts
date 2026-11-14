@@ -141,7 +141,7 @@ export async function buildPrepared({ context, selection, selected, snapshot, pr
       throw new Error('Wrong Emscripten version');
     }
     if (selected.profile.asyncify) {
-      await verifyAsyncifyBigIntPatch({ emscriptenRoot, patchConfig: toolchain.emscriptenAsyncifyBigIntPatch });
+      await verifyAsyncifyBigIntPatch({ checkoutRoot: context.checkoutRoot, emscriptenRoot, patch: toolchain.emscriptenAsyncifyBigIntPatch });
     }
   }
   const command = cmakeArguments({ context, inputs: prepared.inputs, buildRoot, preparedRoot: prepared.root, profile: selected.profile, variant: selection.variant, nativeCheck, dawnRoot });

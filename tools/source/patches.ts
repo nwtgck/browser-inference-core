@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { PatchReceipt } from '#dto/shared';
 import { containedPath, directory, fileIdentity, optionalStat, regularFile, relativePath } from '#tools/shared/files';
 import { runProcess } from '#tools/shared/process';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { gitEnvironment } from './capture.js';
 
 export type Patch = { file: string; target: string; reason: string; files: readonly string[]; mode?: 'apply' | 'reverse' | undefined };
@@ -42,56 +43,52 @@ export async function applyPatch({ sourceRoot, patchRoot, patch: declaration }: 
   if (/^(?:rename |copy |GIT binary patch|Binary files |(?:old|new|deleted) (?:file )?mode (?!100(?:644|755)$))/mu.test(text)) {
     throw new Error(`Unsupported source patch representation: ${patch.file}`);
   }
-  const temporary = await mkdtemp(join(tmpdir(), 'bicore-patch-'));
-  try {
-    const captured = join(temporary, 'input.patch');
-    await writeFile(captured, raw);
-    const mode = patch.mode ?? 'apply';
-    let direction: string[];
-    switch (mode) {
-    case 'apply':
-      direction = [];
-      break;
-    case 'reverse':
-      direction = ['--reverse'];
-      break;
-    default: {
-      const _ex: never = mode;
-      throw new Error(`Unhandled patch direction: ${_ex}`);
-    }
-    }
-    async function apply({ args }: { args: readonly string[] }): Promise<Buffer> {
-      return (await runProcess({ command: 'git', args: ['-c', 'core.autocrlf=false', 'apply', '--no-index', ...direction, ...args, captured], cwd: sourceRoot, env: gitEnvironment({ ceiling: dirname(sourceRoot) }) })).stdout;
-    }
-    const changes = (await apply({ args: ['--numstat', '-z'] })).toString('utf8').split('\0').filter(Boolean).map((row) => {
-      const match = /^\d+\t\d+\t([\s\S]+)$/u.exec(row);
-      if (!match?.[1]) {
-        throw new Error('Expected a text-only source patch with explicit file paths');
-      }
-      return relativePath({ value: match[1] });
-    });
-    if (!changes.length || new Set(changes).size !== changes.length) {
-      throw new Error('Empty or duplicate patch changes');
-    }
-    if (changes.length !== patch.files.length || changes.some((name) => !patch.files.includes(name))) {
-      throw new Error(`Patch changes files outside its inventory: ${patch.file}`);
-    }
-    const before = new Map<string, string | undefined>();
-    for (const name of patch.files) {
-      before.set(name, await optionalDigest({ root: sourceRoot, name }));
-    }
-    await apply({ args: ['--check', '--whitespace=error-all'] });
-    await apply({ args: ['--whitespace=error-all'] });
-    const files: PatchReceipt['files'] = [];
-    for (const name of patch.files) {
-      const beforeSha256 = before.get(name);
-      const afterSha256 = await optionalDigest({ root: sourceRoot, name });
-      files.push({ path: name, ...(beforeSha256 === undefined ? {} : { beforeSha256 }), ...(afterSha256 === undefined ? {} : { afterSha256 }) });
-    }
-    return { file: patch.file, target: patch.target, reason: patch.reason, mode, sha256: createHash('sha256').update(raw).digest('hex'), files };
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
+  await using temporary = await temporaryDirectory({ prefix: join(tmpdir(), 'bicore-patch-') });
+  const captured = join(temporary.root, 'input.patch');
+  await writeFile(captured, raw);
+  const mode = patch.mode ?? 'apply';
+  let direction: string[];
+  switch (mode) {
+  case 'apply':
+    direction = [];
+    break;
+  case 'reverse':
+    direction = ['--reverse'];
+    break;
+  default: {
+    const _ex: never = mode;
+    throw new Error(`Unhandled patch direction: ${_ex}`);
   }
+  }
+  async function apply({ args }: { args: readonly string[] }): Promise<Buffer> {
+    return (await runProcess({ command: 'git', args: ['-c', 'core.autocrlf=false', 'apply', '--no-index', ...direction, ...args, captured], cwd: sourceRoot, env: gitEnvironment({ ceiling: dirname(sourceRoot) }) })).stdout;
+  }
+  const changes = (await apply({ args: ['--numstat', '-z'] })).toString('utf8').split('\0').filter(Boolean).map((row) => {
+    const match = /^\d+\t\d+\t([\s\S]+)$/u.exec(row);
+    if (!match?.[1]) {
+      throw new Error('Expected a text-only source patch with explicit file paths');
+    }
+    return relativePath({ value: match[1] });
+  });
+  if (!changes.length || new Set(changes).size !== changes.length) {
+    throw new Error('Empty or duplicate patch changes');
+  }
+  if (changes.length !== patch.files.length || changes.some((name) => !patch.files.includes(name))) {
+    throw new Error(`Patch changes files outside its inventory: ${patch.file}`);
+  }
+  const before = new Map<string, string | undefined>();
+  for (const name of patch.files) {
+    before.set(name, await optionalDigest({ root: sourceRoot, name }));
+  }
+  await apply({ args: ['--check', '--whitespace=error-all'] });
+  await apply({ args: ['--whitespace=error-all'] });
+  const files: PatchReceipt['files'] = [];
+  for (const name of patch.files) {
+    const beforeSha256 = before.get(name);
+    const afterSha256 = await optionalDigest({ root: sourceRoot, name });
+    files.push({ path: name, ...(beforeSha256 === undefined ? {} : { beforeSha256 }), ...(afterSha256 === undefined ? {} : { afterSha256 }) });
+  }
+  return { file: patch.file, target: patch.target, reason: patch.reason, mode, sha256: createHash('sha256').update(raw).digest('hex'), files };
 }
 
 export async function applyRecipe({ sources, patchRoot, patches }: { sources: Readonly<Record<string, string>>; patchRoot: string; patches: readonly Patch[] }): Promise<PatchReceipt[]> {

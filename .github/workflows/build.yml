@@ -532,7 +532,8 @@ jobs:
           if [[ "$BIC_METRICS_PROFILE" == cpu-wasm32 && "$BIC_METRICS_VARIANT" == browser ]]; then
             BICORE_EMSDK_ROOT="$GITHUB_WORKSPACE/.tools/emsdk" BICORE_EMSDK_NODE="$EMSDK_NODE" \
               EM_CONFIG="$GITHUB_WORKSPACE/.tools/emsdk/.emscripten" \
-              node --test build/tooling/tests/tools/abi/wasm.test.js
+              node --test build/tooling/tests/tools/abi/wasm.test.js \
+                build/tooling/tests/tools/toolchain/tsd-sdk.test.js
           fi
           if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
             BICORE_LLAMA_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/llama-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \

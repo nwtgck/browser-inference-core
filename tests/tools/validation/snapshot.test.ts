@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
-import { chmod, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileIdentity } from '#tools/shared/files';
@@ -39,6 +39,9 @@ test('both runtimes bind the fresh session, smoke every configured pair and pack
     assert.deepEqual(JSON.parse(await readFile(fixture.receiptPath, 'utf8')), receipt);
     const identity = await fileIdentity({ path: manifestPath });
     assert.equal(receipt.finalManifestSha256, identity.sha256);
+    for (const command of fixture.commands) {
+      await assert.rejects(lstat(path.dirname(command.resultPath)), { code: 'ENOENT' });
+    }
   }
 });
 
@@ -172,6 +175,8 @@ test('generated fixture bytes are bound and only the owned temporary directory i
   };
   await assert.rejects(fixture.validate(), /implementation or fixture changed/u);
   assert.equal(fixture.finalCalls, 0);
+  assert.deepEqual(await readdir(actual), []);
+  assert.equal((await lstat(alias)).isSymbolicLink(), true);
 });
 
 test('later source build output is never reimported into the tested saved package', async () => {

@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, open, readFile, rm } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { temporaryDirectory } from './temporary-directory.js';
 
 export type ProcessResult = { stdout: Buffer; stderr: Buffer; exitCode: number };
 export type InheritedChildEnvironment = { kind: 'inherit'; overrides: Readonly<NodeJS.ProcessEnv>; removePrefixes: readonly string[] };
@@ -140,20 +141,16 @@ export function startProcess({ command, args, cwd, env, timeoutMs }: { command: 
 export async function runProcess({ command, args, cwd, env, input, timeoutMs, capture }: { command: string; args: readonly string[]; cwd: string; env?: ChildEnvironment; input?: string | Uint8Array; timeoutMs?: number; capture?: 'pipe' | 'file' | 'tee' }): Promise<ProcessResult> {
   switch (capture) {
   case 'file': {
-    const temporary = await mkdtemp(join(tmpdir(), 'bicore-process-'));
-    try {
-      const output = join(temporary, 'stdout');
-      const errors = join(temporary, 'stderr');
-      await using stdout = await open(output, 'wx');
-      await using stderr = await open(errors, 'wx');
-      const child = spawn(command, args, { cwd, env: childEnvironment({ environment: env }), stdio: ['pipe', stdout.fd, stderr.fd] });
-      const completed = completion({ child, timeoutMs });
-      child.stdin?.end(input);
-      const status = await completed;
-      return checkedResult({ command, stdout: await readFile(output), stderr: await readFile(errors), status });
-    } finally {
-      await rm(temporary, { recursive: true, force: true });
-    }
+    await using temporary = await temporaryDirectory({ prefix: join(tmpdir(), 'bicore-process-') });
+    const output = join(temporary.root, 'stdout');
+    const errors = join(temporary.root, 'stderr');
+    await using stdout = await open(output, 'wx');
+    await using stderr = await open(errors, 'wx');
+    const child = spawn(command, args, { cwd, env: childEnvironment({ environment: env }), stdio: ['pipe', stdout.fd, stderr.fd] });
+    const completed = completion({ child, timeoutMs });
+    child.stdin?.end(input);
+    const status = await completed;
+    return checkedResult({ command, stdout: await readFile(output), stderr: await readFile(errors), status });
   }
   case 'pipe':
   case 'tee':

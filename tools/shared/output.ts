@@ -3,6 +3,7 @@ import { copyFile, lstat, mkdtemp, mkdir, open, readdir, readlink, rename, rm, s
 import { dirname, join, resolve } from 'node:path';
 import { directory, isContained, optionalStat } from './files.js';
 import { runProcess } from './process.js';
+import { temporaryDirectory } from './temporary-directory.js';
 
 type DirectoryIdentity = { dev: number; ino: number };
 type Output = { destination: string; temporary: string; original: DirectoryIdentity | undefined; moved: boolean; installed: DirectoryIdentity | undefined; reuse: boolean; retain: boolean };
@@ -222,12 +223,8 @@ export async function replaceFileUnchanged({ candidate, output }: { candidate: s
   if (old && await sameFileBytes({ left: candidate, right: output })) {
     return;
   }
-  const temporary = await mkdtemp(join(dirname(output), 'bicore-file-'));
-  try {
-    const file = join(temporary, 'prepared');
-    await copyFile(candidate, file, constants.COPYFILE_FICLONE);
-    await rename(file, output);
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+  await using temporary = await temporaryDirectory({ prefix: join(dirname(output), 'bicore-file-') });
+  const file = join(temporary.root, 'prepared');
+  await copyFile(candidate, file, constants.COPYFILE_FICLONE);
+  await rename(file, output);
 }

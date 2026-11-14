@@ -1,10 +1,8 @@
 {
   "emsdkVersion": "6.0.9",
   "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
-  "emscriptenAsyncifyBigIntPatch": {
-    "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-    "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
-  },
+  "emscriptenTypeScriptPatch": "toolchain/patches/emscripten-typescript-signatures.patch",
+  "emscriptenAsyncifyBigIntPatch": "toolchain/patches/emscripten-asyncify-bigint.patch",
   "nodeVersion": "22.16.0",
   "dawnTag": "v20260908.214631",
   "dawnSha256": "9c36eb46ada070b9cc0de2bdfd04c1fa1a1fd852cc1ebb371e96e68e1efe6c3c"

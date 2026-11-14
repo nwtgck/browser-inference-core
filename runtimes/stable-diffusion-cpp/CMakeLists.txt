@@ -132,7 +132,8 @@ else()
         target_compile_definitions(core PRIVATE SDCB_VARIANT_TEST=1)
     endif()
     set_property(TARGET core APPEND PROPERTY LINK_DEPENDS
-        "${SDCB_GENERATED}/exports.json" "${SDCB_GENERATED}/jspi-exports.json")
+        "${SDCB_GENERATED}/exports.json" "${SDCB_GENERATED}/jspi-exports.json"
+        "${EMSCRIPTEN_ROOT_PATH}/src/lib/libasync.js")
     target_link_options(core PRIVATE --no-entry -sMODULARIZE=1 -sEXPORT_ES6=1
         -sEXPORT_NAME=createStableDiffusionCore "-sENVIRONMENT=${environment}"
         -sALLOW_MEMORY_GROWTH=1 "-sMAXIMUM_MEMORY=${SDCB_MAXIMUM_MEMORY}" -sINITIAL_HEAP=33554432

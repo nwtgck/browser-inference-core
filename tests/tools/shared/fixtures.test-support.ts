@@ -1,17 +1,12 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnvironment } from '#tools/source/capture';
 import { runProcess } from '#tools/shared/process';
+import { temporaryDirectory as ownedTemporaryDirectory } from '#tools/shared/temporary-directory';
 
 export async function temporaryDirectory(): Promise<{ root: string; [Symbol.asyncDispose](): Promise<void> }> {
-  const root = await mkdtemp(join(tmpdir(), 'bicore-tools-test-'));
-  return {
-    root,
-    async [Symbol.asyncDispose]() {
-      await rm(root, { recursive: true, force: true });
-    },
-  };
+  return ownedTemporaryDirectory({ prefix: join(tmpdir(), 'bicore-tools-test-') });
 }
 
 export async function git({ root, args }: { root: string; args: readonly string[] }): Promise<string> {

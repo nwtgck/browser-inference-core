@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { generateWgsl } from '#tools/source/wgsl';
@@ -21,7 +21,9 @@ test('unchanged upstream WGSL embedder owns generation, with stable output mtime
   const before = await stat(output);
   await generateWgsl({ sourceRoot, generator, output });
   assert.equal((await stat(output)).mtimeMs, before.mtimeMs);
+  assert.deepEqual(await readdir(join(temporary.root, 'result')), ['shaders.hpp']);
   await writeFile(generator, 'raise RuntimeError("generator diagnostic")\n');
   await assert.rejects(generateWgsl({ sourceRoot, generator, output }), /generator diagnostic/u);
   assert.equal(await readFile(output, 'utf8'), header);
+  assert.deepEqual(await readdir(join(temporary.root, 'result')), ['shaders.hpp']);
 });

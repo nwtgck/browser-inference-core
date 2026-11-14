@@ -1,10 +1,11 @@
-import { cp, copyFile, lstat, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, copyFile, lstat, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { PreparationOptions, PreparationReceipt } from '#dto/llama-cpp';
 import type { FileIdentity } from '#dto/shared';
 
 import { directory, regularFileIdentities, fileIdentity, isContained, optionalStat, regularFile, treeIdentity } from '#tools/shared/files';
 import { withOutputDirectories } from '#tools/shared/output';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { applyPatch, type PatchReceipt } from '#tools/source/patches';
 import { generateWgsl } from '#tools/source/wgsl';
 import { loadConfiguration, runtimePath } from '#runtimes/llama-cpp/tools/config';
@@ -172,71 +173,67 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       if (prepared === undefined) {
         throw new Error('Missing preparation output');
       }
-      const scratch = await mkdtemp(join(dirname(prepared), '.llama-source-'));
-      try {
-        const root = join(prepared, 'llama.cpp');
-        await copySourceTree({ source: original, destination: root });
-        const inputs = await regularFileIdentities({ root });
-        const owned = join(scratch, 'owned');
-        await cp(join(runtime, 'native'), join(owned, 'native'), { recursive: true });
-        const runtimeInputs = await regularFileIdentities({ root: owned });
-        const patchRoot = join(scratch, 'patches');
-        await cp(join(runtime, patchDirectory), patchRoot, { recursive: true });
-        const patches: PatchReceipt[] = [];
-        const selections: PreparationReceipt['selections'] = [];
-        let shaders: Record<string, Record<string, FileIdentity>> = {};
-        if (webgpu) {
-          const nativeContext = join(scratch, 'native-context.cpp');
-          switch (target) {
-          case 'native': await copyInput({ source: join(root, 'src/llama-context.cpp'), destination: nativeContext });
-            break;
-          case 'wasm': break;
-          default: {
-            const _ex: never = target;
-            throw new Error(`Unknown preparation target: ${String(_ex)}`);
-          }
-          }
-          const canonicalRoot = join(scratch, 'original');
-          await cp(join(root, shaderBase), join(canonicalRoot, shaderBase), { recursive: true });
-          const result = await prepareWebgpu({ source: root, original: canonicalRoot, scratch, patchRoot, runtime: owned, mode: gpuProfile ? 'profile' : 'normal', python });
-          patches.push(...result.patches);
-          shaders = result.shaders;
-          switch (target) {
-          case 'native': {
-          // The accepted checkpoint provider belongs to Emdawn. Preserve the
-          // pre-existing native selection within the same coherent tree.
-            const context = join(root, 'src/llama-context.cpp');
-            const before = await fileIdentity({ path: context });
-            await copyInput({ source: nativeContext, destination: context });
-            selections.push({ file: 'src/llama-context.cpp', mode: 'upstream_native_context', reason: 'Native WebGPU retains the upstream context; browser checkpoint batching uses the Emdawn-only provider.', before, after: await fileIdentity({ path: context }) });
-            break;
-          }
-          case 'wasm': break;
-          default: {
-            const _ex: never = target;
-            throw new Error(`Unknown preparation target: ${String(_ex)}`);
-          }
-          }
+      await using scratch = await temporaryDirectory({ prefix: join(dirname(prepared), '.llama-source-') });
+      const root = join(prepared, 'llama.cpp');
+      await copySourceTree({ source: original, destination: root });
+      const inputs = await regularFileIdentities({ root });
+      const owned = join(scratch.root, 'owned');
+      await cp(join(runtime, 'native'), join(owned, 'native'), { recursive: true });
+      const runtimeInputs = await regularFileIdentities({ root: owned });
+      const patchRoot = join(scratch.root, 'patches');
+      await cp(join(runtime, patchDirectory), patchRoot, { recursive: true });
+      const patches: PatchReceipt[] = [];
+      const selections: PreparationReceipt['selections'] = [];
+      let shaders: Record<string, Record<string, FileIdentity>> = {};
+      if (webgpu) {
+        const nativeContext = join(scratch.root, 'native-context.cpp');
+        switch (target) {
+        case 'native': await copyInput({ source: join(root, 'src/llama-context.cpp'), destination: nativeContext });
+          break;
+        case 'wasm': break;
+        default: {
+          const _ex: never = target;
+          throw new Error(`Unknown preparation target: ${String(_ex)}`);
         }
-        if (fileRows) {
-          patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.fileRows }));
-          for (const name of ['file-backed-rows.h', 'file-backed-identity.h']) {
-            await copyCompanion({ source: join(owned, 'native/io', name), destination: join(root, 'src/models', name) });
-          }
         }
-        if (qsa) {
-          patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.qsa }));
+        const canonicalRoot = join(scratch.root, 'original');
+        await cp(join(root, shaderBase), join(canonicalRoot, shaderBase), { recursive: true });
+        const result = await prepareWebgpu({ source: root, original: canonicalRoot, scratch: scratch.root, patchRoot, runtime: owned, mode: gpuProfile ? 'profile' : 'normal', python });
+        patches.push(...result.patches);
+        shaders = result.shaders;
+        switch (target) {
+        case 'native': {
+        // The accepted checkpoint provider belongs to Emdawn. Preserve the
+        // pre-existing native selection within the same coherent tree.
+          const context = join(root, 'src/llama-context.cpp');
+          const before = await fileIdentity({ path: context });
+          await copyInput({ source: nativeContext, destination: context });
+          selections.push({ file: 'src/llama-context.cpp', mode: 'upstream_native_context', reason: 'Native WebGPU retains the upstream context; browser checkpoint batching uses the Emdawn-only provider.', before, after: await fileIdentity({ path: context }) });
+          break;
         }
-        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.chat }));
-        for (const patch of mtmdPatches({ mode: mtmdMode })) {
-          patches.push(await applyPatch({ sourceRoot: join(root, 'tools/mtmd'), patchRoot, patch }));
+        case 'wasm': break;
+        default: {
+          const _ex: never = target;
+          throw new Error(`Unknown preparation target: ${String(_ex)}`);
         }
-        const outputs = await regularFileIdentities({ root });
-        receipt = { formatVersion: 1, options, upstream: treeIdentity({ files: inputs }), inputs, runtimeInputs, patches, selections, shaders, outputs };
-        await writeFile(join(prepared, 'source-preparation.json'), `${JSON.stringify(receipt, undefined, 2)}\n`);
-      } finally {
-        await rm(scratch, { recursive: true, force: true });
+        }
       }
+      if (fileRows) {
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.fileRows }));
+        for (const name of ['file-backed-rows.h', 'file-backed-identity.h']) {
+          await copyCompanion({ source: join(owned, 'native/io', name), destination: join(root, 'src/models', name) });
+        }
+      }
+      if (qsa) {
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.qsa }));
+      }
+      patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.chat }));
+      for (const patch of mtmdPatches({ mode: mtmdMode })) {
+        patches.push(await applyPatch({ sourceRoot: join(root, 'tools/mtmd'), patchRoot, patch }));
+      }
+      const outputs = await regularFileIdentities({ root });
+      receipt = { formatVersion: 1, options, upstream: treeIdentity({ files: inputs }), inputs, runtimeInputs, patches, selections, shaders, outputs };
+      await writeFile(join(prepared, 'source-preparation.json'), `${JSON.stringify(receipt, undefined, 2)}\n`);
     },
   });
   if (receipt === undefined) {

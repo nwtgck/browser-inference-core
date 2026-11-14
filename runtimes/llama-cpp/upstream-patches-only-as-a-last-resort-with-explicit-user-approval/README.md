@@ -176,11 +176,36 @@ patch that freezes older behavior.
 
 ## Other existing deviations
 
-The Emscripten Asyncify/BigInt correction in repository-root
-`tools/toolchain/prepare.ts` and the
-pinned link-option correction in `CMakeLists.txt` are toolchain/build
-workarounds with a separate preparation boundary. The same approval policy applies to expanding them even though they
-are not `.patch` files. The Asyncify correction remains separately reported.
+The Emscripten Asyncify/BigInt correction is an individual repository-root
+`toolchain/patches/emscripten-asyncify-bigint.patch`, applied through the owned SDK
+preparation boundary. It uses the same atomic, context-based file operation as
+the declaration correction below; its behavior remains a separate patch policy.
+The pinned link-option correction in `CMakeLists.txt` is another build workaround.
+The same approval policy applies to expanding these changes. The Asyncify
+correction remains separately reported.
+
+### SDK declaration signatures
+
+- **Patch:** repository-root `toolchain/patches/emscripten-typescript-signatures.patch`.
+- **Scope:** correct SDK 6.0.9 `--emit-tsd` to use the same final `native_sigs`
+  mapping as its JS generation, including explicit signature conversions and
+  SDK helpers. MEMORY64 p/P slots use Number; non-converted i64 uses primitive
+  bigint. Existing JSPI export selection and all generated runtime behavior
+  remain unchanged.
+- **Coupling:** the SDK declaration phase follows JS generation, which populates
+  the conversion mapping. Preparation uses normal forward/reverse patch checks
+  and atomic installation into an owned SDK. Patch content identity participates
+  in cache partitions and toolchain provenance. Standard CMake link dependencies
+  bind warm rebuilds to the SDK generator and signature definitions.
+- **No-patch alternative:** defer the affected generated-type contract until
+  upstream corrects it. Consumer casts, replacement types or changing the SDK's
+  runtime Number conventions would not establish correct public declarations.
+- **Evidence and limits:** an actual SDK C fixture, strict imports of its emitted
+  declarations, and Node runtime checks cover 32-bit Asyncify, 64-bit direct and
+  64-bit JSPI exports, including actual i64 rewind. These are not browser/GPU or
+  model-inference tests.
+- **Removal:** retire the patch and preparation once upstream generates the
+  matching signatures; keep the actual generated-type/runtime regression cases.
 
 ## Inventory and publication
 

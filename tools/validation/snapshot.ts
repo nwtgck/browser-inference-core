@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { BrowserSession, FileEntry, FileIdentity, RuntimeName } from '#dto/shared';
@@ -9,6 +9,7 @@ import { directory, fileIdentity, isContained, treeIdentity } from '#tools/share
 import { parseJson } from '#tools/shared/json';
 import { replaceFileUnchanged } from '#tools/shared/output';
 import type { ChildEnvironment, runProcess } from '#tools/shared/process';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { withValidationManifest, manifestIo, type ManifestIo } from './manifest.js';
 
 export type SmokeResult = { profile: string; variant: string; passed: boolean };
@@ -135,79 +136,76 @@ export async function validateSnapshot<Manifest extends RuntimeManifest, Result 
   const metadata = await treeMetadata({ root: directory });
   const implementation = await testIdentity({ files: plan.testFiles, fixturePath: undefined });
   // Canonicalize only our newly owned directory, never untrusted payload paths.
-  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'bic-smoke-')));
-  try {
-    let fixturePath: string | undefined;
-    if (plan.generateFixture !== undefined) {
-      fixturePath = path.join(temporary, 'fixture.gguf');
-      await plan.generateFixture({ output: fixturePath });
-    }
-    assertSame({ actual: await testIdentity({ files: plan.testFiles, fixturePath: undefined }), expected: implementation, message: 'Test implementation changed while generating fixture' });
-    const tests = await testIdentity({ files: plan.testFiles, fixturePath });
-    const session: BrowserSession & { runtime: Manifest['runtime'] } = { ...identity, snapshotSha256: snapshotDigest({ files: snapshot, metadata }), testInputsSha256: treeIdentity({ files: tests }).sha256, testWebGpu: plan.testWebGpu };
-    const assertSnapshot = async ({ expected }: { expected: ReadonlyMap<string, FileEntry> }): Promise<void> => {
-      assertSame({ actual: await packageFiles({ root: directory, exclude: [] }), expected, message: 'Tested package snapshot changed' });
-      assertSame({ actual: await treeMetadata({ root: directory }), expected: metadata, message: 'Tested package snapshot changed its filesystem metadata' });
-      assertSame({ actual: await testIdentity({ files: plan.testFiles, fixturePath }), expected: tests, message: 'Test implementation or fixture changed' });
-    };
-    await assertSnapshot({ expected: snapshot });
-    const resultsPath = path.join(temporary, 'results.json');
-    const overrides = { BIC_BROWSER_RESULTS_FILE: resultsPath, BIC_BROWSER_SESSION_JSON: JSON.stringify(session) };
-    let env: ChildEnvironment;
-    switch (childEnvironment?.kind) {
-    case undefined: env = { kind: 'inherit', removePrefixes: [], overrides };
-      break;
-    case 'inherit': env = { ...childEnvironment, overrides: { ...childEnvironment.overrides, ...overrides } };
-      break;
-    case 'replace': env = { ...childEnvironment, values: { ...childEnvironment.values, ...overrides } };
-      break;
-    default: {
-      const exhaustive: never = childEnvironment;
-      throw new Error(`Unhandled validation child environment: ${String(exhaustive)}`);
-    }
-    }
-    const cwd = path.join(checkoutRoot, 'runtimes', input.manifest.runtime);
-    const harness = path.join(checkoutRoot, 'tests/runtimes', input.manifest.runtime.replaceAll('-', '_'));
-    if (plan.nodeAsyncify) {
-      await run({ command: process.execPath, args: [path.join(harness, 'asyncify-rewind.mjs'), path.join(directory, 'profiles/webgpu-wasm32-asyncify/test')], cwd, env, capture: 'file' });
-      await assertSnapshot({ expected: snapshot });
-    }
-    await run({ command: process.execPath, args: [path.join(harness, 'browser-smoke.mjs'), directory, ...(fixturePath === undefined ? [] : [fixturePath])], cwd, env, capture: 'file' });
-    await assertSnapshot({ expected: snapshot });
-    const envelope = parseJson({ text: (await readMetadataBytes({ path: resultsPath })).toString('utf8'), decode: plan.decodeEnvelope });
-    assertSame({ actual: envelope.session, expected: session, message: 'Browser result is not bound to this test session' });
-    plan.checkedResults({ results: envelope.results });
-    const manifest = plan.updateManifest({ manifest: input.manifest, results: envelope.results });
-    const finalBytes = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
-    const manifestIdentity = bytesIdentity({ data: finalBytes });
-    const expected = new Map(snapshot);
-    expected.set('manifest.json', { path: 'manifest.json', ...manifestIdentity });
-    await withValidationManifest({
-      manifestPath,
-      before,
-      after: finalBytes,
-      io,
-      finish: async () => {
-        await assertSnapshot({ expected });
-        await plan.finalVerify({ input: { ...input, manifest, manifestIdentity } });
-        await assertSnapshot({ expected });
-      },
-    });
-    const receipt: ValidationReceipt<Manifest['runtime'], Result> = {
-      ...session,
-      status: 'complete',
-      finalSnapshotSha256: snapshotDigest({ files: expected, metadata }),
-      finalManifestSha256: manifestIdentity.sha256,
-      ...(plan.nodeAsyncify ? { nodeAsyncifyPassed: true } : {}),
-      results: envelope.results,
-    };
-    const candidate = path.join(temporary, 'receipt.json');
-    await writeFile(candidate, JSON.stringify(receipt, undefined, 2) + '\n');
-    await replaceFileUnchanged({ candidate, output: receiptPath });
-    return receipt;
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
+  await using scratch = await temporaryDirectory({ prefix: path.join(tmpdir(), 'bic-smoke-') });
+  const temporary = scratch.root;
+  let fixturePath: string | undefined;
+  if (plan.generateFixture !== undefined) {
+    fixturePath = path.join(temporary, 'fixture.gguf');
+    await plan.generateFixture({ output: fixturePath });
   }
+  assertSame({ actual: await testIdentity({ files: plan.testFiles, fixturePath: undefined }), expected: implementation, message: 'Test implementation changed while generating fixture' });
+  const tests = await testIdentity({ files: plan.testFiles, fixturePath });
+  const session: BrowserSession & { runtime: Manifest['runtime'] } = { ...identity, snapshotSha256: snapshotDigest({ files: snapshot, metadata }), testInputsSha256: treeIdentity({ files: tests }).sha256, testWebGpu: plan.testWebGpu };
+  const assertSnapshot = async ({ expected }: { expected: ReadonlyMap<string, FileEntry> }): Promise<void> => {
+    assertSame({ actual: await packageFiles({ root: directory, exclude: [] }), expected, message: 'Tested package snapshot changed' });
+    assertSame({ actual: await treeMetadata({ root: directory }), expected: metadata, message: 'Tested package snapshot changed its filesystem metadata' });
+    assertSame({ actual: await testIdentity({ files: plan.testFiles, fixturePath }), expected: tests, message: 'Test implementation or fixture changed' });
+  };
+  await assertSnapshot({ expected: snapshot });
+  const resultsPath = path.join(temporary, 'results.json');
+  const overrides = { BIC_BROWSER_RESULTS_FILE: resultsPath, BIC_BROWSER_SESSION_JSON: JSON.stringify(session) };
+  let env: ChildEnvironment;
+  switch (childEnvironment?.kind) {
+  case undefined: env = { kind: 'inherit', removePrefixes: [], overrides };
+    break;
+  case 'inherit': env = { ...childEnvironment, overrides: { ...childEnvironment.overrides, ...overrides } };
+    break;
+  case 'replace': env = { ...childEnvironment, values: { ...childEnvironment.values, ...overrides } };
+    break;
+  default: {
+    const exhaustive: never = childEnvironment;
+    throw new Error(`Unhandled validation child environment: ${String(exhaustive)}`);
+  }
+  }
+  const cwd = path.join(checkoutRoot, 'runtimes', input.manifest.runtime);
+  const harness = path.join(checkoutRoot, 'tests/runtimes', input.manifest.runtime.replaceAll('-', '_'));
+  if (plan.nodeAsyncify) {
+    await run({ command: process.execPath, args: [path.join(harness, 'asyncify-rewind.mjs'), path.join(directory, 'profiles/webgpu-wasm32-asyncify/test')], cwd, env, capture: 'file' });
+    await assertSnapshot({ expected: snapshot });
+  }
+  await run({ command: process.execPath, args: [path.join(harness, 'browser-smoke.mjs'), directory, ...(fixturePath === undefined ? [] : [fixturePath])], cwd, env, capture: 'file' });
+  await assertSnapshot({ expected: snapshot });
+  const envelope = parseJson({ text: (await readMetadataBytes({ path: resultsPath })).toString('utf8'), decode: plan.decodeEnvelope });
+  assertSame({ actual: envelope.session, expected: session, message: 'Browser result is not bound to this test session' });
+  plan.checkedResults({ results: envelope.results });
+  const manifest = plan.updateManifest({ manifest: input.manifest, results: envelope.results });
+  const finalBytes = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
+  const manifestIdentity = bytesIdentity({ data: finalBytes });
+  const expected = new Map(snapshot);
+  expected.set('manifest.json', { path: 'manifest.json', ...manifestIdentity });
+  await withValidationManifest({
+    manifestPath,
+    before,
+    after: finalBytes,
+    io,
+    finish: async () => {
+      await assertSnapshot({ expected });
+      await plan.finalVerify({ input: { ...input, manifest, manifestIdentity } });
+      await assertSnapshot({ expected });
+    },
+  });
+  const receipt: ValidationReceipt<Manifest['runtime'], Result> = {
+    ...session,
+    status: 'complete',
+    finalSnapshotSha256: snapshotDigest({ files: expected, metadata }),
+    finalManifestSha256: manifestIdentity.sha256,
+    ...(plan.nodeAsyncify ? { nodeAsyncifyPassed: true } : {}),
+    results: envelope.results,
+  };
+  const candidate = path.join(temporary, 'receipt.json');
+  await writeFile(candidate, JSON.stringify(receipt, undefined, 2) + '\n');
+  await replaceFileUnchanged({ candidate, output: receiptPath });
+  return receipt;
 }
 
 export { manifestIo };

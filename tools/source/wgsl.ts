@@ -1,8 +1,9 @@
-import { copyFile, mkdtemp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { directory, isContained, regularFile } from '#tools/shared/files';
 import { replaceFileUnchanged } from '#tools/shared/output';
 import { runProcess } from '#tools/shared/process';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
 
 export async function wgslInputs({ sourceRoot, generator }: { sourceRoot: string; generator?: string }): Promise<readonly string[]> {
   sourceRoot = await directory({ path: sourceRoot });
@@ -37,20 +38,16 @@ export async function generateWgsl({ sourceRoot, output, generator, patchedTempl
     throw new Error('Generated header must not replace an input');
   }
   await directory({ path: dirname(output), create: true });
-  const temporary = await mkdtemp(join(dirname(output), 'wgsl-embed-'));
-  try {
-    const privateInputs = join(temporary, 'inputs');
-    await mkdir(privateInputs);
-    for (const input of inputs) {
-      await copyFile(patchedTemplate !== undefined && basename(input) === basename(patchedTemplate) ? patchedTemplate : input, join(privateInputs, basename(input)));
-    }
-    const header = join(temporary, 'shaders.hpp');
-    await runProcess({ command: python ?? 'python3', args: ['-I', '-S', join(privateInputs, 'embed_wgsl.py'), '--input_dir', privateInputs, '--output_file', header], cwd: temporary });
-    if (!(await stat(await regularFile({ path: header }))).size) {
-      throw new Error('Canonical shader generator produced no header');
-    }
-    await replaceFileUnchanged({ candidate: header, output });
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
+  await using temporary = await temporaryDirectory({ prefix: join(dirname(output), 'wgsl-embed-') });
+  const privateInputs = join(temporary.root, 'inputs');
+  await mkdir(privateInputs);
+  for (const input of inputs) {
+    await copyFile(patchedTemplate !== undefined && basename(input) === basename(patchedTemplate) ? patchedTemplate : input, join(privateInputs, basename(input)));
   }
+  const header = join(temporary.root, 'shaders.hpp');
+  await runProcess({ command: python ?? 'python3', args: ['-I', '-S', join(privateInputs, 'embed_wgsl.py'), '--input_dir', privateInputs, '--output_file', header], cwd: temporary.root });
+  if (!(await stat(await regularFile({ path: header }))).size) {
+    throw new Error('Canonical shader generator produced no header');
+  }
+  await replaceFileUnchanged({ candidate: header, output });
 }

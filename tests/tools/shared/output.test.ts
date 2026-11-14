@@ -1,12 +1,46 @@
 import assert from 'node:assert/strict';
 import filesystem from 'node:fs/promises';
-import { mkdir, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { basename, join } from 'node:path';
 import test from 'node:test';
-import { withOutputDirectories } from '#tools/shared/output';
+import { replaceFileUnchanged, withOutputDirectories } from '#tools/shared/output';
 import { runProcess } from '#tools/shared/process';
 import { temporaryDirectory } from './fixtures.test-support.js';
+
+test('single-file replacement retains equal output and cleans scratch after success and failure', async context => {
+  await using temporary = await temporaryDirectory();
+  const candidate = join(temporary.root, 'candidate');
+  const output = join(temporary.root, 'output');
+  await writeFile(candidate, 'original');
+  await writeFile(output, 'original');
+  const before = await stat(output, { bigint: true });
+  await replaceFileUnchanged({ candidate, output });
+  const after = await stat(output, { bigint: true });
+  assert.equal(after.ino, before.ino);
+  assert.equal(after.mtimeNs, before.mtimeNs);
+  await writeFile(candidate, 'replacement');
+  await replaceFileUnchanged({ candidate, output });
+  assert.equal(await readFile(output, 'utf8'), 'replacement');
+  assert.deepEqual((await readdir(temporary.root)).sort(), ['candidate', 'output']);
+  await writeFile(candidate, 'failed replacement');
+  const failure = new Error('single-file activation failed');
+  const rename = filesystem.rename;
+  const intercepted = context.mock.method(filesystem, 'rename', async (...args: Parameters<typeof rename>) => {
+    if (args[1] === output) {
+      throw failure;
+    }
+    return rename(...args);
+  });
+  context.after(() => {
+    intercepted.mock.restore();
+    syncBuiltinESMExports();
+  });
+  syncBuiltinESMExports();
+  await assert.rejects(replaceFileUnchanged({ candidate, output }), error => error === failure);
+  assert.equal(await readFile(output, 'utf8'), 'replacement');
+  assert.deepEqual((await readdir(temporary.root)).sort(), ['candidate', 'output']);
+});
 
 test('preparation and later activation failures preserve all previous outputs', async () => {
   await using temporary = await temporaryDirectory();

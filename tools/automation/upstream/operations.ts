@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PreparationOptions } from '#dto/llama-cpp';
@@ -6,6 +6,7 @@ import { gitObjectId } from '#tools/publication/git';
 import { repositoryName } from '#tools/publication/npm-lock';
 import { gitRead, selectedGitlinks } from '#tools/source/capture';
 import { ProcessError } from '#tools/shared/process';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { type Candidate, type PlannedUpdate, type Preflight, type UpdateRequest, pullRequestHandoff } from './plan.js';
 
 export const upstreamPath = 'runtimes/llama-cpp/vendor/llama.cpp';
@@ -70,7 +71,7 @@ export function errorDetails({ error }: { error: unknown }): string {
 
 /** Exercise the actual composer, including pristine/composed QSA and profile patches. */
 export async function overlayPreflight({ checkoutRoot }: { checkoutRoot: string }): Promise<Preflight> {
-  const temporary = await mkdtemp(join(tmpdir(), 'bicore-update-overlay-'));
+  await using temporary = await temporaryDirectory({ prefix: join(tmpdir(), 'bicore-update-overlay-') });
   try {
     const { prepareSources } = await import('#runtimes/llama-cpp/tools/prepare');
     for (const [index, options] of ([
@@ -79,13 +80,11 @@ export async function overlayPreflight({ checkoutRoot }: { checkoutRoot: string 
       { target: 'wasm', webgpu: true, gpuProfile: false, fileRows: true, qsa: true, mtmdMode: 'webgpu' },
       { target: 'wasm', webgpu: true, gpuProfile: true, fileRows: true, qsa: true, mtmdMode: 'webgpu' },
     ] satisfies PreparationOptions[]).entries()) {
-      await prepareSources({ inputs: { compileRoot: checkoutRoot, upstreamRoots: { llama: join(checkoutRoot, upstreamPath) } }, output: join(temporary, String(index)), options, python: 'python3' });
+      await prepareSources({ inputs: { compileRoot: checkoutRoot, upstreamRoots: { llama: join(checkoutRoot, upstreamPath) } }, output: join(temporary.root, String(index)), options, python: 'python3' });
     }
     return { status: 'passed', scope: 'source preparation only; not compilation or inference', error: undefined };
   } catch (error) {
     return { status: 'failed', scope: 'source preparation only; not compilation or inference', error: errorDetails({ error }) };
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
   }
 }
 

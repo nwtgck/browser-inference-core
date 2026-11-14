@@ -37,6 +37,7 @@ export function cachePlan({ runtime, profile, variant, profileConfiguration, var
       emsdkVersion: toolchain.emsdkVersion,
       emscriptenRelease: toolchain.emscriptenRelease,
       emscriptenAsyncifyBigIntPatch: toolchain.emscriptenAsyncifyBigIntPatch,
+      emscriptenTypeScriptPatch: toolchain.emscriptenTypeScriptPatch,
       dawnSha256: toolchain.dawnSha256,
       ccacheVersion,
       platform,

@@ -11,10 +11,9 @@ import { ProcessError, runProcess, type ChildEnvironment } from '#tools/shared/p
 import { READ_ENV_BIC_CACHE_ID, READ_ENV_CC, READ_ENV_CXX, READ_ENV_EM_COMPILER_WRAPPER, READ_ENV_PATH } from '#tools/shared/node-env';
 import { exportCommit, gitEnvironment, gitRead, observeSource, snapshotCompileInputs, type SourceMode, type SourceSnapshot, type SourceState } from '#tools/source/capture';
 import { stageProfile } from '#tools/package/stage';
-import { verifyAsyncifyBigIntPatch } from '#tools/toolchain/prepare';
+import { verifyAsyncifyBigIntPatch, verifyTypeScriptPatch } from '#tools/toolchain/prepare';
 import { loadConfiguration, runtimePath, selectConfiguration, sourceCaptureSelection, upstreamCommit, upstreamPath, visionBf16StorageMetadata, type Configuration, type Profile, type Variant } from '#runtimes/llama-cpp/tools/config';
 import { prepareSources, verifyPreparedSources, type CompileInputs, type PreparedSources } from '#runtimes/llama-cpp/tools/prepare';
-import { prepareModuleDeclarations } from '#runtimes/llama-cpp/tools/declarations';
 
 function definitions({ entry }: { entry: CompileEntry }): string[] {
   const arguments_ = compileArguments({ entry });
@@ -213,7 +212,7 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     }
     emccVersion = version;
     if (asyncify) {
-      await verifyAsyncifyBigIntPatch({ emscriptenRoot, patchConfig: configuration.toolchain.emscriptenAsyncifyBigIntPatch });
+      await verifyAsyncifyBigIntPatch({ checkoutRoot: context.checkoutRoot, emscriptenRoot, patch: configuration.toolchain.emscriptenAsyncifyBigIntPatch });
     }
     if (webgpu) {
       for (const name of ['emdawnwebgpu.port.py', 'webgpu/include/webgpu/webgpu.h', 'webgpu_cpp/include/webgpu/webgpu_cpp.h']) {
@@ -248,7 +247,8 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     return { kind: 'configured', buildDirectory: buildRoot, compilationDatabase };
   }
   switch (selection.kind) {
-  case 'wasm': await checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env });
+  case 'wasm': await verifyTypeScriptPatch({ checkoutRoot: context.checkoutRoot, emscriptenRoot, patch: configuration.toolchain.emscriptenTypeScriptPatch });
+    await checkSdkDeclarationCompiler({ emscriptenRoot, buildRoot, env });
     break;
   case 'native': break;
   default: {
@@ -258,25 +258,6 @@ export async function buildPrepared({ context, source, prepared, selection, conf
   }
   await runBuildCommand({ command: 'cmake', args: ['--build', buildRoot, '--target', 'core', '-j', String(selection.jobs)], cwd: buildRoot, env, log: join(buildRoot, 'compile.log'), capture: 'tee' });
   const runtimeDirectory = join(buildRoot, 'runtime');
-  let moduleDeclarationPreparation: LlamaProvenance['moduleDeclarationPreparation'];
-  switch (selection.kind) {
-  case 'wasm': {
-    const declarations = join(runtimeDirectory, 'core.d.ts');
-    const input = await fileIdentity({ path: declarations });
-    const original = await readFile(declarations, 'utf8');
-    const preparedDeclarations = prepareModuleDeclarations({ source: original });
-    if (preparedDeclarations.source !== original) {
-      await writeFile(declarations, preparedDeclarations.source);
-    }
-    moduleDeclarationPreparation = { input, output: await fileIdentity({ path: declarations }), correctedBigIntReferences: preparedDeclarations.correctedBigIntReferences };
-    break;
-  }
-  case 'native': break;
-  default: {
-    const _ex: never = selection.kind;
-    throw new Error(`Unknown build kind: ${String(_ex)}`);
-  }
-  }
   let browserModulePreparation: LlamaProvenance['browserModulePreparation'];
   if (selection.kind === 'wasm' && selection.variant === 'browser') {
     const module = join(runtimeDirectory, 'core.mjs');
@@ -334,7 +315,6 @@ export async function buildPrepared({ context, source, prepared, selection, conf
     builtAtUnix: Math.floor(Date.now() / 1000),
     buildCache: { ...(cacheIdentity === undefined ? {} : { identity: cacheIdentity }), ...(compilerWrapper === undefined ? {} : { compilerWrapper }) },
     visionBf16Storage: visionBf16StorageMetadata(),
-    ...(moduleDeclarationPreparation === undefined ? {} : { moduleDeclarationPreparation }),
     ...(browserModulePreparation === undefined ? {} : { browserModulePreparation }),
     validation: { compiled: true, realModelInference: false, browserSmoke: false },
   };

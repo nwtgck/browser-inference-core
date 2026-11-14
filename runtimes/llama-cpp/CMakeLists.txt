@@ -213,6 +213,12 @@ else()
         "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','FS','WORKERFS','addFunction','removeFunction','UTF8ToString','stringToUTF8','lengthBytesUTF8','ccall','cwrap']"
         "-sINCOMING_MODULE_JS_API=['locateFile','wasmBinary','wasmMemory','instantiateWasm','print','printErr','onAbort','preRun','postRun','noInitialRun','mainScriptUrlOrBlob']"
         -lworkerfs.js)
+    # Declaration generation is part of this link. Re-run it when preparing a
+    # warm SDK changes the generator or its native signature conversions.
+    set_property(TARGET core APPEND PROPERTY LINK_DEPENDS
+        "${EMSCRIPTEN_ROOT_PATH}/tools/emscripten.py"
+        "${EMSCRIPTEN_ROOT_PATH}/tools/native_sigs.py"
+        "${EMSCRIPTEN_ROOT_PATH}/src/lib/libasync.js")
     if(LCB_WEBGPU AND LCB_VARIANT STREQUAL "browser")
         # A local navigator would hide the earlier browser-version assertion guard.
         if(NOT LCB_ASSERTIONS EQUAL 0)
