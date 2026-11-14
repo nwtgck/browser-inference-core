@@ -98,6 +98,67 @@ test('browser module annotation is idempotent and rejects an unknown Wasm bounda
   assert.throws(() => annotateBrowserModule({ source: 'new URL("renamed.wasm", import.meta.url)' }));
 });
 
+test('browser module annotation selects executable URLs and preserves all surrounding source', () => {
+  const input = `\
+// new URL("ghost.wasm", import.meta.url)
+const documentation = 'new URL("core.wasm", import.meta.url)';
+/* new URL("other.wasm", import.meta.url) */
+const icon = new URL("icon.png?backup=other.wasm", import.meta.url);
+const adapter = new URL("adapter.wasm.js", import.meta.url);
+const title = "Wasm 📦";
+const wasm = new (((URL))) ( (("core.wasm")), (((import.meta)).url), );
+`.replaceAll('\n', '\r\n');
+  const output = annotateBrowserModule({ source: input });
+  assert.equal(output, input.replace('(("core.wasm"))', '/* @vite-ignore */(("core.wasm"))'));
+  assert.equal(output.replace('/* @vite-ignore */', ''), input);
+  assert.equal(annotateBrowserModule({ source: output }), output);
+});
+
+test('browser module annotation handles equivalent literal and parenthesized syntax', () => {
+  for (const literal of ['"core.wasm"', "'core.wasm'", '`core.wasm`', String.raw`'core\x2ewasm'`]) {
+    const argument = `( /* preserve */ (${literal}) )`;
+    const input = `const wasm = new (URL)( ${argument}, (import.meta.url) );`;
+    const output = annotateBrowserModule({ source: input });
+    assert.equal(output, input.replace(argument, `/* @vite-ignore */${argument}`));
+    assert.equal(annotateBrowserModule({ source: output }), output);
+  }
+});
+
+test('browser module annotation recognizes only actual directive comments at its argument', () => {
+  for (const source of [
+    'new URL(/*@vite-ignore*/"core.wasm", import.meta.url);',
+    `\
+new URL(/*
+ @vite-ignore
+ */(("core.wasm")), import.meta.url);
+`,
+    'new URL(( /* @vite-ignore */ ("core.wasm")), import.meta.url);',
+    'new URL(("core.wasm" /* @vite-ignore */), import.meta.url);',
+    'new URL(("core.wasm") /* @vite-ignore */, import.meta.url);',
+  ]) {
+    assert.equal(annotateBrowserModule({ source }), source);
+  }
+  const input = 'const note = "/* @vite-ignore */"; new URL(/* note @vite-ignore */"core.wasm", import.meta.url);';
+  assert.equal(annotateBrowserModule({ source: input }), input.replace('"core.wasm"', '/* @vite-ignore */"core.wasm"'));
+});
+
+test('browser module annotation rejects missing, ambiguous and unsupported Wasm expressions', () => {
+  for (const source of [
+    '// new URL("core.wasm", import.meta.url)',
+    'const note = \'new URL("core.wasm", import.meta.url)\';',
+    'new URL("core.wasm", import.meta.url); new URL("other.wasm", import.meta.url);',
+    'new URL("core.wasm", import.meta.url); new URL("other.WASM", import.meta.url);',
+    'new URL("core.wasm?v=1", import.meta.url);',
+    'new URL("core.wasm", differentBase);',
+    'new URL("core.wasm", import.meta.url, "extra");',
+    'URL("core.wasm", import.meta.url);',
+    'const path = "core.wasm"; new URL(path, import.meta.url);',
+  ]) {
+    assert.throws(() => annotateBrowserModule({ source }), /Unknown generated browser Wasm URL boundary/u);
+  }
+  assert.throws(() => annotateBrowserModule({ source: 'const = new URL("core.wasm", import.meta.url);' }), /Invalid generated browser module syntax/u);
+});
+
 test('compiler capture excludes Node tooling and preserves warm input timestamps', { timeout: 120000 }, async () => {
   await using output = {
     path: await mkdtemp(join(tmpdir(), 'llama-compile-inputs-')),

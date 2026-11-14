@@ -1,6 +1,7 @@
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import type { LlamaProvenance } from '#dto/llama-cpp';
 import { decodeCompilationDatabase } from '#dto/shared';
 import { directory, fileIdentities, fileIdentity, optionalStat, treeIdentity } from '#tools/shared/files';
@@ -73,17 +74,55 @@ export function verifyCompileConfiguration({ entries, profile }: { entries: read
   }
 }
 
+function withoutParentheses({ expression }: { expression: ts.Expression }): ts.Expression {
+  while (ts.isParenthesizedExpression(expression)) {
+    expression = expression.expression;
+  }
+  return expression;
+}
+
 export function annotateBrowserModule({ source }: { source: string }): string {
-  const matches = [...source.matchAll(/\bnew\s+URL\s*\(\s*(?<annotation>\/\* @vite-ignore \*\/\s*)?(?<argument>(?<quote>['"])core\.wasm\k<quote>)\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu)];
-  const allWasm = [...source.matchAll(/\bnew\s+URL\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*['"`][^'"`\r\n]*\.wasm[^'"`\r\n]*['"`]/gu)];
-  const match = matches[0];
-  if (matches.length !== 1 || allWasm.length !== 1 || match?.groups?.['argument'] === undefined) {
+  const file = ts.createSourceFile('core.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const options: ts.CompilerOptions = { allowJs: true, noLib: true, noResolve: true, types: [] };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = () => file;
+  if (ts.createProgram([file.fileName], options, host).getSyntacticDiagnostics(file).length) {
+    throw new Error('Invalid generated browser module syntax');
+  }
+  const candidates: { call: ts.NewExpression; argument: ts.Expression; literal: ts.StringLiteralLike }[] = [];
+  const visit: ts.Visitor = node => {
+    if (ts.isNewExpression(node)) {
+      const constructor = withoutParentheses({ expression: node.expression });
+      const argument = node.arguments?.[0];
+      if (ts.isIdentifier(constructor) && constructor.text === 'URL' && argument !== undefined) {
+        const literal = withoutParentheses({ expression: argument });
+        if (ts.isStringLiteralLike(literal) && literal.text.split(/[?#]/u, 1)[0]?.toLowerCase().endsWith('.wasm')) {
+          candidates.push({ call: node, argument, literal });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+    return undefined;
+  };
+  ts.forEachChild(file, visit);
+  const candidate = candidates[0];
+  const baseArgument = candidate?.call.arguments?.[1];
+  if (candidates.length !== 1 || candidate === undefined || candidate.literal.text !== 'core.wasm' || candidate.call.arguments?.length !== 2 || baseArgument === undefined) {
     throw new Error('Unknown generated browser Wasm URL boundary');
   }
-  if (match.groups['annotation'] !== undefined) {
-    return source;
+  const base = withoutParentheses({ expression: baseArgument });
+  const meta = ts.isPropertyAccessExpression(base) ? withoutParentheses({ expression: base.expression }) : undefined;
+  if (!ts.isPropertyAccessExpression(base) || base.name.text !== 'url' || meta === undefined || !ts.isMetaProperty(meta) || meta.keywordToken !== ts.SyntaxKind.ImportKeyword || meta.name.text !== 'meta') {
+    throw new Error('Unknown generated browser Wasm URL boundary');
   }
-  const argumentIndex = source.indexOf(match.groups['argument'], match.index);
+  // Scan only the first argument's tokens, including its surrounding trivia.
+  const comments = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, source, undefined, candidate.argument.pos, baseArgument.pos - candidate.argument.pos);
+  for (let token = comments.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = comments.scan()) {
+    if (token === ts.SyntaxKind.MultiLineCommentTrivia && comments.getTokenText().slice(2, -2).trim() === '@vite-ignore') {
+      return source;
+    }
+  }
+  const argumentIndex = candidate.argument.getStart(file);
   return `${source.slice(0, argumentIndex)}/* @vite-ignore */${source.slice(argumentIndex)}`;
 }
 
