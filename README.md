@@ -73,9 +73,10 @@ invalidation, and the cold-cache path.
 
 Network operations are intentionally inline in the workflow YAML so acquisition
 destinations, credentials and remote writes remain visible. Builds, tests and
-local package preparation run in directly specified `docker run --network none`
-containers. Typed local tools handle preparation, transformation and validation;
-the workflow owns the network boundary.
+local package preparation run in network-disabled containers through
+`.github/scripts/run-offline.sh`. That script supplies shared Docker execution
+settings; workflow YAML supplies each command and its environment. Typed local
+tools handle preparation, transformation and validation.
 
 ## Runtime package layout (manifest format 5)
 

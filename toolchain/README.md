@@ -52,9 +52,10 @@ or extraction leaves the previous port in place. Emscripten's release metadata
 must match the configured version and release before its correction is applied.
 The prepared port is written to `.tools/emdawnwebgpu_pkg`.
 
-In CI, offline preparation, building, and validation run inside the literal
-`docker run --network none` boundaries shown in the workflow. A missing local
-input is an error; preparation never downloads one implicitly.
+In CI, offline preparation, building, and validation run in network-disabled
+containers through `.github/scripts/run-offline.sh`. Workflow YAML supplies
+the command bodies. A missing local input is an error; preparation never
+downloads one implicitly.
 
 ## Caches
 

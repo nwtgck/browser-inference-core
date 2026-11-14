@@ -65,9 +65,9 @@ claim to protect a runner whose tools or credentials are controlled by an attack
 ## Execution and regression scope
 
 Local preparation, packing, source verification and reporting run as typed Node
-tools in the workflow's explicit `docker run --network none` containers. Network
-acquisition, Actions transfers, npm resolution and remote Git writes are inline
-in YAML.
+tools in network-disabled containers started by `.github/scripts/run-offline.sh`.
+Command bodies, network acquisition, Actions transfers, npm resolution and remote
+Git writes remain inline in workflow YAML.
 
 `tests/tools/publication/` covers source collection, immutable Git bytes, frozen
 report reuse and npm-lock constraints. `tests/tools/package/` covers real npm

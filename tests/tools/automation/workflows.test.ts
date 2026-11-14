@@ -107,8 +107,7 @@ test('parsed workflow permissions, event trust and all literal shell bodies rema
       assert.doesNotMatch(step.run, /python3 -m build_tools|\$\{\{/u);
       await runProcess({ command: 'bash', args: ['-n'], cwd: checkoutRoot, input: step.run });
       if (step.run.includes('build/tooling/tools/automation/cli.js')) {
-        assert.match(step.run, /docker run --network none/u);
-        assert.match(step.run, /-e CI=true/u);
+        assert.match(step.run, /bash \.github\/scripts\/run-offline\.sh/u);
         assert.doesNotMatch(step.run.split("<<'BICORE_OFFLINE'")[0] ?? '', /-e GH_TOKEN/u);
       }
     }

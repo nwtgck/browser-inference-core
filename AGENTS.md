@@ -255,8 +255,12 @@ Network operations are intentionally kept inline in workflow YAML for auditabili
 Keep destinations, credentials, cache transfers and remote writes visible there;
 do not move them into repository Python or shell wrappers for deduplication.
 Local preparation, validation and generation belong in typed tool functions.
-Docker isolation must be explicit in YAML (`docker run --network none`), not a
-custom shell wrapper. Do not add unrelated syscall or socket restrictions.
+Workflows share Docker options, environment variables and workspace mounts through
+`.github/scripts/run-offline.sh`. The script calls `exec docker run` and forwards
+ordinary Docker arguments through `"$@"`.
+Keep workflow-specific environment, image selection and command bodies in YAML,
+including their stdin and output redirections. Do not add unrelated syscall or
+socket restrictions.
 
 Upstream modifications remain individual, reviewable `.patch` files. Separate
 observed input/patch identities from behavioral contracts: a changed file digest

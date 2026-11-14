@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { load } from 'js-yaml';
 import { runProcess } from '#tools/shared/process';
@@ -60,6 +60,8 @@ export async function executable({ root, name, source }: { root: string; name: s
 }
 
 export async function executeShell({ root, script, environment }: { root: string; script: string; environment: NodeJS.ProcessEnv }) {
+  await mkdir(join(root, '.github/scripts'), { recursive: true });
+  await copyFile(join(checkoutRoot, '.github/scripts/run-offline.sh'), join(root, '.github/scripts/run-offline.sh'));
   return runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', script], cwd: root, env: { ...process.env, ...environment, PATH: join(root, 'bin') + ':' + process.env.PATH }, timeoutMs: 20_000 });
 }
 

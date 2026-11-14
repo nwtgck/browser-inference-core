@@ -157,8 +157,11 @@ async function fixtureService(): Promise<void> {
         break;
       }
     }
-    if (environment['GH_TOKEN']) {
+    if (environment['GH_TOKEN'] || environment['GITHUB_TOKEN']) {
       throw new Error('Offline tools must not receive API credentials');
+    }
+    if (environment['CI'] !== 'true' || environment['NPM_CONFIG_OFFLINE'] !== 'true' || environment['GIT_NO_LAZY_FETCH'] !== '1') {
+      throw new Error('Missing offline execution environment');
     }
     const executable = args[index];
     if (!executable) {

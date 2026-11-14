@@ -60,10 +60,7 @@ jobs:
       - name: Emit trusted default-branch tooling
         shell: bash
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+          bash .github/scripts/run-offline.sh \
             -e REPORT_STATE -e COMMENT_NUMBER \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
@@ -96,10 +93,7 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+          bash .github/scripts/run-offline.sh \
             -e REPORT_STATE -e COMMENT_NUMBER \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
@@ -137,10 +131,7 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+          bash .github/scripts/run-offline.sh \
             -e REPORT_STATE -e COMMENT_NUMBER \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
@@ -183,10 +174,7 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+          bash .github/scripts/run-offline.sh \
             -e REPORT_STATE -e COMMENT_NUMBER \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
@@ -217,10 +205,7 @@ jobs:
         env:
           REPORT_STATE: ${{ runner.temp }}/runtime-comments
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+          bash .github/scripts/run-offline.sh \
             -e REPORT_STATE -e COMMENT_NUMBER \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
@@ -281,10 +266,7 @@ jobs:
             done
             if [[ "$complete" != true ]]; then echo 'API pagination limit exceeded; refusing a partial result.' >&2; exit 1; fi
             export COMMENT_NUMBER="$number"
-            docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-              -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-              -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-              -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GITHUB_WORKSPACE -e GITHUB_REPOSITORY \
+            bash .github/scripts/run-offline.sh \
               -e REPORT_STATE -e COMMENT_NUMBER \
               "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"

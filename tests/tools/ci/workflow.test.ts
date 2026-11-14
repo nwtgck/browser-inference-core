@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { pathToFileURL } from 'node:url';
 import { load } from 'js-yaml';
-import { runProcess } from '#tools/shared/process';
+import { ProcessError, runProcess } from '#tools/shared/process';
 import llamaProfiles from '#runtimes/llama-cpp/config/profiles.json' with { type: 'json' };
 import imageProfiles from '#runtimes/stable-diffusion-cpp/config/profiles.json' with { type: 'json' };
 import { temporaryDirectory, git } from '#tests/tools/shared/fixtures.test-support';
@@ -256,6 +256,7 @@ test('QSA comparison and browser finalization are required gates while telemetry
 test('all workflow shell parses and local phases actually invoke isolated Docker without credentials', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
+  await runProcess({ command: 'bash', args: ['-n', '.github/scripts/run-offline.sh'], cwd: checkoutRoot });
   await executable({
     root,
     name: 'docker',
@@ -341,12 +342,57 @@ if(args[0]==='run') process.stdout.write('installed-package-fixture\\nnode-versi
     const observation = commands.find(call => call.args[0] === 'run');
     assert.ok(observation);
     assert.equal(observation.args[observation.args.indexOf('--network') + 1], 'none');
-    assert.ok(!observation.args.includes('-v'));
+    assert.ok(observation.args.includes(`${join(root, 'checkout')}:${join(root, 'checkout')}`));
+    assert.ok(observation.args.includes(`${runner}:${runner}`));
+    assert.equal(observation.args[observation.args.indexOf('-w') + 1], join(root, 'checkout'));
     const exports = await readFile(join(root, 'environment'), 'utf8');
     assert.match(exports, /BIC_OFFLINE_ENVIRONMENT=[0-9a-f]{64}/u);
     const identity = await readFile(join(text({ value: context.root }), 'environment'), 'utf8');
     assert.ok(identity.includes('installed-package-fixture'));
     assert.ok(identity.includes('node-fixture'));
+  }
+});
+
+test('the offline launcher preserves stdin, argument boundaries, output and failures', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = join(temporary.root, 'checkout with spaces');
+  const runner = join(temporary.root, 'runner with spaces');
+  await mkdir(join(root, '.github/scripts'), { recursive: true });
+  await cp(join(checkoutRoot, '.github/scripts/run-offline.sh'), join(root, '.github/scripts/run-offline.sh'));
+  await executable({
+    root,
+    name: 'docker',
+    source: `\
+const fs=require('node:fs');
+fs.writeFileSync(process.env.CALLS,JSON.stringify({args:process.argv.slice(2),input:fs.readFileSync(0,'utf8')}));
+process.stdout.write('original stdout\\n');
+process.stderr.write('original stderr\\n');
+process.exit(Number(process.env.DOCKER_EXIT));
+`,
+  });
+  const input = 'literal $GH_TOKEN and spaces\n';
+  const args = ['.github/scripts/run-offline.sh', '-e', 'HOME=/tmp', '-e', 'EXTRA=value with spaces', 'fixture:tag', 'bash', '-euo', 'pipefail', '-c', 'printf "%s" "$EXTRA"'];
+  for (const code of [0, 7]) {
+    const operation = runProcess({ command: 'bash', args, cwd: root, input, capture: 'file', env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, GITHUB_WORKSPACE: root, RUNNER_TEMP: runner, GH_TOKEN: 'private-token', GITHUB_TOKEN: 'private-token', CALLS: join(root, 'call.json'), DOCKER_EXIT: String(code) } });
+    if (code === 0) {
+      const result = await operation;
+      assert.equal(result.stdout.toString(), 'original stdout\n');
+      assert.equal(result.stderr.toString(), 'original stderr\n');
+    } else {
+      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stdout.toString() === 'original stdout\n' && error.stderr.toString() === 'original stderr\n');
+    }
+    const call = object({ value: JSON.parse(await readFile(join(root, 'call.json'), 'utf8')) });
+    const forwarded = list({ value: call.args }).map(value => text({ value }));
+    assert.equal(call.input, input);
+    assert.deepEqual(forwarded.slice(-args.length + 1), args.slice(1));
+    assert.equal(forwarded[forwarded.indexOf('--network') + 1], 'none');
+    assert.equal(forwarded[forwarded.indexOf('-w') + 1], root);
+    assert.ok(forwarded.includes(`${root}:${root}`));
+    assert.ok(forwarded.includes(`${runner}:${runner}`));
+    assert.ok(forwarded.includes(`HOME=${runner}/bicore-home`));
+    assert.ok(forwarded.includes('NPM_CONFIG_OFFLINE=true'));
+    assert.ok(forwarded.includes('GIT_NO_LAZY_FETCH=1'));
+    assert.ok(!forwarded.some(value => /^(GH_TOKEN|GITHUB_TOKEN)(=|$)/u.test(value)));
   }
 });
 

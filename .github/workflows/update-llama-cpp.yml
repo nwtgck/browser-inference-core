@@ -73,11 +73,8 @@ jobs:
         id: request
         shell: bash
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+          bash .github/scripts/run-offline.sh \
+            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
             -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
             -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
@@ -129,11 +126,8 @@ jobs:
           REQUEST_SOURCE: ${{ steps.request.outputs.source }}
           REQUEST_PREVIOUS: ${{ steps.request.outputs.previous }}
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+          bash .github/scripts/run-offline.sh \
+            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
             -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
             -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT -e REQUEST_SOURCE -e REQUEST_PREVIOUS \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
@@ -186,11 +180,8 @@ jobs:
           TARGET_COMMIT: ${{ steps.resolution.outputs.commit }}
           RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+          bash .github/scripts/run-offline.sh \
+            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
             -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
             -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
@@ -241,11 +232,8 @@ jobs:
           RESOLVED_REF: ${{ steps.resolution.outputs.ref }}
           RELATION: ${{ steps.plan.outputs.relation }}
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+          bash .github/scripts/run-offline.sh \
+            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
             -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
             -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
@@ -275,11 +263,8 @@ jobs:
           RELATION: ${{ steps.plan.outputs.relation }}
           EXISTING_COMMIT: ${{ steps.existing.outputs.commit }}
         run: |
-          docker run --network none --rm -i --cap-drop=ALL --security-opt=no-new-privileges:true \
-            -u "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-            -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$GITHUB_WORKSPACE" \
-            -e HOME="$RUNNER_TEMP/bicore-home" -e CI=true -e GIT_NO_LAZY_FETCH=1 \
-            -e GITHUB_WORKSPACE -e GITHUB_OUTPUT -e GITHUB_REPOSITORY -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
+          bash .github/scripts/run-offline.sh \
+            -e UPDATE_STATE -e TARGET -e CUSTOM_REF -e BASE \
             -e ALLOW_NON_FAST_FORWARD -e SOURCE -e PREVIOUS -e SELECTED_REF -e REQUESTED -e TARGET_COMMIT \
             -e RESOLVED_REF -e RELATION -e EXISTING_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'

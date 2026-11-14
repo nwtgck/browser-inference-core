@@ -76,7 +76,8 @@ whole-file hash.
 Production tools never import test-only helpers.
 
 Acquisition, credentials and remote writes remain visible in workflow YAML.
-Local stages use explicit `docker run --network none` boundaries there. Running
-a local test directly establishes its functional result, not Docker isolation.
+Local stages use `.github/scripts/run-offline.sh` for shared network-disabled
+Docker execution settings, with command bodies in YAML. Running a local test
+directly establishes its functional result, not Docker isolation.
 Saved-package validation binds runtime/test inputs and package bytes to its
 result before recording browser-smoke provenance.
