@@ -43,6 +43,8 @@ test('freeze validates source once and reuses the same report after immutable Gi
   const result = await writeConfirmedReport({ publication, repository: 'fixture/browser-inference-core', resolution, output: join(fixture.root, 'report'), run: { id: 123, attempt: 2 } });
   assert(result.markdown.includes(commit));
   assert.ok(result.markdown.includes(`npm install github:fixture/browser-inference-core#${commit}`));
+  assert.ok(result.markdown.includes(`npm install llama-cpp-browser-core@github:fixture/browser-inference-core#${commit}`));
+  assert.ok(result.markdown.includes(`npm install stable-diffusion-cpp-browser-core@github:fixture/browser-inference-core#${commit}`));
   const markdown = await readFile(join(fixture.root, 'report/consumer-update.md'));
   const envelope = decodeConsumerReportEnvelope({ input: JSON.parse(await readFile(join(fixture.root, 'report/report.json'), 'utf8')) });
   assert.deepEqual(envelope, { schemaVersion: 1, repository: 'fixture/browser-inference-core', sourceCommit: fixtureSource, artifactCommit: commit, runId: 123, runAttempt: 2, markdownSha256: bytesIdentity({ data: markdown }).sha256 });

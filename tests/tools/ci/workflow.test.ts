@@ -676,6 +676,8 @@ process.stdout.write('feat: runtime <one> & "two"\\n');
     const displayed = await readFile(summary, 'utf8');
     assert.ok(displayed.startsWith(previousSummary));
     assert.ok(displayed.includes(`npm install github:owner/repo#${environment.ARTIFACT_COMMIT}`));
+    assert.ok(displayed.includes(`npm install llama-cpp-browser-core@github:owner/repo#${environment.ARTIFACT_COMMIT}`));
+    assert.ok(displayed.includes(`npm install stable-diffusion-cpp-browser-core@github:owner/repo#${environment.ARTIFACT_COMMIT}`));
     assert.ok(displayed.includes(`**Source commit:** \`${environment.LCB_SOURCE_COMMIT}\``));
     assert.equal(displayed.includes('**Source commit title:**'), failsTitle === 'false');
     if (failsTitle === 'false') {

@@ -1513,6 +1513,9 @@ jobs:
               printf '**Source commit title:** <code>%s</code>\n\n' "$source_title"
             fi
             printf '```sh\nnpm install github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+            printf '**Install with explicit package names:**\n\n'
+            printf '```sh\nnpm install llama-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+            printf '```sh\nnpm install stable-diffusion-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           node build/tooling/tools/cli.js publication confirm --work-root "$GITHUB_WORKSPACE/build/publication/package" \
             --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT"

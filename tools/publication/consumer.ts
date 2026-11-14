@@ -29,7 +29,16 @@ export function publicationMetadata({ repository, commit, data, resolution }: { 
 
 export function renderReport({ repository, commit, data, resolution }: { repository: string; commit: string; data: ReportData; resolution: NpmResolution }): string {
   const metadata = publicationMetadata({ repository, commit, data, resolution });
-  const lines = ['# Browser inference runtime artifact', '', `Artifact commit: \`${metadata.runtime.artifactCommit}\``, '', `Source commit: \`${data.sourceCommit}\``, '', '```sh', metadata.retrieval.install, '```', '', '| Runtime | ABI | Profiles |', '| --- | --- | --- |'];
+  const lines = [
+    '# Browser inference runtime artifact', '',
+    `Artifact commit: \`${metadata.runtime.artifactCommit}\``, '',
+    `Source commit: \`${data.sourceCommit}\``, '',
+    '```sh', metadata.retrieval.install, '```', '',
+    '**Install with explicit package names:**', '',
+    '```sh', `npm install llama-cpp-browser-core@github:${repository}#${commit}`, '```', '',
+    '```sh', `npm install stable-diffusion-cpp-browser-core@github:${repository}#${commit}`, '```', '',
+    '| Runtime | ABI | Profiles |', '| --- | --- | --- |',
+  ];
   for (const runtime of runtimeNames) {
     const item = data.runtimes[runtime];
     lines.push(`| ${runtime} | ${String(item.abiVersion)} | ${Object.keys(item.profiles).join(', ')} |`);
