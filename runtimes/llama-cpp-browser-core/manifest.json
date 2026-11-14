@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "llama-cpp",
   "abiVersion": 3,
-  "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+  "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
   "schemaSha256": "56890524292b453d57d52c06ce2fbc838e81547ddfc69f1e5bbdd4a5ed5f32ec",
   "llamaCommit": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
   "licenseRoots": [
@@ -1768,7 +1768,7 @@
     },
     {
       "bytes": 106036,
-      "sha256": "8ab0b28a4cbc51fd984e3b2b2b8e2be6876cc7eeaf16c6e39571ba0e213a799a",
+      "sha256": "b6178087decc093aed0dc5442bc89a49d8e3c92d0f34d73e8db7f6448140c82e",
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts"
     },
     {
@@ -1798,7 +1798,7 @@
     },
     {
       "bytes": 106196,
-      "sha256": "49891d42382bddc8f9fa595599fd7b60a5dd75c14d4d1b8d9bbe5b07c579f275",
+      "sha256": "c188d30f0e5d98ccbbad6e99fdbdbfcfeccf375525b855ff647c5902f511c813",
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts"
     },
     {
@@ -1828,7 +1828,7 @@
     },
     {
       "bytes": 106257,
-      "sha256": "65318dc287439b2b5c17e81c3e57915bed326330431e48f574c21d915b0ce9b4",
+      "sha256": "87e960a39fe7a51a3c8680bbeeee55c3cd7aad8c3755feeda261a424fe927c7c",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.d.ts"
     },
     {
@@ -1868,7 +1868,7 @@
     },
     {
       "bytes": 106417,
-      "sha256": "f301a82a21e03c441ca9c483d722b071568003b4510072ca54108aa97d88f002",
+      "sha256": "187ea4425eb248cad6dfb5ae3fd14c7cfcc16f88a22223f1e1db314d97c32d11",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.d.ts"
     },
     {
@@ -1909,7 +1909,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -1926,9 +1926,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -1942,11 +1948,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -2053,8 +2059,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -37549,9 +37555,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794652298,
+          "builtAtUnix": 1794659703,
           "buildCache": {
-            "identity": "69986e8b874f636a7f64bd2cc0d8a9a0",
+            "identity": "c182a588bda086bda29fd057d8fb53de",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -37572,17 +37578,6 @@
               "sha256": "001840616b63efe8c8c72cd612b6d93b9bff9f2321ba357496b0af90d81924cf"
             },
             "alreadyAnnotated": false
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 97018,
-              "sha256": "d4c88a96172dfe110fbe62f082c39643506ca900a346de1a270e0f4d9958e6ca"
-            },
-            "output": {
-              "bytes": 97018,
-              "sha256": "2f09e5a65220873d33fbee000c8e162b5aafa0db0a9db95b56a1f088a85f2184"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -37619,7 +37614,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -37636,9 +37631,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -37652,11 +37653,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -37763,8 +37764,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -73259,9 +73260,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1794652230,
+          "builtAtUnix": 1794659828,
           "buildCache": {
-            "identity": "7eea57ba9b4fbc42ce4893aaec460ca8",
+            "identity": "e9386b7caffdd66bafb2784be70b9338",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -73271,17 +73272,6 @@
               "retain_checked"
             ],
             "default": "legacy_expand"
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 97178,
-              "sha256": "743ce78f76e46088a955c0555ca36622ae7624044a20855bf0b547bdbdcd1d18"
-            },
-            "output": {
-              "bytes": 97178,
-              "sha256": "b00d925554f37f98891333767e5711c28d54ee3d8ab3eaca5a8de5de9d5810b6"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -73322,7 +73312,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -73339,9 +73329,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -73355,11 +73351,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -73466,8 +73462,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -110297,9 +110293,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652388,
+          "builtAtUnix": 1794659967,
           "buildCache": {
-            "identity": "d06fb60605edc16a2a2585f6e426d28b",
+            "identity": "bbfdfd2bce32aaa7ee1b8c4199c433b7",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -110320,17 +110316,6 @@
               "sha256": "820819c79d8dad7ffa5321955e1b9f5af8e1df6546cdf74de7ec2538c8705839"
             },
             "alreadyAnnotated": false
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 97018,
-              "sha256": "b513dfacbc9e5021167767c1dfaccf7fb78849c2d0cddadc17b307b5639eb3c7"
-            },
-            "output": {
-              "bytes": 97018,
-              "sha256": "afbb2665aef3815d16fa00a2f6938b934f83c9246595644fccab51547afb3082"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -110355,7 +110340,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -110372,9 +110357,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -110388,11 +110379,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -110499,8 +110490,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -147330,9 +147321,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652332,
+          "builtAtUnix": 1794659960,
           "buildCache": {
-            "identity": "38868ccf5bc1cec829d4948b80466e6e",
+            "identity": "6d148079f619c2923f64447d2e5cf807",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -147342,17 +147333,6 @@
               "retain_checked"
             ],
             "default": "legacy_expand"
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 97178,
-              "sha256": "3ae90783308f6023052286322ccd071dd7140c799565a6c179fc8478cdb063be"
-            },
-            "output": {
-              "bytes": 97178,
-              "sha256": "c8a669e222e5534bd81207bea8ab2ea2094afd22b43476f0e84153dd7749c481"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -147381,7 +147361,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -147398,9 +147378,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -147414,11 +147400,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -147525,8 +147511,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -184356,9 +184342,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652263,
+          "builtAtUnix": 1794659722,
           "buildCache": {
-            "identity": "c668a61e2c65769db4fbd0c2ac6c5268",
+            "identity": "c6629e302eb28641b484d611d85f2333",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -184379,17 +184365,6 @@
               "sha256": "a6f407abb42609009fe9d81b17f30f853cd532c025e2413021f0d5f253d69d0f"
             },
             "alreadyAnnotated": false
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106036,
-              "sha256": "2a3895c857044a1e1a87f71f89e90d3a5346f3e4fcfa6fd0919dd900813b6943"
-            },
-            "output": {
-              "bytes": 106036,
-              "sha256": "f7fae200bd3f402d30fcca0e00d1761f4ac321b83309c1db9bb80ffcfa64bddf"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -184414,7 +184389,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -184431,9 +184406,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -184447,11 +184428,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -184558,8 +184539,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -221389,9 +221370,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652241,
+          "builtAtUnix": 1794659705,
           "buildCache": {
-            "identity": "9e1132ce2a2f56df9b6bc1a44546e4e6",
+            "identity": "27289256caeec38a3746d97fc826070c",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -221401,17 +221382,6 @@
               "retain_checked"
             ],
             "default": "legacy_expand"
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106196,
-              "sha256": "8b5e0513775db40f1d5288d483d0a430feb6dd67410b525177a839a83f1a052b"
-            },
-            "output": {
-              "bytes": 106196,
-              "sha256": "c877615ea315670712053a11eae3b18f457419b92a97d1ff9fc7de74cd86f0a0"
-            },
-            "correctedBigIntReferences": 152
           },
           "validation": {
             "compiled": true,
@@ -221440,7 +221410,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -221457,9 +221427,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -221473,11 +221449,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -221584,8 +221560,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -258452,9 +258428,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652384,
+          "builtAtUnix": 1794659879,
           "buildCache": {
-            "identity": "3e53db846170215ce171d801187853c1",
+            "identity": "abaae16e6be4ba90e0b82869d19730c2",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -258475,17 +258451,6 @@
               "sha256": "83c14d8b1c2eb01ea4f04c4187108f34009b718e8227f0e5b3b64722cad7c933"
             },
             "alreadyAnnotated": false
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106036,
-              "sha256": "389e78b9e1e9c33cc65535043513fdea63ba7f79af8d7b2d890f4d0c460470f5"
-            },
-            "output": {
-              "bytes": 106036,
-              "sha256": "8ab0b28a4cbc51fd984e3b2b2b8e2be6876cc7eeaf16c6e39571ba0e213a799a"
-            },
-            "correctedBigIntReferences": 2450
           },
           "validation": {
             "compiled": true,
@@ -258510,7 +258475,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -258527,9 +258492,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -258543,11 +258514,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -258654,8 +258625,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -295522,9 +295493,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652296,
+          "builtAtUnix": 1794659904,
           "buildCache": {
-            "identity": "670f75cf94ecf662158c8a04a92b27cc",
+            "identity": "2207c8773a7f9e78af758f6c43c4eae1",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -295534,17 +295505,6 @@
               "retain_checked"
             ],
             "default": "legacy_expand"
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106196,
-              "sha256": "3eb0463c7aa29593f01e0c5f8bc641a7e516bb4428608e4523a91d3b38dff857"
-            },
-            "output": {
-              "bytes": 106196,
-              "sha256": "49891d42382bddc8f9fa595599fd7b60a5dd75c14d4d1b8d9bbe5b07c579f275"
-            },
-            "correctedBigIntReferences": 2450
           },
           "validation": {
             "compiled": true,
@@ -295573,7 +295533,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -295591,9 +295551,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -295607,11 +295573,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -295718,8 +295684,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -332635,9 +332601,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652418,
+          "builtAtUnix": 1794659866,
           "buildCache": {
-            "identity": "36009627e6e5f15de5ba7aeb7a59dd6f",
+            "identity": "16744b159182c38c3d3d259e68af441a",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -332658,17 +332624,6 @@
               "sha256": "5db9a7b8b326d86575ab6df2b15ef838f33dfe888427d809492421feaa2e349c"
             },
             "alreadyAnnotated": false
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106257,
-              "sha256": "74d6928fb0ba86aef2a6cf24625df5657acb5b4e33af08bdcc8e9ce13b6170b4"
-            },
-            "output": {
-              "bytes": 106257,
-              "sha256": "65318dc287439b2b5c17e81c3e57915bed326330431e48f574c21d915b0ce9b4"
-            },
-            "correctedBigIntReferences": 2456
           },
           "validation": {
             "compiled": true,
@@ -332693,7 +332648,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -332711,9 +332666,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -332727,11 +332688,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
-                "bytes": 14488,
-                "sha256": "683135580a69432372c0753f769ec3dac29db363b876c3d11b094e21f4ffe88f"
+                "bytes": 14862,
+                "sha256": "d6e327d50dbf591640afef9f14e9dc18e41fc356c7cfe28ff9862215c960620e"
               },
               "runtimes/llama-cpp/cmake/FileBackedRowsOverlay.cmake": {
                 "bytes": 654,
@@ -332838,8 +332799,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 91472,
-                "sha256": "3c02df4381f1dd099fe32f3c286ede6d6ffba9b02871b6a81540f2bfc620d870"
+                "bytes": 93129,
+                "sha256": "ee5e9b25f33915b796181a9743b0a239a64dcc464398b554bb4a7e5325cbc3f7"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 4845,
@@ -369755,9 +369716,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1794652338,
+          "builtAtUnix": 1794659743,
           "buildCache": {
-            "identity": "25ed46dd034aa6a1b6c97d5941a4159b",
+            "identity": "5423a64cc8f4165e8b18312afc19a7ab",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -369767,17 +369728,6 @@
               "retain_checked"
             ],
             "default": "legacy_expand"
-          },
-          "moduleDeclarationPreparation": {
-            "input": {
-              "bytes": 106417,
-              "sha256": "712b426b28d46a36302b9b87cd3261409c06be46d861dcaa2a9ed2a48a4f0500"
-            },
-            "output": {
-              "bytes": 106417,
-              "sha256": "f301a82a21e03c441ca9c483d722b071568003b4510072ca54108aa97d88f002"
-            },
-            "correctedBigIntReferences": 2456
           },
           "validation": {
             "compiled": true,

@@ -339,7 +339,7 @@ interface WasmModule {
   _lcb_webgpu_q8_diagnostic_schema_hash(): bigint;
   _bicore_file_backed_rows_version(): number;
   _bicore_model_file_backed_shard(_0: bigint): number;
-  _malloc(_0: bigint): bigint;
+  _malloc(_0: number): number;
   _lcb_webgpu_q8_diagnostic_version(_0: bigint): number;
   _ggml_backend_get_device(_0: bigint): Promise<bigint>;
   _ggml_backend_dev_backend_reg(_0: bigint): Promise<bigint>;
@@ -521,7 +521,7 @@ interface WasmModule {
   _llama_set_causal_attn(_0: bigint, _1: number): Promise<void>;
   _mtmd_default_marker(): Promise<bigint>;
   _ggml_backend_sched_get_buffer_size(_0: bigint, _1: bigint): Promise<bigint>;
-  _free(_0: bigint): void;
+  _free(_0: number): void;
   _mtmd_vision_bf16_storage_version(): Promise<number>;
   _mtmd_context_vision_bf16_storage(_0: bigint): Promise<number>;
   _mtmd_free(_0: bigint): Promise<void>;

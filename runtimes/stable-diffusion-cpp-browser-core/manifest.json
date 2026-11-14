@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 3,
-  "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+  "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
   "schemaSha256": "5dbd61cc33911c2d66ebbc0bc928341e6193544fc44190dbdbf03bf43cb41fff",
   "upstreams": {
     "stable-diffusion": {
@@ -691,7 +691,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -1584,11 +1584,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -1891,8 +1891,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -4018,9 +4018,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -4029,7 +4035,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "947fb50fa7badd331d7d60e646781ade",
+            "identity": "81d20087c00cb2c657115cd35f98a504",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -4047,7 +4053,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -4940,11 +4946,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -5247,8 +5253,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -7422,9 +7428,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -7433,7 +7445,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "74089853e27669e9a40aca013519cf52",
+            "identity": "2fe4c1b29c0e5bb088501816df4731e3",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -7478,7 +7490,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -8371,11 +8383,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -8678,8 +8690,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -10805,9 +10817,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -10816,7 +10834,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "52b7c631f7a3e0b17dbe1759bf59b213",
+            "identity": "f1aa38aaf348279850c89abbf869316d",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -10834,7 +10852,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -11727,11 +11745,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -12034,8 +12052,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -14209,9 +14227,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -14220,7 +14244,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "cf2ca1a6a3c93589b2bcdc13ad49e4ea",
+            "identity": "35089caee308481a15489b56a5582e49",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -14265,7 +14289,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -15158,11 +15182,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -15465,8 +15489,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -17592,9 +17616,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -17603,7 +17633,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "c72c7de6f4f72789de0af6003a18e900",
+            "identity": "256c9410d67d4cdb203a8ace9baaaea6",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -17621,7 +17651,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+          "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -18514,11 +18544,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "a930d2b5b97d75b270395aba2068b2e6cd338f74",
+            "sourceCommit": "bf2d4fa4a4045cddef6d54312093e44b44189a0b",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
-                "bytes": 9365,
-                "sha256": "897ab3b9a246f3fc5bd27efcec6004e6fd7d06ef9049dcc785dfd936c69bbe6f"
+                "bytes": 9419,
+                "sha256": "0d9903579b5a53ebd9ab83b5f99b100b7a62f4bfa03b553c71817732f4799ab7"
               },
               "runtimes/stable-diffusion-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -18821,8 +18851,8 @@
                 "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18519,
-                "sha256": "b0e32ba07ee18c6c155f5a35e3d875f8b28e5ccb350d37209d8a0b2aeb792a49"
+                "bytes": 18691,
+                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -20996,9 +21026,15 @@
           "toolchain": {
             "emsdkVersion": "6.0.9",
             "emscriptenRelease": "f04ea239d533260dd1db760dd2d668d5f9a88d6b",
+            "emscriptenTypeScriptPatch": {
+              "file": "toolchain/patches/emscripten-typescript-signatures.patch",
+              "bytes": 1708,
+              "sha256": "5bb22701121d56f9649b0cdf459faa42f5cde38d2db763bc0692181eafb2f254"
+            },
             "emscriptenAsyncifyBigIntPatch": {
-              "sourceSha256": "b32ed147daafc5406faf23d1dee1410c2ae2b78b6b68f0e1b0c425f812970e1b",
-              "patchedSha256": "5722ee92c126e28d71595e3524ee1ba411fd90bc5a5ad55010f57df690de66d5"
+              "file": "toolchain/patches/emscripten-asyncify-bigint.patch",
+              "bytes": 1323,
+              "sha256": "b52a9118324b37abff23e11231a952df6a1181b771d1c13c66a1f3eda57111ee"
             },
             "nodeVersion": "22.16.0",
             "dawnTag": "v20260908.214631",
@@ -21007,7 +21043,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "bbb6070ec9f8e9aa4e96773428754816",
+            "identity": "cfe9a166a47020962375ed5e5ffb1750",
             "compilerWrapper": "ccache"
           },
           "validation": {
