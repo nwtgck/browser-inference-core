@@ -72,6 +72,15 @@ tools in network-disabled containers started by `.github/scripts/run-offline.sh`
 Command bodies, network acquisition, Actions transfers, npm resolution and remote
 Git writes remain inline in workflow YAML.
 
+The publication job reuses source-free image layers through the GitHub Actions
+cache. It pulls the base tags on each run and builds from their acquired digests.
+An apt layer refreshes once per UTC day or when its Ubuntu base or install recipe
+changes. `cache_mode=cold` disables layer import/export and rebuilds without cache.
+The loaded image's installed package and tool versions still determine its
+environment fingerprint. Cache reuse does not replace package or source checks.
+Image setup, cache transfer, loading and export costs all count toward publication
+time; layer reuse alone does not establish an end-to-end improvement.
+
 `tests/tools/publication/` covers source collection, immutable Git bytes, frozen
 report reuse and npm-lock constraints. `tests/tools/package/` covers real npm
 packing, package closure, notices and generated consumer types. These tests use

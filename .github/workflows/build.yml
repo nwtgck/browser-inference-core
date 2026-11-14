@@ -1289,17 +1289,20 @@ jobs:
           # Only the llama source overlay is read by consumer provenance.
           submodules: false
           persist-credentials: false
-      - name: Acquire offline execution image (online)
-        # Public base images and apt packages are acquired without repository source.
-        # The final build image ID includes timestamps; cache identity uses actual
-        # base identities, recipe bytes and installed package versions instead.
+      - name: Prepare offline image inputs (online)
+        id: offline-inputs
+        # This context contains only the recipe. Resolve floating base tags on
+        # every run, then give the separate builder those exact acquired digests.
         working-directory: .
         shell: bash
         run: |
           image_context="$(mktemp -d "$RUNNER_TEMP/bicore-image.XXXXXX")"
           cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
-          FROM node:22.16.0-bookworm AS node
-          FROM ubuntu:24.04
+          ARG NODE_BASE
+          ARG UBUNTU_BASE
+          FROM ${NODE_BASE} AS node
+          FROM ${UBUNTU_BASE}
+          ARG APT_REFRESH
           RUN apt-get update && apt-get install -y --no-install-recommends \
               ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
               libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
@@ -1310,21 +1313,63 @@ jobs:
           BICORE_DOCKERFILE
           docker pull node:22.16.0-bookworm
           docker pull ubuntu:24.04
-          docker build --tag "bicore-offline:$GITHUB_JOB" "$image_context"
+          node_base="$(docker image inspect --format '{{index .RepoDigests 0}}' node:22.16.0-bookworm)"
+          ubuntu_base="$(docker image inspect --format '{{index .RepoDigests 0}}' ubuntu:24.04)"
+          {
+            printf 'context=%s\n' "$image_context"
+            printf 'node_base=%s\n' "$node_base"
+            printf 'ubuntu_base=%s\n' "$ubuntu_base"
+            printf 'apt_refresh=%s\n' "$(date -u +%F)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Set up image layer cache builder (online)
+        id: offline-builder
+        uses: docker/setup-buildx-action@v4.4.1
+        with:
+          driver: docker-container
+          driver-opts: image=moby/buildkit:buildx-stable-1
+          cache-binary: false
+      - name: Build offline execution image (online)
+        uses: docker/build-push-action@v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+          DOCKER_BUILD_SUMMARY: 'false'
+        with:
+          builder: ${{ steps.offline-builder.outputs.name }}
+          context: ${{ steps.offline-inputs.outputs.context }}
+          file: ${{ steps.offline-inputs.outputs.context }}/Dockerfile
+          tags: bicore-offline:publish
+          load: true
+          push: false
+          # Apt refreshes once per UTC day; cold forbids cache reads and writes.
+          no-cache: ${{ env.BIC_CACHE_MODE == 'cold' }}
+          build-args: |
+            NODE_BASE=${{ steps.offline-inputs.outputs.node_base }}
+            UBUNTU_BASE=${{ steps.offline-inputs.outputs.ubuntu_base }}
+            APT_REFRESH=${{ steps.offline-inputs.outputs.apt_refresh }}
+          cache-from: ${{ env.BIC_CACHE_MODE != 'cold' && format('type=gha,version=2,scope=bicore-offline-publish-v1-{0}-{1},timeout=60s', runner.os, runner.arch) || '' }}
+          cache-to: ${{ env.BIC_CACHE_MODE != 'cold' && format('type=gha,version=2,scope=bicore-offline-publish-v1-{0}-{1},mode=min,ignore-error=true,timeout=60s', runner.os, runner.arch) || '' }}
+      - name: Fingerprint offline execution image
+        # Observe the loaded image's installed tools, not its timestamped image ID.
+        shell: bash
+        env:
+          IMAGE_CONTEXT: ${{ steps.offline-inputs.outputs.context }}
+          NODE_BASE: ${{ steps.offline-inputs.outputs.node_base }}
+          UBUNTU_BASE: ${{ steps.offline-inputs.outputs.ubuntu_base }}
+        run: |
           export BIC_OFFLINE_IMAGE="bicore-offline:$GITHUB_JOB"
           printf 'BIC_OFFLINE_IMAGE=bicore-offline:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
-          docker image inspect --format '{{.Id}}' node:22.16.0-bookworm ubuntu:24.04 > "$image_context/environment"
-          cat "$image_context/Dockerfile" >> "$image_context/environment"
+          docker image inspect --format '{{.Id}}' "$NODE_BASE" "$UBUNTU_BASE" > "$IMAGE_CONTEXT/environment"
+          cat "$IMAGE_CONTEXT/Dockerfile" >> "$IMAGE_CONTEXT/environment"
           offline_docker_args=(
             -e HOME=/tmp
           )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$IMAGE_CONTEXT/environment"
             dpkg-query -W
             node --version
             npm --version
             python3 --version
           OFFLINE
-          fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
+          fingerprint="$(sha256sum "$IMAGE_CONTEXT/environment" | cut -d ' ' -f 1)"
           printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
       - name: Check out the pinned upstreams used by source verification
         run: git submodule update --init --checkout --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source

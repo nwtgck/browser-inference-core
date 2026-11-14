@@ -268,7 +268,7 @@ const fs = require('node:fs');
 fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:process.argv.slice(2)})+'\\n');
 `,
   });
-  const online = new Set(['Acquire offline execution image (online)', 'Acquire locked development dependencies (online)', 'Acquire pinned Dawn headers for native contracts (online)', 'Acquire pinned compiler (online)', 'Acquire pinned Dawn archive (online on cache miss)', 'Install browser test harness (online)', 'Prepare Chromium (online)', 'Publish append-only artifact commit', 'Resolve the published npm dependency (online)']);
+  const online = new Set(['Acquire offline execution image (online)', 'Prepare offline image inputs (online)', 'Fingerprint offline execution image', 'Acquire locked development dependencies (online)', 'Acquire pinned Dawn headers for native contracts (online)', 'Acquire pinned compiler (online)', 'Acquire pinned Dawn archive (online on cache miss)', 'Install browser test harness (online)', 'Prepare Chromium (online)', 'Publish append-only artifact commit', 'Resolve the published npm dependency (online)']);
   for (const filename of await readdir(join(checkoutRoot, '.github/workflows'))) {
     if (!filename.endsWith('.yml')) {
       continue;
@@ -313,7 +313,7 @@ fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:proce
 });
 
 test('the actual image acquisition builds from a source-free context and fingerprints installed tools', async () => {
-  for (const name of Object.keys(jobs)) {
+  for (const name of Object.keys(jobs).filter(name => name !== 'publish')) {
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
     const runner = join(root, 'runner');
@@ -358,6 +358,145 @@ if(args[0]==='run') process.stdout.write('installed-package-fixture\\nnode-versi
     assert.ok(identity.includes('installed-package-fixture'));
     assert.ok(identity.includes('node-fixture'));
   }
+});
+
+test('only publication uses the image layer cache, and cold builds still require a successful image load', () => {
+  const inputs = namedStep({ job: 'publish', name: 'Prepare offline image inputs (online)' });
+  const setup = namedStep({ job: 'publish', name: 'Set up image layer cache builder (online)' });
+  const build = namedStep({ job: 'publish', name: 'Build offline execution image (online)' });
+  const fingerprint = namedStep({ job: 'publish', name: 'Fingerprint offline execution image' });
+  const steps = jobSteps({ name: 'publish' });
+  assert.ok(steps.indexOf(inputs) < steps.indexOf(setup));
+  assert.ok(steps.indexOf(setup) < steps.indexOf(build));
+  assert.ok(steps.indexOf(build) < steps.indexOf(fingerprint));
+  assert.ok(steps.indexOf(fingerprint) < steps.indexOf(namedStep({ job: 'publish', name: 'Assemble and freeze the source-bound publication tree' })));
+  for (const name of Object.keys(jobs)) {
+    assert.equal(actionSteps({ job: name, action: 'docker/setup-buildx-action' }).length, name === 'publish' ? 1 : 0);
+    assert.equal(actionSteps({ job: name, action: 'docker/build-push-action' }).length, name === 'publish' ? 1 : 0);
+  }
+  assert.deepEqual(setup.with, { driver: 'docker-container', 'driver-opts': 'image=moby/buildkit:buildx-stable-1', 'cache-binary': false });
+  const options = object({ value: build.with });
+  const reference = '${{ steps.' + text({ value: inputs.id }) + '.outputs.';
+  assert.equal(options.builder, '${{ steps.' + text({ value: setup.id }) + '.outputs.name }}');
+  assert.equal(options.context, reference + 'context }}');
+  assert.equal(options.file, reference + 'context }}/Dockerfile');
+  assert.deepEqual(text({ value: options['build-args'] }).trim().split('\n'), [
+    'NODE_BASE=' + reference + 'node_base }}',
+    'UBUNTU_BASE=' + reference + 'ubuntu_base }}',
+    'APT_REFRESH=' + reference + 'apt_refresh }}',
+  ]);
+  assert.deepEqual(fingerprint.env, { IMAGE_CONTEXT: reference + 'context }}', NODE_BASE: reference + 'node_base }}', UBUNTU_BASE: reference + 'ubuntu_base }}' });
+  assert.equal(options.load, true);
+  assert.equal(options.push, false);
+  assert.deepEqual(build.env, { DOCKER_BUILD_RECORD_UPLOAD: 'false', DOCKER_BUILD_SUMMARY: 'false' });
+  for (const step of [inputs, setup, build, fingerprint]) {
+    assert.equal(step.if, undefined);
+    assert.equal(step['continue-on-error'], undefined);
+  }
+  for (const mode of ['enabled', 'cold']) {
+    const context = {
+      env: { BIC_CACHE_MODE: mode },
+      runner: { os: 'Linux', arch: 'X64' },
+      // GitHub's format() expression function has positional arguments.
+      format: (pattern: string, os: string, arch: string) => pattern.replace('{0}', os).replace('{1}', arch),
+    };
+    const values = Object.fromEntries(['no-cache', 'cache-from', 'cache-to'].map(key => {
+      const expression = text({ value: options[key] });
+      const value: unknown = runInNewContext(expression.slice(3, -2), context, { timeout: 100 });
+      return [key, value];
+    }));
+    assert.equal(values['no-cache'], mode === 'cold');
+    if (mode === 'cold') {
+      assert.equal(values['cache-from'], '');
+      assert.equal(values['cache-to'], '');
+      continue;
+    }
+    for (const key of ['cache-from', 'cache-to']) {
+      const parameters = Object.fromEntries(text({ value: values[key] }).split(',').map(item => item.split('=')));
+      assert.equal(parameters.type, 'gha');
+      assert.equal(parameters.version, '2');
+      assert.equal(parameters.scope, 'bicore-offline-publish-v1-Linux-X64');
+      assert.equal(parameters.timeout, '60s');
+      assert.equal(parameters.mode, key === 'cache-to' ? 'min' : undefined);
+      assert.equal(parameters['ignore-error'], key === 'cache-to' ? 'true' : undefined);
+    }
+  }
+});
+
+test('publication passes acquired base digests and UTC freshness into a source-free image and observes its installed tools', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = temporary.root;
+  const runner = join(root, 'runner temp');
+  await mkdir(runner);
+  await executable({
+    root,
+    name: 'docker',
+    source: `\
+const fs=require('node:fs');
+const args=process.argv.slice(2);
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command:'docker',args})+'\\n');
+if(args[0]==='pull') process.exit(process.env.FAIL_PULL==='true'?17:0);
+if(args[0]==='image'&&args[3]==='{{index .RepoDigests 0}}'){
+  process.stdout.write(args[4].startsWith('node:')?process.env.NODE_DIGEST:process.env.UBUNTU_DIGEST);
+}else if(args[0]==='image'&&args[3]==='{{.Id}}'){
+  process.stdout.write('node-fixture\\nubuntu-fixture\\n');
+}else if(args[0]==='run'){
+  fs.writeFileSync(process.env.STDIN,fs.readFileSync(0));
+  process.stdout.write(process.env.INSTALLED+'\\nnode-version-fixture\\n');
+}else throw new Error('Unexpected Docker command: '+args.join(' '));
+`,
+  });
+  await executable({ root, name: 'date', source: "require('node:assert/strict').deepEqual(process.argv.slice(2),['-u','+%F']);process.stdout.write(process.env.UTC_DAY+'\\n');" });
+  const inputs = namedStep({ job: 'publish', name: 'Prepare offline image inputs (online)' });
+  const fingerprint = namedStep({ job: 'publish', name: 'Fingerprint offline execution image' });
+  const environment = { RUNNER_TEMP: runner, GITHUB_WORKSPACE: join(root, 'checkout'), GITHUB_JOB: 'publish', GITHUB_ENV: join(root, 'environment'), GITHUB_OUTPUT: join(root, 'output'), CALLS: join(root, 'calls.jsonl'), STDIN: join(root, 'stdin'), NODE_DIGEST: 'node@sha256:' + 'a'.repeat(64), UBUNTU_DIGEST: 'ubuntu@sha256:' + 'b'.repeat(64) };
+  const fingerprints: string[] = [];
+  for (const [day, installed] of [['2026-11-15', 'installed-packages-v1'], ['2026-11-16', 'installed-packages-v1'], ['2026-11-16', 'installed-packages-v2']]) {
+    await writeFile(environment.GITHUB_OUTPUT, '');
+    await writeFile(environment.GITHUB_ENV, '');
+    await executeShell({ root, script: text({ value: inputs.run }), environment: { ...environment, UTC_DAY: day } });
+    const output = Object.fromEntries((await readFile(environment.GITHUB_OUTPUT, 'utf8')).trim().split('\n').map(line => {
+      const separator = line.indexOf('=');
+      return [line.slice(0, separator), line.slice(separator + 1)];
+    }));
+    assert.equal(output.node_base, environment.NODE_DIGEST);
+    assert.equal(output.ubuntu_base, environment.UBUNTU_DIGEST);
+    assert.equal(output.apt_refresh, day);
+    const context = text({ value: output.context });
+    assert.ok(context.startsWith(runner + '/'));
+    assert.deepEqual(await readdir(context), ['Dockerfile']);
+    const recipe = await readFile(join(context, 'Dockerfile'), 'utf8');
+    const instructions = recipe.split('\n').map(line => line.trim().split(/\s+/u));
+    assert.deepEqual(instructions.filter(words => words[0] === 'FROM'), [['FROM', '${NODE_BASE}', 'AS', 'node'], ['FROM', '${UBUNTU_BASE}']]);
+    const refresh = instructions.findIndex(words => words[0] === 'ARG' && words[1] === 'APT_REFRESH');
+    assert.ok(refresh > instructions.findLastIndex(words => words[0] === 'FROM'));
+    assert.ok(refresh < instructions.findIndex(words => words[0] === 'RUN'));
+    assert.deepEqual(instructions.filter(words => words[0] === 'COPY'), [['COPY', '--from=node', '/usr/local/', '/usr/local/']]);
+    await executeShell({ root, script: text({ value: fingerprint.run }), environment: { ...environment, IMAGE_CONTEXT: context, NODE_BASE: output.node_base, UBUNTU_BASE: output.ubuntu_base, INSTALLED: installed } });
+    const identity = await readFile(join(context, 'environment'), 'utf8');
+    assert.equal(identity, 'node-fixture\nubuntu-fixture\n' + recipe + installed + '\nnode-version-fixture\n');
+    const exported = (await readFile(environment.GITHUB_ENV, 'utf8')).trim().split('\n');
+    assert.equal(exported[0], 'BIC_OFFLINE_IMAGE=' + text({ value: object({ value: namedStep({ job: 'publish', name: 'Build offline execution image (online)' }).with }).tags }));
+    assert.match(text({ value: exported[1] }), /^BIC_OFFLINE_ENVIRONMENT=[0-9a-f]{64}$/u);
+    fingerprints.push(text({ value: exported[1] }));
+  }
+  assert.equal(fingerprints[0], fingerprints[1], 'A new refresh day alone does not partition identical installed tools');
+  assert.notEqual(fingerprints[1], fingerprints[2], 'Changed installed packages change the environment partition');
+  const calls = await readCalls({ root });
+  assert.deepEqual(calls.filter(call => call.args[0] === 'pull').map(call => call.args[1]), Array.from({ length: 3 }, () => ['node:22.16.0-bookworm', 'ubuntu:24.04']).flat());
+  for (const call of calls.filter(call => call.args[3] === '{{.Id}}')) {
+    assert.deepEqual(call.args.slice(4), [environment.NODE_DIGEST, environment.UBUNTU_DIGEST]);
+  }
+  for (const call of calls.filter(call => call.args[0] === 'run')) {
+    assert.equal(call.args[call.args.indexOf('--network') + 1], 'none');
+    assert.ok(call.args.includes(`${environment.GITHUB_WORKSPACE}:${environment.GITHUB_WORKSPACE}`));
+    assert.ok(call.args.includes(`${runner}:${runner}`));
+    assert.equal(call.args[call.args.indexOf('-w') + 1], environment.GITHUB_WORKSPACE);
+  }
+  assert.equal(await readFile(environment.STDIN, 'utf8'), offlineScript({ step: fingerprint }));
+  await writeFile(environment.GITHUB_OUTPUT, '');
+  await assert.rejects(executeShell({ root, script: text({ value: inputs.run }), environment: { ...environment, UTC_DAY: '2026-11-16', FAIL_PULL: 'true' } }), ProcessError);
+  assert.equal(await readFile(environment.GITHUB_OUTPUT, 'utf8'), '', 'Failed acquisition never hands incomplete inputs to the builder');
 });
 
 test('Dawn acquisition verifies restored bytes, recovers failed restores and never installs a bad download', async () => {
