@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 3,
-  "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+  "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
   "schemaSha256": "5dbd61cc33911c2d66ebbc0bc928341e6193544fc44190dbdbf03bf43cb41fff",
   "upstreams": {
     "stable-diffusion": {
@@ -691,7 +691,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -1584,7 +1584,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
@@ -4047,7 +4047,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -4940,7 +4940,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
@@ -7478,7 +7478,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -8371,7 +8371,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
@@ -10834,7 +10834,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -11727,7 +11727,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
@@ -14265,7 +14265,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -15158,7 +15158,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
@@ -17621,7 +17621,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+          "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -18514,7 +18514,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "79a10bc41bf514938b029957dc51cc9868e3535c",
+            "sourceCommit": "a6bb705f2df5fab663d724987d1cf987e91c4ac3",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9365,
