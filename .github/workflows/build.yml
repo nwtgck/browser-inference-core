@@ -1663,6 +1663,13 @@ jobs:
             -e CCACHE_DIR -e CCACHE_CONFIGPATH -e BIC_CACHE_ID -e ARTIFACT_COMMIT \
             "$BIC_OFFLINE_IMAGE" bash -euo pipefail <<'BICORE_OFFLINE'
           mkdir -p "$HOME"
+          {
+            printf '## Runtime artifact commit\n\n`%s`\n\n**Source commit:** `%s`\n\n' "$ARTIFACT_COMMIT" "$LCB_SOURCE_COMMIT"
+            if source_title="$(git -C "$GITHUB_WORKSPACE" show -s --format=%s "$LCB_SOURCE_COMMIT" | jq -Rr @html)"; then
+              printf '**Source commit title:** <code>%s</code>\n\n' "$source_title"
+            fi
+            printf '```sh\nnpm install github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           node build/tooling/tools/cli.js publication confirm --work-root "$GITHUB_WORKSPACE/build/publication/package" \
             --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT"
           version="$(jq -er '.report.data.package.version' build/publication/frozen.json)"
@@ -1702,6 +1709,7 @@ jobs:
             --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --repository "$GITHUB_REPOSITORY" --npm-fixture "$GITHUB_WORKSPACE/build/consumer-lock" \
             --output "$GITHUB_WORKSPACE/build/consumer-update"
+          tee -a "$GITHUB_STEP_SUMMARY" < "$GITHUB_WORKSPACE/build/consumer-update/report.md"
           BICORE_OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:

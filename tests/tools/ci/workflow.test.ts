@@ -608,18 +608,66 @@ process.exit(result.status??1);
   assert.ok(text({ value: installed.resolved }).endsWith('#' + first));
 });
 
-test('the publication report invocation forwards its GitHub run identity', async () => {
+test('the published install guide survives later processing and optional source-title failures', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
+  const summary = join(root, 'job summary.md');
+  const previousSummary = '# Earlier job output\n\n';
+  await executable({ root, name: 'node', source: 'process.exit(7);' });
+  await executable({
+    root,
+    name: 'git',
+    source: `\
+if (process.env.FAIL_TITLE === 'true') process.exit(8);
+process.stdout.write('feat: runtime <one> & "two"\\n');
+`,
+  });
+  const step = namedStep({ job: 'publish', name: 'Confirm publication and prepare a fresh npm fixture' });
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), LCB_SOURCE_COMMIT: 'b'.repeat(40) };
+  for (const failsTitle of ['false', 'true']) {
+    await writeFile(summary, previousSummary);
+    await assert.rejects(executeShell({ root, script: offlineScript({ step }), environment: { ...environment, FAIL_TITLE: failsTitle } }));
+    const displayed = await readFile(summary, 'utf8');
+    assert.ok(displayed.startsWith(previousSummary));
+    assert.ok(displayed.includes(`npm install github:owner/repo#${environment.ARTIFACT_COMMIT}`));
+    assert.ok(displayed.includes(`**Source commit:** \`${environment.LCB_SOURCE_COMMIT}\``));
+    assert.equal(displayed.includes('**Source commit title:**'), failsTitle === 'false');
+    if (failsTitle === 'false') {
+      assert.ok(displayed.includes('<code>feat: runtime &lt;one&gt; &amp; &quot;two&quot;</code>'));
+    }
+  }
+});
+
+test('the publication report forwards its run identity and appends the install guide to the job summary', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = temporary.root;
+  const summary = join(root, 'job summary.md');
+  const previousSummary = '# Earlier job output\n\n';
+  const markdown = `\
+# Browser inference runtime artifact
+
+\`\`\`sh
+npm install github:owner/repo#${'a'.repeat(40)}
+\`\`\`
+`;
+  await writeFile(summary, previousSummary);
   await executable({
     root,
     name: 'node',
     source: `\
-require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'node',args:process.argv.slice(2)})+'\\n');
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command:'node',args})+'\\n');
+if (process.env.FAIL_REPORT === 'true') process.exit(7);
+const output = args[args.indexOf('--output') + 1];
+fs.mkdirSync(output, {recursive:true});
+fs.writeFileSync(path.join(output, 'report.md'), process.env.REPORT_MARKDOWN);
 `,
   });
   const step = namedStep({ job: 'publish', name: 'Generate consumer integration metadata from the confirmed receipt' });
-  await executeShell({ root, script: offlineScript({ step }), environment: { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl') } });
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), REPORT_MARKDOWN: markdown };
+  const result = await executeShell({ root, script: offlineScript({ step }), environment });
   const calls = await readCalls({ root });
   assert.equal(calls.length, 1);
   const args = calls[0]?.args;
@@ -628,6 +676,11 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'nod
   assert.equal(args[args.indexOf('--run-id') + 1], '1234');
   assert.equal(args[args.indexOf('--run-attempt') + 1], '7');
   assert.equal(args[args.indexOf('--commit') + 1], 'a'.repeat(40));
+  assert.equal(await readFile(summary, 'utf8'), previousSummary + markdown);
+  assert.equal(result.stdout.toString('utf8'), markdown);
+
+  await assert.rejects(executeShell({ root, script: offlineScript({ step }), environment: { ...environment, FAIL_REPORT: 'true' } }));
+  assert.equal(await readFile(summary, 'utf8'), previousSummary + markdown);
 });
 
 test('the actions lock covers every workflow usage through an existing resolved action', async () => {
