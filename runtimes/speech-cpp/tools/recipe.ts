@@ -13,4 +13,13 @@ export const patches: readonly Patch[] = [{
   target: 'speech',
   reason: 'Compile the independently pinned ggml source without modifying either vendor checkout.',
   files: ['CMakeLists.txt'],
+}, {
+  file: '0002-webgpu-matmul-vec4-layout.patch',
+  target: 'ggml',
+  reason: 'Use scalar matrix kernels when binding offsets or active tensor strides cannot address vec4 elements exactly.',
+  files: [
+    'src/ggml-webgpu/ggml-webgpu.cpp',
+    'src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    'src/ggml-webgpu/ggml-webgpu-mul-mat-layout.hpp',
+  ],
 }];

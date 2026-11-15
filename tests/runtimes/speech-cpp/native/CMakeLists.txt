@@ -4,3 +4,9 @@ add_executable(speech-api-contract api-contract.cpp wasm-probes.cpp)
 target_include_directories(speech-api-contract PRIVATE "${SPCB_SOURCE}/include" "${SPCB_SOURCE}/src/common")
 target_link_libraries(speech-api-contract PRIVATE core)
 add_test(NAME speech-api-contract COMMAND speech-api-contract)
+
+add_executable(speech-webgpu-matmul-layout webgpu-matmul-layout.cpp)
+target_include_directories(speech-webgpu-matmul-layout PRIVATE
+    "${SPCB_GGML_SOURCE}/include" "${SPCB_GGML_SOURCE}/src/ggml-webgpu")
+target_link_libraries(speech-webgpu-matmul-layout PRIVATE ggml-cpu)
+add_test(NAME speech-webgpu-matmul-layout COMMAND speech-webgpu-matmul-layout)
