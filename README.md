@@ -60,7 +60,7 @@ and upstream version pins remain independent between the runtimes.
 ## speech.cpp
 
 ```js
-import createModule from 'browser-inference-core/speech-cpp/profiles/webgpu-wasm64-jspi/browser/core.mjs';
+import createModule from 'browser-inference-core/speech-cpp/profiles/webgpu-wasm32-jspi/browser/core.mjs';
 import { attachCore, schema } from 'browser-inference-core/speech-cpp/host';
 
 const module = await createModule();
@@ -68,7 +68,7 @@ const core = attachCore(module, schema, { suspension: 'jspi' });
 ```
 
 The speech runtime exposes the upstream `speech_*` C API, including the Haru
-conversation API. It requires a desktop browser with WebGPU, memory64 and JSPI
+conversation API. It requires a desktop browser with WebGPU, Wasm SIMD and JSPI
 support. Model files are supplied by the application and are never bundled.
 Compilation and ABI checks do not establish real-model browser inference;
 consult the manifest's validation fields for measured evidence.

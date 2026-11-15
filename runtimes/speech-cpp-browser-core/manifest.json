@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
+  "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -21,15 +21,15 @@
     "callerOwnedRandomAccess": true,
     "upstreamApi": true
   },
-  "schemaSha256": "0e14c6f1274a7adc1479469d4dbfb3b4e29bc3dac75603e1f684173d0f5221b4",
+  "schemaSha256": "bbc02256712e1d4a0fa29ce897a01ae12964bb436975391cdb90000192ec22d0",
   "profiles": {
-    "webgpu-wasm64-jspi": {
+    "webgpu-wasm32-jspi": {
       "variants": {
         "browser": {
           "runtime": "speech-cpp",
-          "profile": "webgpu-wasm64-jspi",
+          "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
+          "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -44,12 +44,12 @@
             }
           },
           "configuration": {
-            "memory64": true,
+            "memory64": false,
             "webgpu": true,
             "jspi": true,
             "asyncify": false,
             "pthreads": false,
-            "maximumMemory": 17179869184
+            "maximumMemory": 4294967296
           },
           "variantConfiguration": {
             "assertions": 0,
@@ -58,26 +58,26 @@
           "cmakeCommand": [
             "cmake",
             "-S",
-            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm64-jspi/browser/runtimes/speech-cpp",
+            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm32-jspi/browser/runtimes/speech-cpp",
             "-B",
-            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/browser",
+            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/browser",
             "-G",
             "Ninja",
             "-DCMAKE_BUILD_TYPE=Release",
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
             "-DSPCB_VARIANT=browser",
-            "-DSPCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/browser/prepared/speech",
-            "-DSPCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/browser/prepared/ggml",
-            "-DSPCB_PROVENANCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/browser/prepared/patch-provenance.json",
+            "-DSPCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/browser/prepared/speech",
+            "-DSPCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/browser/prepared/ggml",
+            "-DSPCB_PROVENANCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/browser/prepared/patch-provenance.json",
             "-DSPCB_CHECKOUT_ROOT=/home/runner/work/browser-inference-core/browser-inference-core",
-            "-DSPCB_COMPILE_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm64-jspi/browser",
+            "-DSPCB_COMPILE_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm32-jspi/browser",
             "-DSPCB_TOOLING_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/tooling",
             "-DSPCB_NODE=/usr/local/bin/node",
             "-DSPCB_NATIVE_CHECK=OFF",
             "-DSPCB_WEBGPU=ON",
             "-DSPCB_JSPI=ON",
-            "-DSPCB_MEMORY64=ON",
-            "-DSPCB_MAXIMUM_MEMORY=17179869184",
+            "-DSPCB_MEMORY64=OFF",
+            "-DSPCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg",
             "-DSPCB_DAWN_PACKAGE=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
@@ -132,6 +132,25 @@
                     "afterSha256": "a14bf10602bcc53efe9d785475de6bd8adb64f039a7ed32381ce3416a207e13e"
                   }
                 ]
+              },
+              {
+                "file": "0003-webgpu-buffer-address-range.patch",
+                "target": "ggml",
+                "reason": "Split weight buffers without size_t overflow and keep GPU buffer offsets within the native pointer address range.",
+                "mode": "apply",
+                "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5",
+                "files": [
+                  {
+                    "path": "src/ggml-backend.cpp",
+                    "beforeSha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff",
+                    "afterSha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48",
+                    "afterSha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -139,11 +158,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
+            "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
-                "bytes": 7431,
-                "sha256": "a1716d8abfa69e10cecb3f20d0e297c7d82ec68cb0219f577ecc737605b89393"
+                "bytes": 7800,
+                "sha256": "c5c0a6a14da2209265c87ba306f858bf7bb8c90635e1ed4c7067d99bc1274cb2"
               },
               "runtimes/speech-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -169,13 +188,17 @@
                 "bytes": 10673,
                 "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64"
               },
+              "runtimes/speech-cpp/upstream-patches/0003-webgpu-buffer-address-range.patch": {
+                "bytes": 2272,
+                "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 1695,
-                "sha256": "338c1f1001e25bb078041b7aebe71f2c2e16e29e7023d0b4f4c1c7ed08eda8ee"
+                "bytes": 2090,
+                "sha256": "1ed75996f23df26d74c449b375fe02a56c1af9dd1ae220864999c8e8bea997c6"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 774,
-                "sha256": "5609d99ad815f8babf06dc04fde99e7f4dde623d9b98d0bb463a0170184c3b63"
+                "bytes": 1127,
+                "sha256": "60960897b73e930ff8f3d2b3f4a39359f85f2e08efc71a00674d92474682264c"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
@@ -188,6 +211,10 @@
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
                 "bytes": 193,
                 "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+              },
+              "tests/runtimes/speech-cpp/native/webgpu-buffer-planning.cpp": {
+                "bytes": 2666,
+                "sha256": "226b2902f9c3d14b50ba8e8cf8b3b4217b6d34a9035b3c5b566c5912981e8bcd"
               },
               "tests/runtimes/speech-cpp/native/webgpu-matmul-layout.cpp": {
                 "bytes": 5291,
@@ -213,7 +240,7 @@
           },
           "preparedSources": {
             "files": 2069,
-            "sha256": "7276bb42ccb28bdb3e96fe40fb894655b172fa93f00fde3d3e3c25ddb3a574d7"
+            "sha256": "24ad7572e08a2d2aaf9644c85401a80764641e2a79887c4a7636b64ad10b4197"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -1262,8 +1289,8 @@
                 "sha256": "60543483093ab72e5867f72a90ca37dbe83b35a2b8e372323825e6d9c303faa6"
               },
               "prepared/ggml/src/ggml-backend.cpp": {
-                "bytes": 102667,
-                "sha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+                "bytes": 102706,
+                "sha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
               },
               "prepared/ggml/src/ggml-backend-meta.cpp": {
                 "bytes": 120529,
@@ -1350,8 +1377,8 @@
                 "sha256": "7b1ed4f6fcb2bdcb3a1b6556d459d37925d42d254397953ccf07f63d1c249da5"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 248114,
-                "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                "bytes": 248684,
+                "sha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
               }
             },
             "targetSources": {
@@ -1515,8 +1542,8 @@
                   "sha256": "60543483093ab72e5867f72a90ca37dbe83b35a2b8e372323825e6d9c303faa6"
                 },
                 "prepared/ggml/src/ggml-backend.cpp": {
-                  "bytes": 102667,
-                  "sha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+                  "bytes": 102706,
+                  "sha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
                 },
                 "prepared/ggml/src/ggml-backend-meta.cpp": {
                   "bytes": 120529,
@@ -1667,8 +1694,8 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 248114,
-                  "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                  "bytes": 248684,
+                  "sha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
                 },
                 "build/upstream/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
                   "bytes": 1462877,
@@ -2142,7 +2169,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "0ca037230b1d252844aefa88544796b2",
+            "identity": "cf4ae7c67766c310146f6985ef25d8f5",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -2153,9 +2180,9 @@
         },
         "test": {
           "runtime": "speech-cpp",
-          "profile": "webgpu-wasm64-jspi",
+          "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
+          "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2170,12 +2197,12 @@
             }
           },
           "configuration": {
-            "memory64": true,
+            "memory64": false,
             "webgpu": true,
             "jspi": true,
             "asyncify": false,
             "pthreads": false,
-            "maximumMemory": 17179869184
+            "maximumMemory": 4294967296
           },
           "variantConfiguration": {
             "assertions": 1,
@@ -2184,26 +2211,26 @@
           "cmakeCommand": [
             "cmake",
             "-S",
-            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm64-jspi/test/runtimes/speech-cpp",
+            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm32-jspi/test/runtimes/speech-cpp",
             "-B",
-            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/test",
+            "/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/test",
             "-G",
             "Ninja",
             "-DCMAKE_BUILD_TYPE=Release",
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
             "-DSPCB_VARIANT=test",
-            "-DSPCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/test/prepared/speech",
-            "-DSPCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/test/prepared/ggml",
-            "-DSPCB_PROVENANCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm64-jspi/test/prepared/patch-provenance.json",
+            "-DSPCB_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/test/prepared/speech",
+            "-DSPCB_GGML_SOURCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/test/prepared/ggml",
+            "-DSPCB_PROVENANCE=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/build/wasm/webgpu-wasm32-jspi/test/prepared/patch-provenance.json",
             "-DSPCB_CHECKOUT_ROOT=/home/runner/work/browser-inference-core/browser-inference-core",
-            "-DSPCB_COMPILE_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm64-jspi/test",
+            "-DSPCB_COMPILE_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/runtimes/speech-cpp/source-inputs/wasm/webgpu-wasm32-jspi/test",
             "-DSPCB_TOOLING_ROOT=/home/runner/work/browser-inference-core/browser-inference-core/build/tooling",
             "-DSPCB_NODE=/usr/local/bin/node",
             "-DSPCB_NATIVE_CHECK=OFF",
             "-DSPCB_WEBGPU=ON",
             "-DSPCB_JSPI=ON",
-            "-DSPCB_MEMORY64=ON",
-            "-DSPCB_MAXIMUM_MEMORY=17179869184",
+            "-DSPCB_MEMORY64=OFF",
+            "-DSPCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg",
             "-DSPCB_DAWN_PACKAGE=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
@@ -2258,6 +2285,25 @@
                     "afterSha256": "a14bf10602bcc53efe9d785475de6bd8adb64f039a7ed32381ce3416a207e13e"
                   }
                 ]
+              },
+              {
+                "file": "0003-webgpu-buffer-address-range.patch",
+                "target": "ggml",
+                "reason": "Split weight buffers without size_t overflow and keep GPU buffer offsets within the native pointer address range.",
+                "mode": "apply",
+                "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5",
+                "files": [
+                  {
+                    "path": "src/ggml-backend.cpp",
+                    "beforeSha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff",
+                    "afterSha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48",
+                    "afterSha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -2265,11 +2311,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
+            "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
-                "bytes": 7431,
-                "sha256": "a1716d8abfa69e10cecb3f20d0e297c7d82ec68cb0219f577ecc737605b89393"
+                "bytes": 7800,
+                "sha256": "c5c0a6a14da2209265c87ba306f858bf7bb8c90635e1ed4c7067d99bc1274cb2"
               },
               "runtimes/speech-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -2295,13 +2341,17 @@
                 "bytes": 10673,
                 "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64"
               },
+              "runtimes/speech-cpp/upstream-patches/0003-webgpu-buffer-address-range.patch": {
+                "bytes": 2272,
+                "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 1695,
-                "sha256": "338c1f1001e25bb078041b7aebe71f2c2e16e29e7023d0b4f4c1c7ed08eda8ee"
+                "bytes": 2090,
+                "sha256": "1ed75996f23df26d74c449b375fe02a56c1af9dd1ae220864999c8e8bea997c6"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 774,
-                "sha256": "5609d99ad815f8babf06dc04fde99e7f4dde623d9b98d0bb463a0170184c3b63"
+                "bytes": 1127,
+                "sha256": "60960897b73e930ff8f3d2b3f4a39359f85f2e08efc71a00674d92474682264c"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
@@ -2314,6 +2364,10 @@
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
                 "bytes": 193,
                 "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+              },
+              "tests/runtimes/speech-cpp/native/webgpu-buffer-planning.cpp": {
+                "bytes": 2666,
+                "sha256": "226b2902f9c3d14b50ba8e8cf8b3b4217b6d34a9035b3c5b566c5912981e8bcd"
               },
               "tests/runtimes/speech-cpp/native/webgpu-matmul-layout.cpp": {
                 "bytes": 5291,
@@ -2339,7 +2393,7 @@
           },
           "preparedSources": {
             "files": 2069,
-            "sha256": "7276bb42ccb28bdb3e96fe40fb894655b172fa93f00fde3d3e3c25ddb3a574d7"
+            "sha256": "24ad7572e08a2d2aaf9644c85401a80764641e2a79887c4a7636b64ad10b4197"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -3392,8 +3446,8 @@
                 "sha256": "60543483093ab72e5867f72a90ca37dbe83b35a2b8e372323825e6d9c303faa6"
               },
               "prepared/ggml/src/ggml-backend.cpp": {
-                "bytes": 102667,
-                "sha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+                "bytes": 102706,
+                "sha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
               },
               "prepared/ggml/src/ggml-backend-meta.cpp": {
                 "bytes": 120529,
@@ -3480,8 +3534,8 @@
                 "sha256": "7b1ed4f6fcb2bdcb3a1b6556d459d37925d42d254397953ccf07f63d1c249da5"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 248114,
-                "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                "bytes": 248684,
+                "sha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
               }
             },
             "targetSources": {
@@ -3649,8 +3703,8 @@
                   "sha256": "60543483093ab72e5867f72a90ca37dbe83b35a2b8e372323825e6d9c303faa6"
                 },
                 "prepared/ggml/src/ggml-backend.cpp": {
-                  "bytes": 102667,
-                  "sha256": "43dea13b13c2a15afd83f53515f3488c17072fc107a6ba4a5e0370f90b4fe7ff"
+                  "bytes": 102706,
+                  "sha256": "6d6c5fbbe1785430df9bca7f2653d5e2275874547df3bb7b0c802a36a4f53eda"
                 },
                 "prepared/ggml/src/ggml-backend-meta.cpp": {
                   "bytes": 120529,
@@ -3801,8 +3855,8 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 248114,
-                  "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                  "bytes": 248684,
+                  "sha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
                 },
                 "build/upstream/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
                   "bytes": 1462877,
@@ -4276,7 +4330,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "6dd02f978d3d84e935687e9277ccdd66",
+            "identity": "6d02d1da972d7941dd064389aa5dd8d5",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -4296,8 +4350,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6608,
-      "sha256": "781ceb992e79a9eaeeb66ca0f5272aa600af228285110ef1b79bfd6ec9d136d9"
+      "bytes": 6626,
+      "sha256": "1a78adda6e3620baabc21b13792902c561cc4fa92a0a835bfb6ef5895f47eb40"
     },
     {
       "path": "api/exports.json",
@@ -4322,17 +4376,17 @@
     {
       "path": "api/schema.json",
       "bytes": 399371,
-      "sha256": "4b81cbfeaf565bb80f6ca2f22c76d671fb85de11ab38cd3b3265637a3eb21e89"
+      "sha256": "cc0b89a56f48b119b94095a9d275cf617d11cb3cb3cc295ae86232d517aba4e4"
     },
     {
       "path": "api/schema.mjs",
       "bytes": 216690,
-      "sha256": "901fcd6287deed0e8e58fb42e8694949e0ae404986a618891ae8cf264d4c5748"
+      "sha256": "f5e4beb2c6410e6cbd26a67f4fa15e707420894e33678300c3ba13bad760febb"
     },
     {
       "path": "host/README.md",
-      "bytes": 5069,
-      "sha256": "d826c85e20fdd5834516a6266b59a17acd51fac0137049133a6b53b7f6c8c52c"
+      "bytes": 5748,
+      "sha256": "116cdc2ec68687cc5264e78c8e3e2bf4285309bdd51d6d293a1f4d0e10cbe233"
     },
     {
       "path": "host/abi.d.ts",
@@ -4351,8 +4405,8 @@
     },
     {
       "path": "host/index.d.ts",
-      "bytes": 883,
-      "sha256": "f2cdc6dde76d33dbdd94726c1494b1af56649e1c69b5bcf8732b575d40ab1e2f"
+      "bytes": 914,
+      "sha256": "becefe105630b94e7aaf93177c559381c75aad8bc8fc881be87eadaa54a1a59a"
     },
     {
       "path": "host/index.mjs",
@@ -4361,8 +4415,8 @@
     },
     {
       "path": "host/profiles.d.ts",
-      "bytes": 529,
-      "sha256": "2f195e67386a3c85215f5cbaaceb4dc194f2f1c06e571b79f8a31155f60ada13"
+      "bytes": 775,
+      "sha256": "8ba3d07985b258313d3740c5ccfe93feaac4afe06122d7c43134019ccf3dfba6"
     },
     {
       "path": "host/read-only-file.mjs",
@@ -4705,52 +4759,52 @@
       "sha256": "f505c5d17326ef289e51a8563420c6933eff79ef3eec731603e80256b30dcd83"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/browser/abi.json",
+      "path": "profiles/webgpu-wasm32-jspi/browser/abi.json",
       "bytes": 119596,
-      "sha256": "8b99ad83c13be12079f061b0cfe019d1bf4e5a334895925f7fb8a082c93b69e3"
+      "sha256": "362e4496f2009fad14e8edea9469c2071a0844a22552fa70a9d6f51b1ebdc4c2"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts",
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
       "bytes": 12239,
-      "sha256": "ef9b47d3c1e37a11bdc96ae584cbbb0e925097e236ae8b5d6ad443f6a74360f9"
+      "sha256": "e9753c122540d4ceabe65c7981b7838c62b938836aeeecc8127aa2da3db5bf04"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/browser/core.mjs",
-      "bytes": 133856,
-      "sha256": "0a247543bfdcf839e01d714d6a5f7fa0e284f8c029d2c9f274f1597990038a53"
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs",
+      "bytes": 131182,
+      "sha256": "d40da925b59f27fd15bc337855ae077d5f61eb692e9bac418ee0dcb8cb822380"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 5135607,
-      "sha256": "5f63ae31008375eb14caba1ba8d095be559fe49f4849f6bb507267fa49d82938"
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
+      "bytes": 4969349,
+      "sha256": "3ce18640386291238b6ce7283a170da918a97795f5a10b2507eda314f59e7fc7"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/browser/module-options.d.ts",
+      "path": "profiles/webgpu-wasm32-jspi/browser/module-options.d.ts",
       "bytes": 499,
       "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/test/abi.json",
+      "path": "profiles/webgpu-wasm32-jspi/test/abi.json",
       "bytes": 119886,
-      "sha256": "2c15003fb844253691ba7e99bbe67b21a3f7ef762ab114afe24af2f309a87e09"
+      "sha256": "ef893b48863f0d5c4776ab408ab6b67b3ab26066405654a7d576a193a1a8741a"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts",
+      "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
       "bytes": 12269,
-      "sha256": "34b683b000d8c1821ae8c4f86e390e3aa8df372350ddd50b099c0dfe87f2de64"
+      "sha256": "a5b01a5ef72d103d7c2ee04f4e8c883556ca410c4a6e5ceb01808d40a800e667"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/test/core.mjs",
-      "bytes": 215926,
-      "sha256": "a0142291ba765c5a14df777f736b9a2ed108a7db6bfebd247f27e08a03ef4fc5"
+      "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
+      "bytes": 212457,
+      "sha256": "376b46a1798302c91099da043cfabe604d6662d92de41ed0fc3821d3a4fb14bf"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 5285775,
-      "sha256": "a4941ab09f2a224da3641da4d0bd3f4a88bed8cb3f47345cdcd1e02b390c2176"
+      "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
+      "bytes": 5113382,
+      "sha256": "fb6a7898a65c80c99dafd854f66532cc5dd3cc4b579dca8f3f8fe5f7b000b947"
     },
     {
-      "path": "profiles/webgpu-wasm64-jspi/test/module-options.d.ts",
+      "path": "profiles/webgpu-wasm32-jspi/test/module-options.d.ts",
       "bytes": 499,
       "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043"
     }

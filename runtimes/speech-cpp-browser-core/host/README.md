@@ -2,12 +2,19 @@
 
 Import `attachCore`, `schema`, and `mountReadOnlyFile` from
 `browser-inference-core/speech-cpp/host`. Instantiate the selected
-`profiles/webgpu-wasm64-jspi/browser/core.mjs` factory, then call
+`profiles/webgpu-wasm32-jspi/browser/core.mjs` factory, then call
 `attachCore(module, schema, { suspension: 'jspi' })`. The browser profile targets
-desktop Chrome with WebGPU, memory64, and JavaScript Promise Integration.
+desktop Chrome with WebGPU, Wasm32 SIMD, and JavaScript Promise Integration.
+It does not require memory64.
+
+Type-only `CoreFactory` and `FactoryByProfile` exports derive from the packaged
+module factories, so dynamic loaders can use their actual option and result
+types without importing a particular profile path.
 
 The generated API exposes the pinned `speech.h` C functions directly. Handles,
-pointer out-parameters, and 64-bit integers use bigint. `api` calls return
+pointer out-parameters, pointer-sized counts, and 64-bit integers use bigint in
+the public host API. Raw Wasm32 pointer/size_t exports and callbacks use Number,
+while uint64_t/int64_t values remain bigint. `api` calls return
 Promises and serialize native access. The generated schema and compiled
 fingerprint must match. ABI 3 describes the wire convention; upstream speech API
 compatibility is separately reported by `speech_api_version_major/minor()`.
@@ -40,7 +47,8 @@ and pass its table pointer to `speech_dialogue_start`. The callback receives
 `samples`, `n_samples`, UTF-8 `text`, and caller data. Copy needed audio/text
 before returning; both are borrowed for that callback only. Return zero to
 continue or nonzero to stop. Use the native pointer signature `p` for pointers
-and `size_t`, preserving the memory64 ABI. Callback table entries must stay
+and `size_t`; Wasm32 callbacks receive native Number values. Normalize borrowed
+pointers with `fromNativePointer` before using them as public handles. Callback table entries must stay
 registered until their conversation is freed. Callbacks must catch their own
 errors and must not invoke the library again with the same model.
 
@@ -66,8 +74,10 @@ const cancellation = createAbiCaller({
 cancellation.callSync({ name: 'speech_request_cancel', args: [request] });
 ```
 
-The memory64 raw export `core.module._speech_request_cancel(request)` is also
-synchronous. Only explicitly declared synchronous leaves may bypass the guard;
+The raw export `core.module._speech_request_cancel` is also synchronous, but
+requires a native Wasm32 Number pointer. Use
+`toNativePointer({ value: request, pointerBytes: core.pointerBytes })` to convert
+a public bigint handle with range checking. Only explicitly declared synchronous leaves may bypass the guard;
 keep the request alive until the pending call settles. Dialogue
 stops via the frame callback or by ending/freeing it between calls. A Worker
 running native code cannot receive application messages until it yields; the
@@ -84,7 +94,8 @@ Blob.slice or an OPFS sync handle can implement the caller-owned source.
 
 Keep the source consistent and mounted until all native users are freed. The
 core does not own downloads, persistence, locks, model selection, a Worker, or
-device/memory budgets. memory64 does not enlarge WebGPU device limits, and API
+device/memory budgets. The 4 GiB linear-memory ceiling does not enlarge WebGPU
+device limits, and API
 availability does not establish that a model fits or meets real-time latency.
 Device memory queries retain the pinned backend's meaning; its WebGPU result
 currently describes a buffer-size limit, not measured free or total GPU memory.
