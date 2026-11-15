@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
+  "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -29,7 +29,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
+          "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -109,6 +109,29 @@
                     "afterSha256": "2202a52765ac825f53f79285200efb296958dff7983fe824a5a5580b046a19ab"
                   }
                 ]
+              },
+              {
+                "file": "0002-webgpu-matmul-vec4-layout.patch",
+                "target": "ggml",
+                "reason": "Use scalar matrix kernels when binding offsets or active tensor strides cannot address vec4 elements exactly.",
+                "mode": "apply",
+                "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64",
+                "files": [
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf",
+                    "afterSha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289",
+                    "afterSha256": "9a697794f01be32a06868a405828d66c0a0f147f439c219eb3dad093f4305104"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu-mul-mat-layout.hpp",
+                    "afterSha256": "a14bf10602bcc53efe9d785475de6bd8adb64f039a7ed32381ce3416a207e13e"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -116,7 +139,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
+            "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7431,
@@ -142,13 +165,17 @@
                 "bytes": 521,
                 "sha256": "58ba0497fa29c1afc7770bd9b357668e5020944fcde6281b9e01bcc9f6585527"
               },
+              "runtimes/speech-cpp/upstream-patches/0002-webgpu-matmul-vec4-layout.patch": {
+                "bytes": 10673,
+                "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 1178,
-                "sha256": "05864eec081743b285ddbf1d96de384676ec757b82c6c3bc96fb7c5546bd92f7"
+                "bytes": 1695,
+                "sha256": "338c1f1001e25bb078041b7aebe71f2c2e16e29e7023d0b4f4c1c7ed08eda8ee"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 421,
-                "sha256": "42af91fbb05d9f18265647c917c7d7b795f26c9c8c4401a1d610c9cfe1f761f4"
+                "bytes": 774,
+                "sha256": "5609d99ad815f8babf06dc04fde99e7f4dde623d9b98d0bb463a0170184c3b63"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
@@ -161,6 +188,10 @@
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
                 "bytes": 193,
                 "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+              },
+              "tests/runtimes/speech-cpp/native/webgpu-matmul-layout.cpp": {
+                "bytes": 5291,
+                "sha256": "2111769c597ac122d0cbb13e17dd381cc6bd5dd6abd62e19da3203b0704d9f23"
               },
               "tools/abi/Bindings.cmake": {
                 "bytes": 5260,
@@ -181,8 +212,8 @@
             }
           },
           "preparedSources": {
-            "files": 2068,
-            "sha256": "01ef7374bf6b9fd452f6abf07addc94de0ec17373e385f05b0c047da2f45348a"
+            "files": 2069,
+            "sha256": "7276bb42ccb28bdb3e96fe40fb894655b172fa93f00fde3d3e3c25ddb3a574d7"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -1319,8 +1350,8 @@
                 "sha256": "7b1ed4f6fcb2bdcb3a1b6556d459d37925d42d254397953ccf07f63d1c249da5"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 247197,
-                "sha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf"
+                "bytes": 248114,
+                "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
               }
             },
             "targetSources": {
@@ -1636,8 +1667,8 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 247197,
-                  "sha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf"
+                  "bytes": 248114,
+                  "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
                 },
                 "build/upstream/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
                   "bytes": 1462877,
@@ -2124,7 +2155,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
+          "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2204,6 +2235,29 @@
                     "afterSha256": "2202a52765ac825f53f79285200efb296958dff7983fe824a5a5580b046a19ab"
                   }
                 ]
+              },
+              {
+                "file": "0002-webgpu-matmul-vec4-layout.patch",
+                "target": "ggml",
+                "reason": "Use scalar matrix kernels when binding offsets or active tensor strides cannot address vec4 elements exactly.",
+                "mode": "apply",
+                "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64",
+                "files": [
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf",
+                    "afterSha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "ab446e25ba92b0733bbe957b32adab70be2c3973cd8f412fbbcf2dd86818a289",
+                    "afterSha256": "9a697794f01be32a06868a405828d66c0a0f147f439c219eb3dad093f4305104"
+                  },
+                  {
+                    "path": "src/ggml-webgpu/ggml-webgpu-mul-mat-layout.hpp",
+                    "afterSha256": "a14bf10602bcc53efe9d785475de6bd8adb64f039a7ed32381ce3416a207e13e"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -2211,7 +2265,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
+            "sourceCommit": "e65ae80505cd79cb9f3e4592987e2f90bb0aafa3",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7431,
@@ -2237,13 +2291,17 @@
                 "bytes": 521,
                 "sha256": "58ba0497fa29c1afc7770bd9b357668e5020944fcde6281b9e01bcc9f6585527"
               },
+              "runtimes/speech-cpp/upstream-patches/0002-webgpu-matmul-vec4-layout.patch": {
+                "bytes": 10673,
+                "sha256": "914f466a76a82160f38cd22bbe6c861678768d63b337f0e0d28c00db307a3f64"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 1178,
-                "sha256": "05864eec081743b285ddbf1d96de384676ec757b82c6c3bc96fb7c5546bd92f7"
+                "bytes": 1695,
+                "sha256": "338c1f1001e25bb078041b7aebe71f2c2e16e29e7023d0b4f4c1c7ed08eda8ee"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 421,
-                "sha256": "42af91fbb05d9f18265647c917c7d7b795f26c9c8c4401a1d610c9cfe1f761f4"
+                "bytes": 774,
+                "sha256": "5609d99ad815f8babf06dc04fde99e7f4dde623d9b98d0bb463a0170184c3b63"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
@@ -2256,6 +2314,10 @@
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
                 "bytes": 193,
                 "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+              },
+              "tests/runtimes/speech-cpp/native/webgpu-matmul-layout.cpp": {
+                "bytes": 5291,
+                "sha256": "2111769c597ac122d0cbb13e17dd381cc6bd5dd6abd62e19da3203b0704d9f23"
               },
               "tools/abi/Bindings.cmake": {
                 "bytes": 5260,
@@ -2276,8 +2338,8 @@
             }
           },
           "preparedSources": {
-            "files": 2068,
-            "sha256": "01ef7374bf6b9fd452f6abf07addc94de0ec17373e385f05b0c047da2f45348a"
+            "files": 2069,
+            "sha256": "7276bb42ccb28bdb3e96fe40fb894655b172fa93f00fde3d3e3c25ddb3a574d7"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -3418,8 +3480,8 @@
                 "sha256": "7b1ed4f6fcb2bdcb3a1b6556d459d37925d42d254397953ccf07f63d1c249da5"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 247197,
-                "sha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf"
+                "bytes": 248114,
+                "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
               }
             },
             "targetSources": {
@@ -3739,8 +3801,8 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 247197,
-                  "sha256": "995b30ce233bdc23cf918da8916485b568aeac0371bcab458d0df3b7b1d172cf"
+                  "bytes": 248114,
+                  "sha256": "c0ddfd807159d630559f736e913edef1018d070bc63739e40c99c6a1040ceb48"
                 },
                 "build/upstream/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
                   "bytes": 1462877,
@@ -4659,8 +4721,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm",
-      "bytes": 5135005,
-      "sha256": "72c561fc9f8571f980042dd4f020401fd49af9089a9b93c272913652ef30fb69"
+      "bytes": 5135607,
+      "sha256": "5f63ae31008375eb14caba1ba8d095be559fe49f4849f6bb507267fa49d82938"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/browser/module-options.d.ts",
@@ -4684,8 +4746,8 @@
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm",
-      "bytes": 5285179,
-      "sha256": "39fdad09ae44a7eaf8422fd97cafdff0b617d7ffc3330ed3a67214c5e69fcf17"
+      "bytes": 5285775,
+      "sha256": "a4941ab09f2a224da3641da4d0bd3f4a88bed8cb3f47345cdcd1e02b390c2176"
     },
     {
       "path": "profiles/webgpu-wasm64-jspi/test/module-options.d.ts",
