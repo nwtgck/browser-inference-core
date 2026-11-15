@@ -13,7 +13,7 @@ upstream pins.
 | --- | --- |
 | `runtimes/llama-cpp/` | Native integration, browser host, profiles, independent upstream pin and approved patches |
 | `runtimes/stable-diffusion-cpp/` | Image bindings, browser host, profiles, independent upstream pins and experimental browser patches |
-| `runtimes/speech-cpp/` | Speech C API, browser host, Chrome WebGPU memory64 JSPI profile and independent speech.cpp/ggml pins |
+| `runtimes/speech-cpp/` | Speech C API, browser host, Chrome WebGPU wasm32 JSPI profile and independent speech.cpp/ggml pins |
 | `toolchain/config.json` | Shared browser compiler, Dawn and compiler correction pins |
 | `tools/` | Typed preparation, ABI metadata, packaging, publication and automation tools |
 | `00-dto/` | External-input structures, public DTO types and named decoders |
@@ -57,7 +57,7 @@ upstream versions.
 ## Parallel builds and bounded caches
 
 The llama matrix builds five profiles in two variants; the image matrix builds
-three profiles in two variants. Speech builds one WebGPU memory64 JSPI profile
+three profiles in two variants. Speech builds one WebGPU wasm32 JSPI profile
 in two variants. Host tests, native checks and these eighteen
 build pairs run in separate jobs. Each runtime then packages and checks its own
 complete matrix before aggregate publication.

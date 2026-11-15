@@ -22,4 +22,9 @@ export const patches: readonly Patch[] = [{
     'src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
     'src/ggml-webgpu/ggml-webgpu-mul-mat-layout.hpp',
   ],
+}, {
+  file: '0003-webgpu-buffer-address-range.patch',
+  target: 'ggml',
+  reason: 'Split weight buffers without size_t overflow and keep GPU buffer offsets within the native pointer address range.',
+  files: ['src/ggml-backend.cpp', 'src/ggml-webgpu/ggml-webgpu.cpp'],
 }];

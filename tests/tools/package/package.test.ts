@@ -36,7 +36,7 @@ import { readFile } from 'node:fs/promises';
 for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp']) {
   const host = await import('browser-inference-core/' + runtime + '/host');
   assert.equal(typeof host.attachCore, 'function');
-  const profile = runtime === 'llama-cpp' ? 'cpu-wasm32' : runtime === 'speech-cpp' ? 'webgpu-wasm64-jspi' : 'webgpu-wasm32-jspi';
+  const profile = runtime === 'llama-cpp' ? 'cpu-wasm32' : 'webgpu-wasm32-jspi';
   for (const variant of ['browser', 'test']) {
     const entry = 'browser-inference-core/' + runtime + '/profiles/' + profile + '/' + variant + '/core.mjs';
     const factory = (await import(entry)).default;

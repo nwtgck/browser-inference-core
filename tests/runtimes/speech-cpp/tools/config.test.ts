@@ -4,10 +4,12 @@ import { loadConfiguration, selectConfiguration } from '#runtimes/speech-cpp/too
 import { resolveSources } from '#runtimes/speech-cpp/tools/prepare';
 import { sourceFixture } from './source.test-support.js';
 
-test('the initial WebGPU memory64 JSPI profile keeps independent browser and test variants', async () => {
+test('the WebGPU wasm32 JSPI profile keeps independent browser and test variants', async () => {
   const configuration = await loadConfiguration({ checkoutRoot: process.cwd() });
-  assert.deepEqual(Object.keys(configuration.profiles), ['webgpu-wasm64-jspi']);
+  assert.deepEqual(Object.keys(configuration.profiles), ['webgpu-wasm32-jspi']);
   assert.deepEqual(Object.keys(configuration.variants), ['browser', 'test']);
+  assert.equal(configuration.profiles['webgpu-wasm32-jspi']?.memory64, false);
+  assert.equal(configuration.profiles['webgpu-wasm32-jspi']?.maximumMemory, 2 ** 32);
   for (const [profile, flags] of Object.entries(configuration.profiles)) {
     for (const variant of Object.keys(configuration.variants)) {
       assert.deepEqual(selectConfiguration({ configuration, profile, variant }).profile, flags);

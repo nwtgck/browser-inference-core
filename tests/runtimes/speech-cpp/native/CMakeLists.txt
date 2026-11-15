@@ -10,3 +10,9 @@ target_include_directories(speech-webgpu-matmul-layout PRIVATE
     "${SPCB_GGML_SOURCE}/include" "${SPCB_GGML_SOURCE}/src/ggml-webgpu")
 target_link_libraries(speech-webgpu-matmul-layout PRIVATE ggml-cpu)
 add_test(NAME speech-webgpu-matmul-layout COMMAND speech-webgpu-matmul-layout)
+
+add_executable(speech-webgpu-buffer-planning webgpu-buffer-planning.cpp)
+target_include_directories(speech-webgpu-buffer-planning PRIVATE
+    "${SPCB_GGML_SOURCE}/include" "${SPCB_GGML_SOURCE}/src")
+target_link_libraries(speech-webgpu-buffer-planning PRIVATE ggml-cpu)
+add_test(NAME speech-webgpu-buffer-planning COMMAND speech-webgpu-buffer-planning)

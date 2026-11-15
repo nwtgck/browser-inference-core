@@ -355,7 +355,7 @@ test('private frozen input decodes source and report structures without a produc
     runtimes: {
       'llama-cpp': { upstream: 'observed-upstream', preparations: { cpu: { upstream: prepared.upstream, options: prepared.options, patches: prepared.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: { files: 1, sha256: 'prepared-tree' } } }, verifiedVariants: ['cpu/browser'] },
       'stable-diffusion-cpp': { upstreams, preparation: { files: 2, sha256: 'prepared-tree' }, patches: [], verifiedVariants: ['cpu/browser'] },
-      'speech-cpp': { upstreams: { speech: { path: 'vendor/speech.cpp', repository: 'nyosegawa/speech.cpp', commit: 'speech-commit' }, ggml: { path: 'vendor/ggml', repository: 'nyosegawa/ggml', commit: 'ggml-commit' } }, preparation: { files: 2, sha256: 'speech-tree' }, patches: [], verifiedVariants: ['webgpu-wasm64-jspi/browser'] },
+      'speech-cpp': { upstreams: { speech: { path: 'vendor/speech.cpp', repository: 'nyosegawa/speech.cpp', commit: 'speech-commit' }, ggml: { path: 'vendor/ggml', repository: 'nyosegawa/ggml', commit: 'ggml-commit' } }, preparation: { files: 2, sha256: 'speech-tree' }, patches: [], verifiedVariants: ['webgpu-wasm32-jspi/browser'] },
     },
   };
   const data: ReportData = {

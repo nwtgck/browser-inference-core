@@ -1,0 +1,46 @@
+diff --git a/src/ggml-backend.cpp b/src/ggml-backend.cpp
+--- a/src/ggml-backend.cpp
++++ b/src/ggml-backend.cpp
+@@ -72,7 +72,8 @@
+         }
+ 
+         // flush the current buffer if adding this tensor would exceed max_size
+-        if (cur_buf_size > 0 && (cur_buf_size + this_size) > max_size) {
++        if (cur_buf_size > 0 &&
++            (cur_buf_size > max_size || this_size > max_size - cur_buf_size)) {
+             plan.push_back({ cur_buf_size, first, i });
+             cur_buf_size = this_size;
+             first        = i;
+diff --git a/src/ggml-webgpu/ggml-webgpu.cpp b/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -3944,8 +3944,18 @@
+     return ctx->device_name.c_str();
+ }
+ 
++static size_t ggml_backend_webgpu_max_addressable_buffer_size() {
++    // Tensor pointers encode fake-base + buffer offset, including on wasm32.
++    const uintptr_t span = std::numeric_limits<uintptr_t>::max() - (uintptr_t) webgpu_ptr_base;
++    return std::min<size_t>(span, std::numeric_limits<size_t>::max()) &
++           ~(size_t) (WEBGPU_STORAGE_BUF_BINDING_MULT - 1);
++}
++
+ static ggml_backend_buffer_t ggml_backend_webgpu_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
+                                                                           size_t                     size) {
++    if (size > ggml_backend_webgpu_max_addressable_buffer_size()) {
++        return nullptr;
++    }
+     static std::atomic<int> buffer_count;
+     int                     buffer_id = buffer_count++;
+     std::string             buf_name  = "tensor_buf" + std::to_string(buffer_id);
+@@ -3974,7 +3984,9 @@
+ static size_t ggml_backend_webgpu_buffer_type_get_max_size(ggml_backend_buffer_type_t buft) {
+     ggml_backend_webgpu_device_context * dev_ctx =
+         static_cast<ggml_backend_webgpu_device_context *>(buft->device->context);
+-    return dev_ctx->webgpu_global_ctx->capabilities.limits.maxStorageBufferBindingSize;
++    return (size_t) std::min<uint64_t>(
++        dev_ctx->webgpu_global_ctx->capabilities.limits.maxStorageBufferBindingSize,
++        ggml_backend_webgpu_max_addressable_buffer_size());
+ }
+ 
+ static size_t ggml_backend_webgpu_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft,

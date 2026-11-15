@@ -32,6 +32,9 @@ test('actual speech metadata preserves opaque handles, Haru dialogue callbacks a
   assert.ok(callback);
   assert.deepEqual(callback.parameters.map(value => value.kind), ['pointer', 'u64', 'pointer', 'pointer']);
   assert.equal(callback.returnKind, 'signed');
+  assert.equal(callback.parameters[0]?.abiType.bits, schema.pointerBytes * 8);
+  assert.equal(callback.parameters[1]?.abiType.bits, schema.pointerBytes * 8);
+  assert.equal(functions.get('speech_result_seed')?.abiType.bits, 64);
   assert.ok(schema.suspendingExports.includes('speech_dialogue_push'));
   for (const name of ['speech_request_cancel', 'speech_last_error', 'speech_last_error_option']) {
     assert.ok(schema.callbackMetadata.getters.some(fn => fn.name === name));
@@ -52,6 +55,11 @@ test('a consumer compiles against the actual generated speech C API declarations
   }
   await copyFile(join(process.cwd(), 'runtimes/shared/host/abi.d.ts'), join(temporary.root, 'host-abi.d.ts'));
   await writeFile(join(temporary.root, 'package.json'), '{"type":"module"}');
+  const actualSchema = await readJson({ path: schemaPath, decode: decodeAbiSchema });
+  const nativePointer = actualSchema.pointerBytes === 4 ? 'number' : 'bigint';
+  const nativeOne = actualSchema.pointerBytes === 4 ? '1' : '1n';
+  const nativeSize = actualSchema.pointerBytes === 4 ? '3200' : '3200n';
+  const nativeTable = actualSchema.pointerBytes === 4 ? 'Number(frameCallback)' : 'BigInt(frameCallback)';
   const consumer = join(temporary.root, 'consumer.ts');
   await writeFile(consumer, `\
 import type { LowLevelFunctions } from './functions.js';
@@ -65,16 +73,17 @@ const start: Promise<number> = api.speech_dialogue_start(1n, 24000, 2n, 3n, 4n);
 const push: Promise<number> = api.speech_dialogue_push(1n, 2n, 3200n);
 const version: Promise<bigint> = api.speech_version();
 const cancel: Promise<void> = api.speech_request_cancel(1n);
-const seed: bigint | Promise<bigint> = module._speech_result_seed(1n);
-const frameCallback = module.addFunction((samples: bigint, nSamples: bigint, text: bigint, userData: bigint): number => {
+const seed: bigint | Promise<bigint> = module._speech_result_seed(${nativeOne});
+const frameCallback = module.addFunction((samples: ${nativePointer}, nSamples: ${nativePointer}, text: ${nativePointer}, userData: ${nativePointer}): number => {
   void [samples, nSamples, text, userData];
   return 0;
 }, 'ipppp');
-const rawStart: number | Promise<number> = module._speech_dialogue_start(1n, 24000, BigInt(frameCallback), 3n, 4n);
-const logCallback = module.addFunction((level: number, text: bigint, userData: bigint): void => {
+const rawStart: number | Promise<number> = module._speech_dialogue_start(${nativeOne}, 24000, ${nativeTable}, ${nativeOne}, ${nativeOne});
+const logCallback = module.addFunction((level: number, text: ${nativePointer}, userData: ${nativePointer}): void => {
   void [level, text, userData];
 }, 'vipp');
-const rawCancel: void = module._speech_request_cancel(1n);
+const rawCancel: void = module._speech_request_cancel(${nativeOne});
+const rawPush: number | Promise<number> = module._speech_dialogue_push(${nativeOne}, ${nativeOne}, ${nativeSize});
 const caller = createAbiCaller({ module, schema, suspension: 'jspi', gate: undefined });
 const syncCancel: number | bigint | void = caller.callSync({ name: 'speech_request_cancel', args: [1n] });
 // @ts-expect-error C pointer arguments retain bigint at the public boundary.
@@ -83,7 +92,7 @@ api.speech_dialogue_push(1, 2n, 3200n);
 module.addFunction((_value: { sample: bigint }) => 0, 'ip');
 // @ts-expect-error Native callbacks cannot return a Promise.
 module.addFunction(() => Promise.resolve(0), 'i');
-void [start, push, version, cancel, seed, frameCallback, rawStart, logCallback, rawCancel, syncCancel];
+void [start, push, version, cancel, seed, frameCallback, rawStart, logCallback, rawCancel, rawPush, syncCancel];
 `);
   const program = ts.createProgram([consumer], { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, noEmit: true, skipLibCheck: false, types: [], lib: ['lib.es2023.d.ts', 'lib.dom.d.ts'] });
   const diagnostics = ts.getPreEmitDiagnostics(program);

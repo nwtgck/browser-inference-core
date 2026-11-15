@@ -110,7 +110,7 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
     await cp(join(checkoutRoot, 'toolchain/config.json'), join(root, 'toolchain/config.json'));
     const runtime = text({ value: object({ value: object({ value: jobs[name] }).env }).BIC_METRICS_RUNTIME });
     const compile = name === 'compile' || name.endsWith('-compile');
-    const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: join(root, 'output'), GITHUB_ENV: join(root, 'env'), LCB_SOURCE_COMMIT: 'a'.repeat(40), BIC_METRICS_RUNTIME: runtime, BIC_METRICS_PROFILE: runtime === 'speech-cpp' ? 'webgpu-wasm64-jspi' : runtime === 'stable-diffusion-cpp' ? 'webgpu-wasm32-jspi' : 'cpu-wasm32', BIC_METRICS_VARIANT: 'browser', BIC_OFFLINE_ENVIRONMENT: 'fixture', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', CALLS: join(root, 'calls.jsonl') };
+    const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: join(root, 'output'), GITHUB_ENV: join(root, 'env'), LCB_SOURCE_COMMIT: 'a'.repeat(40), BIC_METRICS_RUNTIME: runtime, BIC_METRICS_PROFILE: runtime === 'speech-cpp' ? 'webgpu-wasm32-jspi' : runtime === 'stable-diffusion-cpp' ? 'webgpu-wasm32-jspi' : 'cpu-wasm32', BIC_METRICS_VARIANT: 'browser', BIC_OFFLINE_ENVIRONMENT: 'fixture', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', CALLS: join(root, 'calls.jsonl') };
     const acquisition = namedStep({ job: name, name: 'Acquire locked development dependencies (online)' });
     await executeShell({ root, script: text({ value: acquisition.run }), environment });
     const emit = namedStep({ job: name, name: compile ? 'Emit tools and plan cache partitions' : 'Emit the checked-out tools and verify source identity' });
@@ -278,15 +278,15 @@ if(command==='node'&&args.includes('tests/runtimes/speech-cpp/node-core-contract
   const build = calls.find(call => call.command === 'node' && call.args[1] === 'build');
   assert.ok(build);
   assert.equal(build.args[0], 'build/tooling/runtimes/speech-cpp/tools/cli.js');
-  for (const [flag, expected] of [['--kind', 'native'], ['--profile', 'webgpu-wasm64-jspi'], ['--variant', 'test'], ['--expected-commit', environment.LCB_SOURCE_COMMIT]] as const) {
+  for (const [flag, expected] of [['--kind', 'native'], ['--profile', 'webgpu-wasm32-jspi'], ['--variant', 'test'], ['--expected-commit', environment.LCB_SOURCE_COMMIT]] as const) {
     assert.equal(build.args[build.args.indexOf(flag) + 1], expected);
   }
   const ctest = calls.find(call => call.command === 'ctest');
   assert.ok(ctest);
-  assert.deepEqual(ctest.args, ['--test-dir', 'build/runtimes/speech-cpp/build/native/webgpu-wasm64-jspi/test', '--output-on-failure']);
-  const contracts = calls.find(call => call.environment?.BICORE_SPEECH_ABI_SCHEMA);
+  assert.deepEqual(ctest.args, ['--test-dir', 'build/runtimes/speech-cpp/build/native/webgpu-wasm32-jspi/test', '--output-on-failure']);
+  const contracts = calls.find(call => call.command === 'node' && call.args[0] === '--test');
   assert.ok(contracts);
-  assert.equal(contracts.environment?.BICORE_SPEECH_ABI_SCHEMA, join(root, 'build/runtimes/speech-cpp/build/native/webgpu-wasm64-jspi/test/generated/schema.json'));
+  assert.equal(contracts.environment?.BICORE_SPEECH_ABI_SCHEMA, join(root, 'build/runtimes/speech-cpp/build/native/webgpu-wasm32-jspi/test/generated/schema.json'));
   assert.ok(calls.indexOf(build) < calls.indexOf(ctest) && calls.indexOf(ctest) < calls.indexOf(contracts));
 
   const assemble = namedStep({ job: 'speech-build', name: 'Assemble runtime-only package' });
@@ -587,8 +587,8 @@ test('the actual build shell adopts complete cache restores and keeps fresh cach
     { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'browser', emMatch: 'other' },
     { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'stable-diffusion-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'malformed' },
     { outcome: 'success', restored: true, save: false, expected: 'restored', mode: 'off', runtime: 'llama-cpp', profile: 'cpu-wasm32', variant: 'test', emMatch: 'exact' },
-    { outcome: 'success', restored: true, save: true, expected: 'restored', mode: 'off', runtime: 'speech-cpp', profile: 'webgpu-wasm64-jspi', variant: 'browser', emMatch: 'prefix' },
-    { outcome: 'failure', restored: true, save: false, expected: 'fresh', mode: 'basic', runtime: 'speech-cpp', profile: 'webgpu-wasm64-jspi', variant: 'test', emMatch: 'exact' },
+    { outcome: 'success', restored: true, save: true, expected: 'restored', mode: 'off', runtime: 'speech-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'prefix' },
+    { outcome: 'failure', restored: true, save: false, expected: 'fresh', mode: 'basic', runtime: 'speech-cpp', profile: 'webgpu-wasm32-jspi', variant: 'test', emMatch: 'exact' },
   ]) {
     const script = offlineScript({ step: namedStep({ job: scenario.runtime === 'llama-cpp' ? 'compile' : scenario.runtime === 'speech-cpp' ? 'speech-compile' : 'image-compile', name: 'Prepare, build and stage the selected runtime' }) });
     await using temporary = await temporaryDirectory();
@@ -667,7 +667,7 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
       assert.equal(check.environment?.EM_CONFIG, join(root, '.tools/emsdk/.emscripten'));
     }
     const apiChecks = calls.filter(call => call.args[0] === '--test' && call.args[1]?.endsWith('/current-api.test.js'));
-    const checksApi = scenario.profile === 'webgpu-wasm32-jspi' || (scenario.runtime === 'speech-cpp' && scenario.variant === 'browser');
+    const checksApi = scenario.profile === 'webgpu-wasm32-jspi' && scenario.variant === 'browser';
     assert.equal(apiChecks.length, checksApi ? 1 : 0);
     if (checksApi) {
       const check = apiChecks[0];

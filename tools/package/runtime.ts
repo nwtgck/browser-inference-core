@@ -99,7 +99,7 @@ export function hostProfiles({ runtime, profiles, variants }: { runtime: Runtime
   const lines = ["/** Generated from this package's profile/variant set. */"];
   for (const [i, profile] of sortedProfiles.entries()) {
     for (const [j, variant] of sortedVariants.entries()) {
-      lines.push(`import type { ${module} as Module_${i}_${j} } from '../profiles/${profile}/${variant}/core.js';`);
+      lines.push(`import type { default as Factory_${i}_${j}, ${module} as Module_${i}_${j} } from '../profiles/${profile}/${variant}/core.js';`);
     }
   }
   lines.push('export interface ModuleByProfile {');
@@ -110,7 +110,15 @@ export function hostProfiles({ runtime, profiles, variants }: { runtime: Runtime
     }
     lines.push('  };');
   }
-  lines.push('}', 'export type Profile = keyof ModuleByProfile;', 'export type Variant = keyof ModuleByProfile[Profile];');
+  lines.push('}', 'export interface FactoryByProfile {');
+  for (const [i, profile] of sortedProfiles.entries()) {
+    lines.push(`  '${profile}': {`);
+    for (const [j, variant] of sortedVariants.entries()) {
+      lines.push(`    '${variant}': typeof Factory_${i}_${j};`);
+    }
+    lines.push('  };');
+  }
+  lines.push('}', 'export type Profile = keyof ModuleByProfile;', 'export type Variant = keyof ModuleByProfile[Profile];', 'export type CoreFactory = FactoryByProfile[Profile][Variant];');
   if (coreModuleAlias !== undefined) {
     lines.push(coreModuleAlias);
   }

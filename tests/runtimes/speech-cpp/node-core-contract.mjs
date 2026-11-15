@@ -21,21 +21,21 @@ if (!globalThis.navigator) {
   Object.defineProperty(globalThis, 'navigator', { value: navigator });
 }
 const root = path.resolve(directory);
-const { attachCore, schema } = await import(pathToFileURL(path.join(root, 'host/index.mjs')).href);
-const { default: createModule } = await import(pathToFileURL(path.join(root, 'profiles/webgpu-wasm64-jspi/test/core.mjs')).href);
-const wasmBinary = new Uint8Array(await readFile(path.join(root, 'profiles/webgpu-wasm64-jspi/test/core.wasm')));
+const { attachCore, schema, fromNativePointer } = await import(pathToFileURL(path.join(root, 'host/index.mjs')).href);
+const { default: createModule } = await import(pathToFileURL(path.join(root, 'profiles/webgpu-wasm32-jspi/test/core.mjs')).href);
+const wasmBinary = new Uint8Array(await readFile(path.join(root, 'profiles/webgpu-wasm32-jspi/test/core.wasm')));
 const module = await createModule({ wasmBinary });
 const core = attachCore(module, schema, { suspension: 'jspi' });
-assert.equal(core.pointerBytes, 8);
+assert.equal(core.pointerBytes, 4);
 assert.equal(core.schema.runtime, 'speech-cpp');
 assert.equal(await core.api.speech_api_version_major(), core.constant('SPEECH_API_VERSION_MAJOR'));
 assert.equal(await core.api.speech_api_version_minor(), core.constant('SPEECH_API_VERSION_MINOR'));
 assert.match(core.readUtf8(await core.api.speech_version()), /^\d+\.\d+\.\d+/u);
-const checks = ['packaged module, schema fingerprint, memory64 pointers and upstream API version'];
+const checks = ['packaged module, schema fingerprint, wasm32 pointers and upstream API version'];
 
 function readPointer({ storage }) {
   const bytes = core.bytes(storage, core.pointerBytes);
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true);
+  return BigInt(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true));
 }
 
 const output = core.alloc(core.pointerBytes);
@@ -55,6 +55,8 @@ try {
   assert.equal(readPointer({ storage: output }), 0n);
   await core.api.speech_dialogue_free(0n);
   await core.api.speech_request_cancel(0n);
+  assert.equal(module._speech_request_cancel(0), undefined);
+  assert.equal(typeof await core.api.speech_option_count(), 'bigint');
   checks.push('Haru dialogue null-request rejection resets caller output; null release and cancellation');
 } finally {
   if (params !== 0n) {
@@ -63,17 +65,19 @@ try {
   core.free(output);
 }
 
-const callbackData = 0x1_0000_0042n;
+const callbackData = 0xf000_0042n;
 const received = [];
 const callback = module.addFunction((level, text, userData) => {
-  received.push({ level, text: core.readUtf8(text), userData });
-}, 'vijj');
+  assert.equal(typeof text, 'number');
+  assert.equal(typeof userData, 'number');
+  received.push({ level, text: core.readUtf8(fromNativePointer({ value: text, pointerBytes: core.pointerBytes })), userData: fromNativePointer({ value: userData, pointerBytes: core.pointerBytes }) });
+}, 'vipp');
 try {
   await core.api.speech_log_set(BigInt(callback), callbackData);
   assert.ok(core.schema.testFunctions?.some(fn => fn.name === 'spc_test_emit_log'));
   module._spc_test_emit_log();
   assert.deepEqual(received, [{ level: core.constant('SPEECH_LOG_INFO'), text: 'speech callback probe\n', userData: callbackData }]);
-  checks.push('actual upstream log callback routes C to JavaScript with UTF-8 and untruncated memory64 user data');
+  checks.push('actual upstream log callback routes C to JavaScript with UTF-8 and high-bit wasm32 user data');
 } finally {
   await core.api.speech_log_set(0n, 0n);
   module.removeFunction(callback);

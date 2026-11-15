@@ -6,7 +6,7 @@ synthesis, recognition, detection, diarization, enhancement, and full-duplex
 dialogue. Available operations and options depend on the loaded model.
 
 The initial target is a hosted browser application on desktop Chrome with
-WebGPU, Wasm memory64, SIMD, and JavaScript Promise Integration (JSPI). Standalone
+WebGPU, Wasm32, SIMD, and JavaScript Promise Integration (JSPI). Standalone
 application distribution is outside this runtime's initial integration scope.
 This is an experimental target, not a claim that a particular model fits a
 device or runs in real time.
@@ -47,7 +47,7 @@ Replace `ARTIFACT_COMMIT_SHA` with the chosen artifact's full commit hash. Then
 instantiate the selected module and attach its matching schema:
 
 ```js
-import createSpeechCore from 'browser-inference-core/speech-cpp/profiles/webgpu-wasm64-jspi/browser/core.mjs';
+import createSpeechCore from 'browser-inference-core/speech-cpp/profiles/webgpu-wasm32-jspi/browser/core.mjs';
 import { attachCore, schema } from 'browser-inference-core/speech-cpp/host';
 
 const module = await createSpeechCore();
@@ -61,10 +61,10 @@ represents pointers and 64-bit integers as bigint. Callers must serialize access
 to an instance and keep callback table entries alive until their native users
 are released.
 
-The `webgpu-wasm64-jspi` profile is single-threaded and has a 16 GiB maximum Wasm
+The `webgpu-wasm32-jspi` profile is single-threaded and has a 4 GiB maximum Wasm
 linear-memory setting. This ceiling is not an allocation guarantee and does not
 enlarge WebGPU buffer, binding, or physical-memory limits. Feature-detect the
-required browser capabilities before loading a model.
+required browser capabilities before loading a model; memory64 is not required.
 
 | Variant | Assertions | Emscripten environments |
 |---|---:|---|
@@ -101,8 +101,8 @@ node build/tooling/runtimes/speech-cpp/tools/cli.js build \
   --checkout-root "$PWD" --tooling-root "$PWD/build/tooling" --local \
   --output-root /tmp/browser-inference-builds/speech-cpp \
   --toolchain-root "$PWD/.tools" \
-  --profile webgpu-wasm64-jspi --variant test --kind native --jobs 4
-ctest --test-dir /tmp/browser-inference-builds/speech-cpp/build/native/webgpu-wasm64-jspi/test \
+  --profile webgpu-wasm32-jspi --variant test --kind native --jobs 4
+ctest --test-dir /tmp/browser-inference-builds/speech-cpp/build/native/webgpu-wasm32-jspi/test \
   --output-on-failure
 node --test build/tooling/tests/runtimes/speech-cpp/tools/*.test.js
 node --test tests/runtimes/speech-cpp/read-only-file.test.mjs

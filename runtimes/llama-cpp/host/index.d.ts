@@ -2,7 +2,7 @@ import type { LowLevelFunctions } from '../api/functions.js';
 import type { ModuleByProfile, Profile, Variant } from './profiles.js';
 import type { AbiSchema } from './abi.js';
 export { createAbiCaller, selectAbiSchema, toNativePointer, fromNativePointer, toEmscriptenPointer, fromEmscriptenPointer } from './abi.js';
-export type { ModuleByProfile, Profile, Variant } from './profiles.js';
+export type { ModuleByProfile, FactoryByProfile, CoreFactory, Profile, Variant } from './profiles.js';
 export interface CoreModuleOptions extends Record<string, unknown> {
   /** WebGPU browser variants only. Opaque host handle; no WebGPU types dependency. */
   hostNavigator?: { readonly gpu?: object };

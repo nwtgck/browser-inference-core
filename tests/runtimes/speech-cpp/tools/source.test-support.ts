@@ -41,7 +41,7 @@ export async function sourceFixture() {
     await git({ root: repository, args: ['update-index', '--add', '--cacheinfo', `160000,${commits[role]},${runtimeDirectory}/${declarations[role].path}`] });
   }
   await write({ root: repository, name: `${runtimeDirectory}/config/upstreams.json`, text: JSON.stringify(declarations) });
-  await write({ root: repository, name: `${runtimeDirectory}/config/profiles.json`, text: JSON.stringify({ 'webgpu-wasm64-jspi': { memory64: true, webgpu: true, jspi: true, asyncify: false, pthreads: false, maximumMemory: 17179869184 } }) });
+  await write({ root: repository, name: `${runtimeDirectory}/config/profiles.json`, text: JSON.stringify({ 'webgpu-wasm32-jspi': { memory64: false, webgpu: true, jspi: true, asyncify: false, pthreads: false, maximumMemory: 4294967296 } }) });
   await write({ root: repository, name: `${runtimeDirectory}/config/variants.json`, text: JSON.stringify({ browser: { assertions: 0, environment: 'web,worker' } }) });
   await git({ root: repository, args: ['add', `${runtimeDirectory}/config`] });
   await git({ root: repository, args: ['commit', '-qm', 'parent fixture'] });

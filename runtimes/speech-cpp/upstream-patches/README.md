@@ -20,6 +20,13 @@ The predicate lives in a private backend header so native checks can exercise
 the same selection rule without a GPU. This patch is owned by this runtime and
 does not change its independent upstream pin.
 
+`0003-webgpu-buffer-address-range.patch` splits backend buffers without
+overflowing `size_t` and limits each WebGPU buffer to its representable pointer
+range, including the backend's synthetic base address. Device limits remain
+64-bit until that range check. This keeps GPU weights in bounded buffers on
+Wasm32 without narrowing model-file offsets or allocating their full size in
+Wasm memory.
+
 The initial source pair is speech.cpp `2f51f66164a906b322a48303bfbcdd6936833302`
 and its ggml pin `e1a9ac12edbb57402618fd6936598603f5ee6266`. Current identities
 remain the submodule gitlinks and source-bound preparation receipts. Updating a
