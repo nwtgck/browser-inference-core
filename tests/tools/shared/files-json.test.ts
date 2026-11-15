@@ -44,12 +44,13 @@ test('identity decoding accepts and preserves added observation metadata', () =>
   const identity = { path: 'index.mjs', bytes: 4, sha256: 'a'.repeat(64) };
   const manifest = decodeRootManifest({
     input: {
-      formatVersion: 5,
+      formatVersion: 6,
       sourceCommit: 'b'.repeat(40),
       files: [{ ...identity, mode: 0o644 }],
       runtimes: {
         'llama-cpp': { manifest: 'runtimes/llama-cpp-browser-core/manifest.json', manifestFormatVersion: 2 },
         'stable-diffusion-cpp': { manifest: 'runtimes/stable-diffusion-cpp-browser-core/manifest.json', manifestFormatVersion: 2 },
+        'speech-cpp': { manifest: 'runtimes/speech-cpp-browser-core/manifest.json', manifestFormatVersion: 2 },
       },
     },
   });

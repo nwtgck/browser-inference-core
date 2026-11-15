@@ -14,7 +14,7 @@ import { runProcess } from '#tools/shared/process';
 import { readConsumerReport } from '#tools/automation/comments/archive';
 
 function fixtureSourceFacts({ sourceCommit }: { sourceCommit: string }): SourceFacts {
-  return { sourceCommit, runtimes: { 'llama-cpp': { upstream: 'b'.repeat(40), preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: { 'stable-diffusion': { path: 'fixture', repository: 'fixture', commit: 'b'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
+  return { sourceCommit, runtimes: { 'llama-cpp': { upstream: 'b'.repeat(40), preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: { 'stable-diffusion': { path: 'fixture', repository: 'fixture', commit: 'b'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: { speech: { path: 'fixture', repository: 'fixture', commit: 'd'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', commit: 'e'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
 }
 
 test('freeze validates source once and reuses the same report after immutable Git confirmation', async () => {

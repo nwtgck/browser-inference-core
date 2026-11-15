@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { fileIdentitySchema, jsonObjectSchema, jsonSchema, patchReceiptSchema, treeIdentitySchema } from '#dto-internal/shared/artifacts';
+import { fileIdentitySchema, jsonObjectSchema, jsonSchema, patchReceiptSchema, treeIdentitySchema, validationSchema } from '#dto-internal/shared/artifacts';
 import { llamaValidationSchema, preparationOptionsSchema } from '#dto-internal/llama-cpp/artifacts';
+import { upstreamsSchema as speechUpstreamsSchema } from '#dto-internal/speech-cpp/artifacts';
 import { stableDiffusionValidationSchema, upstreamsSchema } from '#dto-internal/stable-diffusion-cpp/artifacts';
 
 const patchSummarySchema = patchReceiptSchema.pick({ file: true, target: true, mode: true, sha256: true, reason: true });
@@ -14,11 +15,13 @@ const sourceFactsSchema = z.object({
       verifiedVariants: z.array(z.string()),
     }).catchall(jsonSchema),
     'stable-diffusion-cpp': z.object({ upstreams: upstreamsSchema, preparation: treeIdentitySchema, patches: z.array(patchSummarySchema), verifiedVariants: z.array(z.string()) }).catchall(jsonSchema),
+    'speech-cpp': z.object({ upstreams: speechUpstreamsSchema, preparation: treeIdentitySchema, patches: z.array(patchSummarySchema), verifiedVariants: z.array(z.string()) }).catchall(jsonSchema),
   }).catchall(jsonSchema),
 }).catchall(jsonSchema);
 export type SourceFacts = z.infer<typeof sourceFactsSchema>;
 const llamaReportProfilesSchema = z.record(z.string(), z.object({ variants: z.record(z.string(), z.object({ configuration: jsonObjectSchema, variantConfiguration: jsonObjectSchema, validation: llamaValidationSchema }).catchall(jsonSchema)) }).catchall(jsonSchema));
 const imageReportProfilesSchema = z.record(z.string(), z.object({ variants: z.record(z.string(), z.object({ configuration: jsonObjectSchema, variantConfiguration: jsonObjectSchema, validation: stableDiffusionValidationSchema }).catchall(jsonSchema)) }).catchall(jsonSchema));
+const speechReportProfilesSchema = z.record(z.string(), z.object({ variants: z.record(z.string(), z.object({ configuration: jsonObjectSchema, variantConfiguration: jsonObjectSchema, validation: validationSchema }).catchall(jsonSchema)) }).catchall(jsonSchema));
 const reportDataSchema = z.object({
   sourceCommit: z.string(),
   package: z.object({ name: z.literal('browser-inference-core'), version: z.string() }).catchall(jsonSchema),
@@ -26,6 +29,7 @@ const reportDataSchema = z.object({
   runtimes: z.object({
     'llama-cpp': z.object({ manifest: z.string(), abiVersion: z.literal(3), schemaSha256: z.string(), upstreams: z.object({ llama: z.string() }).catchall(jsonSchema), profiles: llamaReportProfilesSchema }).catchall(jsonSchema),
     'stable-diffusion-cpp': z.object({ manifest: z.string(), abiVersion: z.literal(3), schemaSha256: z.string(), upstreams: upstreamsSchema, profiles: imageReportProfilesSchema }).catchall(jsonSchema),
+    'speech-cpp': z.object({ manifest: z.string(), abiVersion: z.literal(3), schemaSha256: z.string(), upstreams: speechUpstreamsSchema, profiles: speechReportProfilesSchema }).catchall(jsonSchema),
   }).catchall(jsonSchema),
 }).catchall(jsonSchema);
 export type ReportData = z.infer<typeof reportDataSchema>;
@@ -35,7 +39,7 @@ const frozenPublicationSchema = z.object({
   tree: z.string(),
   branch: z.string(),
   manifest: fileIdentitySchema,
-  runtimeManifests: z.object({ 'llama-cpp': fileIdentitySchema, 'stable-diffusion-cpp': fileIdentitySchema }).catchall(jsonSchema),
+  runtimeManifests: z.object({ 'llama-cpp': fileIdentitySchema, 'stable-diffusion-cpp': fileIdentitySchema, 'speech-cpp': fileIdentitySchema }).catchall(jsonSchema),
   report: z.object({ sha256: z.string(), data: reportDataSchema }).catchall(jsonSchema),
 }).catchall(jsonSchema);
 export type FrozenPublication = z.infer<typeof frozenPublicationSchema>;

@@ -45,10 +45,14 @@
     "#tests/*": {
       "types": "./tests/*.ts",
       "default": "./build/tooling/tests/*.js"
+    },
+    "#dto/speech-cpp": {
+      "types": "./00-dto/speech-cpp/index.ts",
+      "default": "./build/tooling/00-dto/speech-cpp/index.js"
     }
   },
   "scripts": {
-    "test": "node --test tests/runtimes/llama_cpp/*.test.mjs tests/runtimes/stable_diffusion_cpp/*.test.mjs",
+    "test": "node --test tests/runtimes/llama_cpp/*.test.mjs tests/runtimes/stable_diffusion_cpp/*.test.mjs tests/runtimes/speech-cpp/*.test.mjs",
     "pretest:workflows": "tsc --project tsconfig.github-tests.json",
     "test:workflows": "node --test build/tooling/.github/tests/*.test.js",
     "tooling:build": "tsc --project tsconfig.tools.json",

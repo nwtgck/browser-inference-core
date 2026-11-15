@@ -10,6 +10,9 @@ import { collectSourceFacts } from '#runtimes/llama-cpp/tools/prepare';
 import { loadConfiguration as loadLlamaConfiguration, sourceCaptureSelection as llamaSelection, upstreamPath, upstreamCommit } from '#runtimes/llama-cpp/tools/config';
 import { prepareRuntimeSources } from '#runtimes/stable-diffusion-cpp/tools/prepare';
 import { loadConfiguration as loadImageConfiguration, upstreamFacts } from '#runtimes/stable-diffusion-cpp/tools/config';
+import { prepareRuntimeSources as prepareSpeechRuntimeSources } from '#runtimes/speech-cpp/tools/prepare';
+import { loadConfiguration as loadSpeechConfiguration, upstreamFacts as speechUpstreamFacts } from '#runtimes/speech-cpp/tools/config';
+import { sourceCaptureSelection as speechSelection } from '#runtimes/speech-cpp/tools/build';
 import { sourceCaptureSelection as imageSelection } from '#runtimes/stable-diffusion-cpp/tools/build';
 
 function identityFacts({ identity }: { identity: SourceIdentity }) {
@@ -77,9 +80,11 @@ export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCom
   // and their static configuration. The snapshot is only compiler input.
   await loadLlamaConfiguration({ checkoutRoot: sourceRoot });
   const imageConfiguration = await loadImageConfiguration({ checkoutRoot: sourceRoot });
+  const speechConfiguration = await loadSpeechConfiguration({ checkoutRoot: sourceRoot });
   const source = await observeSource({ checkoutRoot: sourceRoot, mode: { kind: 'release', expectedCommit: sourceCommit } });
   const llamaSnapshot = await snapshotCompileInputs({ source, destination: join(workRoot, 'llama-cpp/compile-inputs'), ...llamaSelection({ kind: 'wasm' }), replace: false });
   const imageSnapshot = await snapshotCompileInputs({ source, destination: join(workRoot, 'stable-diffusion-cpp/compile-inputs'), ...imageSelection(), replace: false });
+  const speechSnapshot = await snapshotCompileInputs({ source, destination: join(workRoot, 'speech-cpp/compile-inputs'), ...speechSelection(), replace: false });
   const llamaCommit = await upstreamCommit({ checkoutRoot: sourceRoot, revision: sourceCommit });
   if (manifests['llama-cpp'].llamaCommit !== llamaCommit) {
     throw new Error('Llama package upstream differs from selected gitlink');
@@ -112,11 +117,24 @@ export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCom
       imageVariants.push(`${profile}/${variant}`);
     }
   }
+  const speech = (await prepareSpeechRuntimeSources({ snapshot: speechSnapshot, declarations: speechConfiguration.upstreams, output: join(workRoot, 'speech-cpp/prepared'), replace: false })).facts;
+  const speechVariants: string[] = [];
+  for (const [profile, data] of Object.entries(manifests['speech-cpp'].profiles)) {
+    for (const [variant, information] of Object.entries(data.variants)) {
+      verifySourceInputs({ recorded: information.sourceInputs, expected: speechSnapshot.files, sourceCommit });
+      assertSame({ actual: treeFacts({ tree: information.preparedSources }), expected: treeFacts({ tree: speech.identity }), message: 'Prepared speech sources differ from selected inputs' });
+      assertSame({ actual: { runtime: information.patches.runtime, upstreams: speechUpstreamFacts({ upstreams: information.patches.upstreams }), patches: patchFacts({ patches: information.patches.patches }), vendorCheckoutModified: information.patches.vendorCheckoutModified }, expected: { runtime: speech.receipt.runtime, upstreams: speechUpstreamFacts({ upstreams: speech.receipt.upstreams }), patches: patchFacts({ patches: speech.receipt.patches }), vendorCheckoutModified: speech.receipt.vendorCheckoutModified }, message: 'Speech patch receipt differs from selected sources' });
+      assertSame({ actual: speechUpstreamFacts({ upstreams: information.upstreams }), expected: speechUpstreamFacts({ upstreams: speech.receipt.upstreams }), message: 'Speech upstreams differ from selected gitlinks' });
+      verifyCompiledInputs({ compiled: information.compiledInputs, source: speechSnapshot.files, prepared: speech.files });
+      speechVariants.push(`${profile}/${variant}`);
+    }
+  }
   return {
     sourceCommit,
     runtimes: {
       'llama-cpp': { upstream: llamaCommit, preparations: Object.fromEntries(Object.entries(prepared).map(([name, receipt]) => [name, { upstream: receipt.upstream, options: receipt.options, patches: receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: treeIdentity({ files: receipt.outputs }) }])), verifiedVariants: llamaVariants },
       'stable-diffusion-cpp': { upstreams: image.receipt.upstreams, preparation: image.identity, patches: image.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: imageVariants },
+      'speech-cpp': { upstreams: speech.receipt.upstreams, preparation: speech.identity, patches: speech.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: speechVariants },
     },
   };
 }

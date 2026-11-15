@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { BrowserSession, RuntimeName } from '#dto/shared';
+import type { BrowserSession } from '#dto/shared';
 import { decodeLlamaBrowserEnvelope, decodeLlamaManifest, type LlamaBrowserResult } from '#dto/llama-cpp';
 import { decodeStableDiffusionBrowserEnvelope, decodeStableDiffusionManifest, type StableDiffusionBrowserResult } from '#dto/stable-diffusion-cpp';
 import { loadConfiguration as llamaConfiguration } from '#runtimes/llama-cpp/tools/config';
@@ -19,6 +19,7 @@ import { createSyntheticModel } from '#tools/validation/synthetic-model';
 import { makeRuntime, fixtureSource } from '#tests/tools/package/fixtures.test-support';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 
+type RuntimeName = 'llama-cpp' | 'stable-diffusion-cpp';
 type Result = LlamaBrowserResult | StableDiffusionBrowserResult;
 type Envelope = { session: BrowserSession; results: readonly Result[] };
 export type ValidationFixture = {

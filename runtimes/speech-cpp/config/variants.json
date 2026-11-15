@@ -1,0 +1,10 @@
+{
+  "browser": {
+    "assertions": 0,
+    "environment": "web,worker"
+  },
+  "test": {
+    "assertions": 1,
+    "environment": "web,worker,node"
+  }
+}

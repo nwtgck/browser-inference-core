@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -22,7 +22,8 @@ if (SPEECH_INSTALLED_GGML)
+ else()
+     set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+     set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+-    add_subdirectory(ggml)
++    set(SPEECH_GGML_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ggml" CACHE PATH "ggml source directory")
++    add_subdirectory("${SPEECH_GGML_SOURCE_DIR}" ggml)
+ endif()
+ 
+ # Source files are UTF-8; MSVC otherwise reads them in the system code page.

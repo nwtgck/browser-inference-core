@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { decodeAbiSchema, decodeAbiExtensionSidecar, type AbiSchema, type AbiCatalog, type AbiExtensionSidecar, type FileEntry, type PackageMetadata, type RuntimeName } from '#dto/shared';
 import type { LlamaProvenance } from '#dto/llama-cpp';
 import type { StableDiffusionProvenance } from '#dto/stable-diffusion-cpp';
+import type { SpeechManifest, SpeechProvenance } from '#dto/speech-cpp';
 import { assembleAbiCatalog, renderSchemaModule, renderFunctionTypes, renderFunctionModule } from '#tools/abi/schema';
 import { renderExtensionDeclarations } from '#tools/abi/generate';
 import { withOutputDirectories } from '#tools/shared/output';
@@ -13,7 +14,7 @@ import { runtimeExports } from './layout.js';
 import { writeLicenseIndex } from './licenses.js';
 
 export type { RuntimeValidation } from './runtime.js';
-type Provenance = LlamaProvenance | StableDiffusionProvenance;
+type Provenance = LlamaProvenance | StableDiffusionProvenance | SpeechProvenance;
 export type PackageProfiles<P extends Provenance> = Record<string, { variants: Record<string, P> }>;
 
 export async function assembleRuntimePackage<P extends Provenance, M extends RuntimeManifest>({ sourceRoot, runtime, buildRoot, destination, profiles, variants, extraFiles, licenseRoots, copyLicenses, decodeProvenance, createManifest, verify }: {
@@ -77,7 +78,7 @@ export async function assembleRuntimePackage<P extends Provenance, M extends Run
       switch (runtime) {
       case 'llama-cpp': await writeFile(join(output, 'api/extensions.d.ts'), renderExtensionDeclarations({ declarations: catalog.extensionDeclarations ?? [] }));
         break;
-      case 'stable-diffusion-cpp': break;
+      case 'stable-diffusion-cpp': case 'speech-cpp': break;
       default: {
         const exhaustive: never = runtime;
         throw new Error(String(exhaustive));

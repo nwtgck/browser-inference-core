@@ -118,7 +118,22 @@ export function renderModuleTypes({ schema }: { schema: AbiSchema }): string {
     }
     return native.kind === 'integer' && native.bits === 64 ? 'bigint' : 'number';
   };
-  const lines = ['import type { CoreOptions } from "./module-options.js";', 'export type { CoreOptions } from "./module-options.js";', '/** Raw target exports. Use the host caller for suspension and range checks. */', 'export interface StableDiffusionModule {', '  HEAPU8: Uint8Array<ArrayBuffer>;', '  FS: {', '    mkdir(path: string): unknown;', '  };', '  addFunction(callback: (...args: (number | bigint)[]) => number | bigint | void, signature: string): number | bigint;', '  removeFunction(pointer: number | bigint): void;', '  ccall(name: string, result: "number" | "bigint" | undefined, types: readonly ("number" | "bigint")[], args: readonly (number | bigint)[], options: { async: true }): unknown;', '  _bicore_abi_version(): number;', '  _bicore_pointer_bytes(): number;', `  _bicore_schema_hash(): ${schema.pointerBytes === 8 ? 'bigint' : 'number'};`, '  _bicore_model_io_capabilities(): number;', '  _malloc(size: number): number;', '  _free(pointer: number): void;'];
+  let moduleName: string;
+  switch (schema.runtime) {
+  case 'speech-cpp': moduleName = 'SpeechModule';
+    break;
+  case 'stable-diffusion-cpp': moduleName = 'StableDiffusionModule';
+    break;
+  case 'llama-cpp': throw new Error('Llama module types come from its compiled Emscripten declarations');
+  default: {
+    const exhaustive: never = schema.runtime;
+    throw new Error(String(exhaustive));
+  }
+  }
+  // Infer the callback's scalar tuple: a union-valued rest array would require
+  // every fixed parameter to accept both number and bigint under strict types.
+  const callbackMethod = '  addFunction<Args extends (number | bigint)[]>(callback: (...args: Args) => number | bigint | void, signature: string): number | bigint;';
+  const lines = ['import type { CoreOptions } from "./module-options.js";', 'export type { CoreOptions } from "./module-options.js";', '/** Raw target exports. Use the host caller for suspension and range checks. */', `export interface ${moduleName} {`, '  HEAPU8: Uint8Array<ArrayBuffer>;', '  FS: {', '    mkdir(path: string): unknown;', '  };', callbackMethod, '  removeFunction(pointer: number | bigint): void;', '  ccall(name: string, result: "number" | "bigint" | undefined, types: readonly ("number" | "bigint")[], args: readonly (number | bigint)[], options: { async: true }): unknown;', '  _bicore_abi_version(): number;', '  _bicore_pointer_bytes(): number;', `  _bicore_schema_hash(): ${schema.pointerBytes === 8 ? 'bigint' : 'number'};`, '  _bicore_model_io_capabilities(): number;', '  _malloc(size: number): number;', '  _free(pointer: number): void;'];
   for (const fn of [...schema.functions, ...schema.testFunctions ?? []]) {
     const args = fn.parameters.map((parameter, index) => `arg${index}: ${rawType({ fn, parameter })}`);
     if (loweredReturn({ kind: fn.returnKind }).output) {
@@ -127,7 +142,7 @@ export function renderModuleTypes({ schema }: { schema: AbiSchema }): string {
     const result = rawType({ fn, parameter: undefined });
     lines.push(`  ${fn.export}(${args.join(', ')}): ${result}${schema.suspendingExports.includes(fn.export.slice(1)) ? ` | Promise<${result}>` : ''};`);
   }
-  lines.push('}', 'export default function createModule(options?: CoreOptions): Promise<StableDiffusionModule>;', '');
+  lines.push('}', `export default function createModule(options?: CoreOptions): Promise<${moduleName}>;`, '');
   return lines.join('\n');
 }
 
@@ -192,7 +207,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
       }
     }
     break;
-  case 'stable-diffusion-cpp':
+  case 'stable-diffusion-cpp': case 'speech-cpp':
     helpers.push('_bicore_model_io_capabilities');
     moduleTypes = 'core.d.ts';
     break;
@@ -203,11 +218,22 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
   }
   const baseFunctions = [...functions.values()].sort((left, right) => left.name.localeCompare(right.name));
   const testFunctions: AbiFunction[] = [];
+  let testPrefix: string | undefined;
   switch (policy.runtime) {
-  case 'llama-cpp': break;
-  case 'stable-diffusion-cpp':
+  case 'llama-cpp': testPrefix = undefined;
+    break;
+  case 'stable-diffusion-cpp': testPrefix = 'sdc_test_';
+    break;
+  case 'speech-cpp': testPrefix = 'spc_test_';
+    break;
+  default: {
+    const exhaustive: never = policy.runtime;
+    throw new Error(String(exhaustive));
+  }
+  }
+  if (testPrefix !== undefined) {
     for (const { node, namespaces } of entries) {
-      if (namespaces.length || node.kind !== 'FunctionDecl' || !node.name?.startsWith('sdc_test_')) {
+      if (namespaces.length || node.kind !== 'FunctionDecl' || !node.name?.startsWith(testPrefix)) {
         continue;
       }
       const fn = returnPublicFunction({ declarations, node });
@@ -219,11 +245,6 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
       }
     }
     testFunctions.sort((left, right) => left.name.localeCompare(right.name));
-    break;
-  default: {
-    const exhaustive: never = policy.runtime;
-    throw new Error(String(exhaustive));
-  }
   }
   for (const name of declarations.suspendingTests) {
     if (!testFunctions.some((fn) => fn.name === name)) {
@@ -268,7 +289,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
     schemaSha256: '0'.repeat(64),
     functions: baseFunctions,
     records: recordList,
-    callbacks: [...declarations.callbacks.values()].filter((callback) => /^(?:ggml|gguf|llama|mtmd|sd)_/u.test(callback.name) && !callback.name.startsWith('ggml_backend_webgpu_q8_diagnostic_')).sort((left, right) => left.name.localeCompare(right.name)),
+    callbacks: [...declarations.callbacks.values()].filter((callback) => /^(?:ggml|gguf|llama|mtmd|sd|speech)_/u.test(callback.name) && !callback.name.startsWith('ggml_backend_webgpu_q8_diagnostic_')).sort((left, right) => left.name.localeCompare(right.name)),
     constants: Object.keys(constantValues),
     constantValues,
     excluded: [...excluded].map(([name, reason]) => ({ name, reason })).sort((left, right) => left.name.localeCompare(right.name)),
@@ -282,7 +303,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
   switch (policy.runtime) {
   case 'llama-cpp': schema.extensionDeclarations = extensionDeclarations;
     break;
-  case 'stable-diffusion-cpp': break;
+  case 'stable-diffusion-cpp': case 'speech-cpp': break;
   default: {
     const exhaustive: never = policy.runtime;
     throw new Error(String(exhaustive));
@@ -316,7 +337,7 @@ export async function generateBindings({ policy, compileRoot, compilationDatabas
       }
       await Promise.all([...files].map(([name, text]) => writeFile(path.join(destination, name), text)));
       if (moduleTypes) {
-        await copyFile(path.join(compileRoot, 'runtimes/stable-diffusion-cpp/bindings/module-options.d.ts'), path.join(destination, 'module-options.d.ts'));
+        await copyFile(path.join(compileRoot, 'runtimes', policy.runtime, 'bindings/module-options.d.ts'), path.join(destination, 'module-options.d.ts'));
       }
       // Keep the ordinary fingerprint header's mtime when semantic metadata did
       // not change. CMake still verifies and renders the fixed template below.

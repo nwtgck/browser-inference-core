@@ -5,7 +5,7 @@ export type JsonValue = z.infer<typeof jsonSchema>;
 export const jsonObjectSchema = z.record(z.string(), jsonSchema);
 export type JsonObject = z.infer<typeof jsonObjectSchema>;
 
-export const runtimeNameSchema = z.enum(['llama-cpp', 'stable-diffusion-cpp']);
+export const runtimeNameSchema = z.enum(['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp']);
 export type RuntimeName = z.infer<typeof runtimeNameSchema>;
 
 // DTOs describe wire structure. Paths, hashes, sizes and source identities are
@@ -44,11 +44,12 @@ export const buildCacheSchema = z.object({ identity: z.string().optional(), comp
 export type BuildCache = z.infer<typeof buildCacheSchema>;
 
 export const rootManifestSchema = z.object({
-  formatVersion: z.literal(5),
+  formatVersion: z.literal(6),
   sourceCommit: z.string(),
   runtimes: z.object({
     'llama-cpp': z.object({ manifest: z.string(), manifestFormatVersion: z.literal(2) }).catchall(jsonSchema),
     'stable-diffusion-cpp': z.object({ manifest: z.string(), manifestFormatVersion: z.literal(2) }).catchall(jsonSchema),
+    'speech-cpp': z.object({ manifest: z.string(), manifestFormatVersion: z.literal(2) }).catchall(jsonSchema),
   }).catchall(jsonSchema),
   files: z.array(fileEntrySchema),
 }).catchall(jsonSchema);

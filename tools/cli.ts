@@ -17,6 +17,8 @@ function runtimePackageKind({ runtime }: { runtime: RuntimeName | undefined }): 
     return 'llama';
   case 'stable-diffusion-cpp':
     return 'image';
+  case 'speech-cpp':
+    return 'speech';
   case undefined:
     return 'root';
   default: {
@@ -45,6 +47,10 @@ async function runtimeConfiguration({ runtime, checkoutRoot, profile, variant }:
     const module = await import('#runtimes/stable-diffusion-cpp/tools/config');
     return module.selectConfiguration({ configuration: await module.loadConfiguration({ checkoutRoot }), profile, variant });
   }
+  case 'speech-cpp': {
+    const module = await import('#runtimes/speech-cpp/tools/config');
+    return module.selectConfiguration({ configuration: await module.loadConfiguration({ checkoutRoot }), profile, variant });
+  }
   default: {
     const exhaustive: never = runtime;
     throw new Error(String(exhaustive));
@@ -57,8 +63,8 @@ export type CliModules = {
   toolchainPrepare: () => Promise<Pick<typeof import('#tools/toolchain/prepare'), 'prepareToolchain'>>;
   cachePlanCli: () => Promise<Pick<typeof import('#tools/toolchain/cli-options'), 'runCachePlan'>>;
   runtimeConfiguration: typeof runtimeConfiguration;
-  runtimePackage: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/package'), 'buildPackage'>>;
-  runtimeVerify: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/verify'), 'verifyRuntimePackage'>>;
+  runtimePackage: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/speech-cpp/tools/package'), 'buildPackage'>>;
+  runtimeVerify: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/speech-cpp/tools/verify'), 'verifyRuntimePackage'>>;
   aggregate: () => Promise<Pick<typeof import('#tools/package/aggregate'), 'assemblePackage' | 'validatePackage'>>;
   publication: () => Promise<Pick<typeof import('#tools/publication/artifacts'), 'freezePackage' | 'confirmPublication'>>;
   publicationSources: () => Promise<Pick<typeof import('#tools/publication/source'), 'verifyPublicationSources'>>;
@@ -78,6 +84,8 @@ const defaultModules: CliModules = {
       return import('#runtimes/llama-cpp/tools/package');
     case 'stable-diffusion-cpp':
       return import('#runtimes/stable-diffusion-cpp/tools/package');
+    case 'speech-cpp':
+      return import('#runtimes/speech-cpp/tools/package');
     default: {
       const exhaustive: never = runtime;
       throw new Error(String(exhaustive));
@@ -90,6 +98,8 @@ const defaultModules: CliModules = {
       return import('#runtimes/llama-cpp/tools/verify');
     case 'stable-diffusion-cpp':
       return import('#runtimes/stable-diffusion-cpp/tools/verify');
+    case 'speech-cpp':
+      return import('#runtimes/speech-cpp/tools/verify');
     default: {
       const exhaustive: never = runtime;
       throw new Error(String(exhaustive));
@@ -194,7 +204,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
           await emit({ value: { runtime: options.runtime, sourceCommit: result.manifest.sourceCommit, output: destination }, output: undefined });
         },
       }))
-      .command('assemble', 'Assemble both runtime packages', command => command
+      .command('assemble', 'Assemble all runtime packages', command => command
         .option('checkout-root', checkoutRootOption)
         .option('inputs', requiredString)
         .option('output', requiredString)

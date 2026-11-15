@@ -7,3 +7,9 @@
 [submodule "stable-diffusion-cpp/vendor/ggml-webgpu-source"]
 	path = runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source
 	url = https://github.com/ggml-org/llama.cpp.git
+[submodule "speech-cpp/vendor/speech.cpp"]
+	path = runtimes/speech-cpp/vendor/speech.cpp
+	url = https://github.com/nyosegawa/speech.cpp.git
+[submodule "speech-cpp/vendor/ggml"]
+	path = runtimes/speech-cpp/vendor/ggml
+	url = https://github.com/nyosegawa/ggml.git

@@ -1,10 +1,11 @@
 import type { FileEntry } from '#dto/shared';
 import { relativePath } from './files.js';
 
-export const runtimeNames = ['llama-cpp', 'stable-diffusion-cpp'] as const;
+export const runtimeNames = ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp'] as const;
 export const artifactDirectories = {
   'llama-cpp': 'runtimes/llama-cpp-browser-core',
   'stable-diffusion-cpp': 'runtimes/stable-diffusion-cpp-browser-core',
+  'speech-cpp': 'runtimes/speech-cpp-browser-core',
 } as const;
 export const packageName = 'browser-inference-core';
 

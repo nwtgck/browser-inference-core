@@ -25,7 +25,7 @@ export function runtimeExports({ runtime, prefix }: { runtime: RuntimeName; pref
       exports[`./profiles/*/${extension}.functions`] = { types: `${prefix}/profiles/*/${extension}.functions.d.ts` };
     }
     break;
-  case 'stable-diffusion-cpp': break;
+  case 'stable-diffusion-cpp': case 'speech-cpp': break;
   default: {
     const exhaustive: never = runtime;
     throw new Error(String(exhaustive));

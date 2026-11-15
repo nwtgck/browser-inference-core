@@ -1,0 +1,135 @@
+cmake_minimum_required(VERSION 3.24)
+project(speech-cpp-browser-core LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(SPCB_SOURCE "" CACHE PATH "Prepared speech.cpp source (never vendor)")
+set(SPCB_GGML_SOURCE "" CACHE PATH "Prepared independent ggml source (never vendor)")
+set(SPCB_PROVENANCE "" CACHE FILEPATH "Checked source preparation receipt")
+set(SPCB_CHECKOUT_ROOT "" CACHE PATH "Checkout owning the static tooling")
+set(SPCB_COMPILE_ROOT "" CACHE PATH "Private owned compiler inputs")
+set(SPCB_TOOLING_ROOT "" CACHE PATH "Normal emitted tooling for the checkout")
+set(SPCB_NODE "" CACHE FILEPATH "Node executable used for compiled tooling")
+option(SPCB_NATIVE_CHECK "Native ABI checks, not a browser distribution" OFF)
+option(SPCB_MEMORY64 "Use 64-bit Wasm addresses; file offsets are always 64-bit" ON)
+option(SPCB_WEBGPU "Include the WebGPU backend in Wasm builds" ON)
+option(SPCB_JSPI "Use JavaScript Promise Integration" ON)
+set(SPCB_MAXIMUM_MEMORY "17179869184" CACHE STRING "Wasm linear memory ceiling")
+set(SPCB_VARIANT "browser" CACHE STRING "browser or test")
+if(NOT SPCB_VARIANT MATCHES "^(browser|test)$")
+    message(FATAL_ERROR "Unknown variant")
+endif()
+if(NOT EXISTS "${SPCB_SOURCE}/include/speech.h" OR NOT EXISTS "${SPCB_GGML_SOURCE}/include/ggml.h")
+    message(FATAL_ERROR "Prepare the independent pinned upstream sources first")
+endif()
+if(NOT EMSCRIPTEN AND NOT SPCB_NATIVE_CHECK)
+    message(FATAL_ERROR "Use emcmake or SPCB_NATIVE_CHECK")
+endif()
+if(EMSCRIPTEN AND (NOT SPCB_MEMORY64 OR NOT SPCB_WEBGPU OR NOT SPCB_JSPI))
+    message(FATAL_ERROR "The speech browser runtime currently requires WebGPU, memory64 and JSPI")
+endif()
+if(NOT EXISTS "${SPCB_PROVENANCE}")
+    message(FATAL_ERROR "Pass the checked source preparation receipt as SPCB_PROVENANCE")
+endif()
+file(READ "${SPCB_PROVENANCE}" SPCB_SOURCE_RECORD)
+foreach(role speech ggml)
+    string(JSON identity ERROR_VARIABLE identity_error GET "${SPCB_SOURCE_RECORD}" upstreams "${role}" commit)
+    string(LENGTH "${identity}" identity_length)
+    if(identity_error OR NOT identity_length EQUAL 40 OR NOT identity MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "Invalid upstream identity in source receipt: ${role}")
+    endif()
+    set("SPCB_COMMIT_${role}" "${identity}")
+endforeach()
+if(NOT EXISTS "${SPCB_COMPILE_ROOT}/tools/abi/Bindings.cmake" OR
+   NOT EXISTS "${SPCB_TOOLING_ROOT}/runtimes/speech-cpp/tools/bindings.js" OR
+   NOT EXISTS "${SPCB_NODE}")
+    message(FATAL_ERROR "Pass the compile root, checkout root, emitted tooling root and Node executable")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${SPCB_PROVENANCE}" "${CMAKE_CURRENT_SOURCE_DIR}/config/variants.json")
+set(SPCB_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
+include("${SPCB_COMPILE_ROOT}/tools/abi/Bindings.cmake")
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+foreach(flag OPENMP BLAS METAL CUDA VULKAN BACKEND_DL BUILD_TESTS BUILD_EXAMPLES)
+    set(GGML_${flag} OFF CACHE BOOL "" FORCE)
+endforeach()
+if(EMSCRIPTEN)
+    set(GGML_WEBGPU ON CACHE BOOL "" FORCE)
+    add_compile_options(-msimd128 -sMEMORY64=1 -fwasm-exceptions)
+    add_link_options(-sMEMORY64=1 -fwasm-exceptions)
+else()
+    set(GGML_WEBGPU OFF CACHE BOOL "" FORCE)
+endif()
+set(GGML_WEBGPU_JSPI ON CACHE BOOL "" FORCE)
+set(SPEECH_INSTALLED_GGML OFF CACHE BOOL "" FORCE)
+set(SPEECH_GGML_SOURCE_DIR "${SPCB_GGML_SOURCE}" CACHE PATH "" FORCE)
+function(add_prepared_upstreams)
+    # Pin ggml metadata without letting its Git probes discover the enclosing
+    # checkout. The source preparation receipt remains the full provenance.
+    set(GIT_EXE OFF)
+    set(GGML_GIT_DIRTY 0)
+    set(GGML_BUILD_COMMIT "${SPCB_COMMIT_ggml}-bicore")
+    # Upstream also declares CLI/shared/check targets. Only speech-static and its
+    # model-family dependencies participate in this runtime's target graph.
+    add_subdirectory("${SPCB_SOURCE}" upstream EXCLUDE_FROM_ALL)
+endfunction()
+add_prepared_upstreams()
+
+if(SPCB_NATIVE_CHECK)
+    add_library(core SHARED native/abi/bridge.cpp native/abi/metadata.cpp)
+    if(UNIX AND NOT APPLE)
+        target_link_options(core PRIVATE -Wl,--no-undefined)
+    endif()
+else()
+    add_executable(core native/abi/bridge.cpp native/abi/metadata.cpp)
+    set_target_properties(core PROPERTIES SUFFIX ".mjs" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runtime")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/config/variants.json" variants)
+    string(JSON assertions GET "${variants}" "${SPCB_VARIANT}" assertions)
+    string(JSON environment GET "${variants}" "${SPCB_VARIANT}" environment)
+    if(SPCB_VARIANT STREQUAL "test")
+        target_sources(core PRIVATE "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native/wasm-probes.cpp")
+        target_include_directories(core PRIVATE "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native"
+            "${SPCB_SOURCE}/src/common")
+        target_compile_definitions(core PRIVATE SPCB_VARIANT_TEST=1)
+    endif()
+    set_property(TARGET core APPEND PROPERTY LINK_DEPENDS
+        "${SPCB_GENERATED}/exports.json" "${SPCB_GENERATED}/jspi-exports.json"
+        "${EMSCRIPTEN_ROOT_PATH}/src/lib/libasync.js")
+    target_link_options(core PRIVATE --no-entry -sMODULARIZE=1 -sEXPORT_ES6=1
+        -sEXPORT_NAME=createSpeechCore "-sENVIRONMENT=${environment}"
+        -sALLOW_MEMORY_GROWTH=1 "-sMAXIMUM_MEMORY=${SPCB_MAXIMUM_MEMORY}" -sINITIAL_HEAP=33554432
+        -sSTACK_SIZE=2097152 -sWASM_BIGINT=1 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1
+        -sALLOW_TABLE_GROWTH=1 "-sASSERTIONS=${assertions}"
+        "-sEXPORTED_FUNCTIONS=@${SPCB_GENERATED}/exports.json"
+        "-sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8','ccall','addFunction','removeFunction','UTF8ToString']"
+        "-sINCOMING_MODULE_JS_API=['wasmBinary','instantiateWasm','locateFile','print','printErr','onAbort']"
+        -sJSPI=1 "-sJSPI_EXPORTS=@${SPCB_GENERATED}/jspi-exports.json")
+endif()
+target_include_directories(core PRIVATE "${SPCB_SOURCE}/include")
+if(SPCB_NATIVE_CHECK)
+    # The native ABI check library must retain the same public API that the Wasm
+    # export list retains, including entry points unused by the owned metadata.
+    target_link_libraries(core PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,speech-static>")
+else()
+    target_link_libraries(core PRIVATE speech-static)
+endif()
+bicore_add_abi(TARGET core RUNTIME speech-cpp
+    CHECKOUT_ROOT "${SPCB_CHECKOUT_ROOT}" COMPILE_ROOT "${SPCB_COMPILE_ROOT}" TOOLING_ROOT "${SPCB_TOOLING_ROOT}" NODE "${SPCB_NODE}"
+    OUTPUT "${SPCB_GENERATED}" SPEECH_SOURCE "${SPCB_SOURCE}" GGML_SOURCE "${SPCB_GGML_SOURCE}")
+if(SPCB_NATIVE_CHECK)
+    enable_testing()
+    add_subdirectory("${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native" native-tests)
+endif()
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/target-sources")
+include("${SPCB_COMPILE_ROOT}/tools/shared/TargetSources.cmake")
+foreach(SPCB_INPUT_TARGET core speech-static speechcommon qwen3tts irodoritts drama3 haru fastconformer
+        qwen3asr nemotrontranscribe silerovad sortformer semamba ggml-base ggml-cpu ggml-webgpu)
+    if(TARGET ${SPCB_INPUT_TARGET})
+        bicore_record_target_sources(TARGET ${SPCB_INPUT_TARGET}
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/target-sources/${SPCB_INPUT_TARGET}.txt")
+    endif()
+endforeach()

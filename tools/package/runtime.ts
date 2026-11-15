@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { decodeAbiCatalog, decodeAbiSchema, decodeAbiExtensionSidecar, decodeLicenseIndex, decodePackageMetadata, decodeStringArray, type RuntimeName, type FileEntry, type FileIdentity, type PackageMetadata, type LicenseIndex, type AbiCatalog, type AbiSchema, type AbiExtensionSidecar } from '#dto/shared';
 import type { LlamaManifest, LlamaProvenance } from '#dto/llama-cpp';
 import type { StableDiffusionManifest, StableDiffusionProvenance } from '#dto/stable-diffusion-cpp';
+import type { SpeechManifest, SpeechProvenance } from '#dto/speech-cpp';
 import { inventory } from '#tools/shared/contracts';
 import { parseJson } from '#tools/shared/json';
 import { regularFile, containedPath } from '#tools/shared/files';
@@ -12,8 +13,8 @@ import { runtimeExports } from './layout.js';
 import { renderExtensionTypes, renderExtensionDeclarations, renderModuleTypes } from '#tools/abi/generate';
 import { abiSchemaFingerprint, assembleAbiCatalog, renderSchemaModule, renderFunctionTypes, renderFunctionModule } from '#tools/abi/schema';
 
-export type RuntimeProfiles = Record<string, { variants: Record<string, LlamaProvenance | StableDiffusionProvenance> }>;
-export type RuntimeManifest = LlamaManifest | StableDiffusionManifest;
+export type RuntimeProfiles = Record<string, { variants: Record<string, LlamaProvenance | StableDiffusionProvenance | SpeechProvenance> }>;
+export type RuntimeManifest = LlamaManifest | StableDiffusionManifest | SpeechManifest;
 export type RuntimePackageInput<M extends RuntimeManifest = RuntimeManifest> = {
   directory: string;
   manifest: M;
@@ -87,6 +88,9 @@ export function hostProfiles({ runtime, profiles, variants }: { runtime: Runtime
   case 'stable-diffusion-cpp': module = 'StableDiffusionModule';
     coreModuleAlias = 'export type CoreModule = ModuleByProfile[Profile][Variant];';
     break;
+  case 'speech-cpp': module = 'SpeechModule';
+    coreModuleAlias = 'export type CoreModule = ModuleByProfile[Profile][Variant];';
+    break;
   default: {
     const exhaustive: never = runtime;
     throw new Error(String(exhaustive));
@@ -151,7 +155,7 @@ export async function validateRuntimePayload<M extends RuntimeManifest>({ input,
       await requireFiles({ files, names: ['mjs', 'wasm', 'd.ts', 'json'].map(extension => extension === 'json' ? `profiles/${profile}/${variant}/abi.json` : `profiles/${profile}/${variant}/core.${extension}`) });
       switch (runtime) {
       case 'llama-cpp': break;
-      case 'stable-diffusion-cpp':
+      case 'stable-diffusion-cpp': case 'speech-cpp':
         await requireFiles({ files, names: [`profiles/${profile}/${variant}/module-options.d.ts`] });
         break;
       default: {
@@ -264,7 +268,7 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
       throw new Error('Public extension types differ from compiler declarations');
     }
     break;
-  case 'stable-diffusion-cpp': break;
+  case 'stable-diffusion-cpp': case 'speech-cpp': break;
   default: {
     const exhaustive: never = runtime;
     throw new Error(String(exhaustive));
@@ -310,7 +314,7 @@ export async function validateApi({ input, files }: { input: RuntimePackageInput
           throw new Error('Optional boundary types differ from compiled declaration');
         }
       }
-      if (runtime === 'stable-diffusion-cpp' && await readFile(join(directory, 'profiles', profile, variant, 'core.d.ts'), 'utf8') !== renderModuleTypes({ schema: target })) {
+      if ((runtime === 'stable-diffusion-cpp' || runtime === 'speech-cpp') && await readFile(join(directory, 'profiles', profile, variant, 'core.d.ts'), 'utf8') !== renderModuleTypes({ schema: target })) {
         throw new Error('Native module TypeScript declarations differ from compiled ABI');
       }
       await validateProfileWasm({ directory, files, relative: `profiles/${profile}/${variant}/core.wasm`, exports: target.exports });

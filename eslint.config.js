@@ -28,7 +28,7 @@ const privateDtoImports = {
   // directly, with complete path segments rather than directory substrings.
   regex: '^#dto-internal(?:/|$)|^#dto/[^/]+/|(?:^|/)00-dto(?:/|$)',
   caseSensitive: true,
-  message: 'Import DTO types and decoders through #dto/shared, #dto/llama-cpp or #dto/stable-diffusion-cpp.',
+  message: 'Import DTO types and decoders through #dto/shared or a public #dto/<runtime> entry.',
 };
 const privateDtoSyntax = {
   selector: [

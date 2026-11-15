@@ -17,6 +17,7 @@ export const runtimeTestInputs = {
     'runtimes/llama-cpp/vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'tools/validation/synthetic-model.ts',
     'tools/shared/node-env.ts',
   ],
+  'speech-cpp': [],
   'stable-diffusion-cpp': [
     'tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs', 'tests/runtimes/stable_diffusion_cpp/gguf-fixture.mjs',
     'tests/runtimes/stable_diffusion_cpp/model-io-fixtures.mjs', 'tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.mjs',
@@ -37,6 +38,8 @@ export function testFilesForRuntime({ checkoutRoot, runtime }: { checkoutRoot: s
     files[relative] = path.join(checkoutRoot, relative);
   }
   switch (runtime) {
+  case 'speech-cpp':
+    throw new Error('Speech browser validation has no supported harness');
   case 'llama-cpp':
     files['executed/synthetic-model.js'] = fileURLToPath(import.meta.resolve('#tools/validation/synthetic-model'));
     break;
@@ -55,6 +58,8 @@ export function testFilesForRuntime({ checkoutRoot, runtime }: { checkoutRoot: s
 export async function validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory, receiptPath, settings, childEnvironment, runProcess }: { checkoutRoot: string; runtime: RuntimeName; packageDirectory: string; receiptPath: string; settings: ExecutionSettings & { testWebGpu?: string | undefined }; childEnvironment: ChildEnvironment | undefined; runProcess: typeof import('#tools/shared/process').runProcess }): Promise<ValidationReceipt<'llama-cpp', LlamaBrowserResult> | ValidationReceipt<'stable-diffusion-cpp', StableDiffusionBrowserResult>> {
   await clearValidationReceipt({ packageDirectory, receiptPath });
   switch (runtime) {
+  case 'speech-cpp':
+    throw new Error('Speech browser validation has no supported harness');
   case 'llama-cpp': {
     const [{ loadConfiguration }, { verifyRuntimePackage, verifyRuntimeInput }, { checkedLlamaResults, addLlamaValidation }] = await Promise.all([
       import('#runtimes/llama-cpp/tools/config'), import('#runtimes/llama-cpp/tools/verify'), import('./llama-results.js'),

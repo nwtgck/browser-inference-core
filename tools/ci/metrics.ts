@@ -17,7 +17,7 @@ export type CacheEnvironmentSettings = {
   cacheUseMode?: string | undefined; emCache?: string | undefined; compilerWrapper?: string | undefined;
   ccacheDirectory?: string | undefined; ccacheConfiguration?: string | undefined; compilerIdentity?: string | undefined;
 };
-export type PackageKind = 'llama' | 'image' | 'root';
+export type PackageKind = 'llama' | 'image' | 'speech' | 'root';
 export type SpanStart = MetricContext & {
   schemaVersion: 1; mode: 'basic'; clock: 'monotonic_ns'; event: 'span_start'; phase: string; spanId: string;
   parentSpanId: string | undefined; startedNs: number; packageKind: PackageKind | undefined;

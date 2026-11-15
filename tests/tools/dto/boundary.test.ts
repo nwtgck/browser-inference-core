@@ -89,9 +89,9 @@ const imageManifest: StableDiffusionManifest = {
   profiles: { cpu: { variants: { browser: imageProvenance } } },
 };
 const rootManifest: RootManifest = {
-  formatVersion: 5,
+  formatVersion: 6,
   sourceCommit: 'observed-source',
-  runtimes: { 'llama-cpp': { manifest: 'runtimes/llama/manifest.json', manifestFormatVersion: 2 }, 'stable-diffusion-cpp': { manifest: 'runtimes/image/manifest.json', manifestFormatVersion: 2 } },
+  runtimes: { 'llama-cpp': { manifest: 'runtimes/llama/manifest.json', manifestFormatVersion: 2 }, 'stable-diffusion-cpp': { manifest: 'runtimes/image/manifest.json', manifestFormatVersion: 2 }, 'speech-cpp': { manifest: 'runtimes/speech/manifest.json', manifestFormatVersion: 2 } },
   files: [{ path: 'README.md', ...identity }],
 };
 const abi: AbiSchema = {
@@ -355,6 +355,7 @@ test('private frozen input decodes source and report structures without a produc
     runtimes: {
       'llama-cpp': { upstream: 'observed-upstream', preparations: { cpu: { upstream: prepared.upstream, options: prepared.options, patches: prepared.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: { files: 1, sha256: 'prepared-tree' } } }, verifiedVariants: ['cpu/browser'] },
       'stable-diffusion-cpp': { upstreams, preparation: { files: 2, sha256: 'prepared-tree' }, patches: [], verifiedVariants: ['cpu/browser'] },
+      'speech-cpp': { upstreams: { speech: { path: 'vendor/speech.cpp', repository: 'nyosegawa/speech.cpp', commit: 'speech-commit' }, ggml: { path: 'vendor/ggml', repository: 'nyosegawa/ggml', commit: 'ggml-commit' } }, preparation: { files: 2, sha256: 'speech-tree' }, patches: [], verifiedVariants: ['webgpu-wasm64-jspi/browser'] },
     },
   };
   const data: ReportData = {
@@ -364,9 +365,10 @@ test('private frozen input decodes source and report structures without a produc
     runtimes: {
       'llama-cpp': { manifest: 'llama/manifest.json', abiVersion: 3, schemaSha256: 'abi-digest', upstreams: { llama: 'observed-upstream' }, profiles: { cpu: { variants: { browser: { configuration: llamaProvenance.configuration, variantConfiguration: llamaProvenance.variantConfiguration, validation: { compiled: true, syntheticUntrainedModel: llamaBrowserResult } } } } } },
       'stable-diffusion-cpp': { manifest: 'image/manifest.json', abiVersion: 3, schemaSha256: 'abi-digest', upstreams, profiles: {} },
+      'speech-cpp': { manifest: 'speech/manifest.json', abiVersion: 3, schemaSha256: 'speech-abi', upstreams: source.runtimes['speech-cpp'].upstreams, profiles: {} },
     },
   };
-  const frozen: FrozenPublication = { schemaVersion: 2, sourceCommit: 'observed-source', tree: 'observed-tree', branch: 'artifacts', manifest: identity, runtimeManifests: { 'llama-cpp': identity, 'stable-diffusion-cpp': identity }, report: { sha256: 'report-digest', data } };
+  const frozen: FrozenPublication = { schemaVersion: 2, sourceCommit: 'observed-source', tree: 'observed-tree', branch: 'artifacts', manifest: identity, runtimeManifests: { 'llama-cpp': identity, 'stable-diffusion-cpp': identity, 'speech-cpp': identity }, report: { sha256: 'report-digest', data } };
   assert.deepEqual(shared.decodeFrozenPublication({ input: frozen }), frozen);
   const future = { ...frozen, futureState: true, report: { ...frozen.report, data: { ...data, futureReport: { enabled: true } } } };
   assert.deepEqual(shared.decodeFrozenPublication({ input: future }), future);
