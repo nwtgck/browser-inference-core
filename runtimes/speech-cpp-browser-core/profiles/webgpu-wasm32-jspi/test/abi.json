@@ -3,7 +3,7 @@
   "runtime": "speech-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 4,
-  "schemaSha256": "1aca114bdc91b73f0cb606b1b50527968c87b1ceddecae5536e5c36d71e5c4fe",
+  "schemaSha256": "d9996e86307428cdbf3c26d29ec38b88b506f5f84b3b8c19b381183132ba02a1",
   "functions": [
     {
       "name": "speech_api_version_major",
@@ -4704,6 +4704,7 @@
     "_free",
     "_malloc",
     "_spc_test_emit_log",
+    "_spc_test_gguf_large_file",
     "_speech_api_version_major",
     "_speech_api_version_minor",
     "_speech_detect",
@@ -5016,6 +5017,19 @@
       "returnKind": "void",
       "abiType": {
         "kind": "void"
+      },
+      "parameters": [],
+      "bridge": false
+    },
+    {
+      "name": "spc_test_gguf_large_file",
+      "export": "_spc_test_gguf_large_file",
+      "returnType": "int",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
       },
       "parameters": [],
       "bridge": false

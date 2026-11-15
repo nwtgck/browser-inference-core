@@ -156,5 +156,6 @@ export interface SpeechModule {
   _speech_voice_params_set_speaker(arg0: number, arg1: number): number | Promise<number>;
   _speech_voice_params_set_transcript(arg0: number, arg1: number): number | Promise<number>;
   _spc_test_emit_log(): void;
+  _spc_test_gguf_large_file(): number;
 }
 export default function createModule(options?: CoreOptions): Promise<SpeechModule>;

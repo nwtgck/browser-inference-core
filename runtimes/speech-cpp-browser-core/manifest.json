@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
+  "sourceCommit": "2d168dd8353f310db1261bc7d658a9875ea63f62",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -21,7 +21,7 @@
     "callerOwnedRandomAccess": true,
     "upstreamApi": true
   },
-  "schemaSha256": "bbc02256712e1d4a0fa29ce897a01ae12964bb436975391cdb90000192ec22d0",
+  "schemaSha256": "7e57ea606a8d6795f8452c8d4f4644329cdcc4d1092e5ebd0fed3c18d125d914",
   "profiles": {
     "webgpu-wasm32-jspi": {
       "variants": {
@@ -29,7 +29,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
+          "sourceCommit": "2d168dd8353f310db1261bc7d658a9875ea63f62",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -151,6 +151,25 @@
                     "afterSha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
                   }
                 ]
+              },
+              {
+                "file": "0004-gguf-file-size-offsets.patch",
+                "target": "ggml",
+                "reason": "Keep GGUF logical data sizes and file offsets uint64_t while retaining native bounds for actual tensor and blob allocations.",
+                "mode": "apply",
+                "sha256": "4dc72f650ecdbdc83b60adaf8f7296ac6bf7a8c51ec840a92d23ce2a7f47a3ce",
+                "files": [
+                  {
+                    "path": "include/gguf.h",
+                    "beforeSha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+                    "afterSha256": "bd913b74992681dc1f729426b2131db07f5be9fadcd19e13c98146977aab47df"
+                  },
+                  {
+                    "path": "src/gguf.cpp",
+                    "beforeSha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5",
+                    "afterSha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -158,11 +177,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
+            "sourceCommit": "2d168dd8353f310db1261bc7d658a9875ea63f62",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
-                "bytes": 7800,
-                "sha256": "c5c0a6a14da2209265c87ba306f858bf7bb8c90635e1ed4c7067d99bc1274cb2"
+                "bytes": 7888,
+                "sha256": "a106e4959d9a2aca6531e3b6ed87a41cfb7bd3f92412b68ba73e81c06e5cc6ad"
               },
               "runtimes/speech-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -192,25 +211,33 @@
                 "bytes": 2272,
                 "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5"
               },
+              "runtimes/speech-cpp/upstream-patches/0004-gguf-file-size-offsets.patch": {
+                "bytes": 6564,
+                "sha256": "4dc72f650ecdbdc83b60adaf8f7296ac6bf7a8c51ec840a92d23ce2a7f47a3ce"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 2090,
-                "sha256": "1ed75996f23df26d74c449b375fe02a56c1af9dd1ae220864999c8e8bea997c6"
+                "bytes": 2616,
+                "sha256": "cf98e9e4d47055291f9f4eeccca487afc3f4212844c14e4b28d9071100ed8774"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 1127,
-                "sha256": "60960897b73e930ff8f3d2b3f4a39359f85f2e08efc71a00674d92474682264c"
+                "bytes": 1490,
+                "sha256": "8eeb170a417539d1056776f29bdcc899b5f4400a766ecaca26edb33fbbccd1c8"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
                 "sha256": "175a069be3a5fa3e98b07869ca0e291018df3105f577a71b24aa83f57539b41d"
+              },
+              "tests/runtimes/speech-cpp/native/gguf-large-file.cpp": {
+                "bytes": 5723,
+                "sha256": "5ee24e961551e147fe72973da2ea0536703a86ffc1a0d911e7fbae9780506884"
               },
               "tests/runtimes/speech-cpp/native/wasm-probes.cpp": {
                 "bytes": 145,
                 "sha256": "b519abc51e55266e67863d1406c84f3221fcd73b58ee44c7c24f2844ef64e63c"
               },
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
-                "bytes": 193,
-                "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+                "bytes": 309,
+                "sha256": "1964f5aec08d8729761ebd22a6b63bff7d2f36004fb53b24698ebf6d8aca95b7"
               },
               "tests/runtimes/speech-cpp/native/webgpu-buffer-planning.cpp": {
                 "bytes": 2666,
@@ -240,7 +267,7 @@
           },
           "preparedSources": {
             "files": 2069,
-            "sha256": "24ad7572e08a2d2aaf9644c85401a80764641e2a79887c4a7636b64ad10b4197"
+            "sha256": "0a8cbf6fc6b5b28b67883af29dc5da6c40810805412d9569926ada115dc630f4"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -1309,8 +1336,8 @@
                 "sha256": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab"
               },
               "prepared/ggml/src/gguf.cpp": {
-                "bytes": 58995,
-                "sha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5"
+                "bytes": 59785,
+                "sha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
               },
               "prepared/ggml/src/ggml-backend-dl.cpp": {
                 "bytes": 1051,
@@ -1527,7 +1554,7 @@
                 },
                 "prepared/ggml/include/gguf.h": {
                   "bytes": 11355,
-                  "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4"
+                  "sha256": "bd913b74992681dc1f729426b2131db07f5be9fadcd19e13c98146977aab47df"
                 },
                 "prepared/ggml/src/ggml.c": {
                   "bytes": 263472,
@@ -1570,8 +1597,8 @@
                   "sha256": "28ae5fca1f3be636b36cd6c4fa2ca74fd42d229bfbd5352eaf66f3727bb8a6da"
                 },
                 "prepared/ggml/src/gguf.cpp": {
-                  "bytes": 58995,
-                  "sha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5"
+                  "bytes": 59785,
+                  "sha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
                 }
               },
               "ggml-cpu": {
@@ -2182,7 +2209,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
+          "sourceCommit": "2d168dd8353f310db1261bc7d658a9875ea63f62",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2304,6 +2331,25 @@
                     "afterSha256": "5d4bda95950fbdf4785f53181b76263b0b019aba384c029962d9c515eae6287f"
                   }
                 ]
+              },
+              {
+                "file": "0004-gguf-file-size-offsets.patch",
+                "target": "ggml",
+                "reason": "Keep GGUF logical data sizes and file offsets uint64_t while retaining native bounds for actual tensor and blob allocations.",
+                "mode": "apply",
+                "sha256": "4dc72f650ecdbdc83b60adaf8f7296ac6bf7a8c51ec840a92d23ce2a7f47a3ce",
+                "files": [
+                  {
+                    "path": "include/gguf.h",
+                    "beforeSha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+                    "afterSha256": "bd913b74992681dc1f729426b2131db07f5be9fadcd19e13c98146977aab47df"
+                  },
+                  {
+                    "path": "src/gguf.cpp",
+                    "beforeSha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5",
+                    "afterSha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
+                  }
+                ]
               }
             ],
             "vendorCheckoutModified": false
@@ -2311,11 +2357,11 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "71d627f545b4c290fb8e330479b753566077e19a",
+            "sourceCommit": "2d168dd8353f310db1261bc7d658a9875ea63f62",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
-                "bytes": 7800,
-                "sha256": "c5c0a6a14da2209265c87ba306f858bf7bb8c90635e1ed4c7067d99bc1274cb2"
+                "bytes": 7888,
+                "sha256": "a106e4959d9a2aca6531e3b6ed87a41cfb7bd3f92412b68ba73e81c06e5cc6ad"
               },
               "runtimes/speech-cpp/bindings/module-options.d.ts": {
                 "bytes": 499,
@@ -2345,25 +2391,33 @@
                 "bytes": 2272,
                 "sha256": "adb8a599c7c0060b07d46b0650d90483d286e2bbf242bf82ff896751ae51e3b5"
               },
+              "runtimes/speech-cpp/upstream-patches/0004-gguf-file-size-offsets.patch": {
+                "bytes": 6564,
+                "sha256": "4dc72f650ecdbdc83b60adaf8f7296ac6bf7a8c51ec840a92d23ce2a7f47a3ce"
+              },
               "runtimes/speech-cpp/upstream-patches/README.md": {
-                "bytes": 2090,
-                "sha256": "1ed75996f23df26d74c449b375fe02a56c1af9dd1ae220864999c8e8bea997c6"
+                "bytes": 2616,
+                "sha256": "cf98e9e4d47055291f9f4eeccca487afc3f4212844c14e4b28d9071100ed8774"
               },
               "tests/runtimes/speech-cpp/native/CMakeLists.txt": {
-                "bytes": 1127,
-                "sha256": "60960897b73e930ff8f3d2b3f4a39359f85f2e08efc71a00674d92474682264c"
+                "bytes": 1490,
+                "sha256": "8eeb170a417539d1056776f29bdcc899b5f4400a766ecaca26edb33fbbccd1c8"
               },
               "tests/runtimes/speech-cpp/native/api-contract.cpp": {
                 "bytes": 4851,
                 "sha256": "175a069be3a5fa3e98b07869ca0e291018df3105f577a71b24aa83f57539b41d"
+              },
+              "tests/runtimes/speech-cpp/native/gguf-large-file.cpp": {
+                "bytes": 5723,
+                "sha256": "5ee24e961551e147fe72973da2ea0536703a86ffc1a0d911e7fbae9780506884"
               },
               "tests/runtimes/speech-cpp/native/wasm-probes.cpp": {
                 "bytes": 145,
                 "sha256": "b519abc51e55266e67863d1406c84f3221fcd73b58ee44c7c24f2844ef64e63c"
               },
               "tests/runtimes/speech-cpp/native/wasm-probes.h": {
-                "bytes": 193,
-                "sha256": "2967bf8b680f28879199d65ddfd581cc9de00bccbaeb8eee8c8011b5cc07241d"
+                "bytes": 309,
+                "sha256": "1964f5aec08d8729761ebd22a6b63bff7d2f36004fb53b24698ebf6d8aca95b7"
               },
               "tests/runtimes/speech-cpp/native/webgpu-buffer-planning.cpp": {
                 "bytes": 2666,
@@ -2393,7 +2447,7 @@
           },
           "preparedSources": {
             "files": 2069,
-            "sha256": "24ad7572e08a2d2aaf9644c85401a80764641e2a79887c4a7636b64ad10b4197"
+            "sha256": "0a8cbf6fc6b5b28b67883af29dc5da6c40810805412d9569926ada115dc630f4"
           },
           "compiledInputs": {
             "translationUnits": {
@@ -2408,6 +2462,10 @@
               "compile/tests/runtimes/speech-cpp/native/wasm-probes.cpp": {
                 "bytes": 145,
                 "sha256": "b519abc51e55266e67863d1406c84f3221fcd73b58ee44c7c24f2844ef64e63c"
+              },
+              "compile/tests/runtimes/speech-cpp/native/gguf-large-file.cpp": {
+                "bytes": 5723,
+                "sha256": "5ee24e961551e147fe72973da2ea0536703a86ffc1a0d911e7fbae9780506884"
               },
               "prepared/speech/src/common/model-file.cpp": {
                 "bytes": 29776,
@@ -3466,8 +3524,8 @@
                 "sha256": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab"
               },
               "prepared/ggml/src/gguf.cpp": {
-                "bytes": 58995,
-                "sha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5"
+                "bytes": 59785,
+                "sha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
               },
               "prepared/ggml/src/ggml-backend-dl.cpp": {
                 "bytes": 1051,
@@ -3551,6 +3609,10 @@
                 "compile/tests/runtimes/speech-cpp/native/wasm-probes.cpp": {
                   "bytes": 145,
                   "sha256": "b519abc51e55266e67863d1406c84f3221fcd73b58ee44c7c24f2844ef64e63c"
+                },
+                "compile/tests/runtimes/speech-cpp/native/gguf-large-file.cpp": {
+                  "bytes": 5723,
+                  "sha256": "5ee24e961551e147fe72973da2ea0536703a86ffc1a0d911e7fbae9780506884"
                 }
               },
               "drama3": {
@@ -3688,7 +3750,7 @@
                 },
                 "prepared/ggml/include/gguf.h": {
                   "bytes": 11355,
-                  "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4"
+                  "sha256": "bd913b74992681dc1f729426b2131db07f5be9fadcd19e13c98146977aab47df"
                 },
                 "prepared/ggml/src/ggml.c": {
                   "bytes": 263472,
@@ -3731,8 +3793,8 @@
                   "sha256": "28ae5fca1f3be636b36cd6c4fa2ca74fd42d229bfbd5352eaf66f3727bb8a6da"
                 },
                 "prepared/ggml/src/gguf.cpp": {
-                  "bytes": 58995,
-                  "sha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5"
+                  "bytes": 59785,
+                  "sha256": "3995d90cd2ad579e32663369625d9ac559093274576ef095b04d9536cc6ff61e"
                 }
               },
               "ggml-cpu": {
@@ -4375,13 +4437,13 @@
     },
     {
       "path": "api/schema.json",
-      "bytes": 399371,
-      "sha256": "cc0b89a56f48b119b94095a9d275cf617d11cb3cb3cc295ae86232d517aba4e4"
+      "bytes": 399761,
+      "sha256": "ff6b1931ec1aa7509e2650f1f0296a7e8128e129a5905d2db93ca76f2e9596ae"
     },
     {
       "path": "api/schema.mjs",
-      "bytes": 216690,
-      "sha256": "f5e4beb2c6410e6cbd26a67f4fa15e707420894e33678300c3ba13bad760febb"
+      "bytes": 216916,
+      "sha256": "f257b735d3a581a73abe0e81a34e7bcae0bb7eab8c63f43f2655c614c78e471e"
     },
     {
       "path": "host/README.md",
@@ -4775,8 +4837,8 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 4969349,
-      "sha256": "3ce18640386291238b6ce7283a170da918a97795f5a10b2507eda314f59e7fc7"
+      "bytes": 4969623,
+      "sha256": "f90813dfde4c77620267d544ae1fad6c0cfeb62355d80adb96fbb0b0aa321e76"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/browser/module-options.d.ts",
@@ -4785,23 +4847,23 @@
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/abi.json",
-      "bytes": 119886,
-      "sha256": "ef893b48863f0d5c4776ab408ab6b67b3ab26066405654a7d576a193a1a8741a"
+      "bytes": 120220,
+      "sha256": "af0af13a863f3ce329589dbd5c9e3b3d746c778418e88cd1b7b3986ca3bc53cb"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
-      "bytes": 12269,
-      "sha256": "a5b01a5ef72d103d7c2ee04f4e8c883556ca410c4a6e5ceb01808d40a800e667"
+      "bytes": 12308,
+      "sha256": "4fb58cde6a7f047d1dbd297c329c0837ba0d4a764f02ce674f01341911974b3f"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 212457,
-      "sha256": "376b46a1798302c91099da043cfabe604d6662d92de41ed0fc3821d3a4fb14bf"
+      "bytes": 212843,
+      "sha256": "d2600696a07f653b1e2461d35610411a53b7981f7d70918faafb8f30527927f3"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 5113382,
-      "sha256": "fb6a7898a65c80c99dafd854f66532cc5dd3cc4b579dca8f3f8fe5f7b000b947"
+      "bytes": 5121616,
+      "sha256": "679f4b728d1871db898bbd86e783d1583750736240df3e78e94d03ad15ccb634"
     },
     {
       "path": "profiles/webgpu-wasm32-jspi/test/module-options.d.ts",
