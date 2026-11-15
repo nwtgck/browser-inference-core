@@ -6,7 +6,7 @@ export interface StableDiffusionModule {
   FS: {
     mkdir(path: string): unknown;
   };
-  addFunction(callback: (...args: (number | bigint)[]) => number | bigint | void, signature: string): number | bigint;
+  addFunction<Args extends (number | bigint)[]>(callback: (...args: Args) => number | bigint | void, signature: string): number | bigint;
   removeFunction(pointer: number | bigint): void;
   ccall(name: string, result: "number" | "bigint" | undefined, types: readonly ("number" | "bigint")[], args: readonly (number | bigint)[], options: { async: true }): unknown;
   _bicore_abi_version(): number;

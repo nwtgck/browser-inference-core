@@ -57,7 +57,7 @@ export type AbiExtension = {
 };
 export type AbiSchema = {
   abiVersion: 3;
-  runtime: 'llama-cpp' | 'stable-diffusion-cpp';
+  runtime: 'llama-cpp' | 'stable-diffusion-cpp' | 'speech-cpp';
   pointerBytes: 4 | 8;
   pointerRepresentation: 'bigint_native';
   schemaSha256: string;

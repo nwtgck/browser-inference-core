@@ -74,6 +74,32 @@
     "./stable-diffusion-cpp/profiles/*/core.wasm": "./runtimes/stable-diffusion-cpp-browser-core/profiles/*/core.wasm",
     "./stable-diffusion-cpp/manifest.json": "./runtimes/stable-diffusion-cpp-browser-core/manifest.json",
     "./stable-diffusion-cpp/native-license-index.json": "./runtimes/stable-diffusion-cpp-browser-core/native-license-index.json",
-    "./stable-diffusion-cpp/licenses/*": "./runtimes/stable-diffusion-cpp-browser-core/licenses/*"
+    "./stable-diffusion-cpp/licenses/*": "./runtimes/stable-diffusion-cpp-browser-core/licenses/*",
+    "./speech-cpp/host/abi": {
+      "types": "./runtimes/speech-cpp-browser-core/host/abi.d.ts",
+      "import": "./runtimes/speech-cpp-browser-core/host/abi.mjs"
+    },
+    "./speech-cpp/host": {
+      "types": "./runtimes/speech-cpp-browser-core/host/index.d.ts",
+      "import": "./runtimes/speech-cpp-browser-core/host/index.mjs"
+    },
+    "./speech-cpp/api/functions": {
+      "types": "./runtimes/speech-cpp-browser-core/api/functions.d.ts",
+      "import": "./runtimes/speech-cpp-browser-core/api/functions.mjs"
+    },
+    "./speech-cpp/api/schema.json": "./runtimes/speech-cpp-browser-core/api/schema.json",
+    "./speech-cpp/api/schema.mjs": {
+      "types": "./runtimes/speech-cpp-browser-core/api/schema.d.ts",
+      "import": "./runtimes/speech-cpp-browser-core/api/schema.mjs"
+    },
+    "./speech-cpp/api/exports.json": "./runtimes/speech-cpp-browser-core/api/exports.json",
+    "./speech-cpp/profiles/*/core.mjs": {
+      "types": "./runtimes/speech-cpp-browser-core/profiles/*/core.d.ts",
+      "import": "./runtimes/speech-cpp-browser-core/profiles/*/core.mjs"
+    },
+    "./speech-cpp/profiles/*/core.wasm": "./runtimes/speech-cpp-browser-core/profiles/*/core.wasm",
+    "./speech-cpp/manifest.json": "./runtimes/speech-cpp-browser-core/manifest.json",
+    "./speech-cpp/native-license-index.json": "./runtimes/speech-cpp-browser-core/native-license-index.json",
+    "./speech-cpp/licenses/*": "./runtimes/speech-cpp-browser-core/licenses/*"
   }
 }

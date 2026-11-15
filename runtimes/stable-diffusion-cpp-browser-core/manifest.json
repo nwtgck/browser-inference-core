@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 3,
-  "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+  "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
   "schemaSha256": "5dbd61cc33911c2d66ebbc0bc928341e6193544fc44190dbdbf03bf43cb41fff",
   "upstreams": {
     "stable-diffusion": {
@@ -74,8 +74,8 @@
       "path": "host/README.md"
     },
     {
-      "bytes": 4130,
-      "sha256": "7dfa8ab9d8531e0b2eeac590a47be349a4ce0e48e9ac10b1315a48e30d445037",
+      "bytes": 4145,
+      "sha256": "96ac8d1463b27b7eb1cb63abe3fb88232a9287b49b9668fa1ff581b690bafb5d",
       "path": "host/abi.d.ts"
     },
     {
@@ -539,8 +539,8 @@
       "path": "profiles/webgpu-wasm32-asyncify/browser/abi.json"
     },
     {
-      "bytes": 60603,
-      "sha256": "b9aa71d4d1e8262d0ca161e510789af7224a8b02979bdb76c46c0b42a85bd8ad",
+      "bytes": 60622,
+      "sha256": "597cb930170556804a1479c8f6bbe97e45fd73bb0df5507d02b7c8b86c6b13a5",
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.d.ts"
     },
     {
@@ -564,8 +564,8 @@
       "path": "profiles/webgpu-wasm32-asyncify/test/abi.json"
     },
     {
-      "bytes": 61328,
-      "sha256": "ba603d71f506289f9afb801a5fad7ceb66dc9b6b750f8043f21543fcf61e7458",
+      "bytes": 61347,
+      "sha256": "0dcef1a75ba3f8d9a890b95f2b304a6aae4284a2768582444a77a1ae68bb4114",
       "path": "profiles/webgpu-wasm32-asyncify/test/core.d.ts"
     },
     {
@@ -589,8 +589,8 @@
       "path": "profiles/webgpu-wasm32-jspi/browser/abi.json"
     },
     {
-      "bytes": 60603,
-      "sha256": "b9aa71d4d1e8262d0ca161e510789af7224a8b02979bdb76c46c0b42a85bd8ad",
+      "bytes": 60622,
+      "sha256": "597cb930170556804a1479c8f6bbe97e45fd73bb0df5507d02b7c8b86c6b13a5",
       "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts"
     },
     {
@@ -614,8 +614,8 @@
       "path": "profiles/webgpu-wasm32-jspi/test/abi.json"
     },
     {
-      "bytes": 61328,
-      "sha256": "ba603d71f506289f9afb801a5fad7ceb66dc9b6b750f8043f21543fcf61e7458",
+      "bytes": 61347,
+      "sha256": "0dcef1a75ba3f8d9a890b95f2b304a6aae4284a2768582444a77a1ae68bb4114",
       "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts"
     },
     {
@@ -639,8 +639,8 @@
       "path": "profiles/webgpu-wasm64-jspi/browser/abi.json"
     },
     {
-      "bytes": 60603,
-      "sha256": "2d64167c6e682589fe3e1ebff3cbdec1322846b95acffef64f042260aad3270e",
+      "bytes": 60622,
+      "sha256": "0956d320dc2752d126773eb375cbdf629befd60d8cd4a6b3224c86ffbea8a018",
       "path": "profiles/webgpu-wasm64-jspi/browser/core.d.ts"
     },
     {
@@ -664,8 +664,8 @@
       "path": "profiles/webgpu-wasm64-jspi/test/abi.json"
     },
     {
-      "bytes": 61328,
-      "sha256": "495462ff9e431b900b5910cb3d69578f50b9664f0401c03c31d8d13093928472",
+      "bytes": 61347,
+      "sha256": "2b8e248e077e02bec4e795397929dc7c9d6ea7976649ed8fe4f313c9fc72370e",
       "path": "profiles/webgpu-wasm64-jspi/test/core.d.ts"
     },
     {
@@ -691,7 +691,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -1584,7 +1584,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -2003,8 +2003,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -4053,7 +4053,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -4946,7 +4946,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -5365,8 +5365,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -7490,7 +7490,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -8383,7 +8383,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -8802,8 +8802,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -10852,7 +10852,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -11745,7 +11745,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -12164,8 +12164,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -14289,7 +14289,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -15182,7 +15182,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -15601,8 +15601,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
@@ -17651,7 +17651,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+          "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -18544,7 +18544,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db9234cfcdf43ce0eb3f45b259b25a905e8ad6fc",
+            "sourceCommit": "c60ddc1de7081072b48a66ceb947cfe1f495e513",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -18963,8 +18963,8 @@
                 "sha256": "eb2f1ed4ff7804084c9d40d56d7e148fce4a2816e6d49e9aeaea47f9961cf2af"
               },
               "tools/abi/Bindings.cmake": {
-                "bytes": 4940,
-                "sha256": "7f37107e19eda98529927fa1474524c17ce63796e4b0846cf7df7c0b547efc13"
+                "bytes": 5260,
+                "sha256": "ccc756b076afb0d9debec267969f46186cf7267e208d4537485c83a5186b3764"
               },
               "tools/abi/ConfigureFingerprint.cmake": {
                 "bytes": 496,
