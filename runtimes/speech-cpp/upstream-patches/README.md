@@ -27,6 +27,14 @@ range, including the backend's synthetic base address. Device limits remain
 Wasm32 without narrowing model-file offsets or allocating their full size in
 Wasm memory.
 
+`0004-gguf-file-size-offsets.patch` keeps aggregate tensor data sizes and file
+offsets in 64 bits while parsing metadata without weights. Individual tensors
+and contiguous in-memory blobs still obey the native address space; their
+padding, arithmetic and allocation bounds remain checked. File offset getters
+stay wide through the speech loader's existing bounded 16 MiB transfers. The
+native and Wasm test variants parse a small virtual GGUF whose aggregate payload
+exceeds 4 GiB without allocating or reading that payload.
+
 The initial source pair is speech.cpp `2f51f66164a906b322a48303bfbcdd6936833302`
 and its ggml pin `e1a9ac12edbb57402618fd6936598603f5ee6266`. Current identities
 remain the submodule gitlinks and source-bound preparation receipts. Updating a

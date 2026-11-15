@@ -65,6 +65,9 @@ try {
   core.free(output);
 }
 
+assert.equal(module._spc_test_gguf_large_file(), 0);
+checks.push('real GGUF parser preserves metadata-only tensor offsets above 4 GiB and rejects invalid native blob/range sizes');
+
 const callbackData = 0xf000_0042n;
 const received = [];
 const callback = module.addFunction((level, text, userData) => {

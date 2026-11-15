@@ -100,7 +100,8 @@ else()
     string(JSON assertions GET "${variants}" "${SPCB_VARIANT}" assertions)
     string(JSON environment GET "${variants}" "${SPCB_VARIANT}" environment)
     if(SPCB_VARIANT STREQUAL "test")
-        target_sources(core PRIVATE "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native/wasm-probes.cpp")
+        target_sources(core PRIVATE "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native/wasm-probes.cpp"
+            "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native/gguf-large-file.cpp")
         target_include_directories(core PRIVATE "${SPCB_COMPILE_ROOT}/tests/runtimes/speech-cpp/native"
             "${SPCB_SOURCE}/src/common")
         target_compile_definitions(core PRIVATE SPCB_VARIANT_TEST=1)

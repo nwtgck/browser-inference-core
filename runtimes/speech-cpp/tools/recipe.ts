@@ -27,4 +27,9 @@ export const patches: readonly Patch[] = [{
   target: 'ggml',
   reason: 'Split weight buffers without size_t overflow and keep GPU buffer offsets within the native pointer address range.',
   files: ['src/ggml-backend.cpp', 'src/ggml-webgpu/ggml-webgpu.cpp'],
+}, {
+  file: '0004-gguf-file-size-offsets.patch',
+  target: 'ggml',
+  reason: 'Keep GGUF logical data sizes and file offsets uint64_t while retaining native bounds for actual tensor and blob allocations.',
+  files: ['include/gguf.h', 'src/gguf.cpp'],
 }];
