@@ -2,6 +2,8 @@
   "extends": "./tsconfig.base.json",
   "include": [
     "runtimes/speech-cpp/tools/**/*.ts",
+    "tools/toolchain/cli.ts",
+    "tools/ci/cli.ts",
     "tests/runtimes/speech-cpp/**/*.ts"
   ]
 }

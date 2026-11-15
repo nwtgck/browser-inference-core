@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { pathToFileURL } from 'node:url';
 import { load } from 'js-yaml';
+import ts from 'typescript';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import llamaProfiles from '#runtimes/llama-cpp/config/profiles.json' with { type: 'json' };
 import imageProfiles from '#runtimes/stable-diffusion-cpp/config/profiles.json' with { type: 'json' };
@@ -135,6 +136,30 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
       assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund'], ['run', 'tooling:build']]);
       assert.deepEqual(compiler, []);
     }
+  }
+});
+
+test('the speech compile project emits independently resolvable runtime and workflow entries', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = temporary.root;
+  const emitted = join(root, 'build/tooling');
+  await mkdir(join(root, 'runtimes/speech-cpp'), { recursive: true });
+  // Keep package imports and dependencies in the isolated tree, so an earlier
+  // full tooling build cannot satisfy missing entries or their imports.
+  for (const name of ['package.json', 'node_modules', 'toolchain', 'runtimes/speech-cpp/config']) {
+    await cp(join(checkoutRoot, name), join(root, name), { recursive: true, dereference: true });
+  }
+  const configuration = ts.getParsedCommandLineOfConfigFile(join(checkoutRoot, 'tsconfig.speech-cpp.json'), { outDir: emitted }, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: diagnostic => assert.fail(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')),
+  });
+  assert.ok(configuration);
+  const program = ts.createProgram({ rootNames: configuration.fileNames, options: configuration.options, configFileParsingDiagnostics: configuration.errors });
+  const result = program.emit();
+  assert.deepEqual([...ts.getPreEmitDiagnostics(program), ...result.diagnostics].map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')), []);
+  assert.equal(result.emitSkipped, false);
+  for (const entry of ['runtimes/speech-cpp/tools/cli.js', 'tools/ci/cli.js', 'tools/toolchain/cli.js']) {
+    await import(pathToFileURL(join(emitted, entry)).href);
   }
 });
 
