@@ -1,0 +1,10 @@
+{
+  "speech": {
+    "path": "vendor/speech.cpp",
+    "repository": "nyosegawa/speech.cpp"
+  },
+  "ggml": {
+    "path": "vendor/ggml",
+    "repository": "nyosegawa/ggml"
+  }
+}

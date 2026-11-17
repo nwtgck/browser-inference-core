@@ -3,6 +3,7 @@
   "include": [
     ".github/tests/**/*.ts",
     "runtimes/llama-cpp/tools/cli.ts",
-    "runtimes/stable-diffusion-cpp/tools/cli.ts"
+    "runtimes/stable-diffusion-cpp/tools/cli.ts",
+    "runtimes/speech-cpp/tools/cli.ts"
   ]
 }

@@ -5,6 +5,7 @@ import { regularFile, relativePath, directory as directoryPath, optionalStat } f
 import { assertSame, copyRegular, readRegularBytes } from './files.js';
 
 export const embeddedNotices: Record<RuntimeName, Readonly<Record<string, readonly [string, string]>>> = {
+  'speech-cpp': {},
   'llama-cpp': {
     'vendor/miniaudio/miniaudio.h': ['miniaudio', 'miniaudio'],
     'vendor/stb/stb_image.h': ['stb_image', 'stb_image'],
@@ -252,14 +253,14 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
         tail = tail.slice(at + 1);
         break;
       }
-      case 'stable-diffusion-cpp': {
+      case 'stable-diffusion-cpp': case 'speech-cpp': {
         if (tail.startsWith('toolchain/')) {
           tail = tail.slice('toolchain/'.length);
         }
         const at = tail.indexOf('/');
         const rootName = tail.slice(0, at);
         tail = tail.slice(at + 1);
-        sourceRoot = rootName === 'stable-diffusion' ? 'stable-diffusion.cpp' : rootName;
+        sourceRoot = rootName === 'stable-diffusion' ? 'stable-diffusion.cpp' : rootName === 'speech' ? 'speech.cpp' : rootName;
         break;
       }
       default: {

@@ -5,6 +5,10 @@ import { artifactDirectories } from '#tools/shared/contracts';
 import { decodeAbiSchema, type RuntimeName, type AbiSchema, type AbiExtension, type AbiExtensionDeclaration, type PatchReceipt, type FileEntry } from '#dto/shared';
 import { decodeLlamaManifest, decodeLlamaProvenance, type LlamaProvenance, type LlamaManifest } from '#dto/llama-cpp';
 import { decodeStableDiffusionManifest, decodeStableDiffusionProvenance, type StableDiffusionProvenance, type StableDiffusionManifest, type Upstreams } from '#dto/stable-diffusion-cpp';
+import { decodeSpeechManifest, decodeSpeechProvenance, type SpeechManifest, type SpeechProvenance, type Upstreams as SpeechUpstreams } from '#dto/speech-cpp';
+import { verifyRuntimeInput as verifySpeech, speechManifestCapabilities } from '#runtimes/speech-cpp/tools/verify';
+import { loadConfiguration as speechConfiguration } from '#runtimes/speech-cpp/tools/config';
+import { patches as speechPatches } from '#runtimes/speech-cpp/tools/recipe';
 import type { RuntimeManifest } from '#tools/package/runtime';
 import { fileIdentity } from '#tools/shared/files';
 import { abiSchemaFingerprint, assembleAbiCatalog, renderFunctionTypes, renderFunctionModule, renderSchemaModule } from '#tools/abi/schema';
@@ -52,8 +56,13 @@ export function fixtureWasm({ names }: { names: readonly string[] }): Buffer {
 }
 
 export function fixtureAbi({ runtime, memory64, gpuProfile }: { runtime: RuntimeName; memory64: boolean; gpuProfile: boolean }): AbiSchema {
-  const name = runtime === 'llama-cpp' ? 'fixture_version' : 'sd_browser_bf16_retention_version';
+  const name = runtime === 'stable-diffusion-cpp' ? 'sd_browser_bf16_retention_version' : runtime === 'speech-cpp' ? 'speech_api_version_major' : 'fixture_version';
   const schema: AbiSchema = { abiVersion: 3, runtime, pointerRepresentation: 'bigint_native', pointerBytes: memory64 ? 8 : 4, schemaSha256: '0'.repeat(64), functions: [{ name, export: '_' + name, returnType: 'uint32_t', returnKind: 'unsigned', abiType: { kind: 'integer', bits: 32, signed: false }, parameters: [], bridge: false }], records: [], callbacks: [], constants: runtime === 'llama-cpp' ? [] : ['SD_TYPE_BF16'], constantValues: runtime === 'llama-cpp' ? {} : { SD_TYPE_BF16: '30' }, excluded: [], exports: ['_' + name], suspendingExports: [], callbackMetadata: { version: 2, getters: [] }, ...(runtime === 'stable-diffusion-cpp' ? { capabilities: { ggufFileOffsetBits: 64, safetensorsFileOffsetBits: 64, callerOwnedRandomAccess: 1, upstreamApi: 1, ggufShards: 1, ggufOriginalShapes: 1, bf16WeightRetention: 1, modelIoMask: 7 } } : {}) };
+  if (runtime === 'speech-cpp') {
+    schema.constants = ['SPEECH_OK'];
+    schema.constantValues = { SPEECH_OK: '0' };
+    schema.capabilities = { ggufFileOffsetBits: 64, callerOwnedRandomAccess: 1, upstreamApi: 1, modelIoMask: 1 };
+  }
   if (runtime === 'llama-cpp') {
     const extensions: Record<string, AbiExtension> = {};
     const graph: AbiExtension = { extensionId: 'model-graph-v1', version: 1, abiVersion: 1, baseAbiVersion: 3, pointerRepresentation: 'bigint_u64', suspension: 'none', versionExport: '_' + name, schemaHashExport: '_' + name, functions: schema.functions, records: [], constants: [], constantValues: {} };
@@ -80,7 +89,7 @@ export function fixtureAbi({ runtime, memory64, gpuProfile }: { runtime: Runtime
 }
 
 export async function makeRuntime({ root, runtime, selection }: { root: string; runtime: RuntimeName; selection: 'minimal' | 'configured' }): Promise<void> {
-  const configuration = await (runtime === 'llama-cpp' ? llamaConfiguration : imageConfiguration)({ checkoutRoot: sourceRoot });
+  const configuration = await (runtime === 'llama-cpp' ? llamaConfiguration : runtime === 'speech-cpp' ? speechConfiguration : imageConfiguration)({ checkoutRoot: sourceRoot });
   let profiles: string[];
   switch (selection) {
   case 'minimal': profiles = runtime === 'llama-cpp' ? ['cpu-wasm32'] : Object.keys(configuration.profiles);
@@ -94,6 +103,11 @@ export async function makeRuntime({ root, runtime, selection }: { root: string; 
   }
   const buildRoot = join(root, 'build-inputs', runtime);
   const upstreams: Upstreams = { 'stable-diffusion': { path: 'vendor/stable-diffusion.cpp', repository: 'https://example.invalid/sd', commit: 'b'.repeat(40) }, ggml: { path: 'vendor/ggml-webgpu-source', repository: 'https://example.invalid/ggml', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } };
+  const speechUpstreams: SpeechUpstreams = { speech: { path: 'vendor/speech.cpp', repository: 'nyosegawa/speech.cpp', commit: 'd'.repeat(40) }, ggml: { path: 'vendor/ggml', repository: 'nyosegawa/ggml', commit: 'e'.repeat(40) } };
+  const speechPatchReceipts: PatchReceipt[] = [];
+  for (const patch of speechPatches) {
+    speechPatchReceipts.push({ file: patch.file, target: patch.target, mode: 'apply', reason: patch.reason, files: [], sha256: (await fileIdentity({ path: join(sourceRoot, 'runtimes/speech-cpp/upstream-patches', patch.file) })).sha256 });
+  }
   const patchReceipts: PatchReceipt[] = [];
   for (const patch of patches) {
     patchReceipts.push({ file: patch.file, target: patch.target, mode: 'apply', reason: patch.reason, files: [], sha256: (await fileIdentity({ path: join(sourceRoot, 'runtimes/stable-diffusion-cpp/upstream-patches', patch.file) })).sha256 });
@@ -124,9 +138,9 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
 }
 `,
       });
-      await write({ path: join(build, 'runtime/core.d.ts'), data: runtime === 'stable-diffusion-cpp' ? renderModuleTypes({ schema }) : `export interface MainModule { HEAPU8: Uint8Array; FS: object; addFunction<Args extends (number | bigint)[]>(callback: (...args: Args) => number | bigint | void, signature: string): number | bigint; removeFunction(pointer: number | bigint): void; _fixture_version(): number; }\nexport default function(options?: object): Promise<MainModule>;\n` });
-      if (runtime === 'stable-diffusion-cpp') {
-        await write({ path: join(build, 'runtime/module-options.d.ts'), data: await readFile(join(sourceRoot, 'runtimes/stable-diffusion-cpp/bindings/module-options.d.ts')) });
+      await write({ path: join(build, 'runtime/core.d.ts'), data: runtime !== 'llama-cpp' ? renderModuleTypes({ schema }) : `export interface MainModule { HEAPU8: Uint8Array; FS: object; addFunction<Args extends (number | bigint)[]>(callback: (...args: Args) => number | bigint | void, signature: string): number | bigint; removeFunction(pointer: number | bigint): void; _fixture_version(): number; }\nexport default function(options?: object): Promise<MainModule>;\n` });
+      if (runtime !== 'llama-cpp') {
+        await write({ path: join(build, 'runtime/module-options.d.ts'), data: await readFile(join(sourceRoot, 'runtimes', runtime, 'bindings/module-options.d.ts')) });
       }
       await write({ path: join(build, 'runtime/core.wasm'), data: fixtureWasm({ names: schema.exports.map(name => name.slice(1)) }) });
       if (runtime === 'llama-cpp') {
@@ -142,9 +156,10 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
         throw new Error('Missing fixture variant');
       }
       const common = { profile, variant, sourceCommit: fixtureSource, sourceDirty: false, configuration: config, variantConfiguration, sourceInputs: { mode: 'release' as const, publishable: true, sourceCommit: fixtureSource, files: {} }, compiledInputs: { translationUnits: {}, targetSources: {} }, toolchain: {}, cmakeCommand: [], buildCache: {}, validation: { compiled: true, browserSmoke: false, realModelInference: false } };
-      const record: LlamaProvenance | StableDiffusionProvenance = runtime === 'llama-cpp'
+      const record: LlamaProvenance | StableDiffusionProvenance | SpeechProvenance = runtime === 'llama-cpp'
         ? { ...common, runtime, llamaCommit: 'b'.repeat(40), emccVersion: 'fixture', nodeVersion: 'fixture', upstreamBuildInfo: { commit: 'fixture', number: 0 }, visionBf16Storage: { version: 1, modes: ['legacy_expand', 'retain_checked'], default: 'legacy_expand' }, preparedSources: { formatVersion: 1, options: { target: 'wasm', webgpu: config.webgpu, gpuProfile: 'gpuProfile' in config && config.gpuProfile === true, fileRows: config.memory64, qsa: true, mtmdMode: config.webgpu ? 'webgpu' : 'cpu' }, upstream: { files: 0, sha256: '0'.repeat(64) }, inputs: {}, runtimeInputs: {}, patches: [], selections: [], shaders: {}, outputs: {} } }
-        : { ...common, runtime, upstreams, patches: { runtime, upstreams, patches: patchReceipts, vendorCheckoutModified: false }, preparedSources: { files: 0, sha256: '0'.repeat(64) }, nativeCheck: false };
+        : runtime === 'speech-cpp' ? { ...common, runtime, upstreams: speechUpstreams, patches: { runtime, upstreams: speechUpstreams, patches: speechPatchReceipts, vendorCheckoutModified: false }, preparedSources: { files: 0, sha256: '0'.repeat(64) }, nativeCheck: false }
+          : { ...common, runtime, upstreams, patches: { runtime, upstreams, patches: patchReceipts, vendorCheckoutModified: false }, preparedSources: { files: 0, sha256: '0'.repeat(64) }, nativeCheck: false };
       await write({ path: join(build, 'provenance.json'), data: JSON.stringify(record) });
     }
   }
@@ -158,7 +173,7 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
     extraFiles: [{ source: join(sourceRoot, 'LICENSE'), name: 'LICENSE' }, { source: join(sourceRoot, 'tools/package/runtime-readme.md'), name: 'README.md' }],
     licenseRoots: runtime === 'llama-cpp' ? ['llama.cpp'] : [],
     copyLicenses: async ({ output }: { output: string }) => {
-      const names = runtime === 'llama-cpp' ? ['licenses/0/LICENSE'] : ['licenses/stable-diffusion/LICENSE', 'licenses/ggml/LICENSE', 'licenses/toolchain/emscripten/LICENSE', 'licenses/toolchain/emdawnwebgpu_pkg/LICENSE'];
+      const names = runtime === 'llama-cpp' ? ['licenses/0/LICENSE'] : [`licenses/${runtime === 'speech-cpp' ? 'speech' : 'stable-diffusion'}/LICENSE`, 'licenses/ggml/LICENSE', 'licenses/toolchain/emscripten/LICENSE', 'licenses/toolchain/emdawnwebgpu_pkg/LICENSE'];
       for (const name of names) {
         await write({ path: join(output, name), data: 'Copyright packaging fixture authors; synthetic notice.\n' });
       }
@@ -169,6 +184,8 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
   };
   if (runtime === 'llama-cpp') {
     await assembleRuntimePackage({ ...options, decodeProvenance: decodeLlamaProvenance, createManifest: ({ sourceCommit, first, profiles, files, catalog }): LlamaManifest => ({ runtime, formatVersion: 2, abiVersion: 3, sourceCommit, llamaCommit: first.llamaCommit, schemaSha256: catalog.schemaSha256, licenseRoots: ['llama.cpp'], profiles, files }), verify: async ({ input }) => verifyLlama({ sourceRoot, input, requireClean: true, checkNpmPack: false }) });
+  } else if (runtime === 'speech-cpp') {
+    await assembleRuntimePackage({ ...options, decodeProvenance: decodeSpeechProvenance, createManifest: ({ sourceCommit, first, profiles, files, catalog }): SpeechManifest => ({ runtime, formatVersion: 2, abiVersion: 3, sourceCommit, upstreams: first.upstreams, experimental: true, capabilities: speechManifestCapabilities({ schema: catalog }), schemaSha256: catalog.schemaSha256, profiles, files }), verify: async ({ input }) => verifySpeech({ sourceRoot, input, requireClean: true, checkNpmPack: false }) });
   } else {
     await assembleRuntimePackage({ ...options, decodeProvenance: decodeStableDiffusionProvenance, createManifest: ({ sourceCommit, first, profiles, files, catalog }): StableDiffusionManifest => ({ runtime, formatVersion: 2, abiVersion: 3, sourceCommit, upstreams: first.upstreams, experimental: true, capabilities: imageManifestCapabilities({ schema: catalog }), schemaSha256: catalog.schemaSha256, profiles, files }), verify: async ({ input }) => verifyImage({ sourceRoot, input, requireClean: true, checkNpmPack: false }) });
   }
@@ -176,7 +193,7 @@ ${schema.exports.map(name => `  module[${JSON.stringify(name)}] = instance.expor
 
 export async function packageFixture() {
   const root = await mkdtemp(join(tmpdir(), 'bicore-package-'));
-  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp'] as const) {
+  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp'] as const) {
     await makeRuntime({ root, runtime, selection: 'minimal' });
   }
   const directory = join(root, 'package');
@@ -194,7 +211,7 @@ export async function packageFixture() {
 export async function rehashRuntime({ directory, runtime, change }: { directory: string; runtime: RuntimeName; change: (manifest: RuntimeManifest) => void }): Promise<void> {
   const root = join(directory, artifactDirectories[runtime]);
   const raw: unknown = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
-  const manifest: RuntimeManifest = runtime === 'llama-cpp' ? decodeLlamaManifest({ input: raw }) : decodeStableDiffusionManifest({ input: raw });
+  const manifest: RuntimeManifest = runtime === 'llama-cpp' ? decodeLlamaManifest({ input: raw }) : runtime === 'speech-cpp' ? decodeSpeechManifest({ input: raw }) : decodeStableDiffusionManifest({ input: raw });
   manifest.files = [...(await packageFiles({ root, exclude: ['manifest.json'] })).values()];
   change(manifest);
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest));

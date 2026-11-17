@@ -36,6 +36,7 @@ export async function createReportData({ validated, verifySource }: { validated:
   }
   const llama = validated.runtimes['llama-cpp'];
   const image = validated.runtimes['stable-diffusion-cpp'];
+  const speech = validated.runtimes['speech-cpp'];
   return {
     sourceCommit: validated.manifest.sourceCommit,
     package: { name: 'browser-inference-core', version: validated.metadata.version },
@@ -43,6 +44,7 @@ export async function createReportData({ validated, verifySource }: { validated:
     runtimes: {
       'llama-cpp': { manifest: artifactDirectories['llama-cpp'] + '/manifest.json', abiVersion: llama.abiVersion, schemaSha256: llama.schemaSha256, upstreams: { llama: llama.llamaCommit }, profiles: profiles({ values: llama.profiles }) },
       'stable-diffusion-cpp': { manifest: artifactDirectories['stable-diffusion-cpp'] + '/manifest.json', abiVersion: image.abiVersion, schemaSha256: image.schemaSha256, upstreams: image.upstreams, profiles: profiles({ values: image.profiles }) },
+      'speech-cpp': { manifest: artifactDirectories['speech-cpp'] + '/manifest.json', abiVersion: speech.abiVersion, schemaSha256: speech.schemaSha256, upstreams: speech.upstreams, profiles: profiles({ values: speech.profiles }) },
     },
   };
 }
@@ -87,10 +89,11 @@ export async function freezePackage({ sourceRoot, packageDirectory, work, receip
   }));
   const llamaIdentity = identities['llama-cpp'];
   const imageIdentity = identities['stable-diffusion-cpp'];
-  if (!llamaIdentity || !imageIdentity) {
+  const speechIdentity = identities['speech-cpp'];
+  if (!llamaIdentity || !imageIdentity || !speechIdentity) {
     throw new Error('Missing frozen manifest identity');
   }
-  const frozen: FrozenPublication = { schemaVersion: 2, sourceCommit: expectedSource, tree, branch, manifest: validated.manifestIdentity, runtimeManifests: { 'llama-cpp': llamaIdentity, 'stable-diffusion-cpp': imageIdentity }, report: { sha256: bytesIdentity({ data: Buffer.from(canonicalJson({ value: data })) }).sha256, data } };
+  const frozen: FrozenPublication = { schemaVersion: 2, sourceCommit: expectedSource, tree, branch, manifest: validated.manifestIdentity, runtimeManifests: { 'llama-cpp': llamaIdentity, 'stable-diffusion-cpp': imageIdentity, 'speech-cpp': speechIdentity }, report: { sha256: bytesIdentity({ data: Buffer.from(canonicalJson({ value: data })) }).sha256, data } };
   await mkdir(dirname(receiptPath), { recursive: true });
   await writeFile(receiptPath, JSON.stringify(frozen, undefined, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return frozen;

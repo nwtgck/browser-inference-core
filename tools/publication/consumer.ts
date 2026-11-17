@@ -18,7 +18,7 @@ export function publicationMetadata({ repository, commit, data, resolution }: { 
   const raw = `https://raw.githubusercontent.com/${repository}/${commit}/`;
   return {
     schemaVersion: 2,
-    runtime: { package: data.package.name, version: data.package.version, artifactCommit: commit, sourceCommit: data.sourceCommit, manifestFormatVersion: 5 },
+    runtime: { package: data.package.name, version: data.package.version, artifactCommit: commit, sourceCommit: data.sourceCommit, manifestFormatVersion: 6 },
     retrieval: { repository, artifactRawBase: raw, sourceRawBase: `https://raw.githubusercontent.com/${repository}/${data.sourceCommit}/`, install: `npm install github:${repository}#${commit}`, manifest: raw + 'manifest.json' },
     npm: resolution,
     source: data.source,
@@ -37,6 +37,7 @@ export function renderReport({ repository, commit, data, resolution }: { reposit
     '**Install with explicit package names:**', '',
     '```sh', `npm install llama-cpp-browser-core@github:${repository}#${commit}`, '```', '',
     '```sh', `npm install stable-diffusion-cpp-browser-core@github:${repository}#${commit}`, '```', '',
+    '```sh', `npm install speech-cpp-browser-core@github:${repository}#${commit}`, '```', '',
   ];
   return lines.join('\n') + '\n' + renderIntegrationDetails({ metadata });
 }
@@ -47,7 +48,7 @@ function renderIntegrationDetails({ metadata }: { metadata: ReturnType<typeof pu
     const item = metadata.runtimes[runtime];
     lines.push(`| ${runtime} | ${String(item.abiVersion)} | ${Object.keys(item.profiles).join(', ')} |`);
   }
-  lines.push('', 'Both runtimes are independent modules. Build and smoke results do not certify real-model inference.', '', 'The root manifest binds each runtime manifest; each runtime manifest owns its payload inventory. Check the selected ABI fingerprint before calling native exports.', '', `Complete manifest: [manifest.json](${metadata.retrieval.manifest})`, '');
+  lines.push('', 'All runtimes are independent modules. Build and smoke results do not certify real-model inference.', '', 'The root manifest binds each runtime manifest; each runtime manifest owns its payload inventory. Check the selected ABI fingerprint before calling native exports.', '', `Complete manifest: [manifest.json](${metadata.retrieval.manifest})`, '');
   for (const runtime of runtimeNames) {
     lines.push(`- [${runtime} manifest](${metadata.retrieval.artifactRawBase}${metadata.runtimes[runtime].manifest})`);
   }

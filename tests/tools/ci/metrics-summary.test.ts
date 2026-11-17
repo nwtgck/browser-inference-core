@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { MetricContext, SpanRecord } from '#tools/ci/metrics';
 import { ninjaSummary, readRecords, summarize, unionLength } from '#tools/ci/summary';
+import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 
 const context: MetricContext = { runId: undefined, runAttempt: undefined, job: undefined, sourceCommit: undefined, runtime: undefined, profile: undefined, variant: undefined };
 
@@ -30,6 +31,15 @@ test('parallel child coverage is unioned, incomplete spans are unknown', () => {
   const bad = summarize({ records: [...records, records[0]!], errors: 0 });
   assert.ok(bad.invalidOrMissingRecords > 0);
   assert.equal(bad.phases['parent']?.exclusiveNs, null);
+});
+
+test('saved speech package spans retain their runtime classification', async () => {
+  await using temporary = await temporaryDirectory();
+  const records = pair({ id: 'd', parent: undefined, start: 0, length: 10, phase: 'package' }).map(record => ({ ...record, packageKind: 'speech' as const }));
+  await writeFile(join(temporary.root, 'events-speech.jsonl'), records.map(record => JSON.stringify(record)).join('\n') + '\n');
+  const result = await readRecords({ directory: temporary.root });
+  assert.equal(result.errors, 0);
+  assert.deepEqual(result.records.map(record => record.packageKind), ['speech', 'speech']);
 });
 
 test('Ninja outputs use covered intervals rather than duplicated command time', async () => {

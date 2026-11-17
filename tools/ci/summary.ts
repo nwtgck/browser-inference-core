@@ -120,7 +120,7 @@ function spanRecord({ input }: { input: unknown }): SpanRecord | undefined {
     throw new Error('Invalid span');
   }
   const kind = input['packageKind'];
-  const packageKind: PackageKind | undefined = kind === 'llama' || kind === 'image' || kind === 'root' ? kind : undefined;
+  const packageKind: PackageKind | undefined = kind === 'llama' || kind === 'image' || kind === 'speech' || kind === 'root' ? kind : undefined;
   const context: MetricContext = {
     runId: optionalString({ value: input['runId'] }),
     runAttempt: optionalString({ value: input['runAttempt'] }),

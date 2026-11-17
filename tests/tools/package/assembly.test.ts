@@ -10,6 +10,7 @@ import { buildPackage } from '#runtimes/llama-cpp/tools/package';
 import { stageBuiltProfile } from '#runtimes/llama-cpp/tools/build';
 import { decodeLlamaProvenance } from '#dto/llama-cpp';
 import { verifyRuntimePackage as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
+import { verifyRuntimePackage as verifySpeech } from '#runtimes/speech-cpp/tools/verify';
 import { verifyRuntimePackage as verifyImage } from '#runtimes/stable-diffusion-cpp/tools/verify';
 import { freezePackage } from '#tools/publication/artifacts';
 import { assemblePackage, validatePackage } from '#tools/package/aggregate';
@@ -85,13 +86,16 @@ exit 42
   assert.deepEqual(await readFile(join(destination, 'manifest.json')), original);
 });
 
-test('aggregate activation requires both independently valid runtime inputs', async () => {
+test('aggregate activation requires every independently valid runtime input', async () => {
   await using fixture = await packageFixture();
   const original = await readFile(join(fixture.directory, 'manifest.json'));
-  const image = join(fixture.root, 'package-inputs/stable-diffusion-cpp');
-  await rename(image, image + '.saved');
-  await assert.rejects(assemblePackage({ sourceRoot, inputs: join(fixture.root, 'package-inputs'), destination: fixture.directory, checkNpmPack: false }));
-  assert.deepEqual(await readFile(join(fixture.directory, 'manifest.json')), original);
+  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp']) {
+    const input = join(fixture.root, 'package-inputs', runtime);
+    await rename(input, input + '.saved');
+    await assert.rejects(assemblePackage({ sourceRoot, inputs: join(fixture.root, 'package-inputs'), destination: fixture.directory, checkNpmPack: false }));
+    assert.deepEqual(await readFile(join(fixture.directory, 'manifest.json')), original);
+    await rename(input + '.saved', input);
+  }
 });
 
 test('rehashing package metadata cannot introduce build hooks, peers or bundled dependencies', async () => {
@@ -105,7 +109,7 @@ test('rehashing package metadata cannot introduce build hooks, peers or bundled 
   }
 });
 
-test('standalone aggregate checks all three npm package boundaries while deferred assembly performs no pack', async () => {
+test('aggregate checks all four npm package boundaries while deferred assembly performs no pack', async () => {
   await using fixture = await packageFixture();
   let npm: string | undefined;
   for (const directory of (READ_ENV_PATH() ?? '').split(delimiter)) {
@@ -139,10 +143,11 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
   await assert.rejects(readFile(log), { code: 'ENOENT' });
   await validatePackage({ sourceRoot, directory: fixture.directory, requireClean: true, checkNpmPack: true });
   const packed = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { name: string });
-  assert.deepEqual(packed.map(item => item.name), ['llama-cpp-browser-core', 'stable-diffusion-cpp-browser-core', 'browser-inference-core']);
+  assert.deepEqual(packed.map(item => item.name), ['llama-cpp-browser-core', 'stable-diffusion-cpp-browser-core', 'speech-cpp-browser-core', 'browser-inference-core']);
   await write({ path: log, data: '' });
   await verifyLlama({ sourceRoot, directory: join(fixture.root, 'package-inputs/llama-cpp'), requireClean: true, checkNpmPack: true });
   await verifyImage({ sourceRoot, directory: join(fixture.root, 'package-inputs/stable-diffusion-cpp'), requireClean: true, checkNpmPack: true });
+  await verifySpeech({ sourceRoot, directory: join(fixture.root, 'package-inputs/speech-cpp'), requireClean: true, checkNpmPack: true });
   let sourceChecks = 0;
   await freezePackage({
     sourceRoot,
@@ -155,11 +160,11 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
       sourceChecks++;
       const image = Object.values(Object.values(manifests['stable-diffusion-cpp'].profiles)[0]!.variants)[0]!;
       // Explicit synthetic report facts; this test counts package boundaries, not source correctness.
-      return { sourceCommit, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] } } };
+      return { sourceCommit, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: manifests['speech-cpp'].upstreams, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
     },
   });
   const handoff = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { name: string });
-  assert.deepEqual(handoff.map(item => item.name), ['llama-cpp-browser-core', 'stable-diffusion-cpp-browser-core', 'browser-inference-core']);
+  assert.deepEqual(handoff.map(item => item.name), ['llama-cpp-browser-core', 'stable-diffusion-cpp-browser-core', 'speech-cpp-browser-core', 'browser-inference-core']);
   assert.equal(sourceChecks, 1);
   const root = join(fixture.directory, artifactDirectories['llama-cpp']);
   const metadata = decodePackageMetadata({ input: JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) });

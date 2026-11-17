@@ -2,7 +2,7 @@ import type { LowLevelFunctions } from '../api/functions.js';
 import type { CoreModule } from './profiles.js';
 import type { AbiSchema } from './abi.js';
 export { createAbiCaller, selectAbiSchema, toNativePointer, fromNativePointer, toEmscriptenPointer, fromEmscriptenPointer } from './abi.js';
-export type { CoreModule, ModuleByProfile, Profile, Variant } from './profiles.js';
+export type { CoreModule, ModuleByProfile, FactoryByProfile, CoreFactory, Profile, Variant } from './profiles.js';
 export interface Core<Module extends CoreModule = CoreModule> {
   module: Module;
   api: LowLevelFunctions;

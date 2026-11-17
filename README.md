@@ -5,13 +5,15 @@
 
 One source repository, independent browser runtimes, one append-only `artifacts`
 branch. The llama.cpp runtime is in `runtimes/llama-cpp/`; experimental image generation
-is in `runtimes/stable-diffusion-cpp/`. Both have their own profile definitions and
+is in `runtimes/stable-diffusion-cpp/`; experimental speech and dialogue are in
+`runtimes/speech-cpp/`. Each has its own Wasm instances, profile definitions and
 upstream pins.
 
 | Location | Responsibility |
 | --- | --- |
 | `runtimes/llama-cpp/` | Native integration, browser host, profiles, independent upstream pin and approved patches |
 | `runtimes/stable-diffusion-cpp/` | Image bindings, browser host, profiles, independent upstream pins and experimental browser patches |
+| `runtimes/speech-cpp/` | Speech C API, browser host, Chrome WebGPU wasm32 JSPI profile and independent speech.cpp/ggml pins |
 | `toolchain/config.json` | Shared browser compiler, Dawn and compiler correction pins |
 | `tools/` | Typed preparation, ABI metadata, packaging, publication and automation tools |
 | `00-dto/` | External-input structures, public DTO types and named decoders |
@@ -27,7 +29,7 @@ publication URLs and install commands use the actual `GITHUB_REPOSITORY` value.
 
 Use Node.js 22.12 or later and the locked development dependencies. Emit the
 private tools with `npm run tooling:build`; `npm run tooling:check` checks their
-types without emitting. `npm test` runs the two JavaScript host-helper suites.
+types without emitting. `npm test` runs the JavaScript host-helper suites.
 Run affected emitted tests under `build/tooling/tests/` with Node's test runner;
 [verification scopes](docs/verification.md) identify the relevant entries.
 Local tool, source-preparation and native C++ checks do not require Emscripten.
@@ -46,7 +48,7 @@ source .tools/emsdk/emsdk_env.sh
 ```
 
 Compiler, Dawn and the Asyncify correction are pinned in
-`toolchain/config.json`. Both runtimes select upstream commits from their
+`toolchain/config.json`. All runtimes select upstream commits from their
 source commit's submodule gitlinks. Local development can use staged gitlinks;
 image source roles are declared in
 `runtimes/stable-diffusion-cpp/config/upstreams.json`. Each runtime keeps its own
@@ -55,12 +57,13 @@ upstream versions.
 ## Parallel builds and bounded caches
 
 The llama matrix builds five profiles in two variants; the image matrix builds
-three profiles in two variants. Host tests, native checks and these sixteen
+three profiles in two variants. Speech builds one WebGPU wasm32 JSPI profile
+in two variants. Host tests, native checks and these eighteen
 build pairs run in separate jobs. Each runtime then packages and checks its own
 complete matrix before aggregate publication.
 
-Only final aggregation waits for both runtimes. Each side transfers its own
-compiler/Dawn license notices and never borrows the other's build artifact.
+Only final aggregation waits for all runtimes. Each runtime transfers its own
+compiler/Dawn license notices and never borrows another runtime's build artifact.
 Runner availability can still limit actual parallelism.
 
 CI caches the SHA-256-verified Dawn download, Emscripten's system-library cache,
@@ -81,28 +84,30 @@ common environment and strict Bash. YAML supplies extra Docker options, the
 explicit image argument and quoted `OFFLINE` command bodies. Typed local
 tools handle preparation, transformation and validation.
 
-## Runtime package layout (manifest format 5)
+## Runtime package layout (manifest format 6)
 
 | Public import | Physical package location |
 | --- | --- |
 | `browser-inference-core/manifest.json` | `manifest.json` |
 | `browser-inference-core/llama-cpp/host` | `runtimes/llama-cpp-browser-core/host/index.mjs` and its declaration |
 | `browser-inference-core/stable-diffusion-cpp/host` | `runtimes/stable-diffusion-cpp-browser-core/host/index.mjs` and its declaration |
+| `browser-inference-core/speech-cpp/host` | `runtimes/speech-cpp-browser-core/host/index.mjs` and its declaration |
 | `browser-inference-core/<runtime>/api/functions` | `runtimes/<runtime-package>/api/functions.d.ts` and typed JavaScript facade |
 | `browser-inference-core/<runtime>/api/schema.mjs` | `runtimes/<runtime-package>/api/schema.mjs` |
 | `browser-inference-core/<runtime>/profiles/<profile>/<variant>/core.mjs` | Matching factory and declaration under `runtimes/<runtime-package>/profiles/` |
 | `browser-inference-core/<runtime>/profiles/<profile>/<variant>/core.wasm` | Matching WebAssembly binary under `runtimes/<runtime-package>/profiles/` |
 
-Here `<runtime>` is `llama-cpp` or `stable-diffusion-cpp`, while
-`<runtime-package>` is `llama-cpp-browser-core` or
-`stable-diffusion-cpp-browser-core`. This distinction applies to the artifacts
-branch as well as the installed package; source directories keep their shorter names.
+Here `<runtime>` is `llama-cpp`, `stable-diffusion-cpp` or `speech-cpp`, while
+`<runtime-package>` is `llama-cpp-browser-core`,
+`stable-diffusion-cpp-browser-core` or `speech-cpp-browser-core`. This distinction
+applies to the artifacts branch as well as the installed package; source
+directories keep their shorter names.
 
 Each format-2 runtime manifest owns its payload inventory, provenance and
-validation. The root manifest binds root files and both runtime manifests; the
+validation. The root manifest binds root files and all runtime manifests; the
 combined inventories cover the complete tree and reject mixed source commits. Public exports select the runtime explicitly; direct
 filesystem consumers use the physical paths above. No duplicate
-Wasm payloads are shipped. Publication waits for both complete runtime packages;
+Wasm payloads are shipped. Publication waits for all complete runtime packages;
 there is no last-writer-wins replacement of one runtime with the other.
 
 Install the exact artifact commit reported after successful publication, then
@@ -114,9 +119,12 @@ fictional artifact commit into a consumer lockfile. A local `dist/package` may
 also be selected explicitly for development. See the
 [installed-package guide](tools/package/runtime-readme.md) for examples.
 
-The image runtime is experimental. Native tests, browser ABI smoke checks and
-compilation are distinct from actual GPU image generation. Consult each profile's
-recorded validation scope; real-model inference is not asserted automatically.
+The image and speech runtimes are experimental. Native tests, browser ABI smoke
+checks and compilation are distinct from actual GPU model inference. Consult
+each profile's recorded validation scope; real-model inference is not asserted
+automatically.
+The speech runtime's [guide](runtimes/speech-cpp/README.md) describes its target,
+dialogue ownership, model-file access and verification limits.
 
 ## Source preparation
 

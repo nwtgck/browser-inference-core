@@ -24,6 +24,7 @@ export const READ_ENV_BICORE_FIXTURE_REPOSITORY = () => process.env.BICORE_FIXTU
 export const READ_ENV_BICORE_FIXTURE_UPSTREAM = () => process.env.BICORE_FIXTURE_UPSTREAM;
 export const READ_ENV_BICORE_LLAMA_ABI_SCHEMA = () => process.env.BICORE_LLAMA_ABI_SCHEMA;
 export const READ_ENV_BICORE_SD_ABI_SCHEMA = () => process.env.BICORE_SD_ABI_SCHEMA;
+export const READ_ENV_BICORE_SPEECH_ABI_SCHEMA = () => process.env.BICORE_SPEECH_ABI_SCHEMA;
 export const READ_ENV_BICORE_SOURCE_ROOT = () => process.env.BICORE_SOURCE_ROOT;
 export const READ_ENV_BICORE_TEST_JQ_MODE = () => process.env.BICORE_TEST_JQ_MODE;
 export const READ_ENV_BICORE_TOOLCHAIN_ROOT = () => process.env.BICORE_TOOLCHAIN_ROOT;

@@ -1,6 +1,6 @@
 # Browser Inference Core
 
-This package contains independently built llama.cpp and stable-diffusion.cpp
+This package contains independently built llama.cpp, stable-diffusion.cpp and speech.cpp
 browser runtimes, generated declarations, schemas, license notices and build
 provenance. Applications choose a profile and create each native module separately.
 
@@ -10,6 +10,7 @@ provenance. Applications choose a profile and create each native module separate
 | --- | --- |
 | `browser-inference-core/llama-cpp/host` | Typed llama module creation, schema attachment and read-only file mounting |
 | `browser-inference-core/stable-diffusion-cpp/host` | Typed image module attachment and read-only file mounting |
+| `browser-inference-core/speech-cpp/host` | Typed speech module attachment and read-only file mounting |
 | `browser-inference-core/<runtime>/host/abi` | Native pointer conversion and the generic ABI caller |
 | `browser-inference-core/<runtime>/api/functions` | Generated function declarations and typed JavaScript factory |
 | `browser-inference-core/<runtime>/api/schema.mjs` | ABI catalog indexed by the compiled target fingerprint |
@@ -20,7 +21,7 @@ provenance. Applications choose a profile and create each native module separate
 | `browser-inference-core/llama-cpp/api/extensions` | Always available ModelGraphNativeExports and Q8DiagnosticFunctions types; check the target capability before calling |
 | `browser-inference-core/manifest.json` | Complete package identities and links to each runtime manifest |
 
-Replace `<runtime>` with `llama-cpp` or `stable-diffusion-cpp`. Select an actual
+Replace `<runtime>` with `llama-cpp`, `stable-diffusion-cpp` or `speech-cpp`. Select an actual
 profile listed in its manifest and either the `browser` or `test` variant.
 Keep the module, WebAssembly binary and schema from the same artifact commit.
 
@@ -54,14 +55,31 @@ requirements of the selected profile.
 
 The application owns model files, generation parameters, context lifetime,
 callbacks, cancellation, output conversion and Worker messages. Native modules
-and upstream version pins remain independent between the two runtimes.
+and upstream version pins remain independent between the runtimes.
+
+## speech.cpp
+
+```js
+import createModule from 'browser-inference-core/speech-cpp/profiles/webgpu-wasm32-jspi/browser/core.mjs';
+import { attachCore, schema } from 'browser-inference-core/speech-cpp/host';
+
+const module = await createModule();
+const core = attachCore(module, schema, { suspension: 'jspi' });
+```
+
+The speech runtime exposes the upstream `speech_*` C API, including the Haru
+conversation API. It requires a desktop browser with WebGPU, Wasm SIMD and JSPI
+support. Model files are supplied by the application and are never bundled.
+Compilation and ABI checks do not establish real-model browser inference;
+consult the manifest's validation fields for measured evidence.
 
 ## Artifact layout and provenance
 
-The format-5 root manifest binds root files and both runtime manifests. Each
+The format-6 root manifest binds root files and all three runtime manifests. Each
 runtime manifest owns its complete payload inventory; together they cover the
 installed tree. Physical runtime files live under
-`runtimes/llama-cpp-browser-core/` and `runtimes/stable-diffusion-cpp-browser-core/`; each
+`runtimes/llama-cpp-browser-core/`, `runtimes/stable-diffusion-cpp-browser-core/` and
+`runtimes/speech-cpp-browser-core/`; each
 retains its own format-2 manifest and validation scope. ABI-3 catalogs select
 target metadata by the compiled native fingerprint; each profile also includes
 its target metadata in `abi.json`. Use the public import

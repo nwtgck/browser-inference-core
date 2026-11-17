@@ -8,6 +8,8 @@
     "tests/tools/**/*.ts",
     ".github/tests/**/*.ts",
     "tests/runtimes/llama-cpp/**/*.ts",
-    "tests/runtimes/stable-diffusion-cpp/**/*.ts"
+    "tests/runtimes/stable-diffusion-cpp/**/*.ts",
+    "runtimes/speech-cpp/tools/**/*.ts",
+    "tests/runtimes/speech-cpp/**/*.ts"
   ]
 }

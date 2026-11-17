@@ -5,10 +5,11 @@ import { copyRegular } from './files.js';
 import { collectNotices } from './licenses.js';
 import { apiFiles } from './runtime.js';
 import type { LlamaProvenance } from '#dto/llama-cpp';
+import type { SpeechProvenance } from '#dto/speech-cpp';
 import type { StableDiffusionProvenance } from '#dto/stable-diffusion-cpp';
 
 /** Stage the compiled profile and its provenance together for CI transfer. */
-export async function stageProfile({ buildDirectory, generatedDirectory, runtimeFiles, provenance, noticeRoots, noticeDestination }: { buildDirectory: string; generatedDirectory: string; runtimeFiles: readonly { source: string; name: string }[]; provenance: LlamaProvenance | StableDiffusionProvenance; noticeRoots: readonly string[]; noticeDestination: string | undefined }): Promise<void> {
+export async function stageProfile({ buildDirectory, generatedDirectory, runtimeFiles, provenance, noticeRoots, noticeDestination }: { buildDirectory: string; generatedDirectory: string; runtimeFiles: readonly { source: string; name: string }[]; provenance: LlamaProvenance | StableDiffusionProvenance | SpeechProvenance; noticeRoots: readonly string[]; noticeDestination: string | undefined }): Promise<void> {
   const names = runtimeFiles.map(file => file.name);
   if (new Set(names).size !== names.length || ['core.mjs', 'core.wasm', 'core.d.ts'].some(name => !names.includes(name))) {
     throw new Error('Staging requires each compiled runtime member exactly once');

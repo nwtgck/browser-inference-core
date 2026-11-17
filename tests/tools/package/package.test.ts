@@ -17,11 +17,11 @@ async function validate({ directory }: { directory: string }) {
   return validatePackage({ sourceRoot, directory, requireClean: true, checkNpmPack: false });
 }
 
-test('root inventory owns five entries and derives complete payload closure through runtime manifests', async () => {
+test('root inventory owns six entries and derives complete payload closure through runtime manifests', async () => {
   await using fixture = await packageFixture();
   const result = await validate({ directory: fixture.directory });
-  assert.equal(result.manifest.formatVersion, 5);
-  assert.equal(result.manifest.files.length, 5);
+  assert.equal(result.manifest.formatVersion, 6);
+  assert.equal(result.manifest.files.length, 6);
   assert(result.files.size > result.manifest.files.length + 1);
   assert(result.manifest.files.every(entry => !entry.path.endsWith('.wasm')));
 });
@@ -33,7 +33,7 @@ test('public runtime pairs and host modules resolve with their own packaged Wasm
     args: ['--input-type=module', '-e', `\
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-for (const runtime of ['llama-cpp', 'stable-diffusion-cpp']) {
+for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp']) {
   const host = await import('browser-inference-core/' + runtime + '/host');
   assert.equal(typeof host.attachCore, 'function');
   const profile = runtime === 'llama-cpp' ? 'cpu-wasm32' : 'webgpu-wasm32-jspi';
@@ -44,14 +44,14 @@ for (const runtime of ['llama-cpp', 'stable-diffusion-cpp']) {
     const wasm = new URL('core.wasm', import.meta.resolve(entry));
     assert.equal(wasm.href, import.meta.resolve(entry.replace('.mjs', '.wasm')));
     const module = await factory({ wasmBinary: new Uint8Array(await readFile(wasm)) });
-    assert.equal(module[runtime === 'llama-cpp' ? '_fixture_version' : '_sd_browser_bf16_retention_version'](), 1);
+    assert.equal(module[runtime === 'llama-cpp' ? '_fixture_version' : runtime === 'speech-cpp' ? '_speech_api_version_major' : '_sd_browser_bf16_retention_version'](), 1);
   }
 }
 `],
     cwd: fixture.directory,
   });
   assert.equal(result.exitCode, 0);
-  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp'] as const) {
+  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp'] as const) {
     for (const name of hostFiles) {
       assert.deepEqual(await readFile(join(fixture.directory, artifactDirectories[runtime], 'host', name)), await readFile(join(sourceRoot, 'runtimes', runtime, 'host', name)));
     }

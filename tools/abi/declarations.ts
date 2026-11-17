@@ -107,7 +107,7 @@ export class Declarations {
           }
         } else {
           for (const [name, value] of values) {
-            if (/^(?:LLAMA|GGML|GGUF|MTMD)_/u.test(name) || (runtime === 'stable-diffusion-cpp' && node.loc?.includedFrom?.file === translationUnit)) {
+            if (/^(?:LLAMA|GGML|GGUF|MTMD|SPEECH)_/u.test(name) || (runtime === 'stable-diffusion-cpp' && node.loc?.includedFrom?.file === translationUnit)) {
               this.constantValues[name] = value;
             }
           }
