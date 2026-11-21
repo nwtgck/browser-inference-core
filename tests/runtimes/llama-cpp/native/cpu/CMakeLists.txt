@@ -54,6 +54,7 @@ add_test(NAME mtmd-borrowed COMMAND mtmd-borrowed)
 mtmd_contract(mtmd-entry "../mtmd-entry.cpp"
     $<TARGET_OBJECTS:native-mtmd> $<TARGET_OBJECTS:native-mtmd-model> $<TARGET_OBJECTS:native-mtmd-subcontext>
     $<TARGET_OBJECTS:native-mtmd-audio> $<TARGET_OBJECTS:native-mtmd-image>)
+target_include_directories(mtmd-entry PRIVATE "${LCB_PREPARED_SOURCE}/src")
 target_link_options(mtmd-entry PRIVATE -Wl,--wrap=gguf_init_from_file)
 add_test(NAME mtmd-entry COMMAND mtmd-entry "${CMAKE_CURRENT_BINARY_DIR}/entry-gguf")
 mtmd_contract(mtmd-loader "../mtmd-loader.cpp"

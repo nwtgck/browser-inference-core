@@ -18,7 +18,7 @@
  
  #include <algorithm>
  #include <cassert>
-@@ -1325,6 +1328,17 @@
+@@ -1454,6 +1457,17 @@
          auto & hparams = model.hparams;
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
@@ -36,7 +36,7 @@
  
          auto fin = open_ifstream_binary(fname);
          if (!fin) {
-@@ -1339,7 +1353,8 @@
+@@ -1468,7 +1482,8 @@
          // get offsets
          for (int64_t i = 0; i < gguf_get_n_tensors(ctx_gguf.get()); ++i) {
              const char * name = gguf_get_tensor_name(ctx_gguf.get(), i);
@@ -46,7 +46,7 @@
          }
  
          // create data context
-@@ -1366,12 +1381,30 @@
+@@ -1495,12 +1510,30 @@
              }
              if (cur) {
                  tensors_to_load.push_back(cur);
@@ -79,7 +79,7 @@
              }
              return cur;
          };
-@@ -3514,23 +3547,42 @@
+@@ -4341,23 +4374,42 @@
                  GGML_ASSERT(false && "unknown projector type");
          }
  
@@ -124,7 +124,7 @@
              ggml_backend_buffer_set_usage(model.buf.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
              // read the weight from file
              if (!no_alloc) {
-@@ -3541,27 +3593,79 @@
+@@ -4368,27 +4420,79 @@
                      auto it_off = tensor_offset.find(t->name);
                      GGML_ASSERT(it_off != tensor_offset.end() && "no offset for tensor");
                      const size_t offset = it_off->second;
@@ -208,7 +208,7 @@
                  }
                  LOG_DBG("%s: loaded %zu tensors from %s\n", __func__, tensors_to_load.size(), fname.c_str());
              } else {
-@@ -3734,7 +3838,8 @@
+@@ -4561,7 +4665,8 @@
  
      if (loader.has_vision) {
          // Reject unsupported requested GPU retention before allocating weights.
@@ -246,7 +246,7 @@
  
      const int n_splits = ggml_backend_sched_get_n_splits(backends.sched.get());
      const int n_nodes  = ggml_graph_n_nodes(gf);
-@@ -542,7 +552,17 @@
+@@ -627,7 +637,17 @@
  
      // if buffers are not allocated, we need to do a warmup run to allocate them
      if (!is_allocated) {
@@ -264,8 +264,8 @@
 +        }
      }
  
-     const bool needs_gen_state = params->gen_process == MTMD_SUBCTX_GEN_PROCESS_GEN_CODE ||
-@@ -569,9 +589,60 @@
+     if (model.proj_type == PROJECTOR_TYPE_KOKORO && !params->kokoro) {
+@@ -658,9 +678,60 @@
      // read it before scheduling: backends may reorder the nodes of graphs with several outputs (Metal)
      ggml_tensor * embeddings = params->out_embd ? ggml_graph_node(gf, -1) : nullptr;
  

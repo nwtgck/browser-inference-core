@@ -1,5 +1,6 @@
 #include "mtmd-subcontext.h"
 #include "mtmd-graph.h"
+#include "llama-arch.h"
 #include "ggml-cpu.h"
 #include "support/check.hpp"
 #include "support/mtmd-metadata.hpp"
@@ -32,6 +33,21 @@ int32_t llama_vocab_n_tokens(const llama_vocab *) {
 int32_t llama_token_to_piece(const llama_vocab *, llama_token, char *, int32_t, int32_t, bool) {
     throw std::runtime_error("unexpected text token conversion");
 }
+llama_model_params llama_model_default_params() {
+    throw std::runtime_error("unexpected embedded text model defaults query");
+}
+llama_model * llama_model_init_from_user(gguf_context *, llama_model_set_tensor_data_t, void *, llama_model_params) {
+    throw std::runtime_error("unexpected embedded text model loading");
+}
+void llama_model_free(llama_model *) {
+    throw std::runtime_error("unexpected embedded text model release");
+}
+}
+const char * llama_arch_name(llm_arch) {
+    throw std::runtime_error("unexpected embedded text model architecture query");
+}
+std::string llama_arch_kv_name(llm_arch, llm_kv) {
+    throw std::runtime_error("unexpected embedded text model metadata query");
 }
 std::unique_ptr<mtmd_graph> mtmd_get_graph_builder(mtmd_subcontext *, const mtmd_image_f32_batch &,
                                                    const mtmd_subctx_encode_params *) {
