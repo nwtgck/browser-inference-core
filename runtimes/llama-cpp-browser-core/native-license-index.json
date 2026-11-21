@@ -1,13 +1,46 @@
 {
   "components": [
     {
+      "id": "@ggml-org/llama-chat",
+      "name": "@ggml-org/llama-chat",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/ui/apps/chat/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "@ggml-org/llama-ui",
+      "name": "@ggml-org/llama-ui",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/ui/lib/ui/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "@ggml-org/llama-voice",
+      "name": "@ggml-org/llama-voice",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/ui/lib/voice/LICENSE"
+        }
+      ]
+    },
+    {
       "id": "big-integer",
       "name": "big-integer",
       "version": null,
       "license": null,
       "notices": [
         {
-          "path": "licenses/2/tools/ui/src/lib/vendors/big-integer/LICENSE"
+          "path": "licenses/2/ui/apps/chat/src/lib/vendors/big-integer/LICENSE"
         }
       ]
     },
@@ -3002,6 +3035,17 @@
       ]
     },
     {
+      "id": "llama-chat",
+      "name": "llama-chat",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/ui/apps/chat/alias/LICENSE"
+        }
+      ]
+    },
+    {
       "id": "llama-cpp-browser-core",
       "name": "llama-cpp-browser-core",
       "version": "0.1.0",
@@ -3045,7 +3089,7 @@
       "license": null,
       "notices": [
         {
-          "path": "licenses/2/tools/ui/src/lib/vendors/nerdamer-prime/LICENSE"
+          "path": "licenses/2/ui/apps/chat/src/lib/vendors/nerdamer-prime/LICENSE"
         }
       ]
     },

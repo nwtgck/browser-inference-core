@@ -535,6 +535,7 @@ export interface LowLevelFunctions {
   ggml_silu_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_sin(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_sin_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
+  ggml_sleep(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   ggml_soft_max(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_soft_max_add_sinks(arg0: bigint, arg1: bigint): Promise<void>;
   ggml_soft_max_ext(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: number): Promise<bigint>;
@@ -746,6 +747,7 @@ export interface LowLevelFunctions {
   llama_model_default_params(out: bigint): Promise<void>;
   llama_model_desc(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   llama_model_dflash_selector_top_k(arg0: bigint): Promise<number>;
+  llama_model_dflash_variant(arg0: bigint): Promise<number>;
   llama_model_free(arg0: bigint): Promise<void>;
   llama_model_ftype(arg0: bigint): Promise<number>;
   llama_model_get_vocab(arg0: bigint): Promise<bigint>;
@@ -758,6 +760,8 @@ export interface LowLevelFunctions {
   llama_model_load_from_file(arg0: bigint, arg1: bigint): Promise<bigint>;
   llama_model_load_from_file_ptr(arg0: bigint, arg1: bigint): Promise<bigint>;
   llama_model_load_from_splits(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
+  llama_model_meta_arr_n(arg0: bigint, arg1: bigint): Promise<number>;
+  llama_model_meta_arr_str(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   llama_model_meta_count(arg0: bigint): Promise<number>;
   llama_model_meta_key_by_index(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint): Promise<number>;
   llama_model_meta_key_str(arg0: number): Promise<bigint>;
@@ -930,6 +934,7 @@ export interface LowLevelFunctions {
   mtmd_bitmap_set_id(arg0: bigint, arg1: bigint): Promise<void>;
   mtmd_bitmap_set_is_video(arg0: bigint, arg1: number): Promise<void>;
   mtmd_bitmap_set_mergeable(arg0: bigint, arg1: number): Promise<void>;
+  mtmd_bitmap_set_transcript(arg0: bigint, arg1: bigint): Promise<void>;
   mtmd_context_params_default(out: bigint): Promise<void>;
   mtmd_context_vision_bf16_storage(arg0: bigint): Promise<number>;
   mtmd_decode_use_mrope(arg0: bigint): Promise<number>;
@@ -937,6 +942,7 @@ export interface LowLevelFunctions {
   mtmd_default_marker(): Promise<bigint>;
   mtmd_encode_chunk(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_free(arg0: bigint): Promise<void>;
+  mtmd_gen_audio_g2p(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
   mtmd_gen_audio_get_info(out: bigint, arg0: bigint): Promise<void>;
   mtmd_gen_audio_get_voice(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_audio_process(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
@@ -944,6 +950,7 @@ export interface LowLevelFunctions {
   mtmd_gen_audio_voice_name(arg0: bigint, arg1: number): Promise<bigint>;
   mtmd_gen_inp_default(out: bigint, arg0: bigint): Promise<void>;
   mtmd_gen_state_free(arg0: bigint): Promise<void>;
+  mtmd_gen_state_get_ref_codes(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_state_init(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_gen_state_params_default(out: bigint): Promise<void>;
   mtmd_gen_state_reset(arg0: bigint): Promise<void>;
@@ -965,12 +972,14 @@ export interface LowLevelFunctions {
   mtmd_helper_gen_audio_get_output(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
   mtmd_helper_gen_audio_init(arg0: bigint, arg1: bigint): Promise<bigint>;
   mtmd_helper_gen_audio_inp_default(out: bigint): Promise<void>;
+  mtmd_helper_gen_audio_max_frames(arg0: bigint): Promise<number>;
   mtmd_helper_gen_audio_next_is_text(arg0: bigint): Promise<number>;
   mtmd_helper_gen_audio_reset(arg0: bigint): Promise<void>;
   mtmd_helper_gen_audio_set_input(arg0: bigint, arg1: bigint): Promise<number>;
   mtmd_helper_gen_audio_step_gen(arg0: bigint, arg1: number, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
   mtmd_helper_gen_audio_step_prompt(arg0: bigint, arg1: number): Promise<number>;
   mtmd_helper_get_capabilities(out: bigint, arg0: bigint, arg1: bigint): Promise<void>;
+  mtmd_helper_get_media_meta(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
   mtmd_helper_get_n_pos(arg0: bigint): Promise<number>;
   mtmd_helper_get_n_tokens(arg0: bigint): Promise<bigint>;
   mtmd_helper_image_get_decoder_pos(arg0: bigint, arg1: number, arg2: bigint): Promise<void>;
@@ -981,12 +990,18 @@ export interface LowLevelFunctions {
   mtmd_helper_resampler_init(arg0: number, arg1: number): Promise<bigint>;
   mtmd_helper_resampler_process(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<bigint>;
   mtmd_helper_support_video(arg0: bigint): Promise<number>;
+  mtmd_helper_video_free(arg0: bigint): Promise<void>;
+  mtmd_helper_video_get_info(out: bigint, arg0: bigint): Promise<void>;
+  mtmd_helper_video_init(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
+  mtmd_helper_video_init_from_buf(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<bigint>;
   mtmd_helper_video_init_params_default(out: bigint): Promise<void>;
+  mtmd_helper_video_read_next(arg0: bigint, arg1: bigint, arg2: bigint): Promise<number>;
   mtmd_image_tokens_get_decoder_pos(out: bigint, arg0: bigint, arg1: number, arg2: bigint): Promise<void>;
   mtmd_image_tokens_get_id(arg0: bigint): Promise<bigint>;
   mtmd_image_tokens_get_n_pos(arg0: bigint): Promise<number>;
   mtmd_image_tokens_get_n_tokens(arg0: bigint): Promise<bigint>;
   mtmd_init_from_file(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
+  mtmd_init_from_file_with_vision_bf16_report(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number, arg4: bigint, arg5: number): Promise<bigint>;
   mtmd_init_from_file_with_vision_bf16_storage(arg0: bigint, arg1: bigint, arg2: bigint, arg3: number): Promise<bigint>;
   mtmd_input_chunk_copy(arg0: bigint): Promise<bigint>;
   mtmd_input_chunk_free(arg0: bigint): Promise<void>;
@@ -1010,6 +1025,8 @@ export interface LowLevelFunctions {
   mtmd_test_create_input_chunks(): Promise<bigint>;
   mtmd_tokenize(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<number>;
   mtmd_tokenize_from_parts(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: number): Promise<number>;
+  mtmd_vision_bf16_classify_metadata(arg0: number, arg1: bigint, arg2: bigint): Promise<number>;
+  mtmd_vision_bf16_diagnostics_version(): Promise<number>;
   mtmd_vision_bf16_storage_version(): Promise<number>;
 }
 export type NativeScalar = number | bigint;

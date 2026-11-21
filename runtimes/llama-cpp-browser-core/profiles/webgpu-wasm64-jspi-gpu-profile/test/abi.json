@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 8,
-  "schemaSha256": "de98f47a641d39c563d8b1e5ccb47ba47418bab3938e74650842040bfb69c473",
+  "schemaSha256": "1a2d424ec82b797321050d55bb41825d2eae210ce1fca6c50cc8020dbf26970e",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -20629,6 +20629,47 @@
       "bridge": false
     },
     {
+      "name": "ggml_sleep",
+      "export": "_ggml_sleep",
+      "returnType": "struct ggml_tensor *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct ggml_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "a",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "us",
+          "cType": "int32_t",
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "ggml_soft_max",
       "export": "_ggml_soft_max",
       "returnType": "struct ggml_tensor *",
@@ -28058,6 +28099,29 @@
       "bridge": false
     },
     {
+      "name": "llama_model_dflash_variant",
+      "export": "_llama_model_dflash_variant",
+      "returnType": "enum llama_dflash_variant",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "llama_model_free",
       "export": "_llama_model_free",
       "returnType": "void",
@@ -28391,6 +28455,79 @@
         }
       ],
       "bridge": true
+    },
+    {
+      "name": "llama_model_meta_arr_n",
+      "export": "_llama_model_meta_arr_n",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "key",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "llama_model_meta_arr_str",
+      "export": "_llama_model_meta_arr_str",
+      "returnType": "const char *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "key",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "i",
+          "cType": "int32_t",
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        }
+      ],
+      "bridge": false
     },
     {
       "name": "llama_model_meta_count",
@@ -33834,6 +33971,36 @@
       "bridge": false
     },
     {
+      "name": "mtmd_bitmap_set_transcript",
+      "export": "_mtmd_bitmap_set_transcript",
+      "returnType": "void",
+      "returnKind": "void",
+      "abiType": {
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "bitmap",
+          "cType": "mtmd_bitmap *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "transcript",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "mtmd_context_params_default",
       "export": "_bicore_mtmd_context_params_default",
       "returnType": "struct mtmd_context_params",
@@ -33983,6 +34150,58 @@
           "abiType": {
             "kind": "pointer",
             "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "mtmd_gen_audio_g2p",
+      "export": "_mtmd_gen_audio_g2p",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "word",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "buf",
+          "cType": "char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "buf_size",
+          "cType": "size_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false,
+            "pointerSized": true
           }
         }
       ],
@@ -34210,6 +34429,37 @@
         {
           "name": "state",
           "cType": "mtmd_gen_state *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "mtmd_gen_state_get_ref_codes",
+      "export": "_mtmd_gen_state_get_ref_codes",
+      "returnType": "const int32_t *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "state",
+          "cType": "const mtmd_gen_state *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "n_codes",
+          "cType": "size_t *",
           "kind": "pointer",
           "abiType": {
             "kind": "pointer",
@@ -35093,6 +35343,29 @@
       "bridge": true
     },
     {
+      "name": "mtmd_helper_gen_audio_max_frames",
+      "export": "_mtmd_helper_gen_audio_max_frames",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_helper_gen_audio *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "mtmd_helper_gen_audio_next_is_text",
       "export": "_mtmd_helper_gen_audio_next_is_text",
       "returnType": "bool",
@@ -35283,6 +35556,58 @@
         {
           "name": "mctx",
           "cType": "const struct mtmd_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": true
+    },
+    {
+      "name": "mtmd_helper_get_media_meta",
+      "export": "_bicore_mtmd_helper_get_media_meta",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "buf",
+          "cType": "const unsigned char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "len",
+          "cType": "size_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false,
+            "pointerSized": true
+          }
+        },
+        {
+          "name": "opt",
+          "cType": "struct mtmd_helper_init_opt",
+          "kind": "record",
+          "abiType": {
+            "kind": "record",
+            "record": "mtmd_helper_init_opt"
+          }
+        },
+        {
+          "name": "out",
+          "cType": "struct mtmd_helper_media_meta *",
           "kind": "pointer",
           "abiType": {
             "kind": "pointer",
@@ -35584,6 +35909,140 @@
       "bridge": false
     },
     {
+      "name": "mtmd_helper_video_free",
+      "export": "_mtmd_helper_video_free",
+      "returnType": "void",
+      "returnKind": "void",
+      "abiType": {
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_helper_video *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "mtmd_helper_video_get_info",
+      "export": "_bicore_mtmd_helper_video_get_info",
+      "returnType": "struct mtmd_helper_video_info",
+      "returnKind": "record",
+      "abiType": {
+        "kind": "record",
+        "record": "mtmd_helper_video_info"
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "const mtmd_helper_video *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": true
+    },
+    {
+      "name": "mtmd_helper_video_init",
+      "export": "_bicore_mtmd_helper_video_init",
+      "returnType": "mtmd_helper_video *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "mctx",
+          "cType": "const struct mtmd_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "path",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "params",
+          "cType": "struct mtmd_helper_video_init_params",
+          "kind": "record",
+          "abiType": {
+            "kind": "record",
+            "record": "mtmd_helper_video_init_params"
+          }
+        }
+      ],
+      "bridge": true
+    },
+    {
+      "name": "mtmd_helper_video_init_from_buf",
+      "export": "_bicore_mtmd_helper_video_init_from_buf",
+      "returnType": "mtmd_helper_video *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "mctx",
+          "cType": "const struct mtmd_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "buf",
+          "cType": "const unsigned char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "len",
+          "cType": "size_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false,
+            "pointerSized": true
+          }
+        },
+        {
+          "name": "params",
+          "cType": "struct mtmd_helper_video_init_params",
+          "kind": "record",
+          "abiType": {
+            "kind": "record",
+            "record": "mtmd_helper_video_init_params"
+          }
+        }
+      ],
+      "bridge": true
+    },
+    {
       "name": "mtmd_helper_video_init_params_default",
       "export": "_bicore_mtmd_helper_video_init_params_default",
       "returnType": "struct mtmd_helper_video_init_params",
@@ -35594,6 +36053,47 @@
       },
       "parameters": [],
       "bridge": true
+    },
+    {
+      "name": "mtmd_helper_video_read_next",
+      "export": "_mtmd_helper_video_read_next",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "mtmd_helper_video *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "out_bitmap",
+          "cType": "mtmd_bitmap **",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "out_text",
+          "cType": "char **",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
     },
     {
       "name": "mtmd_image_tokens_get_decoder_pos",
@@ -35742,6 +36242,75 @@
           "abiType": {
             "kind": "record",
             "record": "mtmd_context_params"
+          }
+        }
+      ],
+      "bridge": true
+    },
+    {
+      "name": "mtmd_init_from_file_with_vision_bf16_report",
+      "export": "_bicore_mtmd_init_from_file_with_vision_bf16_report",
+      "returnType": "struct mtmd_context *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "text_model",
+          "cType": "const struct llama_model *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "params",
+          "cType": "const struct mtmd_context_params",
+          "kind": "record",
+          "abiType": {
+            "kind": "record",
+            "record": "mtmd_context_params"
+          }
+        },
+        {
+          "name": "storage",
+          "cType": "int32_t",
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "report",
+          "cType": "struct mtmd_vision_bf16_load_report *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "report_size",
+          "cType": "uint32_t",
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
           }
         }
       ],
@@ -36415,6 +36984,61 @@
           }
         }
       ],
+      "bridge": false
+    },
+    {
+      "name": "mtmd_vision_bf16_classify_metadata",
+      "export": "_mtmd_vision_bf16_classify_metadata",
+      "returnType": "int32_t",
+      "returnKind": "signed",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": true
+      },
+      "parameters": [
+        {
+          "name": "has_vision",
+          "cType": "int32_t",
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "common_projector",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "vision_projector",
+          "cType": "const char *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "mtmd_vision_bf16_diagnostics_version",
+      "export": "_mtmd_vision_bf16_diagnostics_version",
+      "returnType": "uint32_t",
+      "returnKind": "unsigned",
+      "abiType": {
+        "kind": "integer",
+        "bits": 32,
+        "signed": false
+      },
+      "parameters": [],
       "bridge": false
     },
     {
@@ -40159,7 +40783,7 @@
       "name": "mtmd_gen_audio_info",
       "cType": "struct mtmd_gen_audio_info",
       "id": 45,
-      "size": 24,
+      "size": 32,
       "alignment": 8,
       "fields": [
         {
@@ -40189,10 +40813,23 @@
           }
         },
         {
-          "name": "model_variant",
-          "cType": "const char *",
+          "name": "n_channels",
+          "cType": "int32_t",
           "id": 2,
           "offset": 8,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "model_variant",
+          "cType": "const char *",
+          "id": 3,
+          "offset": 16,
           "size": 8,
           "kind": "pointer",
           "abiType": {
@@ -40203,8 +40840,8 @@
         {
           "name": "n_voices",
           "cType": "int32_t",
-          "id": 3,
-          "offset": 16,
+          "id": 4,
+          "offset": 24,
           "size": 4,
           "kind": "signed",
           "abiType": {
@@ -40219,7 +40856,7 @@
       "name": "mtmd_gen_inp",
       "cType": "struct mtmd_gen_inp",
       "id": 46,
-      "size": 72,
+      "size": 112,
       "alignment": 8,
       "fields": [
         {
@@ -40372,6 +41009,82 @@
             "bits": 64,
             "signed": false,
             "pointerSized": true
+          }
+        },
+        {
+          "name": "speed",
+          "cType": "float",
+          "id": 12,
+          "offset": 72,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "backbone_state",
+          "cType": "const uint8_t *",
+          "id": 13,
+          "offset": 80,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "backbone_state_size",
+          "cType": "size_t",
+          "id": 14,
+          "offset": 88,
+          "size": 8,
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false,
+            "pointerSized": true
+          }
+        },
+        {
+          "name": "backbone_n_past",
+          "cType": "int32_t",
+          "id": 15,
+          "offset": 96,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "n_steps",
+          "cType": "int32_t",
+          "id": 16,
+          "offset": 100,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "cfg_scale",
+          "cType": "float",
+          "id": 17,
+          "offset": 104,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
           }
         }
       ]
@@ -40745,7 +41458,7 @@
       "name": "mtmd_helper_gen_audio_inp",
       "cType": "struct mtmd_helper_gen_audio_inp",
       "id": 52,
-      "size": 72,
+      "size": 96,
       "alignment": 8,
       "fields": [
         {
@@ -40839,7 +41552,7 @@
           }
         },
         {
-          "name": "lang",
+          "name": "speaker_ref_text",
           "cType": "const char *",
           "id": 7,
           "offset": 40,
@@ -40851,10 +41564,22 @@
           }
         },
         {
-          "name": "top_k",
-          "cType": "int32_t",
+          "name": "lang",
+          "cType": "const char *",
           "id": 8,
           "offset": 48,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "top_k",
+          "cType": "int32_t",
+          "id": 9,
+          "offset": 56,
           "size": 4,
           "kind": "signed",
           "abiType": {
@@ -40866,8 +41591,8 @@
         {
           "name": "top_p",
           "cType": "float",
-          "id": 9,
-          "offset": 52,
+          "id": 10,
+          "offset": 60,
           "size": 4,
           "kind": "float",
           "abiType": {
@@ -40878,8 +41603,8 @@
         {
           "name": "temp",
           "cType": "float",
-          "id": 10,
-          "offset": 56,
+          "id": 11,
+          "offset": 64,
           "size": 4,
           "kind": "float",
           "abiType": {
@@ -40890,8 +41615,8 @@
         {
           "name": "seed",
           "cType": "uint32_t",
-          "id": 11,
-          "offset": 60,
+          "id": 12,
+          "offset": 68,
           "size": 4,
           "kind": "unsigned",
           "abiType": {
@@ -40901,10 +41626,59 @@
           }
         },
         {
+          "name": "speed",
+          "cType": "float",
+          "id": 13,
+          "offset": 72,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "loudness",
+          "cType": "float",
+          "id": 14,
+          "offset": 76,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "cfg_scale",
+          "cType": "float",
+          "id": 15,
+          "offset": 80,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "flow_steps",
+          "cType": "int32_t",
+          "id": 16,
+          "offset": 84,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
           "name": "out_type",
           "cType": "enum mtmd_helper_gen_audio_outtype",
-          "id": 12,
-          "offset": 64,
+          "id": 17,
+          "offset": 88,
           "size": 4,
           "kind": "signed",
           "abiType": {
@@ -40919,7 +41693,7 @@
       "name": "mtmd_helper_init_opt",
       "cType": "struct mtmd_helper_init_opt",
       "id": 53,
-      "size": 32,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -40927,7 +41701,7 @@
           "cType": "struct mtmd_helper_video_init_params",
           "id": 0,
           "offset": 0,
-          "size": 32,
+          "size": 40,
           "kind": "record",
           "abiType": {
             "kind": "record",
@@ -40937,9 +41711,176 @@
       ]
     },
     {
+      "name": "mtmd_helper_media_meta",
+      "cType": "struct mtmd_helper_media_meta",
+      "id": 54,
+      "size": 24,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "type",
+          "cType": "enum mtmd_helper_media_type",
+          "id": 0,
+          "offset": 0,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "width",
+          "cType": "uint32_t",
+          "id": 1,
+          "offset": 4,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "height",
+          "cType": "uint32_t",
+          "id": 2,
+          "offset": 8,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "sample_rate",
+          "cType": "int32_t",
+          "id": 3,
+          "offset": 12,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "duration",
+          "cType": "float",
+          "id": 4,
+          "offset": 16,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "n_frames",
+          "cType": "int32_t",
+          "id": 5,
+          "offset": 20,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "mtmd_helper_video_decoder",
+      "cType": "struct mtmd_helper_video_decoder",
+      "id": 55,
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "open",
+          "cType": "void *(*)(void *, const char *, const unsigned char *, size_t, struct mtmd_helper_video_stream_info *)",
+          "id": 0,
+          "offset": 0,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "start",
+          "cType": "bool (*)(void *, uint32_t, uint32_t, float, bool *)",
+          "id": 1,
+          "offset": 8,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "read_frame",
+          "cType": "bool (*)(void *, unsigned char *, uint32_t, uint32_t)",
+          "id": 2,
+          "offset": 16,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "read_audio",
+          "cType": "const float *(*)(void *, int, size_t *)",
+          "id": 3,
+          "offset": 24,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "close",
+          "cType": "void (*)(void *)",
+          "id": 4,
+          "offset": 32,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "user_data",
+          "cType": "void *",
+          "id": 5,
+          "offset": 40,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ]
+    },
+    {
       "name": "mtmd_helper_video_info",
       "cType": "struct mtmd_helper_video_info",
-      "id": 54,
+      "id": 56,
       "size": 16,
       "alignment": 4,
       "fields": [
@@ -40999,8 +41940,8 @@
     {
       "name": "mtmd_helper_video_init_params",
       "cType": "struct mtmd_helper_video_init_params",
-      "id": 55,
-      "size": 32,
+      "id": 57,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -41052,13 +41993,25 @@
             "bits": 8,
             "signed": false
           }
+        },
+        {
+          "name": "decoder",
+          "cType": "const struct mtmd_helper_video_decoder *",
+          "id": 4,
+          "offset": 32,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
         }
       ]
     },
     {
-      "name": "mtmd_helper_video_src",
-      "cType": "struct mtmd_helper_video_src",
-      "id": 56,
+      "name": "mtmd_helper_video_stream_info",
+      "cType": "struct mtmd_helper_video_stream_info",
+      "id": 58,
       "size": 20,
       "alignment": 4,
       "fields": [
@@ -41130,7 +42083,7 @@
     {
       "name": "mtmd_input_part",
       "cType": "struct mtmd_input_part",
-      "id": 57,
+      "id": 59,
       "size": 16,
       "alignment": 8,
       "fields": [
@@ -41163,7 +42116,7 @@
     {
       "name": "mtmd_input_text",
       "cType": "struct mtmd_input_text",
-      "id": 58,
+      "id": 60,
       "size": 24,
       "alignment": 8,
       "fields": [
@@ -41224,7 +42177,7 @@
     {
       "name": "mtmd_video_config",
       "cType": "struct mtmd_video_config",
-      "id": 59,
+      "id": 61,
       "size": 20,
       "alignment": 4,
       "fields": [
@@ -41284,6 +42237,93 @@
           "cType": "int32_t",
           "id": 4,
           "offset": 16,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "mtmd_vision_bf16_load_report",
+      "cType": "struct mtmd_vision_bf16_load_report",
+      "id": 62,
+      "size": 24,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "version",
+          "cType": "uint32_t",
+          "id": 0,
+          "offset": 0,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "size",
+          "cType": "uint32_t",
+          "id": 1,
+          "offset": 4,
+          "size": 4,
+          "kind": "unsigned",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": false
+          }
+        },
+        {
+          "name": "status",
+          "cType": "int32_t",
+          "id": 2,
+          "offset": 8,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "reason",
+          "cType": "int32_t",
+          "id": 3,
+          "offset": 12,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "phase",
+          "cType": "int32_t",
+          "id": 4,
+          "offset": 16,
+          "size": 4,
+          "kind": "signed",
+          "abiType": {
+            "kind": "integer",
+            "bits": 32,
+            "signed": true
+          }
+        },
+        {
+          "name": "cleanup",
+          "cType": "int32_t",
+          "id": 5,
+          "offset": 20,
           "size": 4,
           "kind": "signed",
           "abiType": {
@@ -42901,6 +43941,7 @@
     "GGML_OP_SET_ROWS",
     "GGML_OP_SILU_BACK",
     "GGML_OP_SIN",
+    "GGML_OP_SLEEP",
     "GGML_OP_SOFT_MAX",
     "GGML_OP_SOFT_MAX_BACK",
     "GGML_OP_SOLVE_TRI",
@@ -43053,6 +44094,11 @@
     "LLAMA_CONTEXT_TYPE_DEFAULT",
     "LLAMA_CONTEXT_TYPE_MTP",
     "LLAMA_DEFAULT_SEED",
+    "LLAMA_DFLASH_VARIANT_DFLASH",
+    "LLAMA_DFLASH_VARIANT_DFLASH2",
+    "LLAMA_DFLASH_VARIANT_DSPARK",
+    "LLAMA_DFLASH_VARIANT_LILICORR",
+    "LLAMA_DFLASH_VARIANT_NONE",
     "LLAMA_DRY_MAX_SEQ_BREAKERS",
     "LLAMA_FILE_MAGIC_GGLA",
     "LLAMA_FILE_MAGIC_GGSN",
@@ -43185,11 +44231,18 @@
     "LLAMA_VOCAB_TYPE_WPM",
     "MTMD_GEN_AUDIO_TYPE_CHATTERBOX",
     "MTMD_GEN_AUDIO_TYPE_DRAMA3",
+    "MTMD_GEN_AUDIO_TYPE_FISH_S2",
+    "MTMD_GEN_AUDIO_TYPE_KOKORO",
     "MTMD_GEN_AUDIO_TYPE_LFM3A",
+    "MTMD_GEN_AUDIO_TYPE_MINIMAX_MUSIC3",
     "MTMD_GEN_AUDIO_TYPE_NONE",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS",
     "MTMD_GEN_AUDIO_TYPE_QWEN3TTS",
     "MTMD_GEN_AUDIO_TYPE_SOPRANO",
+    "MTMD_GEN_AUDIO_TYPE_TINY_VOCA",
+    "MTMD_GEN_AUDIO_TYPE_VOXCPM2",
+    "MTMD_GEN_AUDIO_TYPE_YUE2",
+    "MTMD_GEN_AUDIO_TYPE_ZONOS3",
     "MTMD_GEN_PROCESS_TYPE_GEN_CODE",
     "MTMD_GEN_PROCESS_TYPE_GEN_WAV",
     "MTMD_HELPER_GEN_AUDIO_OUT_AUDIO",
@@ -43198,6 +44251,10 @@
     "MTMD_HELPER_GEN_AUDIO_OUT_TEXT",
     "MTMD_HELPER_GEN_AUDIO_OUTTYPE_PCM",
     "MTMD_HELPER_GEN_AUDIO_OUTTYPE_WAV",
+    "MTMD_HELPER_MEDIA_TYPE_AUDIO",
+    "MTMD_HELPER_MEDIA_TYPE_IMAGE",
+    "MTMD_HELPER_MEDIA_TYPE_UNKNOWN",
+    "MTMD_HELPER_MEDIA_TYPE_VIDEO",
     "MTMD_INPUT_CHUNK_TYPE_AUDIO",
     "MTMD_INPUT_CHUNK_TYPE_COUNT",
     "MTMD_INPUT_CHUNK_TYPE_IMAGE",
@@ -43206,6 +44263,26 @@
     "MTMD_VIDEO_TEMPLATE_LFM3",
     "MTMD_VIDEO_TEMPLATE_LFM3_OMNI",
     "MTMD_VIDEO_TEMPLATE_QWEN3VL",
+    "MTMD_VISION_BF16_CANDIDATE_LEGACY_FIRST",
+    "MTMD_VISION_BF16_CANDIDATE_NOT_APPLICABLE",
+    "MTMD_VISION_BF16_CANDIDATE_REVIEWED",
+    "MTMD_VISION_BF16_CANDIDATE_UNKNOWN",
+    "MTMD_VISION_BF16_CANDIDATE_UNREVIEWED",
+    "MTMD_VISION_BF16_CLEANUP_COMPLETE",
+    "MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED",
+    "MTMD_VISION_BF16_CLEANUP_UNKNOWN",
+    "MTMD_VISION_BF16_LOAD_FAILED",
+    "MTMD_VISION_BF16_LOAD_RETENTION_REFUSED",
+    "MTMD_VISION_BF16_LOAD_SUCCEEDED",
+    "MTMD_VISION_BF16_PHASE_COMPLETE",
+    "MTMD_VISION_BF16_PHASE_CONTEXT",
+    "MTMD_VISION_BF16_PHASE_PREUPLOAD",
+    "MTMD_VISION_BF16_PHASE_UNKNOWN",
+    "MTMD_VISION_BF16_REASON_INVALID_MODE",
+    "MTMD_VISION_BF16_REASON_NONE",
+    "MTMD_VISION_BF16_REASON_OTHER",
+    "MTMD_VISION_BF16_REASON_PROJECTOR_UNREVIEWED",
+    "MTMD_VISION_BF16_REASON_WEIGHT_UNREVIEWED",
     "MTMD_VISION_BF16_STORAGE_INVALID",
     "MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND",
     "MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED",
@@ -43322,7 +44399,7 @@
     "GGML_OP_CONV_TRANSPOSE_1D": "48",
     "GGML_OP_CONV_TRANSPOSE_2D": "56",
     "GGML_OP_COS": "12",
-    "GGML_OP_COUNT": "99",
+    "GGML_OP_COUNT": "100",
     "GGML_OP_COUNT_EQUAL": "18",
     "GGML_OP_CPY": "33",
     "GGML_OP_CROSS_ENTROPY_LOSS": "94",
@@ -43388,6 +44465,7 @@
     "GGML_OP_SET_ROWS": "41",
     "GGML_OP_SILU_BACK": "22",
     "GGML_OP_SIN": "11",
+    "GGML_OP_SLEEP": "99",
     "GGML_OP_SOFT_MAX": "43",
     "GGML_OP_SOFT_MAX_BACK": "44",
     "GGML_OP_SOLVE_TRI": "82",
@@ -43540,6 +44618,11 @@
     "LLAMA_CONTEXT_TYPE_DEFAULT": "0",
     "LLAMA_CONTEXT_TYPE_MTP": "1",
     "LLAMA_DEFAULT_SEED": "4294967295",
+    "LLAMA_DFLASH_VARIANT_DFLASH": "0",
+    "LLAMA_DFLASH_VARIANT_DFLASH2": "1",
+    "LLAMA_DFLASH_VARIANT_DSPARK": "2",
+    "LLAMA_DFLASH_VARIANT_LILICORR": "3",
+    "LLAMA_DFLASH_VARIANT_NONE": "-1",
     "LLAMA_DRY_MAX_SEQ_BREAKERS": "64",
     "LLAMA_FILE_MAGIC_GGLA": "1734831201",
     "LLAMA_FILE_MAGIC_GGSN": "1734833006",
@@ -43672,11 +44755,18 @@
     "LLAMA_VOCAB_TYPE_WPM": "3",
     "MTMD_GEN_AUDIO_TYPE_CHATTERBOX": "5",
     "MTMD_GEN_AUDIO_TYPE_DRAMA3": "6",
+    "MTMD_GEN_AUDIO_TYPE_FISH_S2": "10",
+    "MTMD_GEN_AUDIO_TYPE_KOKORO": "11",
     "MTMD_GEN_AUDIO_TYPE_LFM3A": "4",
+    "MTMD_GEN_AUDIO_TYPE_MINIMAX_MUSIC3": "9",
     "MTMD_GEN_AUDIO_TYPE_NONE": "0",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS": "2",
     "MTMD_GEN_AUDIO_TYPE_QWEN3TTS": "1",
     "MTMD_GEN_AUDIO_TYPE_SOPRANO": "3",
+    "MTMD_GEN_AUDIO_TYPE_TINY_VOCA": "12",
+    "MTMD_GEN_AUDIO_TYPE_VOXCPM2": "13",
+    "MTMD_GEN_AUDIO_TYPE_YUE2": "8",
+    "MTMD_GEN_AUDIO_TYPE_ZONOS3": "7",
     "MTMD_GEN_PROCESS_TYPE_GEN_CODE": "0",
     "MTMD_GEN_PROCESS_TYPE_GEN_WAV": "1",
     "MTMD_HELPER_GEN_AUDIO_OUT_AUDIO": "2",
@@ -43685,6 +44775,10 @@
     "MTMD_HELPER_GEN_AUDIO_OUT_TEXT": "1",
     "MTMD_HELPER_GEN_AUDIO_OUTTYPE_PCM": "0",
     "MTMD_HELPER_GEN_AUDIO_OUTTYPE_WAV": "1",
+    "MTMD_HELPER_MEDIA_TYPE_AUDIO": "2",
+    "MTMD_HELPER_MEDIA_TYPE_IMAGE": "1",
+    "MTMD_HELPER_MEDIA_TYPE_UNKNOWN": "0",
+    "MTMD_HELPER_MEDIA_TYPE_VIDEO": "3",
     "MTMD_INPUT_CHUNK_TYPE_AUDIO": "2",
     "MTMD_INPUT_CHUNK_TYPE_COUNT": "3",
     "MTMD_INPUT_CHUNK_TYPE_IMAGE": "1",
@@ -43693,6 +44787,26 @@
     "MTMD_VIDEO_TEMPLATE_LFM3": "1",
     "MTMD_VIDEO_TEMPLATE_LFM3_OMNI": "2",
     "MTMD_VIDEO_TEMPLATE_QWEN3VL": "3",
+    "MTMD_VISION_BF16_CANDIDATE_LEGACY_FIRST": "2",
+    "MTMD_VISION_BF16_CANDIDATE_NOT_APPLICABLE": "3",
+    "MTMD_VISION_BF16_CANDIDATE_REVIEWED": "1",
+    "MTMD_VISION_BF16_CANDIDATE_UNKNOWN": "0",
+    "MTMD_VISION_BF16_CANDIDATE_UNREVIEWED": "4",
+    "MTMD_VISION_BF16_CLEANUP_COMPLETE": "1",
+    "MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED": "2",
+    "MTMD_VISION_BF16_CLEANUP_UNKNOWN": "0",
+    "MTMD_VISION_BF16_LOAD_FAILED": "0",
+    "MTMD_VISION_BF16_LOAD_RETENTION_REFUSED": "2",
+    "MTMD_VISION_BF16_LOAD_SUCCEEDED": "1",
+    "MTMD_VISION_BF16_PHASE_COMPLETE": "3",
+    "MTMD_VISION_BF16_PHASE_CONTEXT": "2",
+    "MTMD_VISION_BF16_PHASE_PREUPLOAD": "1",
+    "MTMD_VISION_BF16_PHASE_UNKNOWN": "0",
+    "MTMD_VISION_BF16_REASON_INVALID_MODE": "4",
+    "MTMD_VISION_BF16_REASON_NONE": "0",
+    "MTMD_VISION_BF16_REASON_OTHER": "1",
+    "MTMD_VISION_BF16_REASON_PROJECTOR_UNREVIEWED": "2",
+    "MTMD_VISION_BF16_REASON_WEIGHT_UNREVIEWED": "3",
     "MTMD_VISION_BF16_STORAGE_INVALID": "-1",
     "MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND": "0",
     "MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED": "1",
@@ -43716,26 +44830,6 @@
     {
       "name": "mtmd_encode",
       "reason": "deprecated upstream declaration"
-    },
-    {
-      "name": "mtmd_helper_video_free",
-      "reason": "requires subprocess video support, unavailable in the browser source set"
-    },
-    {
-      "name": "mtmd_helper_video_get_info",
-      "reason": "requires subprocess video support, unavailable in the browser source set"
-    },
-    {
-      "name": "mtmd_helper_video_init",
-      "reason": "requires subprocess video support, unavailable in the browser source set"
-    },
-    {
-      "name": "mtmd_helper_video_init_from_buf",
-      "reason": "requires subprocess video support, unavailable in the browser source set"
-    },
-    {
-      "name": "mtmd_helper_video_read_next",
-      "reason": "requires subprocess video support, unavailable in the browser source set"
     },
     {
       "name": "mtmd_helper_video_seq",
@@ -43808,10 +44902,15 @@
     "_bicore_mtmd_helper_bitmap_init_from_file",
     "_bicore_mtmd_helper_gen_audio_inp_default",
     "_bicore_mtmd_helper_get_capabilities",
+    "_bicore_mtmd_helper_get_media_meta",
     "_bicore_mtmd_helper_init_opt_default",
+    "_bicore_mtmd_helper_video_get_info",
+    "_bicore_mtmd_helper_video_init",
+    "_bicore_mtmd_helper_video_init_from_buf",
     "_bicore_mtmd_helper_video_init_params_default",
     "_bicore_mtmd_image_tokens_get_decoder_pos",
     "_bicore_mtmd_init_from_file",
+    "_bicore_mtmd_init_from_file_with_vision_bf16_report",
     "_bicore_mtmd_init_from_file_with_vision_bf16_storage",
     "_bicore_pointer_bytes",
     "_bicore_schema_hash",
@@ -44339,6 +45438,7 @@
     "_ggml_silu_inplace",
     "_ggml_sin",
     "_ggml_sin_inplace",
+    "_ggml_sleep",
     "_ggml_soft_max",
     "_ggml_soft_max_add_sinks",
     "_ggml_soft_max_ext",
@@ -44546,6 +45646,7 @@
     "_llama_model_decoder_start_token",
     "_llama_model_desc",
     "_llama_model_dflash_selector_top_k",
+    "_llama_model_dflash_variant",
     "_llama_model_free",
     "_llama_model_ftype",
     "_llama_model_get_vocab",
@@ -44554,6 +45655,8 @@
     "_llama_model_is_diffusion",
     "_llama_model_is_hybrid",
     "_llama_model_is_recurrent",
+    "_llama_model_meta_arr_n",
+    "_llama_model_meta_arr_str",
     "_llama_model_meta_count",
     "_llama_model_meta_key_by_index",
     "_llama_model_meta_key_str",
@@ -44719,17 +45822,20 @@
     "_mtmd_bitmap_set_id",
     "_mtmd_bitmap_set_is_video",
     "_mtmd_bitmap_set_mergeable",
+    "_mtmd_bitmap_set_transcript",
     "_mtmd_context_vision_bf16_storage",
     "_mtmd_decode_use_mrope",
     "_mtmd_decode_use_non_causal",
     "_mtmd_default_marker",
     "_mtmd_encode_chunk",
     "_mtmd_free",
+    "_mtmd_gen_audio_g2p",
     "_mtmd_gen_audio_get_voice",
     "_mtmd_gen_audio_process",
     "_mtmd_gen_audio_read_tensor",
     "_mtmd_gen_audio_voice_name",
     "_mtmd_gen_state_free",
+    "_mtmd_gen_state_get_ref_codes",
     "_mtmd_gen_state_reset",
     "_mtmd_gen_state_set_ref",
     "_mtmd_get_audio_sample_rate",
@@ -44744,6 +45850,7 @@
     "_mtmd_helper_gen_audio_get_logit_bias",
     "_mtmd_helper_gen_audio_get_output",
     "_mtmd_helper_gen_audio_init",
+    "_mtmd_helper_gen_audio_max_frames",
     "_mtmd_helper_gen_audio_next_is_text",
     "_mtmd_helper_gen_audio_reset",
     "_mtmd_helper_gen_audio_set_input",
@@ -44758,6 +45865,8 @@
     "_mtmd_helper_resampler_init",
     "_mtmd_helper_resampler_process",
     "_mtmd_helper_support_video",
+    "_mtmd_helper_video_free",
+    "_mtmd_helper_video_read_next",
     "_mtmd_image_tokens_get_id",
     "_mtmd_image_tokens_get_n_pos",
     "_mtmd_image_tokens_get_n_tokens",
@@ -44783,6 +45892,8 @@
     "_mtmd_test_create_input_chunks",
     "_mtmd_tokenize",
     "_mtmd_tokenize_from_parts",
+    "_mtmd_vision_bf16_classify_metadata",
+    "_mtmd_vision_bf16_diagnostics_version",
     "_mtmd_vision_bf16_storage_version"
   ],
   "suspendingExports": [
@@ -44836,10 +45947,15 @@
     "bicore_mtmd_helper_bitmap_init_from_file",
     "bicore_mtmd_helper_gen_audio_inp_default",
     "bicore_mtmd_helper_get_capabilities",
+    "bicore_mtmd_helper_get_media_meta",
     "bicore_mtmd_helper_init_opt_default",
+    "bicore_mtmd_helper_video_get_info",
+    "bicore_mtmd_helper_video_init",
+    "bicore_mtmd_helper_video_init_from_buf",
     "bicore_mtmd_helper_video_init_params_default",
     "bicore_mtmd_image_tokens_get_decoder_pos",
     "bicore_mtmd_init_from_file",
+    "bicore_mtmd_init_from_file_with_vision_bf16_report",
     "bicore_mtmd_init_from_file_with_vision_bf16_storage",
     "ggml_abs",
     "ggml_abs_inplace",
@@ -45357,6 +46473,7 @@
     "ggml_silu_inplace",
     "ggml_sin",
     "ggml_sin_inplace",
+    "ggml_sleep",
     "ggml_soft_max",
     "ggml_soft_max_add_sinks",
     "ggml_soft_max_ext",
@@ -45552,6 +46669,7 @@
     "llama_model_decoder_start_token",
     "llama_model_desc",
     "llama_model_dflash_selector_top_k",
+    "llama_model_dflash_variant",
     "llama_model_free",
     "llama_model_ftype",
     "llama_model_get_vocab",
@@ -45560,6 +46678,8 @@
     "llama_model_is_diffusion",
     "llama_model_is_hybrid",
     "llama_model_is_recurrent",
+    "llama_model_meta_arr_n",
+    "llama_model_meta_arr_str",
     "llama_model_meta_count",
     "llama_model_meta_key_by_index",
     "llama_model_meta_key_str",
@@ -45724,17 +46844,20 @@
     "mtmd_bitmap_set_id",
     "mtmd_bitmap_set_is_video",
     "mtmd_bitmap_set_mergeable",
+    "mtmd_bitmap_set_transcript",
     "mtmd_context_vision_bf16_storage",
     "mtmd_decode_use_mrope",
     "mtmd_decode_use_non_causal",
     "mtmd_default_marker",
     "mtmd_encode_chunk",
     "mtmd_free",
+    "mtmd_gen_audio_g2p",
     "mtmd_gen_audio_get_voice",
     "mtmd_gen_audio_process",
     "mtmd_gen_audio_read_tensor",
     "mtmd_gen_audio_voice_name",
     "mtmd_gen_state_free",
+    "mtmd_gen_state_get_ref_codes",
     "mtmd_gen_state_reset",
     "mtmd_gen_state_set_ref",
     "mtmd_get_audio_sample_rate",
@@ -45749,6 +46872,7 @@
     "mtmd_helper_gen_audio_get_logit_bias",
     "mtmd_helper_gen_audio_get_output",
     "mtmd_helper_gen_audio_init",
+    "mtmd_helper_gen_audio_max_frames",
     "mtmd_helper_gen_audio_next_is_text",
     "mtmd_helper_gen_audio_reset",
     "mtmd_helper_gen_audio_set_input",
@@ -45763,6 +46887,8 @@
     "mtmd_helper_resampler_init",
     "mtmd_helper_resampler_process",
     "mtmd_helper_support_video",
+    "mtmd_helper_video_free",
+    "mtmd_helper_video_read_next",
     "mtmd_image_tokens_get_id",
     "mtmd_image_tokens_get_n_pos",
     "mtmd_image_tokens_get_n_tokens",
@@ -45788,6 +46914,8 @@
     "mtmd_test_create_input_chunks",
     "mtmd_tokenize",
     "mtmd_tokenize_from_parts",
+    "mtmd_vision_bf16_classify_metadata",
+    "mtmd_vision_bf16_diagnostics_version",
     "mtmd_vision_bf16_storage_version"
   ],
   "callbackMetadata": {

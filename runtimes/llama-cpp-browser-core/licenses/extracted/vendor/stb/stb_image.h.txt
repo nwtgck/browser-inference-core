@@ -1,5 +1,20 @@
-/* stb_image - v2.30 - public domain image loader - http://nothings.org/stb
+/* stb_image - v2.32 - public domain image loader - http://nothings.org/stb
                                   no warranty implied; use at your own risk
+
+   == SECURITY NOTE ==
+
+   If security is a priority, consider using Wuffs instead:
+     https://github.com/google/wuffs-mirror-release-c
+   v0.3 is the current stable version, but v0.4 includes an stb_image-compatible
+   API using #define WUFFS_CONFIG__ENABLE_DROP_IN_REPLACEMENT__STB
+
+   Limitations:
+     - Wuffs is not public domain, but is available under MIT and Apache licenses.
+     - Wuffs supports a different set of file formats.
+     - Wuffs source file 1.8 MB (v0.3) or 3.5 MB (v0.4 as of 2026-11-01),
+       whereas stb_image is about 0.3 MB.
+
+   == stb_image ==
 
    Do this:
       #define STB_IMAGE_IMPLEMENTATION
@@ -15,6 +30,8 @@
    You can #define STBI_ASSERT(x) before the #include to avoid using assert.h.
    And #define STBI_MALLOC, STBI_REALLOC, and STBI_FREE to avoid using malloc,realloc,free
 
+   STBI_REALLOC_SIZED is an alternative to STBI_REALLOC that is also passed the previously
+   alocated size, which can be helpful in certain constrained environments.
 
    QUICK NOTES:
       Primarily of interest to game developers and other people who can
@@ -29,7 +46,6 @@
 
       GIF (*comp always reports as 4-channel)
       HDR (radiance rgbE format)
-      PIC (Softimage PIC)
       PNM (PPM and PGM binary only)
 
       Animated GIF still needs a proper API, but here's one way to do it:
@@ -48,6 +64,8 @@ LICENSE
 
 RECENT REVISION HISTORY:
 
+      2.32  (2026-11-12) fix req_comp regression; other fixes
+      2.31  (2026-11-08) many bugfixes and etc.
       2.30  (2024-05-31) avoid erroneous gcc warning
       2.29  (2023-05-xx) optimizations
       2.28  (2023-01-29) many error fixes, security errors, just tons of stuff
@@ -55,24 +73,6 @@ RECENT REVISION HISTORY:
       2.26  (2020-07-13) many minor fixes
       2.25  (2020-02-02) fix warnings
       2.24  (2020-02-02) fix warnings; thread-local failure_reason and flip_vertically
-      2.23  (2019-08-11) fix clang static analysis warning
-      2.22  (2019-03-04) gif fixes, fix warnings
-      2.21  (2019-02-25) fix typo in comment
-      2.20  (2019-02-07) support utf8 filenames in Windows; fix warnings and platform ifdefs
-      2.19  (2018-02-11) fix warning
-      2.18  (2018-01-30) fix warnings
-      2.17  (2018-01-29) bugfix, 1-bit BMP, 16-bitness query, fix warnings
-      2.16  (2017-07-23) all functions have 16-bit variants; optimizations; bugfixes
-      2.15  (2017-03-18) fix png-1,2,4; all Imagenet JPGs; no runtime SSE detection on GCC
-      2.14  (2017-03-03) remove deprecated STBI_JPEG_OLD; fixes for Imagenet JPGs
-      2.13  (2016-12-04) experimental 16-bit API, only for PNG so far; fixes
-      2.12  (2016-04-02) fix typo in 2.11 PSD fix that caused crashes
-      2.11  (2016-04-02) 16-bit PNGS; enable SSE2 in non-gcc x64
-                         RGB-format JPEG; remove white matting in PSD;
-                         allocate large structures on the stack;
-                         correct channel count for PNG & BMP
-      2.10  (2016-01-22) avoid warning introduced in 2.09
-      2.09  (2016-01-16) 16-bit TGA; comments in PNM files; STBI_REALLOC_SIZED
 
    See end of file for full revision history.
 
@@ -94,7 +94,7 @@ RECENT REVISION HISTORY:
  Optimizations & bugfixes                  Mikhail Morozov (1-bit BMP)
     Fabian "ryg" Giesen                    Anael Seghezzi (is-16-bit query)
     Arseny Kapoulkine                      Simon Breuss (16-bit PNM)
-    John-Mark Allen
+    John-Mark Allen                        hikari_no_yume (stbi_info2, is_iphone_png)
     Carmelo J Fdez-Aguera
 
  Bug & warning fixes
@@ -187,6 +187,9 @@ RECENT REVISION HISTORY:
 //   // returns ok=1 and sets x, y, n if image is a supported format,
 //   // 0 otherwise.
 //
+// The stbi_info2 family provides the same information in struct format, plus
+// some additional flags.
+//
 // Note that stb_image pervasively uses ints in its public API for sizes,
 // including sizes of memory buffers. This is now part of the API and thus
 // hard to change without causing breakage. As a result, the various image
@@ -271,6 +274,11 @@ RECENT REVISION HISTORY:
 // you have issues compiling it, you can disable it entirely by
 // defining STBI_NO_SIMD.
 //
+// On 32-bit MinGW, SSE2 support is disabled by default. You can allow it
+// by defining STBI_MINGW_ENABLE_SSE2, but this comes with caveats due to
+// compiler ABI issues. Search for STBI_MINGW_ENABLE_SSE2 further down in this
+// file for details.
+//
 // ===========================================================================
 //
 // HDR image support   (disable by defining STBI_NO_HDR)
@@ -306,23 +314,40 @@ RECENT REVISION HISTORY:
 //
 //     stbi_is_hdr(char *filename);
 //
+// If you also want to query other image details at the same time:
+//
+//     stbi_info_res r = stbi_info2(filename);
+//     if (r.type != STBI_type_unknown && r.is_hdr) {
+//        // ...
+//     }
+//
 // ===========================================================================
 //
 // iPhone PNG support:
 //
-// We optionally support converting iPhone-formatted PNGs (which store
-// premultiplied BGRA) back to RGB, even though they're internally encoded
-// differently. To enable this conversion, call
-// stbi_convert_iphone_png_to_rgb(1).
+// iPhone-formatted PNGs, also known as CgBI PNGs, are supported. Unlike
+// standard PNGs, these store colors in BGR/BGRA order with premultiplied alpha.
 //
-// Call stbi_set_unpremultiply_on_load(1) as well to force a divide per
-// pixel to remove any premultiplied alpha *only* if the image file explicitly
-// says there's premultiplied data (currently only happens in iPhone images,
-// and only if iPhone convert-to-rgb processing is on).
+// By default, stb_image will load the colors in the same format they were
+// stored in. If you need to know which kind of PNG was loaded, and thus the
+// color format, call one of the stbi_info2 functions and check is_iphone_png.
+//
+// Alternatively, if you want stb_image to convert the color order to RGB/RGBA,
+// call stbi_convert_iphone_png_to_rgb(1).
+//
+// Call stbi_set_unpremultiply_on_load(1) as well to force a divide per pixel
+// pixel to remove any premultiplied alpha. Note that this currently only works
+// when color order conversion is also in use.
 //
 // ===========================================================================
 //
 // ADDITIONAL CONFIGURATION
+//
+//  - You can #define STB_IMAGE_STATIC to cause all STB image functions to
+//    get declared with static linkage. This is useful when you want to
+//    write an image loader wrapper without the STB functions leaking into
+//    the global namespace, or when a project contains (for whatever reason)
+//    multiple versions of stb_image.
 //
 //  - You can suppress implementation of any of the decoders to reduce
 //    your code footprint by #defining one or more of the following
@@ -335,7 +360,6 @@ RECENT REVISION HISTORY:
 //        STBI_NO_TGA
 //        STBI_NO_GIF
 //        STBI_NO_HDR
-//        STBI_NO_PIC
 //        STBI_NO_PNM   (.ppm and .pgm)
 //
 //  - You can request *only* certain decoders and suppress all other ones
@@ -349,11 +373,13 @@ RECENT REVISION HISTORY:
 //        STBI_ONLY_TGA
 //        STBI_ONLY_GIF
 //        STBI_ONLY_HDR
-//        STBI_ONLY_PIC
 //        STBI_ONLY_PNM   (.ppm and .pgm)
 //
-//   - If you use STBI_NO_PNG (or _ONLY_ without PNG), and you still
-//     want the zlib decoder to be available, #define STBI_SUPPORT_ZLIB
+//  - Setting STBI_NO_LINEAR will remove the stbi_loadf family of functions
+//    that returns pixel data as floats.
+//
+//  - If you use STBI_NO_PNG (or _ONLY_ without PNG), and you still
+//    want the zlib decoder to be available, #define STBI_SUPPORT_ZLIB
 //
 //  - If you define STBI_MAX_DIMENSIONS, stb_image will reject images greater
 //    than that size (in either width or height) without further processing.
@@ -369,6 +395,9 @@ RECENT REVISION HISTORY:
 
 
 // only used for desired_channels
+
+
+// image type
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -429,7 +458,13 @@ RECENT REVISION HISTORY:
 // free the loaded image -- this is just free()
 
 
-// get image dimensions & components without fully decoding
+// get image dimensions, components, etc without fully decoding (new api)
+
+
+// STBI_type_*; if this is STBI_type_unsupported (0), the other fields are meaningless
+
+
+// get image dimensions & components without fully decoding (old api)
 
 
 // for image formats that explicitly notate that they have premultiplied alpha,
@@ -514,6 +549,9 @@ RECENT REVISION HISTORY:
    // instructions at will, and so are we.
 
 
+// 64-bit ARM targets always support AdvSIMD
+
+
 // ARM NEON
 
 
@@ -531,12 +569,12 @@ RECENT REVISION HISTORY:
 // initialize a callback-based context
 
 
+// there are remaining characters in the IO buffer, skip back to the actual position we finished at
+
+
 /* have to read a byte to reset feof()'s flag */
 
 /* push byte back onto stream if valid. */
-
-//static void stop_file(stbi__context *s) { }
-
 
 // !STBI_NO_STDIO
 
@@ -544,6 +582,10 @@ RECENT REVISION HISTORY:
 // conceptually rewind SHOULD rewind to the beginning of the stream,
    // but we just rewind to the beginning of the initial buffer, because
    // we only use it after doing 'test', which only ever looks at at most 92 bytes
+
+
+// PIC support removed Oct 2026. If you really need to load a PIC file, use either an old version of stb_image
+// or convert with a tool like ImageMagick.
 
 
 // stb_image uses ints pervasively, including for offset calculations.
@@ -663,12 +705,6 @@ RECENT REVISION HISTORY:
 /* UTF8 */
 
 /* UTF8 */
-
-// need to 'unget' all the characters in the IO buffer
-
-
-// need to 'unget' all the characters in the IO buffer
-
 
 //!STBI_NO_STDIO
 
@@ -943,9 +979,6 @@ RECENT REVISION HISTORY:
 // first scan for DC coefficient, must be first
 
 
-// 0 all the ac values now
-
-
 // refinement scan for DC coefficient
 
 
@@ -1113,7 +1146,7 @@ RECENT REVISION HISTORY:
       // store
 
 
-// STBI_SSE2
+// STBI__SSE2
 
 
 // NEON integer IDCT. should produce bit-identical
@@ -1250,6 +1283,10 @@ RECENT REVISION HISTORY:
          // component has, independent of interleaved MCU blocking and such
 
 
+// if we're out of data, just skip decoding this MCU
+               // progressive coeffs got initialized at setup so this is fine
+
+
 // every data block is an MCU, so countdown the restart interval
 
 
@@ -1353,6 +1390,9 @@ RECENT REVISION HISTORY:
 
 
 // w2, h2 are multiples of 8 (see above)
+
+
+// 0 all the coeffs now so they're guaranteed to be initialized
 
 
 // use comparisons since in some cases we handle more than one case (e.g. SOF)
@@ -1893,9 +1933,6 @@ Init algorithm:
 // if critical, fail
 
 
-// not threadsafe
-
-
 // end of PNG chunk, read and skip CRC
 
 
@@ -1958,6 +1995,9 @@ Init algorithm:
 // BI_BITFIELDS specifies masks explicitly, don't override
 
 
+// BI_BITFIELDS BMPs can have alpha, but BI_RGB ones never do
+
+
 // if all_a is 0 at end, then we loaded alpha channel but it was all 0
 
 
@@ -1997,13 +2037,16 @@ Init algorithm:
 // discard max important
 
 
+// BITMAPINFOHEADER
+
+
 // not documented, but generated by photoshop and handled by mspaint
 
 
 // ?!?!?
 
 
-// V4/V5 header
+// V3/V4/V5 header
 
 
 // override mr/mg/mb unless in BI_BITFIELDS mode, as per docs
@@ -2054,7 +2097,13 @@ Init algorithm:
    // sanity-check size
 
 
+// psize is 0, already skipped to line data above
+
+
 /* bpp = 32 and pad = 0 */
+
+// before v3 header, no real alpha support, so treat alpha as not present
+
 
 // right shift amt to put high bit in position #7
 
@@ -2075,19 +2124,13 @@ Init algorithm:
 // only RGB or RGBA (incl. 16bit) or grey allowed
 
 
-// fallthrough
-
-
-// fallthrough
-
-
 // discard Offset
 
 
 // colormap type
 
 
-// only RGB or indexed allowed
+// only RGB/indexed allowed
 
 
 // image type
@@ -2114,74 +2157,16 @@ Init algorithm:
 // skip colormap specification and image x/y origin
 
 
-// test width
-
-
-// test height
-
-
 // bits per pixel
 
 
 // ignore alpha bits
 
 
-// when using a colormap, tga_bits_per_pixel is the size of the indexes
-            // I don't think anything but 8 or 16bit indexes makes sense
+// only support 8- and 16-bit indexes for colormaps
 
 
 // seems to have passed everything
-
-
-//   discard Offset
-
-
-//   color type
-
-
-//   only RGB or indexed allowed
-
-
-//   image type
-
-
-// colormapped (paletted) image
-
-
-// colortype 1 demands image type 1 or 9
-
-
-// skip index of first colormap entry and number of entries
-
-
-//   check bits per palette color entry
-
-
-// skip image x and y origin
-
-
-// "normal" image w/o colormap
-
-
-// only RGB or grey allowed, +/- RLE
-
-
-// skip colormap specification and image x/y origin
-
-
-//   test width
-
-
-//   test height
-
-
-//   bits per pixel
-
-
-// for colormapped images, bpp is size of an index
-
-
-// if we got this far, everything's good and we can return 1 instead of 0
 
 
 // read 16bit value and convert to 24bit RGB
@@ -2199,17 +2184,10 @@ Init algorithm:
    // so let's treat all 15 and 16bit TGAs as RGB with no alpha.
 
 
-//   read in the TGA header stuff
+// read in the TGA header
 
 
-// int tga_alpha_bits = tga_inverted & 15; // the 4 lowest bits - unused (useless?)
-   //   image data
-
-
-// @TODO
-
-
-// @TODO
+//   image data
 
 
 //   do a tiny bit of precessing
@@ -2231,12 +2209,6 @@ Init algorithm:
 
 
 /* you have to have at least one entry! */
-
-//   any data to skip? (offset usually = 0)
-
-
-//   load the palette
-
 
 //   load the data
 
@@ -2273,10 +2245,13 @@ Init algorithm:
 //   in case we're in RLE mode, keep counting down
 
 
-//   do I need to invert the image?
-
-
 //   clear my palette, if I had one
+
+
+// horizontal flip if required
+
+
+// vertical flip if required
 
 
 // swap RGB - if the source data was RGB16, it already is in the right order
@@ -2285,8 +2260,7 @@ Init algorithm:
 // convert to target component count
 
 
-//   the things I do to get rid of an error message, and yet keep
-   //   Microsoft's C compilers happy... [8^(
+// these were just read for the side effect
 
 
 //   OK, done
@@ -2418,64 +2392,22 @@ Init algorithm:
 
 
 // *************************************************************************************************
-// Softimage PIC loader
-// by Tom Seddon
-//
-// See http://softimage.wiki.softimage.com/index.php/INFO:_PIC_file_format
-// See http://ozviz.wasp.uwa.edu.au/~pbourke/dataformats/softimagepic/
-
-
-// this will (should...) cater for even some bizarre stuff like having data
-    // for the same channel in multiple packets.
-
-
-// has alpha channel?
-
-
-//uncompressed
-
-
-//Pure RLE
-
-
-//Mixed RLE
-
-
-// Repeated
-
-
-// Raw
-
-
-//skip `ratio'
-
-
-//skip `fields'
-
-
-//skip `pad'
-
-   // intermediate buffer is RGBA
-
-
-// *************************************************************************************************
 // GIF loader -- public domain by Jean-Marc Lienher -- simplified/shrunk by stb
 
 
 // output buffer (always 4 components)
 
 
-// The current "background" as far as a gif is concerned
+// one extra slot as sentinel
+
+
+// one extra slot as sentinel
 
 
 // can't actually tell whether it's 3 or 4 until we parse the comments
 
 
-// recurse to decode the prefixes, since the linked-list is backwards,
-   // and working backwards through an interleaved image would be nasty
-
-
-// don't render transparent pixels;
+// no global color table -> bg color ignored
 
 
 // support no starting clear code
@@ -2493,6 +2425,30 @@ Init algorithm:
 // end of stream code
 
 
+// self-reference case
+
+
+// chase oldcode to find its first character
+
+
+// add the first character at the end of revbuf; consumes 1 slot
+
+
+// walk linked list of prefixes to emit bytes in reverse order to revbuf
+         // safe: longest chain possible can't contain more than 4096 - (clear + 2) <= 4094 bytes,
+         // since every code below clear+2 terminates the chain and any code above has a
+         // "prefix" link to a lower-numbered code
+
+
+// one final slot in revbuf: still guaranteed to be <=4096 bytes, so revind >= 0 at the end
+
+
+// increment avail unless dict is already full
+
+
+// turn decoded bytes into pixels
+
+
 // this function is designed to support animated gifs, although stb_image doesn't support it
 // two back is the image from two frames ago, used for a very specific disposal format
 
@@ -2503,15 +2459,7 @@ Init algorithm:
 // stbi__g_failure_reason set by stbi__gif_header
 
 
-// image is treated as "transparent" at the start - ie, nothing overwrites the current background;
-      // background colour is only used for pixels that are not rendered first frame, after that "background"
-      // color refers to the color that was there the previous frame.
-
-
-// state of the background (starts transparent)
-
-
-// pixels that were affected previous frame
+// clear to transparent
 
 
 // second frame - how do we dispose of the previous one?
@@ -2523,22 +2471,10 @@ Init algorithm:
 // use previous graphic
 
 
-// restore what was changed last frame to background before that frame;
+// use background color
 
 
-// This is a non-disposal case eithe way, so just
-         // leave the pixels as is, and they will become the new background
-         // 1: do not dispose
-         // 0:  not specified.
-
-
-// background is what out is after the undoing of the previou frame;
-
-
-// clear my history;
-
-
-// pixels that were affected previous frame
+// This is a non-disposal case either way, just leave the pixels as they are.
 
 
 /* Image Descriptor */
@@ -2552,13 +2488,8 @@ Init algorithm:
 // first interlaced spacing
 
 
-// if this was the first frame,
-
-
-// if first frame, any pixel not drawn to gets the background color
-
-
-// just in case it was made transparent, undo that; It will be reset next frame if need be;
+// if we have a background color set and no transparent color, first frame should clear to background
+            // first frame needs to initialize the image
 
 
 // Comment Extension.
@@ -2569,11 +2500,6 @@ Init algorithm:
 
 // delay - 1/100th of a second, saving as 1/1000ths.
 
-                  // unset old transparent
-
-
-// don't need transparent
-
 
 // gif stream termination code
 
@@ -2581,13 +2507,48 @@ Init algorithm:
 // using '1' causes warning on some compilers
 
 
+// pointer to previous frame
+
+
+// pixel data follows after hdr in same allocation
+
+
+// make sure we initialize everything that is passed in so we have defined values if we return
+
+
 // end of animated gif marker
 
 
-// free temp buffer;
+// we ensure g.w > 0, g.h > 0; that means totalbytes > 0 and this check
+      // also guarantees that layers doesn't overflow
 
 
-// do the final conversion after loading everything;
+// allocate this frame
+
+
+// pixels go right after frame data
+
+
+// if this frame is not in "restore to previous" disposal mode (which "un-paints" it),
+      // it becomes the next reference frame
+
+
+// free temp decode buffer
+
+
+// allocate output space
+
+
+// move all frames over, then free them
+
+
+// free current frame
+
+
+// do the final conversion after loading everything
+
+
+// if conversion failed, also free delays
 
 
 // end of animated gif marker
@@ -2600,9 +2561,6 @@ Init algorithm:
 // if there was an error and we allocated an image buffer, free it!
 
 
-// free buffers needed for multiple frame loading;
-
-
 // *************************************************************************************************
 // Radiance RGBE HDR loader
 // originally by Nicolas Schulz
@@ -2611,12 +2569,24 @@ Init algorithm:
 // flush to end of line
 
 
-// Exponent
+// exponent 0 always gives 0.0f
 
 
-/* fallthrough */
+// when req_comp <= 2, we convert to grayscale instead by averaging the three channels;
+      // fold the /3 into the scale factor
 
-/* fallthrough */
+
+// image data is stored as some number of scanlines
+
+
+// data is not RLE, this was the first pixel
+
+
+// Run
+
+
+// Dump
+
 
 // Check identifier
 
@@ -2631,27 +2601,7 @@ Init algorithm:
 // Read data
 
 
-// Load image data
-   // image data is stored as some number of sca
-
-
-// Read flat data
-
-
-// Read RLE-encoded data
-
-
-// not run-length encoded, so we have to actually use THIS data as a decoded
-            // pixel (note this can't be a valid pixel--one of RGB must be >= 128)
-
-
-// yes, this makes no sense
-
-
-// Run
-
-
-// Dump
+// for sizes where it's legal, assume RLE unless proven otherwise
 
 
 // STBI_NO_HDR
@@ -2663,19 +2613,12 @@ Init algorithm:
 //
 // PGM: http://netpbm.sourceforge.net/doc/pgm.html
 // PPM: http://netpbm.sourceforge.net/doc/ppm.html
-//
-// Known limitations:
-//    Does not support comments in the header section
-//    Does not support ASCII image data (formats P2 and P3)
-
-
-// stbi__convert_format frees input on failure
 
 
 // Get identifier
 
 
-// '5' is 1-component .pgm; '6' is 3-component .ppm
+// '2'/'5' is 1-component .pgm; '3'/'6' is 3-component .ppm
 
 
 // read width
@@ -2685,6 +2628,21 @@ Init algorithm:
 
 
 // read max value
+
+
+// bytes per value
+
+
+// error already set
+
+
+// BE to match binary reader, fixed up below
+
+
+// expected_maxv conversion
+
+
+// BE
 
 
 // test tga last because it's a crappy test!
@@ -2697,6 +2655,24 @@ Init algorithm:
 
 /*
    revision history:
+      2.23  (2019-08-11) fix clang static analysis warning
+      2.22  (2019-03-04) gif fixes, fix warnings
+      2.21  (2019-02-25) fix typo in comment
+      2.20  (2019-02-07) support utf8 filenames in Windows; fix warnings and platform ifdefs
+      2.19  (2018-02-11) fix warning
+      2.18  (2018-01-30) fix warnings
+      2.17  (2018-01-29) bugfix, 1-bit BMP, 16-bitness query, fix warnings
+      2.16  (2017-07-23) all functions have 16-bit variants; optimizations; bugfixes
+      2.15  (2017-03-18) fix png-1,2,4; all Imagenet JPGs; no runtime SSE detection on GCC
+      2.14  (2017-03-03) remove deprecated STBI_JPEG_OLD; fixes for Imagenet JPGs
+      2.13  (2016-12-04) experimental 16-bit API, only for PNG so far; fixes
+      2.12  (2016-04-02) fix typo in 2.11 PSD fix that caused crashes
+      2.11  (2016-04-02) 16-bit PNGS; enable SSE2 in non-gcc x64
+                         RGB-format JPEG; remove white matting in PSD;
+                         allocate large structures on the stack;
+                         correct channel count for PNG & BMP
+      2.10  (2016-01-22) avoid warning introduced in 2.09
+      2.09  (2016-01-16) 16-bit TGA; comments in PNM files; STBI_REALLOC_SIZED
       2.20  (2019-02-07) support utf8 filenames in Windows; fix warnings and platform ifdefs
       2.19  (2018-02-11) fix warning
       2.18  (2018-01-30) fix warnings
