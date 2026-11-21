@@ -143,6 +143,7 @@ enum class BicoreRecordLayouts : uint64_t {
     BICORE_RECORD(mtmd_input_part),
     BICORE_RECORD(mtmd_input_text),
     BICORE_RECORD(mtmd_video_config),
+    BICORE_RECORD(mtmd_vision_bf16_load_report),
     BICORE_RECORD(ggml_webgpu_q8_diagnostic_request_v1),
     BICORE_RECORD(ggml_webgpu_q8_diagnostic_report_v1),
 };

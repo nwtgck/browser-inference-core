@@ -153,6 +153,21 @@ test('current native contracts use the production TypeScript preparation', { tim
         } finally {
           await writeFile(provider, original);
         }
+        // Compile the actual loader with a new upstream enumerator. This must
+        // fail through the production review inventory, even with its default.
+        const metadataHeader = join(prepared.root, 'tools/mtmd/mtmd-impl.h');
+        const metadataOriginal = await readFile(metadataHeader, 'utf8');
+        const addedProjector = metadataOriginal.replace('enum projector_type {', 'enum projector_type {\n    PROJECTOR_TYPE_UNCLASSIFIED_TEST_ONLY,');
+        assert.notEqual(addedProjector, metadataOriginal);
+        try {
+          await writeFile(metadataHeader, addedProjector);
+          await assert.rejects(
+            runProcess({ command: 'cmake', args: ['--build', build, '--target', 'native-mtmd-model'], cwd: sourceRoot, timeoutMs: 90_000 }),
+            /PROJECTOR_TYPE_UNCLASSIFIED_TEST_ONLY/u,
+          );
+        } finally {
+          await writeFile(metadataHeader, metadataOriginal);
+        }
       }
     });
   }

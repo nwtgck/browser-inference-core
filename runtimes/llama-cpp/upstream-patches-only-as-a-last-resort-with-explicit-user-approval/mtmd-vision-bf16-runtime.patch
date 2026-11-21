@@ -8,7 +8,7 @@
  
  #include <algorithm>
  #include <array>
-@@ -883,6 +884,7 @@
+@@ -1148,6 +1149,7 @@
  
  // the weights and hparams of one modality of an mmproj file, read-only once loaded
  struct mtmd_model {
@@ -16,7 +16,7 @@
      mtmd_modality modality = MTMD_MODALITY_VISION;
      projector_type proj_type = PROJECTOR_TYPE_MLP;
      mtmd_hparams hparams;
-@@ -1305,6 +1307,8 @@
+@@ -1596,6 +1598,8 @@
  };
  
  struct mtmd_model_params {
@@ -36,7 +36,7 @@
  #include "models/models.h"
  
  #include "ggml.h"
-@@ -3729,8 +3732,16 @@
+@@ -4556,8 +4559,16 @@
          params.progress_callback,
          params.progress_callback_user_data);
  
@@ -150,15 +150,16 @@
  
 --- a/mtmd.cpp
 +++ b/mtmd.cpp
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,8 @@
  #include "models/models.h"
  #include "mtmd-impl.h"
  #include "mtmd.h"
 +#include "mtmd-vision-bf16.h"
++#include "mtmd-vision-bf16-diagnostics-internal.h"
  #include "mtmd-internal.h"
  #include "mtmd-audio.h"
  #include "mtmd-image.h"
-@@ -607,6 +608,7 @@
+@@ -817,6 +819,7 @@
  }
  
  struct mtmd_context {
@@ -166,7 +167,7 @@
      // must outlive the subcontexts below
      mtmd_models models;
      std::unique_ptr<mtmd_backends> backends; // shared by the subcontexts
-@@ -674,7 +676,9 @@
+@@ -897,7 +900,9 @@
      mtmd_context(const char * mmproj_fname,
                     const llama_model * text_model,
                     const mtmd_context_params & ctx_params,
@@ -177,7 +178,7 @@
          print_timings   (ctx_params.print_timings),
          n_threads       (ctx_params.n_threads),
          media_marker    (ctx_params.media_marker),
-@@ -713,6 +717,8 @@
+@@ -936,6 +941,8 @@
          ggml_backend_dev_t device = mtmd_select_device(ctx_params.use_gpu, ctx_params.device);
  
          mtmd_model_params model_params;
@@ -186,12 +187,10 @@
          model_params.image_min_tokens            = ctx_params.image_min_tokens;
          model_params.image_max_tokens            = ctx_params.image_max_tokens;
          model_params.no_alloc                    = no_alloc;
-@@ -1376,6 +1382,32 @@
-         LOG_ERR("%s: error: %s\n", __func__, e.what());
-         return nullptr;
+@@ -1647,6 +1654,79 @@
      }
-+}
-+
+ }
+ 
 +uint32_t mtmd_vision_bf16_storage_version(void) {
 +    return 1;
 +}
@@ -216,6 +215,55 @@
 +
 +mtmd_vision_bf16_storage mtmd_context_vision_bf16_storage(const mtmd_context * context) {
 +    return context ? context->vision_bf16_storage : MTMD_VISION_BF16_STORAGE_INVALID;
- }
- 
++}
++
++uint32_t mtmd_vision_bf16_diagnostics_version(void) {
++    return 1;
++}
++
++int32_t mtmd_vision_bf16_classify_metadata(int32_t has_vision, const char * common, const char * vision) {
++    return lcb_mtmd_classify_metadata(has_vision, common, vision);
++}
++
++mtmd_context * mtmd_init_from_file_with_vision_bf16_report(
++        const char * path, const llama_model * text_model, const mtmd_context_params params,
++        int32_t storage, mtmd_vision_bf16_load_report * report, uint32_t report_size) {
++    if (!report || report_size != sizeof(*report)) {
++        return nullptr;
++    }
++    *report = lcb_mtmd_new_load_report();
++    if (storage != MTMD_VISION_BF16_STORAGE_LEGACY_EXPAND &&
++        storage != MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED) {
++        report->reason = MTMD_VISION_BF16_REASON_INVALID_MODE;
++        report->phase = MTMD_VISION_BF16_PHASE_PREUPLOAD;
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED;
++        return nullptr;
++    }
++    try {
++        auto * result = new mtmd_context(path, text_model, params, false,
++                                        static_cast<mtmd_vision_bf16_storage>(storage));
++        report->status = MTMD_VISION_BF16_LOAD_SUCCEEDED;
++        report->reason = MTMD_VISION_BF16_REASON_NONE;
++        report->phase = MTMD_VISION_BF16_PHASE_COMPLETE;
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_NOT_REQUIRED;
++        return result;
++    } catch (const lcb_mtmd_retention_refused & error) {
++        // Only role checks before vision allocation/upload use this exception.
++        // The constructor has fully unwound before cleanup is reported.
++        report->status = MTMD_VISION_BF16_LOAD_RETENTION_REFUSED;
++        report->reason = error.reason;
++        report->phase = MTMD_VISION_BF16_PHASE_PREUPLOAD;
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_COMPLETE;
++        LOG_ERR("%s: error: %s\n", __func__, error.what());
++        return nullptr;
++    } catch (const std::exception & error) {
++        // General failures are never described as retention review refusals.
++        report->cleanup = MTMD_VISION_BF16_CLEANUP_COMPLETE;
++        LOG_ERR("%s: error: %s\n", __func__, error.what());
++        return nullptr;
++    }
++}
++
  void mtmd_free(mtmd_context * ctx) {
+     delete ctx;
+ }

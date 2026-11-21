@@ -6,7 +6,8 @@
 #include <filesystem>
 
 // Small synthetic GGUF files exercise actual loading, never model inference.
-inline void write_mtmd_fixture(const std::filesystem::path & path, bool vision, bool audio, bool gen_audio) {
+inline void write_mtmd_fixture(const std::filesystem::path & path, bool vision, bool audio, bool gen_audio,
+                               ggml_type vision_bias_type = GGML_TYPE_F32) {
     gguf_context_ptr file(gguf_init_empty());
     gguf_set_val_bool(file.get(), KEY_HAS_VISION_ENC, vision);
     gguf_set_val_bool(file.get(), KEY_HAS_AUDIO_ENC, audio);
@@ -30,7 +31,8 @@ inline void write_mtmd_fixture(const std::filesystem::path & path, bool vision, 
     gguf_set_arr_data(file.get(), KEY_IMAGE_STD, GGUF_TYPE_FLOAT32, normalization, 3);
     ggml_context_ptr tensors(ggml_init({64 * 1024, nullptr, false}));
     auto tensor = [&](const std::string & name) {
-        auto * value = ggml_new_tensor_2d(tensors.get(), GGML_TYPE_F32, 4, 4);
+        const bool vision_bias = vision && name == mtmd_format(TN_LLAVA_PROJ, 0, "bias");
+        auto * value = ggml_new_tensor_2d(tensors.get(), vision_bias ? vision_bias_type : GGML_TYPE_F32, 4, 4);
         ggml_set_name(value, name.c_str());
         std::memset(value->data, 0, ggml_nbytes(value));
         gguf_add_tensor(file.get(), value);

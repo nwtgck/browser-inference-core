@@ -389,9 +389,10 @@ static void test_roles() {
             m.layers[0].k_norm_b = bias;
         rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
     }
-    for (projector_type kind : {PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_MLP_NORM, PROJECTOR_TYPE_QWEN2VL,
-                                PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2,
-                                PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3, PROJECTOR_TYPE_GEMMA4V}) {
+    for (projector_type kind :
+         {PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_MLP_NORM, PROJECTOR_TYPE_QWEN2VL, PROJECTOR_TYPE_QWEN25VL,
+          PROJECTOR_TYPE_QWEN3VL, PROJECTOR_TYPE_LFM2, PROJECTOR_TYPE_LFM3VL, PROJECTOR_TYPE_GEMMA3,
+          PROJECTOR_TYPE_GEMMA4V, PROJECTOR_TYPE_MUSE_GLIMMER}) {
         fixture f;
         mtmd_model m{};
         m.proj_type = kind;
@@ -425,6 +426,70 @@ static void test_roles() {
         m.proj_type = PROJECTOR_TYPE_LFM2;
         rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
     }
+    for (auto member : {&mtmd_model::mm_0_w, &mtmd_model::mm_1_w, &mtmd_model::mm_2_w}) {
+        fixture f;
+        mtmd_model m{};
+        m.proj_type = PROJECTOR_TYPE_MUSE_GLIMMER;
+        m.*member = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 32);
+        lcb_mtmd_check_retained_roles(m, f.weights);
+        ++checks;
+        m.position_embeddings = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
+        rejected([&] { lcb_mtmd_check_retained_roles(m, f.weights); }, "role");
+    }
+}
+
+static void test_review_refusals() {
+    fixture f;
+    mtmd_model m{};
+    m.proj_type = PROJECTOR_TYPE_MUSE_GLIMMER;
+    auto * weight = ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 32);
+    // A well-formed but unreviewed role may be retried before allocation.
+    try {
+        lcb_mtmd_check_retained_roles(m, f.weights);
+        require(false, "missing review refusal");
+    } catch (const lcb_mtmd_retention_refused & error) {
+        require(error.reason == MTMD_VISION_BF16_REASON_WEIGHT_UNREVIEWED, "wrong weight refusal type");
+    }
+    m.proj_type = PROJECTOR_TYPE_INTERNVL;
+    try {
+        lcb_mtmd_check_retained_roles(m, f.weights);
+        require(false, "missing projector refusal");
+    } catch (const lcb_mtmd_retention_refused & error) {
+        require(error.reason == MTMD_VISION_BF16_REASON_PROJECTOR_UNREVIEWED, "wrong projector refusal type");
+    }
+    m.proj_type = PROJECTOR_TYPE_MUSE_GLIMMER;
+    m.mm_0_w = weight;
+    const auto saved = *weight;
+    // Malformed known weights and backend failures are not review refusals.
+    for (bool layout : {false, true}) {
+        bool caught = false;
+        try {
+            if (layout) {
+                weight->nb[1] += sizeof(ggml_bf16_t);
+                lcb_mtmd_check_retained_roles(m, f.weights);
+            } else {
+                lcb_mtmd_check_retained_backend(MTMD_VISION_BF16_STORAGE_RETAIN_CHECKED, true, false);
+            }
+        } catch (const lcb_mtmd_retention_refused &) {
+            throw std::runtime_error("general failure became retryable");
+        } catch (const std::runtime_error &) {
+            caught = true;
+        }
+        require(caught, "invalid layout/backend was accepted");
+        *weight = saved;
+    }
+    // An earlier unreviewed role must not hide a later malformed known role.
+    ggml_new_tensor_2d(f.weights, GGML_TYPE_BF16, 16, 16);
+    m.mm_1_w = ggml_new_tensor_3d(f.weights, GGML_TYPE_BF16, 16, 16, 2);
+    bool malformed = false;
+    try {
+        lcb_mtmd_check_retained_roles(m, f.weights);
+    } catch (const lcb_mtmd_retention_refused &) {
+        throw std::runtime_error("earlier unreviewed role hid invalid known layout");
+    } catch (const std::runtime_error &) {
+        malformed = true;
+    }
+    require(malformed, "later invalid layout was accepted");
 }
 
 // Gemma4UV is not Gemma4V: only the direct image projection is reviewed.
@@ -506,6 +571,7 @@ int main(int argc, char ** argv) {
         // numerical path reports a sanitizer error before reaching these tests.
         if (argc == 2 && std::string(argv[1]) == "roles") {
             test_roles();
+            test_review_refusals();
             test_gemma4uv_roles();
             std::cout << "PASS: " << checks << " role checks; metadata only, not GPU acceptance\n";
             return 0;
@@ -518,6 +584,7 @@ int main(int argc, char ** argv) {
         test_rows();
         test_rejections();
         test_roles();
+        test_review_refusals();
         test_gemma4uv_roles();
         std::cout << "PASS: " << checks << " checks; real ggml CPU contract/numerical tests, not GPU acceptance\n";
         return 0;

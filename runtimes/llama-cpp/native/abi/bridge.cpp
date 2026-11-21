@@ -228,4 +228,10 @@ struct mtmd_context * bicore_mtmd_init_from_file_with_vision_bf16_storage(const 
                                                                           int32_t storage) {
     return mtmd_init_from_file_with_vision_bf16_storage(path, model, record(params), storage);
 }
+struct mtmd_context *
+bicore_mtmd_init_from_file_with_vision_bf16_report(const char * path, const struct llama_model * model,
+                                                   const struct mtmd_context_params * params, int32_t storage,
+                                                   struct mtmd_vision_bf16_load_report * report, uint32_t report_size) {
+    return mtmd_init_from_file_with_vision_bf16_report(path, model, record(params), storage, report, report_size);
+}
 }

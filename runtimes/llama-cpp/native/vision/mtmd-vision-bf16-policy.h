@@ -1,5 +1,6 @@
 #pragma once
 #include "mtmd-vision-bf16.h"
+#include "mtmd-vision-bf16-classification.h"
 #include <cstring>
 #include <stdexcept>
 

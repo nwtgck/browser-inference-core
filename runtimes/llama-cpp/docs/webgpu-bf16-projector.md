@@ -1,7 +1,6 @@
 # WebGPU vision BF16 storage
 
-The pinned llama.cpp revision `cd959bae99ff4bed22bef2604f45241c09bbb8c8`
-has BF16-left/F32-right matrix multiplication and BF16 row lookup in WebGPU.
+The pinned llama.cpp has BF16-left/F32-right matrix multiplication and BF16 row lookup in WebGPU.
 Storage support alone does not establish complete-model compatibility or speed.
 BF16 means Brain Floating Point 16; F16/F32 mean 16/32-bit floating point.
 
@@ -13,7 +12,7 @@ There is no extra Wasm asset, profile, variant or build directory for retention.
 integration. Ordinary builds include both storage policies in that integration.
 
 `mtmd_init_from_file` remains unchanged and selects `legacy-expand`. Its parameter
-record and `clip_context_params` keep their upstream layouts. New callers use the
+record keeps its upstream layout. New callers use the
 C declarations in `native/vision/mtmd-vision-bf16.h`:
 
 ```c
@@ -58,8 +57,8 @@ selection is rejected rather than published as a runtime-selected comparison.
 ## Checked retention contract
 
 A WebGPU vision load first checks the actual weight roles against the pinned
-private `clip_model` fields. Reviewed projector enums are MLP/MLP-norm,
-Qwen2/2.5/3VL, Gemma 3, Gemma4V, Gemma4UV and LFM2/3VL. This is a conservative role
+private `mtmd_model` fields. Reviewed projector enums are MLP/MLP-norm,
+Qwen2/2.5/3VL, Gemma 3, Gemma4V, Gemma4UV, LFM2/3VL and Muse Glimmer. This is a conservative role
 allowlist, not a complete real-model compatibility list. If BF16 weights exist,
 unreviewed projectors, BF16 norms/patch kernels/interpolated position tables and
 Gemma 3's custom BF16 transposed projection are rejected. Standard F16 Gemma 3
@@ -74,6 +73,11 @@ weights are rejected; non-BF16 types retain their existing behavior. Audio
 this vision allowlist. The official Gemma 4 12B QAT q4_0 projector inspected for
 this change has one BF16 image projection and nine F32 image tensors. This is
 not permission to retain every 2D tensor or a guarantee for arbitrary repacks.
+
+Muse Glimmer retains the shared transformer matrices and three direct projector
+operands, `mm_0_w`, `mm_1_w` and `mm_2_w`. Its position table is interpolated and
+permuted, so BF16 position tables remain excluded, as do patch, normalization
+and bias weights. The upstream graph builder is unchanged.
 
 Every reservation and encoding checks retained weights and their views:
 
@@ -141,6 +145,40 @@ Absence of a record is not zero or success; `no_alloc` emits no load success.
 Requested mode, actual backend and retained-weight count are distinct facts.
 New records omit model paths, tensor names and tensor values.
 
+### Metadata classification and a single-load report
+
+`native/vision/mtmd-vision-bf16-diagnostics.h` adds a separate version-1 interface.
+It does not change the two storage modes or add a native automatic retry.
+
+- `mtmd_vision_bf16_classify_metadata` reads only the supplied modality flag and
+  projector metadata strings. A nonempty common projector name takes precedence
+  over the vision name. Unknown, missing, malformed or overlong metadata is
+  `UNKNOWN`; audio-only metadata is `NOT_APPLICABLE`. `REVIEWED` is a family
+  review decision, not a statement about the weights or device in a given file.
+  `UNREVIEWED` means review is pending; it must not be presented as proof that
+  retention is impossible. `LEGACY_FIRST` is reserved for a reviewed decision
+  to prefer established storage; no current family uses it.
+- `mtmd_init_from_file_with_vision_bf16_report` performs exactly one strict load.
+  It takes the existing parameters, raw storage i32, caller-owned report pointer
+  and exact report size. A missing report or incorrect size returns null without
+  touching the report or opening a file. Unknown storage is reported as an
+  invalid-mode failure before I/O.
+- A successful load reports `SUCCEEDED`. Only dedicated review refusals before
+  resident vision weight allocation/upload report `RETENTION_REFUSED`, a
+  projector/weight review reason, `PREUPLOAD` and `CLEANUP_COMPLETE`, after the
+  failed constructor has unwound. Invalid known layouts, missing backends,
+  I/O, allocation, cancellation and graph failures report ordinary failure.
+  Error text is not a retry protocol. General failure phase stays `UNKNOWN`.
+
+The report is fixed-width and caller-owned: version, size, status, reason, phase
+and cleanup, each four bytes. Generated record layout and pointer lowering are
+authoritative; callers must not hard-code target offsets. Metadata classification
+does not read GGUF tensor contents. The host decides whether to load directly in
+legacy mode and whether a dedicated completed preupload refusal justifies one
+legacy retry. Explicit retention can remain strict. A retry must not reload the
+language model or proceed after cancellation. A successful requested-policy
+query alone does not prove GPU placement or reduced physical memory.
+
 ## Legacy execution cost
 
 Storage selection is read at context initialization and graph boundaries, not
@@ -159,6 +197,20 @@ same private declarations, including unity builds. The ordinary C++ source and
 public headers establish the API and role contracts; compatibility checks and
 recorded source identities have distinct responsibilities. CPU builds preserve
 API plumbing without claiming WebGPU retention.
+
+The explicit projector review inventory is compiled in the actual loader in
+every profile. A locally mandatory `-Wswitch-enum` diagnostic makes a newly
+added upstream enum fail compilation until its disposition is reviewed. The
+negative compile test inserts an unclassified enumerator into the prepared
+upstream declaration and compiles the complete production loader, rather than a
+copy of its switch. Do not generate missing cases into `UNREVIEWED` automatically.
+
+This detects new family identifiers, not every new BF16 opportunity or risk.
+An existing family can gain tensor roles, storage types, dimensions or a
+data-dependent graph without changing its enum. Actual dtype/shape comes from
+the GGUF file. Role checks and real upstream graph fixtures cover those separate
+boundaries; they cannot exhaust all possible files and shapes. An explicit
+`UNREVIEWED` inventory keeps pending work visible without claiming it is complete.
 
 Native CPU contracts and synthetic upstream graph fixtures are distinct from
 actual model loading, WebGPU execution and image quality. Current entry/loader
@@ -185,5 +237,5 @@ Preparation records the actual `gemma4uv.cpp` input; graph tests check the accep
 role and dimensions rather than treating every source edit as a behavioral change.
 
 `tests/runtimes/llama-cpp/native/support/mtmd-logger.cpp` supplies the pinned logger state only for standalone tests
-that omit `clip.cpp`; it is not part of a distributed runtime. The vendor tree,
+that omit `mtmd.cpp`; it is not part of a distributed runtime. The vendor tree,
 model builder, shaders, legacy storage policy and consumer defaults are unchanged.

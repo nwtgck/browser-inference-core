@@ -69,6 +69,18 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 - **Accepted scope:** per-load immutable storage selection in the same runtime. Existing entries remain
   legacy-expand; explicit retain-checked uses original BF16 storage and rejects
   unreviewed roles/graphs/placement instead of retrying in F32 or on CPU.
+- **Review and failure reporting:** a metadata-only candidate classifier and a
+  caller-owned fixed-width report accompany a strict single-load entry point.
+  The core never retries. Only dedicated preupload role-review refusals report
+  completed cleanup for a host to consider one legacy retry. General I/O,
+  allocation, backend, layout, cancellation and late graph errors are ordinary
+  failures. An exhaustive inventory of the real upstream projector enum is
+  compiled into the loader; new identifiers require an explicit review decision.
+  Existing family changes still require role and graph review, not just enum coverage.
+- **Muse Glimmer scope:** shared transformer matrices and the three direct
+  `mm_0_w`/`mm_1_w`/`mm_2_w` projection operands are reviewed. BF16 interpolated
+  positions, patch, normalization and bias weights remain excluded. Synthetic
+  tests use the real upstream builder; no builder or shader change is introduced.
 - **Gemma4UV scope:** `mtmd-retained-roles.h` accepts only the image `mm_input_proj_w` for this
   projector, not common layer weights, patch/position/norm weights or audio.
   The private-role contract and `models/gemma4uv.cpp` require review on
