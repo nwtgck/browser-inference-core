@@ -255,6 +255,46 @@ size_t run(ggml_webgpu_shader_lib & library, ggml_webgpu_shader_lib & scalar, co
         require(scalar.select() == 0, "Subgroup capability required by width policy");
         factory(scalar, false, false, output);
     }
+    for (const int64_t k : {7680, 8192, 10752}) {
+        Fixture f(GGML_TYPE_Q4_K, k, 2048);
+        for (const uint32_t sg : {16u, 32u}) {
+            f.min_sg = f.max_sg = sg;
+            require(f.eligible() && f.select() == sg, "Q4_K at M=2048 admits complete blocks within the new K bounds");
+            factory(f, true, false, {});
+        }
+
+        auto variable = f.context<ggml_webgpu_shader_lib_context>();
+        variable.min_subgroup_size = 8;
+        require(ggml_webgpu_q4_requested_subgroup_size(variable, false, false) == 0,
+                "Q4_K at M=2048 requires explicit control for a variable width");
+        variable.subgroup_size_control_enabled = true;
+        require(ggml_webgpu_q4_requested_subgroup_size(variable, false, false) == 16,
+                "Q4_K at M=2048 uses the existing requested S16 policy");
+    }
+    for (const int64_t k : {7424, 7681, 10751, 11008}) {
+        Fixture f(GGML_TYPE_Q4_K, k, 2048);
+        require(!f.eligible() && f.select() == 0, "Q4_K at M=2048 rejects K outside the bounds or with partial blocks");
+    }
+    for (const int64_t m : {2047, 2049, 2080, 2559}) {
+        Fixture f(GGML_TYPE_Q4_K, 7680, m);
+        require(!f.eligible() && f.select() == 0, "Q4_K below the old long-K M floor only admits M=2048");
+    }
+    {
+        Fixture q4_0(GGML_TYPE_Q4_0, 7680, 2048);
+        require(!q4_0.eligible() && q4_0.select() == 0, "The long-K Q4_0 row floor stays at M=2560");
+        factory(q4_0, false, false, {});
+
+        Fixture f(GGML_TYPE_Q4_K, 7680, 2048);
+        require(!f.eligible(true) && !f.eligible(false, true), "Q4_K at M=2048 rejects MMVQ and overlap");
+        f.x.ne[1] = f.dst.ne[1] = 2;
+        require(!f.eligible(), "Q4_K at M=2048 requires a single input column");
+        f.x.ne[1] = f.dst.ne[1] = 1;
+        f.a.ne[2] = f.x.ne[2] = f.dst.ne[2] = 2;
+        require(!f.eligible(), "Q4_K at M=2048 requires singleton batches");
+        f.a.ne[2] = f.x.ne[2] = f.dst.ne[2] = 1;
+        f.post = 1;
+        require(!f.eligible(), "Q4_K at M=2048 rejects epilogues");
+    }
     for (const auto type : {GGML_TYPE_Q8_0, GGML_TYPE_Q6_K, GGML_TYPE_F32, GGML_TYPE_F16}) {
         for (const auto sg : {8u, 16u, 32u, 64u}) {
             Fixture f(type, 2048);
