@@ -6,8 +6,12 @@ struct Case {
     ggml_type right = GGML_TYPE_F32, output = GGML_TYPE_F32;
     int64_t k = 256, m = 64, n = 32, batch2 = 1, batch3 = 1;
     bool overlap = false, subgroup = false;
+    std::optional<unsigned> expected_mode = std::nullopt;
+    uint32_t expected_grid_x = 0;
 };
 static unsigned mode(const Case & c) {
+    if (c.expected_mode)
+        return *c.expected_mode;
     if (c.right != GGML_TYPE_F32 || c.output != GGML_TYPE_F32 || c.k <= 0 || c.n < 5 || c.overlap || c.subgroup)
         return 0;
     const bool q4 = (c.left == GGML_TYPE_Q4_0 && c.k % 32 == 0) || (c.left == GGML_TYPE_Q4_K && c.k % 256 == 0);
@@ -69,8 +73,12 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
             BICORE_CHECK(item.first == key || item.second != pipeline.pipeline.Get()->id);
         const bool valid_layout = input.k > 0 && input.k % ggml_blck_size(input.left) == 0 && input.m > 0 &&
                                   input.n >= 5 && input.batch2 > 0 && input.batch3 > 0;
-        if (valid_layout && !input.subgroup && input.m < 1000 && input.n < 1000 && input.batch2 < 100 &&
-            input.batch3 < 100) {
+        if (input.expected_grid_x) {
+            BICORE_CHECK(valid_layout && !input.subgroup);
+            BICORE_CHECK(
+                (production_dispatch(c, 65535, input.overlap) == std::array<uint32_t, 2>{input.expected_grid_x, 1}));
+        } else if (valid_layout && !input.subgroup && input.m < 1000 && input.n < 1000 && input.batch2 < 100 &&
+                   input.batch3 < 100) {
             const uint64_t groups = ((input.m + d.tile_m * d.wg_size_m - 1) / (d.tile_m * d.wg_size_m)) *
                                     ((input.n + d.tile_n * d.wg_size_n - 1) / (d.tile_n * d.wg_size_n)) * input.batch2 *
                                     input.batch3;
@@ -154,6 +162,39 @@ static void all(const std::filesystem::path & output) {
                                         {-1, 8},
                                         {8, -1}})
         cases.push_back({GGML_TYPE_Q6_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 64, 32, batch2, batch3});
+    // The expected mode/grid are explicit boundaries, independent of the production predicate.
+    const auto q8 = [](int64_t k, int64_t m, int64_t n, unsigned mode, uint32_t grid = 0) {
+        return Case{GGML_TYPE_Q8_0, GGML_TYPE_F32, GGML_TYPE_F32, k, m, n, 1, 1, false, false, mode, grid};
+    };
+    cases.push_back(q8(5120, 10240, 128, 2, 640));
+    cases.push_back(q8(5120, 10176, 128, 0, 1272));
+    cases.push_back(q8(5120, 8192, 160, 2, 640));
+    cases.push_back(q8(5120, 8192, 159, 0, 1280));
+    cases.push_back(q8(5120, 10241, 128, 0, 1284));
+    cases.push_back(q8(5088, 10240, 128, 0, 1280));
+    cases.push_back(q8(5121, 10240, 128, 0));
+    cases.push_back(q8(5120, 16384, 96, 0, 1536));
+    cases.push_back(q8(5120, 10240, 4, 0));
+    cases.push_back(q8(5120, 48, 128, 0, 8));
+    auto excluded = q8(5120, 10240, 128, 0);
+    excluded.batch2 = 2;
+    cases.push_back(excluded);
+    excluded.batch2 = 1;
+    excluded.batch3 = 2;
+    cases.push_back(excluded);
+    excluded.batch3 = 1;
+    excluded.overlap = true;
+    cases.push_back(excluded);
+    excluded.overlap = false;
+    excluded.subgroup = true;
+    cases.push_back(excluded);
+    excluded.subgroup = false;
+    excluded.right = GGML_TYPE_F16;
+    cases.push_back(excluded);
+    excluded.right = GGML_TYPE_F32;
+    excluded.output = GGML_TYPE_F16;
+    cases.push_back(excluded);
+    cases.push_back(q8(5120, 10240, 128, 2));
     supported_type_controls(cases);
     for (const auto right : {GGML_TYPE_F32, GGML_TYPE_F16})
         for (const auto result : {GGML_TYPE_F32, GGML_TYPE_F16})

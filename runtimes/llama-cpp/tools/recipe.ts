@@ -356,6 +356,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-moe-sparse-columns.patch',
+    target: 'llama-webgpu',
+    reason: 'moe sparse column assignments',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-direct-mapped-read.patch',
     target: 'llama-webgpu',
     reason: 'direct mapped read',
@@ -370,6 +380,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     reason: 'quant wide m',
     files: [
       'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-q8-prefill-wide-m.patch',
+    target: 'llama-webgpu',
+    reason: 'wide paired-half Q8 prefill',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/quant_half_pairs_inner_loops.tmpl',
     ],
     modes: ['normal', 'profile'],
   },

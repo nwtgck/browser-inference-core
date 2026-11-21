@@ -601,6 +601,14 @@ not establish target-device speed.
 - **Removal:** upstream implements equivalent guarded fusion or the owner withdraws it; remove the patch, preparation, build wiring, tests and provenance entry together.
 
 
+## WebGPU MoE sparse columns
+
+- **Patch:** `ggml-webgpu-moe-sparse-columns.patch`. Applied after the inactive column groups and NVFP4 accumulator patches.
+- **Scope:** Indexed IQ3_S and IQ4_NL matrix multiplication with scalar F32 input. For tiles of up to eight active columns, each participating lane accumulates one column. Larger tiles use the original grouped assignment.
+- **Contract:** Keep the gather metadata, WebGPU bindings, uniform layout, dispatch dimensions, and F16 accumulation order for each output. The existing pipeline key covers weight type, input type and vectorization. The separate indexed single-token kernel keeps its existing selection.
+- **Validation and limits:** Compare emitted normal and profile shaders and run numerical and timing comparisons for sparse, mixed and full tiles. Software tests cover authored routing and do not establish end-to-end prefill latency.
+- **Removal:** Remove when upstream provides an equivalent sparse tile, or revisit the patch when the indexed matrix tile shape or gather contract changes.
+
 ## WebGPU MoE matrix inactive column groups
 
 - **Patch:** `ggml-webgpu-moe-group-skip.patch`.
@@ -791,6 +799,14 @@ not establish target-device speed.
 - **No-patch alternative:** retain the four-row geometry or wait for upstream tuning.
 - **Validation and limits:** actual normal/profile factory/cache/grid/source equivalence, ownership and pinned-header syntax are source/native gates. Finite authored software checks are separate from full runtime/model/hardware validation. Small-K and small-grid speed, cold compilation cost, physical peak and Windows/macOS improvements remain unmeasured; no additional K threshold is inferred from untested cases.
 - **Removal:** retire this stage and its build/provenance/tests when upstream provides equivalent generic selection or the owner drops it. Recheck geometry, memory limits, per-row arithmetic, pair ownership and key/grid coupling on updates.
+
+## Wider-M paired-half Q8 prefill tiles
+
+- **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.
+- **Scope:** Ordinary single-matrix Q8_0 x F32 to F32 with complete 32-value blocks, K>=5120, M divisible by 64, N>=128 and divisible by 32, and at least 640 output workgroups for the 64x32 tile. Keep existing overlap, subgroup-matrix, vector and base-geometry exclusions. Other Q8 shapes use the existing route. Selection uses tensor shape and backend capabilities without model or device identifiers.
+- **Contract:** Reuse the paired-half M8 cache key, labels, WG64/TK32 tile and 16-word UBO. Decode signed packed Q8 bytes with the canonical 34-byte block layout and multiply the F32 scale before rounding the products to half. Store adjacent values as pairs and accumulate in the original K order. Preserve the existing bindings, offsets and global memory layout. No new buffers, exports, probe or host synchronization.
+- **Validation:** Exercise actual factory dispatch and cache transitions in normal and profile providers. Check packed decoding, full output bits and guard regions in a representative prefill. Isolated software WebGPU timings establish a candidate; physical-device prefill and ordinary first-token latency require model measurements.
+- **Removal:** Delete the patch and its recipe entry when upstream supplies an equivalent Q8 prefill path with comparable numerical behavior and device performance.
 
 ## Ordinary fixed-subgroup Q4 matvecs
 

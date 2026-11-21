@@ -1,0 +1,38 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2995,7 +2995,16 @@
+                 q6_c8_groups = std::min<uint64_t>(8, q6_c8_groups * std::min<uint64_t>(8, factor));
+             }
+         }
+-        if ((q4_blocks || q6_c8_groups >= 8) && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++        const int64_t m = context.dst->ne[0];
++        const int64_t n = context.dst->ne[1];
++        constexpr int64_t q8_min_groups = 640;
++        // Keep the wide Q8 tile on long-K, full tiles with a large per-matrix grid.
++        // Divide the minimum group count by the column tiles rather than multiplying extents.
++        const bool q8_c8 = key.src0_type == GGML_TYPE_Q8_0 && k >= 5120 && k % 32 == 0 &&
++                           m >= 64 && m % 64 == 0 && n >= 128 && n % 32 == 0 &&
++                           context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
++                           m / 64 >= 1 + (q8_min_groups - 1) / (n / 32);
++        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8) && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
+             context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
+             !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
+             WEBGPU_MUL_MAT_TILE_N == 4 && WEBGPU_MUL_MAT_WG_SIZE_M == 8 &&
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/quant_half_pairs_inner_loops.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/quant_half_pairs_inner_loops.tmpl
+@@ -16,5 +16,15 @@
+ // Q4_0 helper unused in this Q4_K specialization
+ #endif
+ 
++#ifdef INIT_SRC0_SHMEM_Q8_0
++fn dequant_q8_0_packed_to_shmem(q_packed: u32, d: f32, dst_idx: u32) {
++    for (var k = 0u; k < 4u; k += 2u) {
++        let q0 = f32(get_byte_i32(q_packed, k)) * d;
++        let q1 = f32(get_byte_i32(q_packed, k + 1u)) * d;
++        shmem[(dst_idx + k) / 2u] = vec2<f16>(f16(q0), f16(q1));
++    }
++}
++#else
+ // Q8 helper unused in this Q4 specialization
+ #endif
++#endif

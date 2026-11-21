@@ -30,8 +30,34 @@ static void nvfp4_accumulator() {
     BICORE_CHECK(select(GGML_PREC_UNDEFINED).Get() == narrow.Get());
 }
 
+static void sparse_matrix(const std::filesystem::path & output) {
+    auto ctx = recording_context();
+    for (const auto type : {GGML_TYPE_IQ3_S, GGML_TYPE_IQ4_NL, GGML_TYPE_Q4_K}) {
+        ggml_tensor a{}, x{};
+        a.type = type;
+        x.type = GGML_TYPE_F32;
+        a.ne[0] = x.ne[0] = type == GGML_TYPE_IQ4_NL ? 640 : 2560;
+        a.ne[1] = 640;
+        a.ne[2] = 512;
+        x.ne[1] = x.ne[3] = 1;
+        x.ne[2] = 5;
+        ggml_webgpu_shader_lib_context context{};
+        context.src0 = &a;
+        context.src1 = &x;
+        const auto pipeline = ctx->shader_lib->get_mul_mat_id_pipeline(context, true);
+        const auto & d = *static_cast<const ggml_webgpu_mul_mat_shader_decisions *>(pipeline.context.get());
+        BICORE_CHECK(d.wg_size == 64 && d.tile_k == 32 && d.tile_m * d.wg_size_m == 32 && d.tile_n * d.wg_size_n == 32);
+        x.ne[2] = 128;
+        BICORE_CHECK(ctx->shader_lib->get_mul_mat_id_pipeline(context, true).pipeline.Get() == pipeline.pipeline.Get());
+        std::ofstream shader(output / (pipeline.name + ".wgsl"));
+        shader << pipeline.pipeline.Get()->code;
+        BICORE_CHECK(bool(shader));
+    }
+}
+
 static void all(const std::filesystem::path & output) {
     nvfp4_accumulator();
+    sparse_matrix(output);
     auto ctx = recording_context();
     std::ofstream cases(output / "cases.json");
     cases << "[\n";
