@@ -44,6 +44,8 @@ endforeach()
 
 mtmd_contract(mtmd-bf16 "../mtmd-bf16.cpp")
 add_test(NAME mtmd-bf16 COMMAND mtmd-bf16)
+mtmd_contract(mtmd-bf16-classification "../mtmd-bf16-classification.cpp")
+add_test(NAME mtmd-bf16-classification COMMAND mtmd-bf16-classification)
 mtmd_contract(mtmd-retained "../mtmd-retained.cpp" "../support/mtmd-logger.cpp")
 add_test(NAME mtmd-retained COMMAND mtmd-retained)
 add_test(NAME mtmd-retained-roles COMMAND mtmd-retained roles)
@@ -54,6 +56,7 @@ add_test(NAME mtmd-borrowed COMMAND mtmd-borrowed)
 mtmd_contract(mtmd-entry "../mtmd-entry.cpp"
     $<TARGET_OBJECTS:native-mtmd> $<TARGET_OBJECTS:native-mtmd-model> $<TARGET_OBJECTS:native-mtmd-subcontext>
     $<TARGET_OBJECTS:native-mtmd-audio> $<TARGET_OBJECTS:native-mtmd-image>)
+target_include_directories(mtmd-entry PRIVATE "${LCB_PREPARED_SOURCE}/src")
 target_link_options(mtmd-entry PRIVATE -Wl,--wrap=gguf_init_from_file)
 add_test(NAME mtmd-entry COMMAND mtmd-entry "${CMAKE_CURRENT_BINARY_DIR}/entry-gguf")
 mtmd_contract(mtmd-loader "../mtmd-loader.cpp"
@@ -65,10 +68,10 @@ add_test(NAME mtmd-loader COMMAND mtmd-loader "${CMAKE_CURRENT_BINARY_DIR}/metad
 mtmd_contract(mtmd-model-graphs "../mtmd-graphs.cpp" "../support/mtmd-logger.cpp"
     "${LCB_PREPARED_SOURCE}/tools/mtmd/mtmd-graph.cpp"
     $<TARGET_OBJECTS:native-mtmd-model>)
-foreach(model llava qwen2vl qwen3vl siglip gemma4v gemma4uv lfm3vl)
+foreach(model llava qwen2vl qwen3vl siglip gemma4v gemma4uv lfm3vl muse-glimmer)
     target_sources(mtmd-model-graphs PRIVATE "${LCB_PREPARED_SOURCE}/tools/mtmd/models/${model}.cpp")
 endforeach()
-foreach(model llava qwen2vl qwen3vl gemma3 lfm2 gemma4v gemma4uv lfm3vl)
+foreach(model llava qwen2vl qwen3vl gemma3 lfm2 gemma4v gemma4uv lfm3vl muse-glimmer)
     foreach(side 32 48)
         add_test(NAME "retained-model-${model}-${side}" COMMAND mtmd-model-graphs "${model}" "${side}")
     endforeach()

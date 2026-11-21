@@ -2,6 +2,7 @@
 
 #include "mtmd-model.h"
 #include "ggml.h"
+#include "mtmd-vision-bf16-diagnostics-internal.h"
 
 #include <stdexcept>
 #include <unordered_set>
@@ -15,6 +16,10 @@ inline void lcb_mtmd_check_retained_roles(const mtmd_model & model, ggml_context
     bool has_bf16 = false;
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
         has_bf16 = has_bf16 || t->type == GGML_TYPE_BF16;
+        if (t->type == GGML_TYPE_BF16 &&
+            (t->ne[0] <= 0 || t->ne[1] <= 0 || t->ne[2] <= 0 || t->ne[3] <= 0 || !ggml_is_contiguous(t))) {
+            throw std::runtime_error("retain-checked BF16: unsupported weight role or layout");
+        }
     }
     if (!has_bf16)
         return;
@@ -27,6 +32,13 @@ inline void lcb_mtmd_check_retained_roles(const mtmd_model & model, ggml_context
     case PROJECTOR_TYPE_MLP_NORM:
         matrices.insert(model.mm_0_w);
         matrices.insert(model.mm_3_w);
+        break;
+    case PROJECTOR_TYPE_MUSE_GLIMMER:
+        // Three direct left operands of build_mm; position interpolation and
+        // patch/norm/bias weights are deliberately excluded.
+        matrices.insert(model.mm_0_w);
+        matrices.insert(model.mm_1_w);
+        matrices.insert(model.mm_2_w);
         break;
     case PROJECTOR_TYPE_QWEN2VL:
     case PROJECTOR_TYPE_QWEN25VL:
@@ -52,7 +64,8 @@ inline void lcb_mtmd_check_retained_roles(const mtmd_model & model, ggml_context
         matrices.insert(model.mm_input_proj_w);
         break;
     default:
-        throw std::runtime_error("retain-checked BF16: projector roles have not been reviewed");
+        throw lcb_mtmd_retention_refused(MTMD_VISION_BF16_REASON_PROJECTOR_UNREVIEWED,
+                                         "retain-checked BF16: projector roles have not been reviewed");
     }
     if (model.proj_type != PROJECTOR_TYPE_GEMMA4UV) {
         for (const mtmd_layer & layer : model.layers) {
@@ -70,15 +83,24 @@ inline void lcb_mtmd_check_retained_roles(const mtmd_model & model, ggml_context
             }
         }
     }
+    bool unreviewed_weight = false;
     for (ggml_tensor * t = ggml_get_first_tensor(weights); t; t = ggml_get_next_tensor(weights, t)) {
         if (t->type != GGML_TYPE_BF16)
             continue;
-        const bool matrix = matrices.count(t) && t->ne[2] == 1 && t->ne[3] == 1;
-        const bool lookup = model.proj_type == PROJECTOR_TYPE_GEMMA4V && t == model.position_embeddings &&
-                            t->ne[2] == 2 && t->ne[3] == 1;
-        if ((!matrix && !lookup) || t->ne[0] <= 0 || t->ne[1] <= 0 || !ggml_is_contiguous(t)) {
+        const bool matrix = matrices.count(t) != 0;
+        const bool lookup = model.proj_type == PROJECTOR_TYPE_GEMMA4V && t == model.position_embeddings;
+        if ((matrix && (t->ne[2] != 1 || t->ne[3] != 1)) || (lookup && (t->ne[2] != 2 || t->ne[3] != 1))) {
             // Metadata only: no tensor names, paths or contents in new records.
             throw std::runtime_error("retain-checked BF16: unsupported weight role or layout");
         }
+        if (!matrix && !lookup) {
+            unreviewed_weight = true;
+        }
+    }
+    // A later malformed known weight must not be hidden by an earlier role
+    // refusal and then made eligible for a consumer's legacy retry.
+    if (unreviewed_weight) {
+        throw lcb_mtmd_retention_refused(MTMD_VISION_BF16_REASON_WEIGHT_UNREVIEWED,
+                                         "retain-checked BF16: unsupported weight role or layout");
     }
 }

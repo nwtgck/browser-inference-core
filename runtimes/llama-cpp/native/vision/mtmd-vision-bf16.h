@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mtmd.h"
+#include "mtmd-vision-bf16-diagnostics.h"
 #include <stdint.h>
 
 #ifdef __cplusplus

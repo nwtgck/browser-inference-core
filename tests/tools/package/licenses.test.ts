@@ -42,6 +42,34 @@ test('license index groups complete notices by software with reproducible bytes 
   await validateLicenseIndex({ ...options, index: extended });
 });
 
+test('llama.cpp UI notices retain their original bytes under each upstream package and vendored library', async () => {
+  await using temporary = await temporaryDirectory();
+  const source = join(temporary.root, 'llama.cpp');
+  const directory = join(temporary.root, 'package');
+  const destination = join(directory, 'licenses/0');
+  const notices = [
+    ['ui/apps/chat/LICENSE', '@ggml-org/llama-chat'],
+    ['ui/apps/chat/alias/LICENSE', 'llama-chat'],
+    ['ui/apps/chat/src/lib/vendors/big-integer/LICENSE', 'big-integer'],
+    ['ui/apps/chat/src/lib/vendors/nerdamer-prime/LICENSE', 'nerdamer-prime'],
+    ['ui/lib/ui/LICENSE', '@ggml-org/llama-ui'],
+    ['ui/lib/voice/LICENSE', '@ggml-org/llama-voice'],
+  ] as const;
+  await write({ path: join(directory, 'LICENSE'), data: 'Core notice' });
+  for (const [relative, id] of notices) {
+    await write({ path: join(source, relative), data: `${id} notice\r\n` });
+  }
+  assert.equal(await collectNotices({ source, destination, required: true }), notices.length);
+  const options = { directory, runtime: 'llama-cpp' as const, licenseRoots: ['llama.cpp'], metadata };
+  const index = await writeLicenseIndex(options);
+  for (const [relative, id] of notices) {
+    const path = `licenses/0/${relative}`;
+    assert.deepEqual(index.components.find(component => component.id === id)?.notices, [{ path }]);
+    assert.deepEqual(await readFile(join(directory, path)), await readFile(join(source, relative)));
+  }
+  await validateLicenseIndex({ ...options, index });
+});
+
 test('license validation rejects missing, duplicated, reassigned, extracted and unindexed documents', async () => {
   await using temporary = await temporaryDirectory();
   const directory = temporary.root;
@@ -79,7 +107,7 @@ test('empty, unreviewed and linked license sources and linked index destinations
     await assert.rejects(writeLicenseIndex(options), /Empty/u);
   }
   await write({ path: original, data: 'Notice' });
-  for (const name of ['licenses/embedded/unreviewed.h.txt', 'licenses/0/unexpected-tree/library/LICENSE']) {
+  for (const name of ['licenses/embedded/unreviewed.h.txt', 'licenses/0/unexpected-tree/library/LICENSE', 'licenses/0/ui/apps/chat/LICENSE.extra', 'licenses/0/ui/lib/unreviewed/LICENSE']) {
     await write({ path: join(directory, name), data: '// Unknown owner' });
     await assert.rejects(makeLicenseIndex(options), /Unclassified/u);
     await rm(join(directory, name));

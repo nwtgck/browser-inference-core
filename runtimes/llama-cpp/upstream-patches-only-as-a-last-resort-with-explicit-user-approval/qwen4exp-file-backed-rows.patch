@@ -1,7 +1,6 @@
-diff --git a/src/llama-model.cpp b/src/llama-model.cpp
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -1686,6 +1686,14 @@
+@@ -1727,6 +1727,14 @@
  
      this->ml = &ml; // to be used by create_tensor() and load_arch_tensors()
  
@@ -16,7 +15,6 @@ diff --git a/src/llama-model.cpp b/src/llama-model.cpp
      if (ml.use_mmap && params.load_mode == LLAMA_LOAD_MODE_AUTO) {
          for (const auto & dev : devices) {
              ggml_backend_dev_props props;
-diff --git a/src/llama.cpp b/src/llama.cpp
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -312,10 +312,17 @@
@@ -48,7 +46,7 @@ diff --git a/src/llama.cpp b/src/llama.cpp
          return {0, model_ptr.release()};
      } catch (const std::exception & err) {
          LLAMA_LOG_ERROR("%s: error loading model: %s\n", __func__, err.what());
-@@ -496,6 +507,11 @@
+@@ -490,6 +501,11 @@
  }
  
  void llama_model_save_to_file(const struct llama_model * model, const char * path_model) {
@@ -60,10 +58,9 @@ diff --git a/src/llama.cpp b/src/llama.cpp
      llama_model_saver ms(model);
      ms.add_kv_from_model();
      ms.add_tensors_from_model();
-diff --git a/src/models/models.h b/src/models/models.h
 --- a/src/models/models.h
 +++ b/src/models/models.h
-@@ -2715,7 +2715,12 @@
+@@ -2923,7 +2923,12 @@
      std::unique_ptr<llm_graph_context> build_arch_graph(const llm_graph_params & params) const override;
  };
  
@@ -76,7 +73,6 @@ diff --git a/src/models/models.h b/src/models/models.h
      llama_model_qwen4exp(const struct llama_model_params & params) : llama_model_base(params) {}
  
      class llm_graph_input_kpool;
-diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
 @@ -1,4 +1,5 @@
@@ -112,10 +108,10 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 +            per_layer_tok_embd = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "weight"),
 +                                               { hparams.ple_head_dim, ple_rows }, TENSOR_READ_LAZY);
 +        }
-     }
- 
-     auto load_block = [&](int il, int flags) {
-@@ -1283,10 +1303,13 @@
+         // an FP8 table keeps its checkpoint bytes, so its per-tensor scale is applied after the gather
+         per_layer_tok_embd_s = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "scale"), { 1 }, TENSOR_NOT_REQUIRED);
+         if (per_layer_tok_embd_s && per_layer_tok_embd_s->type != GGML_TYPE_F32) {
+@@ -1281,10 +1301,13 @@
  
      bool can_reuse(const llm_graph_params & params) override {
          mctx = static_cast<const llama_memory_hybrid_idx_context *>(params.mctx)->get_attn();
@@ -130,7 +126,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
  
      const llama_model & model;
  
-@@ -1358,6 +1381,17 @@
+@@ -1356,6 +1379,17 @@
          }
      }
  
@@ -148,7 +144,7 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
      {
          ggml_tensor * ple = model.per_layer_tok_embd;
  
-@@ -1408,13 +1442,21 @@
+@@ -1406,13 +1440,21 @@
      // the attention cells see every ubatch regardless of the layer types
      auto ple_inp = std::make_unique<llm_graph_input_qwen4exp_ple>(model, mctx_hyb->get_attn());
  
@@ -172,10 +168,10 @@ diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
 -    // gather then flatten the heads: get_rows lays the head dimension out slowest, as the reference does
 -    ggml_tensor * emb = ggml_get_rows(ctx0, model.per_layer_tok_embd, rows);
 +    // Preserve the upstream gather layout and all downstream operations.
-     emb = ggml_reshape_2d(ctx0, emb, hparams.ple_head_dim * n_heads, n_tokens);
-     cb(emb, "ple_embd", -1);
- 
-@@ -1510,3 +1552,21 @@
+     if (model.per_layer_tok_embd_s) {
+         emb = ggml_scale(ctx0, emb, model.per_layer_tok_embd_scale);
+     }
+@@ -1511,3 +1553,21 @@
  
      return ggml_add(ctx0, hidden, ggml_add(ctx0, gated, conv_out));
  }

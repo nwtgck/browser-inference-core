@@ -87,15 +87,15 @@
  #include "ggml.h"
  #include "pre_wgsl.hpp"
  
-@@ -1289,6 +1290,7 @@
+@@ -1296,6 +1297,7 @@
      wgpu::Device           device;
      pre_wgsl::Preprocessor preprocessor;
  
 +    std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
      std::unordered_map<int, webgpu_pipeline> hc_pipelines;
-     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;       // key is whether to compute the mean
-     std::unordered_map<int, webgpu_pipeline> argmax_pipelines;         // key is vec4
-@@ -2021,6 +2023,17 @@
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;            // key is whether to compute the mean
+     std::unordered_map<int, webgpu_pipeline> argmax_pipelines;              // key is vec4
+@@ -2045,6 +2047,17 @@
          return ssm_scan_pipelines[key];
      }
  
@@ -123,7 +123,7 @@
  
  #include "ggml-backend-impl.h"
  #include "ggml-impl.h"
-@@ -3386,6 +3387,57 @@
+@@ -3498,6 +3499,57 @@
      return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
  }
  
@@ -181,7 +181,7 @@
  static webgpu_encoded_op ggml_webgpu_hc(webgpu_context & ctx, ggml_tensor * dst) {
      const bool pre = dst->op == GGML_OP_DSV4_HC_PRE;
      ggml_tensor * x = dst->src[0];
-@@ -3622,6 +3674,10 @@
+@@ -3734,6 +3786,10 @@
          case GGML_OP_FLASH_ATTN_EXT:
              return ggml_webgpu_flash_attn(ctx, src0, src1, src2, node->src[3], node->src[4], node);
          case GGML_OP_ADD:

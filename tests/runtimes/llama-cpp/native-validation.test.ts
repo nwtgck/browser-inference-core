@@ -16,7 +16,7 @@ const dawn = resolve(READ_ENV_LCB_TEST_DAWN_PACKAGE() ?? join(sourceRoot, '.tool
 
 // Native declarations and deterministic external API doubles are not GPU or
 // browser execution. Required inputs must be explicit; never substitute history.
-test('current native contracts use the production TypeScript preparation', { timeout: 480_000 }, async context => {
+test('current native contracts use the production TypeScript preparation', { timeout: 900_000 }, async context => {
   await directory({ path: join(sourceRoot, 'runtimes/llama-cpp/vendor/llama.cpp') });
   await regularFile({ path: join(dawn, 'webgpu/include/webgpu/webgpu.h') });
   await using workspace = {
@@ -133,7 +133,7 @@ test('current native contracts use the production TypeScript preparation', { tim
               cwd: sourceRoot,
               timeoutMs: 60_000,
             });
-            await runProcess({ command: 'cmake', args: ['--build', contracts, '--target', 'mtmd-entry', 'mtmd-loader', 'mtmd-borrowed', 'checkpoint-writer', '--parallel', '2'], cwd: sourceRoot, timeoutMs: 180_000 });
+            await runProcess({ command: 'cmake', args: ['--build', contracts, '--target', 'mtmd-entry', 'mtmd-loader', 'mtmd-borrowed', 'checkpoint-writer', '--parallel', '2'], cwd: sourceRoot, timeoutMs: 300_000 });
             await runProcess({ command: 'ctest', args: ['--test-dir', contracts, '-R', '^(mtmd-(entry|loader|borrowed)|checkpoint-writer)$', '--output-on-failure'], cwd: sourceRoot, timeoutMs: 60_000 });
           }
         }
@@ -152,6 +152,21 @@ test('current native contracts use the production TypeScript preparation', { tim
           );
         } finally {
           await writeFile(provider, original);
+        }
+        // Compile the actual loader with a new upstream enumerator. This must
+        // fail through the production review inventory, even with its default.
+        const metadataHeader = join(prepared.root, 'tools/mtmd/mtmd-impl.h');
+        const metadataOriginal = await readFile(metadataHeader, 'utf8');
+        const addedProjector = metadataOriginal.replace('enum projector_type {', 'enum projector_type {\n    PROJECTOR_TYPE_UNCLASSIFIED_TEST_ONLY,');
+        assert.notEqual(addedProjector, metadataOriginal);
+        try {
+          await writeFile(metadataHeader, addedProjector);
+          await assert.rejects(
+            runProcess({ command: 'cmake', args: ['--build', build, '--target', 'native-mtmd-model'], cwd: sourceRoot, timeoutMs: 90_000 }),
+            /PROJECTOR_TYPE_UNCLASSIFIED_TEST_ONLY/u,
+          );
+        } finally {
+          await writeFile(metadataHeader, metadataOriginal);
         }
       }
     });

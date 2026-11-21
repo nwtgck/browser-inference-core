@@ -69,6 +69,18 @@ and [v0.7.0 review](../docs/llama-v0.7.0-review.md) remain historical context.
 - **Accepted scope:** per-load immutable storage selection in the same runtime. Existing entries remain
   legacy-expand; explicit retain-checked uses original BF16 storage and rejects
   unreviewed roles/graphs/placement instead of retrying in F32 or on CPU.
+- **Review and failure reporting:** a metadata-only candidate classifier and a
+  caller-owned fixed-width report accompany a strict single-load entry point.
+  The core never retries. Only dedicated preupload role-review refusals report
+  completed cleanup for a host to consider one legacy retry. General I/O,
+  allocation, backend, layout, cancellation and late graph errors are ordinary
+  failures. An exhaustive inventory of the real upstream projector enum is
+  compiled into the loader; new identifiers require an explicit review decision.
+  Existing family changes still require role and graph review, not just enum coverage.
+- **Muse Glimmer scope:** shared transformer matrices and the three direct
+  `mm_0_w`/`mm_1_w`/`mm_2_w` projection operands are reviewed. BF16 interpolated
+  positions, patch, normalization and bias weights remain excluded. Synthetic
+  tests use the real upstream builder; no builder or shader change is introduced.
 - **Gemma4UV scope:** `mtmd-retained-roles.h` accepts only the image `mm_input_proj_w` for this
   projector, not common layer weights, patch/position/norm weights or audio.
   The private-role contract and `models/gemma4uv.cpp` require review on
@@ -734,11 +746,11 @@ not establish target-device speed.
 
 - **Patch:** `ggml-webgpu-quant-half-pairs.patch`.
 - **Scope:** Only ordinary Q4_0/Q4_K x F32 to F32 matrices with N>=5, complete quantization blocks, no source overlap and no subgroup-matrix path are eligible. Keep the reviewed TK32, 4x4 register tiles and 8x8 workgroup geometry; other geometry, dtype, indexed and matvec paths retain canonical shaders.
-- **Contract:** store adjacent half values as whole shared-memory pairs, load them into private pairs, and accumulate the two products in ascending K order. Preserve global scalar activation loads, packed weight decoders and half expressions, output stores, two barriers per K tile, 4096-byte shared memory, bindings, sixteen uniform words and host dispatch. A typed mode selected before lookup participates in cache equality/hash and profile labels; no shape-sized cache key or runtime probe is added.
+- **Contract:** store adjacent half values as whole shared-memory pairs, load them into private pairs, and accumulate the two products in ascending K order. Preserve global scalar activation loads, packed weight decoders, F32 dequantization before conversion to half storage, output stores, two barriers per K tile, 4096-byte shared memory, bindings, sixteen uniform words and host dispatch. A typed mode selected before lookup participates in cache equality/hash and profile labels; no shape-sized cache key or runtime probe is added.
 - **Integration:** append a checked shader-library stage after the Q6 selector, copy the pinned templates into an isolated preparation tree and generate a dedicated embedding with the canonical emitter. Keep vendor and canonical embeddings unchanged, report actual normal/profile compiled copies separately.
 - **No-patch alternative:** retain canonical scalar shared storage or wait for an upstream equivalent. No supported runtime setting provides this code-generation choice.
 - **Validation and limits:** complete-source native factory/cache/fallback/grid checks establish the host selection contract. Shader numerical checks establish a separate property. Finite authored GPU checks and software measurements are separate evidence; they do not establish physical peak memory, cold-start cost, model quality or Windows/macOS speed. Preserving source arithmetic is not a universal compiler bit-equivalence guarantee.
-- **Removal:** remove this stage, embedding and associated build/provenance/tests when upstream supplies an equivalent or the owner drops it. Re-review half expressions, pair ownership, geometry, keys and emitter/preprocessor contracts on upstream changes.
+- **Removal:** remove this stage, embedding and associated build/provenance/tests when upstream supplies an equivalent or the owner drops it. Re-review dequantization precision, half conversions, pair ownership, geometry, keys and emitter/preprocessor contracts on upstream changes.
 
 ## Direct aligned mapped reads in Emdawn
 

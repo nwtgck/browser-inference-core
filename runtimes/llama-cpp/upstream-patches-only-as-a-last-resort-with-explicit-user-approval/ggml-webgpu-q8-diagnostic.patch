@@ -11,7 +11,7 @@
  #include "ggml-webgpu-router-tail.hpp"
  
  #include "ggml-backend-impl.h"
-@@ -404,6 +408,7 @@
+@@ -417,6 +421,7 @@
      wgpu::CommandEncoder     active_command_encoder;
      wgpu::ComputePassEncoder active_compute_pass;
      bool                     batch_compute_passes = true;
@@ -19,7 +19,7 @@
  
  #ifdef GGML_WEBGPU_GPU_PROFILE
      // Profiling: per-shader GPU time in ms
-@@ -1834,17 +1839,9 @@
+@@ -1913,17 +1918,9 @@
      });
  }
  
@@ -40,7 +40,7 @@
      ggml_webgpu_shader_lib_context shader_lib_ctx = {};
  
      shader_lib_ctx.src0                     = src0;
-@@ -1861,12 +1858,32 @@
+@@ -1940,12 +1937,32 @@
      shader_lib_ctx.supports_dot_product     = ctx->global_ctx->capabilities.supports_dot_product;
      shader_lib_ctx.vendor                   = ctx->global_ctx->vendor;
  
@@ -74,7 +74,7 @@
          if (use_mmvq) {
              ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
          }
-@@ -1964,6 +1981,11 @@
+@@ -2043,6 +2060,11 @@
      });
  
      return ggml_backend_webgpu_build_multi(ctx, dispatches);
@@ -86,7 +86,7 @@
  }
  
  static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
-@@ -4215,7 +4237,17 @@
+@@ -4440,7 +4462,17 @@
  #endif
  }
  
@@ -105,7 +105,7 @@
      WEBGPU_LOG_DEBUG("ggml_backend_webgpu_graph_compute(" << cgraph->n_nodes << " nodes)");
  
      ggml_backend_webgpu_context * backend_ctx = (ggml_backend_webgpu_context *) backend->context;
-@@ -4246,7 +4278,7 @@
+@@ -4471,7 +4503,7 @@
          if (cgraph->nodes[node_idx]->op == GGML_OP_SET_ROWS) {
              contains_set_rows = true;
          }
@@ -114,7 +114,7 @@
              commands.push_back(*cmd);
              num_batched_kernels += cmd.value().num_kernels;
  #ifdef GGML_WEBGPU_GPU_PROFILE
-@@ -4316,6 +4348,13 @@
+@@ -4541,6 +4573,13 @@
      ctx->bind_group_cache.end_graph();
      WEBGPU_CPU_PROFILE_TOTAL_END(graph_compute, ctx->global_ctx);
      return GGML_STATUS_SUCCESS;
@@ -128,7 +128,7 @@
  }
  
  struct ggml_backend_webgpu_event_context {
-@@ -5704,12 +5743,154 @@
+@@ -6193,12 +6232,154 @@
      return &device;
  }
  
@@ -295,7 +295,7 @@
  #include "ggml-webgpu-rms-scale-shaders.hpp"
  #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
  #include "ggml-webgpu-router-tail-shaders.hpp"
-@@ -321,6 +324,7 @@
+@@ -322,6 +325,7 @@
      wgpu::ComputePipeline pipeline;
      std::string           name;
      std::shared_ptr<void> context = nullptr;
@@ -303,7 +303,7 @@
  };
  
  struct ggml_webgpu_generic_shader_decisions {
-@@ -1191,11 +1195,14 @@
+@@ -1224,11 +1228,14 @@
      uint32_t  subgroup_size;
      bool      use_mmvq;
      bool      src_overlap;
@@ -319,7 +319,7 @@
      }
  };
  
-@@ -1210,6 +1217,8 @@
+@@ -1243,6 +1250,8 @@
          ggml_webgpu_hash_combine(seed, key.subgroup_size);
          ggml_webgpu_hash_combine(seed, key.use_mmvq);
          ggml_webgpu_hash_combine(seed, key.src_overlap);
@@ -328,7 +328,7 @@
          return seed;
      }
  };
-@@ -2339,7 +2348,7 @@
+@@ -2496,7 +2505,7 @@
          return quantize_q8_pipelines[key];
      }
  
@@ -337,7 +337,7 @@
          ggml_webgpu_mul_mat_vec_pipeline_key key = {};
          key.src0_type                            = context.src0->type;
          key.src1_type                            = context.src1->type;
-@@ -2356,6 +2365,32 @@
+@@ -2513,6 +2522,32 @@
                                   ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
                                   ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
  
@@ -370,7 +370,7 @@
          auto it = mul_mat_vec_pipelines.find(key);
          if (it != mul_mat_vec_pipelines.end()) {
              return it->second;
-@@ -2476,6 +2511,8 @@
+@@ -2633,6 +2668,8 @@
              outputs_per_wg = WEBGPU_MUL_MAT_VEC_LEGACY_Q_OUTPUTS_PER_WG;
          }
  
@@ -379,7 +379,7 @@
          if (key.use_mmvq) {
              defines.push_back("MMVQ");
              defines.push_back("Q8_1_T");
-@@ -2496,12 +2533,13 @@
+@@ -2653,12 +2690,13 @@
              // describe all output rows covered by the actual workgroup.
              outputs_per_wg *= wg_size / key.subgroup_size;
          } else {
@@ -395,7 +395,7 @@
          if (key.vectorized) {
              variant += "_vectorized";
          }
-@@ -2515,6 +2553,12 @@
+@@ -2672,6 +2710,12 @@
  
          webgpu_pipeline pipeline   = ggml_webgpu_create_pipeline(device, processed, variant);
          pipeline.context           = decisions;

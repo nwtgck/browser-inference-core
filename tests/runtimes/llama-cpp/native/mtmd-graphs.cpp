@@ -61,6 +61,7 @@ static void probe(std::string kind, int side, int height) {
     h.eps = 1e-6;
     h.ffn_op = FFN_GELU;
     h.rope_theta = 10000;
+    h.muse_glimmer_sparse_factor = 4;
     ggml_init_params ip = {};
     ip.mem_size = 1024 * 1024;
     ip.no_alloc = true;
@@ -127,6 +128,16 @@ static void probe(std::string kind, int side, int height) {
         model.mm_2_w = mat("mm.2.weight", proj, proj);
         model.mm_2_b = vec("mm.2.bias", proj);
         graph = std::make_unique<mtmd_graph_llava>(&ctx, image);
+    } else if (kind == "muse-glimmer") {
+        model.proj_type = PROJECTOR_TYPE_MUSE_GLIMMER;
+        model.pre_ln_w = vec("v.pre_ln.weight", e);
+        model.pre_ln_b = vec("v.pre_ln.bias", e);
+        model.post_ln_w = vec("v.post_ln.weight", e);
+        model.post_ln_b = vec("v.post_ln.bias", e);
+        model.mm_0_w = mat("mm.0.weight", e * h.n_merge * h.n_merge, proj);
+        model.mm_1_w = mat("mm.1.weight", proj, proj);
+        model.mm_2_w = mat("mm.2.weight", proj, proj);
+        graph = std::make_unique<mtmd_graph_muse_glimmer>(&ctx, image);
     } else if (kind == "qwen2vl" || kind == "qwen3vl") {
         model.proj_type = kind == "qwen2vl" ? PROJECTOR_TYPE_QWEN2VL : PROJECTOR_TYPE_QWEN3VL;
         model.patch_embeddings_1 = tensor("v.patch_embd.weight.1", GGML_TYPE_F32, {p, p, 3, e});
@@ -189,6 +200,26 @@ static void probe(std::string kind, int side, int height) {
     // tables are rejected before upstream interpolation asserts on their type.
     lcb_mtmd_check_retained_roles(model, weights.get());
     auto * g = graph->build();
+    if (kind == "muse-glimmer") {
+        for (auto * weight : {model.mm_0_w, model.mm_1_w, model.mm_2_w}) {
+            int direct_uses = 0;
+            for (int i = 0; i < ggml_graph_n_nodes(g); ++i) {
+                auto * node = ggml_graph_node(g, i);
+                for (int j = 0; j < GGML_MAX_SRC; ++j) {
+                    if (root(node->src[j]) != weight)
+                        continue;
+                    if (node->op != GGML_OP_MUL_MAT || j != 0 || node->src[j] != weight)
+                        throw std::runtime_error("Muse Glimmer projection is not a direct retained left operand");
+                    ++direct_uses;
+                }
+            }
+            if (direct_uses != 1)
+                throw std::runtime_error("Muse Glimmer projection use changed");
+        }
+        auto * output = ggml_graph_node(g, ggml_graph_n_nodes(g) - 1);
+        if (output->ne[0] != proj || output->ne[1] != np / (h.n_merge * h.n_merge))
+            throw std::runtime_error("Muse Glimmer projection output changed");
+    }
     if (unified) {
         int projection_uses = 0;
         for (int i = 0; i < ggml_graph_n_nodes(g); ++i) {

@@ -191,11 +191,28 @@ void bicore_mtmd_helper_get_capabilities(struct mtmd_helper_cap * out, const str
                                          const struct mtmd_context * context) {
     record(out) = mtmd_helper_get_capabilities(model, context);
 }
+int32_t bicore_mtmd_helper_get_media_meta(const unsigned char * data, size_t size,
+                                          const struct mtmd_helper_init_opt * options,
+                                          struct mtmd_helper_media_meta * out) {
+    return mtmd_helper_get_media_meta(data, size, record(options), out);
+}
 void bicore_mtmd_helper_init_opt_default(struct mtmd_helper_init_opt * out) {
     record(out) = mtmd_helper_init_opt_default();
 }
 void bicore_mtmd_helper_video_init_params_default(struct mtmd_helper_video_init_params * out) {
     record(out) = mtmd_helper_video_init_params_default();
+}
+mtmd_helper_video * bicore_mtmd_helper_video_init(const struct mtmd_context * context, const char * path,
+                                                  const struct mtmd_helper_video_init_params * params) {
+    return mtmd_helper_video_init(context, path, record(params));
+}
+mtmd_helper_video * bicore_mtmd_helper_video_init_from_buf(const struct mtmd_context * context,
+                                                           const unsigned char * data, size_t size,
+                                                           const struct mtmd_helper_video_init_params * params) {
+    return mtmd_helper_video_init_from_buf(context, data, size, record(params));
+}
+void bicore_mtmd_helper_video_get_info(struct mtmd_helper_video_info * out, const mtmd_helper_video * context) {
+    record(out) = mtmd_helper_video_get_info(context);
 }
 void bicore_mtmd_image_tokens_get_decoder_pos(struct mtmd_decoder_pos * out, const mtmd_image_tokens * tokens,
                                               llama_pos position, size_t index) {
@@ -210,5 +227,11 @@ struct mtmd_context * bicore_mtmd_init_from_file_with_vision_bf16_storage(const 
                                                                           const struct mtmd_context_params * params,
                                                                           int32_t storage) {
     return mtmd_init_from_file_with_vision_bf16_storage(path, model, record(params), storage);
+}
+struct mtmd_context *
+bicore_mtmd_init_from_file_with_vision_bf16_report(const char * path, const struct llama_model * model,
+                                                   const struct mtmd_context_params * params, int32_t storage,
+                                                   struct mtmd_vision_bf16_load_report * report, uint32_t report_size) {
+    return mtmd_init_from_file_with_vision_bf16_report(path, model, record(params), storage, report, report_size);
 }
 }

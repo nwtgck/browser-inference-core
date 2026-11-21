@@ -124,13 +124,26 @@ export function embeddedComments({ original }: { original: string }): string {
   return comments.join('\n\n');
 }
 
+const llamaNoticeOwners = new Map<string, readonly [string, string]>([
+  ['licenses/LICENSE-jsonhpp', ['nlohmann-json', 'nlohmann/json']],
+  ['ui/apps/chat/LICENSE', ['@ggml-org/llama-chat', '@ggml-org/llama-chat']],
+  ['ui/apps/chat/alias/LICENSE', ['llama-chat', 'llama-chat']],
+  ['ui/apps/chat/src/lib/vendors/big-integer/LICENSE', ['big-integer', 'big-integer']],
+  ['ui/apps/chat/src/lib/vendors/nerdamer-prime/LICENSE', ['nerdamer-prime', 'nerdamer-prime']],
+  ['ui/lib/ui/LICENSE', ['@ggml-org/llama-ui', '@ggml-org/llama-ui']],
+  ['ui/lib/voice/LICENSE', ['@ggml-org/llama-voice', '@ggml-org/llama-voice']],
+]);
+
 export function noticeOwner({ root, relative }: { root: string; relative: string }): readonly [string, string] {
   relativePath({ value: relative });
   if (relative.includes(':')) {
     throw new Error('Unsafe native notice path');
   }
-  if (root === 'llama.cpp' && relative === 'licenses/LICENSE-jsonhpp') {
-    return ['nlohmann-json', 'nlohmann/json'];
+  if (root === 'llama.cpp') {
+    const owner = llamaNoticeOwners.get(relative);
+    if (owner) {
+      return owner;
+    }
   }
   const parts = relative.split('/');
   if (parts.includes('node_modules')) {
