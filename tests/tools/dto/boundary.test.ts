@@ -352,6 +352,7 @@ test('package metadata preserves every field used to reject install-time behavio
 test('private frozen input decodes source and report structures without a producer roundtrip', () => {
   const source: SourceFacts = {
     sourceCommit: 'observed-source',
+    treeFingerprint: { algorithm: 'sha256', scheme: 'git-committed-tree-sha256-v1', value: 'observed-fingerprint', reproduce: 'observed recipe' },
     runtimes: {
       'llama-cpp': { upstream: 'observed-upstream', preparations: { cpu: { upstream: prepared.upstream, options: prepared.options, patches: prepared.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: { files: 1, sha256: 'prepared-tree' } } }, verifiedVariants: ['cpu/browser'] },
       'stable-diffusion-cpp': { upstreams, preparation: { files: 2, sha256: 'prepared-tree' }, patches: [], verifiedVariants: ['cpu/browser'] },
@@ -368,7 +369,7 @@ test('private frozen input decodes source and report structures without a produc
       'speech-cpp': { manifest: 'speech/manifest.json', abiVersion: 3, schemaSha256: 'speech-abi', upstreams: source.runtimes['speech-cpp'].upstreams, profiles: {} },
     },
   };
-  const frozen: FrozenPublication = { schemaVersion: 2, sourceCommit: 'observed-source', tree: 'observed-tree', branch: 'artifacts', manifest: identity, runtimeManifests: { 'llama-cpp': identity, 'stable-diffusion-cpp': identity, 'speech-cpp': identity }, report: { sha256: 'report-digest', data } };
+  const frozen: FrozenPublication = { schemaVersion: 3, sourceCommit: 'observed-source', tree: 'observed-tree', branch: 'artifacts', manifest: identity, integrity: identity, runtimeManifests: { 'llama-cpp': identity, 'stable-diffusion-cpp': identity, 'speech-cpp': identity }, report: { sha256: 'report-digest', data } };
   assert.deepEqual(shared.decodeFrozenPublication({ input: frozen }), frozen);
   const future = { ...frozen, futureState: true, report: { ...frozen.report, data: { ...data, futureReport: { enabled: true } } } };
   assert.deepEqual(shared.decodeFrozenPublication({ input: future }), future);

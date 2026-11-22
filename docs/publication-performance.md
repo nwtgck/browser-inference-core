@@ -1,14 +1,16 @@
 # Publication validation and packing
 
-The aggregate `browser-inference-core` package uses a format-5 root manifest.
-It binds root files and the two format-2 runtime manifests; each runtime manifest
-owns its complete payload inventory. The combined inventories cover the installed
-tree. Source tools, SDK executables and compiler intermediates are excluded.
+The aggregate `browser-inference-core` package uses a format-6 root manifest.
+It binds root files and the three format-2 runtime manifests; each runtime manifest
+owns its complete payload inventory. Publication adds one separately validated
+integrity YAML envelope around the exact root manifest. The combined inventories
+and envelope cover the installed tree. Source tools, SDK executables and compiler
+intermediates are excluded.
 
 ## Validation ownership
 
 Runtime packaging verifies its selected profiles, generated ABI catalog, actual
-exports, public declarations and notices. Aggregate assembly requires both
+exports, public declarations and notices. Aggregate assembly requires all three
 independent runtimes from the same source commit. Independently supplied saved
 packages are decoded at their entry and checked against their actual files.
 Typed values then pass between local stages without repeated parsing.
@@ -20,29 +22,33 @@ the final private snapshot. It does not maintain a second npm packlist algorithm
 
 The offline `publication freeze` entry:
 
-1. Validates the package, source identity and both runtime inventories.
+1. Validates the package, source identity and all three runtime inventories.
 2. Copies the validated byte inventory into a fresh private snapshot.
-3. Checks npm packing for that aggregate snapshot.
-4. Collects source facts once, including prepared-source and actual compiler-input
-   correspondence for both runtimes.
+3. Collects source facts once, including prepared-source and actual compiler-input
+   correspondence and the complete committed-source SHA-256 tree fingerprint.
+4. Creates `browser-inference-core-artifact-integrity.yaml` with the root JSON
+   bytes and source fingerprint, then checks npm packing for the complete snapshot.
 5. Stages the snapshot in a private Git repository and verifies the immutable
    tree's paths, entry types, sizes and blob identities.
-6. Writes a private receipt containing the tree, manifest identities and typed
+6. Writes a private receipt containing the tree, YAML/manifest identities and typed
    report data with its canonical digest.
 
 The receipt remains outside the runtime package and is not a cache admission
-record. The workflow's visible online push loop appends a commit using that same
+record. The workflow attests the receipt's YAML digest before its visible online
+push loop appends a commit using that same
 verified tree. Conflicts retry on the new parent; they do not recompile, repack or
 force-push. An accepted push with a lost response is resolved by ancestry checks.
 
 ## Confirmation and reporting
 
 `publication confirm` reads this job's private receipt, checks its source/report
-binding, and compares the returned artifact commit's tree and manifest blobs.
+binding, and compares the returned artifact commit's tree, YAML and manifest blobs.
 It reuses the verified typed report data. It does not rescan all payloads or
 reproduce source preparation at every later local step. A different job or lost
 receipt requires fresh package/source validation through the revalidation API.
 Private receipt reuse is not a signature or proof for arbitrary third-party data.
+The separately published YAML attestation supplies that external signature; see
+[artifact integrity](artifact-integrity.md) for the verification contract.
 
 `publication npm-fixture` prepares an isolated dependency-free npm consumer.
 The exact online lock-resolution command, credentials and fresh npm cache stay

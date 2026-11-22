@@ -54,7 +54,24 @@ test('jobs use the immutable source head, locked dependencies and one strict emi
   }
   assert.equal(object({ value: workflow.env }).LCB_SOURCE_COMMIT, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.deepEqual(workflow.permissions, { contents: 'read' });
-  assert.deepEqual(object({ value: jobs.publish }).permissions, { contents: 'write' });
+  assert.deepEqual(object({ value: jobs.publish }).permissions, { contents: 'write', attestations: 'write', 'id-token': 'write' });
+});
+
+test('publication signs only the verified frozen envelope digest before any append-only push', () => {
+  const steps = jobSteps({ name: 'publish' });
+  const freeze = steps.findIndex(step => step.id === 'freeze');
+  const attest = steps.findIndex(step => typeof step.uses === 'string' && step.uses.startsWith('actions/attest@'));
+  const publish = steps.findIndex(step => step.id === 'publish');
+  assert.ok(freeze >= 0 && freeze < attest && attest < publish);
+  assert.equal(actionSteps({ job: 'publish', action: 'actions/attest' }).length, 1);
+  const step = object({ value: steps[attest] });
+  assert.deepEqual(step.with, { 'subject-name': 'browser-inference-core-artifact-integrity.yaml', 'subject-digest': 'sha256:${{ steps.freeze.outputs.integrity-sha256 }}', 'create-storage-record': false });
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+  assert.equal(object({ value: steps[publish] }).if, undefined);
+  for (const name of Object.keys(jobs).filter(name => name !== 'publish')) {
+    assert.equal(actionSteps({ job: name, action: 'actions/attest' }).length, 0);
+  }
 });
 
 test('upstream update state is initialized on the runner and exported for later steps', async () => {
@@ -688,6 +705,7 @@ test('publication freezing keeps its saved receipt and errors without echoing th
     const root = temporary.root;
     const source = 'a'.repeat(40);
     const tree = 'b'.repeat(40);
+    const integrity = 'c'.repeat(64);
     const output = join(root, 'outputs');
     await executable({
       root,
@@ -699,7 +717,7 @@ const args=process.argv.slice(2);
 if(args[1]==='publication'&&args[2]==='freeze'){
   const receipt=args[args.indexOf('--receipt')+1];
   fs.mkdirSync(path.dirname(receipt),{recursive:true});
-  fs.writeFileSync(receipt,JSON.stringify({tree:process.env.TREE,sourceCommit:process.env.LCB_SOURCE_COMMIT}));
+  fs.writeFileSync(receipt,JSON.stringify({tree:process.env.TREE,sourceCommit:process.env.LCB_SOURCE_COMMIT,integrity:{sha256:process.env.INTEGRITY}}));
   process.stdout.write('receipt stdout\\n');
   process.stderr.write('freeze diagnostic\\n');
   process.exit(Number(process.env.FREEZE_EXIT));
@@ -707,17 +725,17 @@ if(args[1]==='publication'&&args[2]==='freeze'){
 process.stdout.write('assembly ready\\n');
 `,
     });
-    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, LCB_SOURCE_COMMIT: source, TREE: tree, FREEZE_EXIT: String(code) } } });
+    const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, GITHUB_REPOSITORY: 'owner/repo', LCB_SOURCE_COMMIT: source, TREE: tree, INTEGRITY: integrity, FREEZE_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
       assert.equal(result.stdout.toString(), 'assembly ready\n');
       assert.equal(result.stderr.toString(), 'freeze diagnostic\n');
-      assert.equal(await readFile(output, 'utf8'), `tree=${tree}\nsource-commit=${source}\n`);
+      assert.equal(await readFile(output, 'utf8'), `tree=${tree}\nsource-commit=${source}\nintegrity-sha256=${integrity}\n`);
     } else {
       await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === 'assembly ready\n');
       await assert.rejects(readFile(output));
     }
-    assert.deepEqual(JSON.parse(await readFile(join(root, 'build/publication/frozen.json'), 'utf8')), { tree, sourceCommit: source });
+    assert.deepEqual(JSON.parse(await readFile(join(root, 'build/publication/frozen.json'), 'utf8')), { tree, sourceCommit: source, integrity: { sha256: integrity } });
   }
 });
 

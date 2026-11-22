@@ -16,7 +16,7 @@ import { freezePackage } from '#tools/publication/artifacts';
 import { assemblePackage, validatePackage } from '#tools/package/aggregate';
 import { artifactDirectories } from '#tools/shared/contracts';
 import { decodePackageMetadata } from '#dto/shared';
-import { makeRuntime, packageFixture, rehashRuntime, sourceRoot, fixtureSource, write } from './fixtures.test-support.js';
+import { makeRuntime, packageFixture, rehashRuntime, sourceRoot, fixtureSource, fixtureTreeFingerprint, write } from './fixtures.test-support.js';
 
 test('the llama build stages compiler notices where the package consumer reads them', async () => {
   await using temporary = await temporaryDirectory();
@@ -156,11 +156,12 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
     receipt: join(fixture.root, 'frozen.json'),
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    repository: 'fixture/browser-inference-core',
     verifySource: async ({ sourceCommit, manifests }) => {
       sourceChecks++;
       const image = Object.values(Object.values(manifests['stable-diffusion-cpp'].profiles)[0]!.variants)[0]!;
       // Explicit synthetic report facts; this test counts package boundaries, not source correctness.
-      return { sourceCommit, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: manifests['speech-cpp'].upstreams, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
+      return { sourceCommit, treeFingerprint: fixtureTreeFingerprint, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: manifests['speech-cpp'].upstreams, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
     },
   });
   const handoff = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { name: string });

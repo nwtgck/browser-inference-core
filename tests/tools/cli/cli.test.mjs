@@ -74,7 +74,7 @@ const commands = [
   { name: 'runtime', argv: ['package', 'runtime', '--runtime', 'llama-cpp', '--checkout-root', 'checkout', '--build-root', 'build', '--output', 'package', '--license-root', 'licenses'], required: ['runtime', 'checkout-root', 'build-root', 'output', 'license-root'] },
   { name: 'assemble', argv: ['package', 'assemble', '--checkout-root', 'checkout', '--inputs', 'inputs', '--output', 'package'], required: ['checkout-root', 'inputs', 'output'] },
   { name: 'verify', argv: ['package', 'verify', '--checkout-root', 'checkout', '--directory', 'package'], required: ['checkout-root', 'directory'] },
-  { name: 'freeze', argv: ['publication', 'freeze', '--checkout-root', 'checkout', '--directory', 'package', '--work-root', 'frozen', '--receipt', 'receipt.json', '--branch', 'artifacts', '--source-commit', 'revision', '--source-work-root', 'source-work', '--python', 'python3'], required: ['checkout-root', 'directory', 'work-root', 'receipt', 'branch', 'source-commit', 'source-work-root', 'python'] },
+  { name: 'freeze', argv: ['publication', 'freeze', '--checkout-root', 'checkout', '--directory', 'package', '--work-root', 'frozen', '--receipt', 'receipt.json', '--branch', 'artifacts', '--repository', 'fixture/browser-inference-core', '--source-commit', 'revision', '--source-work-root', 'source-work', '--python', 'python3'], required: ['checkout-root', 'directory', 'work-root', 'receipt', 'branch', 'repository', 'source-commit', 'source-work-root', 'python'] },
   { name: 'confirm', argv: ['publication', 'confirm', '--work-root', 'frozen', '--receipt', 'receipt.json', '--commit', 'artifact'], required: ['work-root', 'receipt', 'commit'] },
   { name: 'npm-fixture', argv: ['publication', 'npm-fixture', '--directory', 'npm', '--repository', 'owner/repository', '--commit', 'artifact', '--version', '1.2.3'], required: ['directory', 'repository', 'commit', 'version'] },
   { name: 'report', argv: ['publication', 'report', '--work-root', 'frozen', '--receipt', 'receipt.json', '--commit', 'artifact', '--repository', 'owner/repository', '--npm-fixture', 'npm', '--output', 'report.md'], required: ['work-root', 'receipt', 'commit', 'repository', 'npm-fixture', 'output'] },
@@ -270,7 +270,7 @@ test('freeze connects real source verification arguments without a dependency ro
   });
   await cli.parse(commands[5].argv);
   assert.deepEqual(calls, [
-    { sourceRoot: resolve('checkout'), packageDirectory: resolve('package'), work: resolve('frozen'), receipt: resolve('receipt.json'), branch: 'artifacts', expectedSource: 'revision' },
+    { sourceRoot: resolve('checkout'), packageDirectory: resolve('package'), work: resolve('frozen'), receipt: resolve('receipt.json'), branch: 'artifacts', repository: 'fixture/browser-inference-core', expectedSource: 'revision' },
     { sourceRoot: resolve('checkout'), workRoot: resolve('source-work'), sourceCommit: 'actual-source', manifests, python: 'python3' },
   ]);
   assert.deepEqual(cli.emitted, [{ value: frozen, output: undefined }]);

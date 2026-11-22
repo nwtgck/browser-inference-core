@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { verifyCompiledInputs, verifyLlamaPreparationReceipt } from '#tools/publication/source';
 import type { PreparationReceipt } from '#dto/llama-cpp';
 import type { FileIdentity } from '#dto/shared';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { captureTreeFingerprint } from '#tools/source/fingerprint';
+import { localGit } from '#tools/publication/git';
+import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 
 test('compiled input evidence binds actual translation units and original Unity target sources to the prepared tree', () => {
   const preparedFile: FileIdentity = { bytes: 42, sha256: 'a'.repeat(64) };
@@ -32,4 +37,29 @@ test('source preparation compares known facts while preserving unrelated artifac
   recorded.outputs['runtime.cpp']!.sha256 = expected.outputs['runtime.cpp']!.sha256;
   recorded.options.qsa = false;
   assert.throws(() => verifyLlamaPreparationReceipt({ recorded, expected }), /Prepared llama sources/u);
+});
+
+test('source fingerprint runs and publishes the same committed recipe at the selected source head', async () => {
+  await using temporary = await temporaryDirectory();
+  const sourceRoot = temporary.root;
+  const reproduce = await readFile('.github/scripts/treefingerprint.sh', 'utf8');
+  await mkdir(join(sourceRoot, '.github/scripts'), { recursive: true });
+  await writeFile(join(sourceRoot, '.github/scripts/treefingerprint.sh'), reproduce);
+  await writeFile(join(sourceRoot, 'source.txt'), 'committed input');
+  await localGit({ cwd: sourceRoot, args: ['init', '-q'] });
+  await localGit({ cwd: sourceRoot, args: ['config', 'user.name', 'Fixture'] });
+  await localGit({ cwd: sourceRoot, args: ['config', 'user.email', 'fixture@example.invalid'] });
+  await localGit({ cwd: sourceRoot, args: ['add', '--all'] });
+  const tree = (await localGit({ cwd: sourceRoot, args: ['write-tree'] })).toString('utf8').trim();
+  const sourceCommit = (await localGit({ cwd: sourceRoot, args: ['commit-tree', tree], input: 'Source fixture\n' })).toString('utf8').trim();
+  // update-ref is a source-fixture mutation, not a publication operation.
+  const { runProcess } = await import('#tools/shared/process');
+  await runProcess({ command: 'git', args: ['update-ref', 'HEAD', sourceCommit], cwd: sourceRoot });
+  const observed = await captureTreeFingerprint({ sourceRoot, sourceCommit });
+  assert.match(observed.value, /^[a-f0-9]{64}$/u);
+  assert.equal(observed.reproduce, reproduce);
+  await writeFile(join(sourceRoot, '.github/scripts/treefingerprint.sh'), 'exit 99\n');
+  await writeFile(join(sourceRoot, 'source.txt'), 'dirty local change');
+  assert.deepEqual(await captureTreeFingerprint({ sourceRoot, sourceCommit }), observed);
+  await assert.rejects(captureTreeFingerprint({ sourceRoot, sourceCommit: '0'.repeat(40) }), /selected commit/u);
 });

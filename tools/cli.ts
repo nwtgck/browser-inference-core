@@ -241,6 +241,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
     .command('publication', 'Freeze, confirm, and report local publication state', command => command
       .demandCommand(1)
       .command('freeze', 'Freeze a verified package and its source facts', command => command
+        .option('repository', { ...requiredString, description: 'GitHub owner/repository publishing the package' })
         .option('checkout-root', checkoutRootOption)
         .option('directory', requiredString)
         .option('work-root', { ...requiredString, description: 'Fresh artifact snapshot directory' })
@@ -255,7 +256,7 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
           const sourceRoot = resolve(options['checkout-root']);
           const { freezePackage } = await tools.publication();
           const { verifyPublicationSources } = await tools.publicationSources();
-          const frozen = await freezePackage({ sourceRoot, packageDirectory: resolve(options.directory), work: resolve(options['work-root']), receipt: resolve(options.receipt), branch: options.branch, expectedSource: options['source-commit'], verifySource: ({ sourceCommit, manifests }) => verifyPublicationSources({ sourceRoot, workRoot: resolve(options['source-work-root']), sourceCommit, manifests, python: options.python }) });
+          const frozen = await freezePackage({ sourceRoot, packageDirectory: resolve(options.directory), work: resolve(options['work-root']), receipt: resolve(options.receipt), branch: options.branch, expectedSource: options['source-commit'], repository: options.repository, verifySource: ({ sourceCommit, manifests }) => verifyPublicationSources({ sourceRoot, workRoot: resolve(options['source-work-root']), sourceCommit, manifests, python: options.python }) });
           await emit({ value: frozen, output: undefined });
         },
       }))

@@ -1820,6 +1820,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     env:
       BIC_METRICS_RUNTIME: root
     steps:
@@ -1866,7 +1868,7 @@ jobs:
           fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
           printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
       - name: Check out the pinned upstreams used by source verification
-        run: git submodule update --init --checkout --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source runtimes/speech-cpp/vendor/speech.cpp runtimes/speech-cpp/vendor/ggml
+        run: git submodule update --init --recursive --checkout --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source runtimes/speech-cpp/vendor/speech.cpp runtimes/speech-cpp/vendor/ggml
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
@@ -1905,9 +1907,20 @@ jobs:
             node build/tooling/tools/cli.js publication freeze --checkout-root "$GITHUB_WORKSPACE" \
               --directory "$GITHUB_WORKSPACE/dist/package" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
               --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --branch artifacts \
+              --repository "$GITHUB_REPOSITORY" \
               --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3 > /dev/null
-            jq -r '"tree=\(.tree)\nsource-commit=\(.sourceCommit)"' build/publication/frozen.json >> "$GITHUB_OUTPUT"
+            jq -r '"tree=\(.tree)\nsource-commit=\(.sourceCommit)\nintegrity-sha256=\(.integrity.sha256)"' build/publication/frozen.json >> "$GITHUB_OUTPUT"
           OFFLINE
+      - name: Attest the frozen artifact integrity envelope
+        uses: actions/attest@v4.2.2
+        with:
+          # Freeze verified this SHA-256 against the Git blob in the fixed tree.
+          # Signing the saved digest avoids observing a later worktree mutation.
+          # On PR runs the attestation event SHA is the merge commit; the signed
+          # YAML separately records the actual checked-out LCB_SOURCE_COMMIT head.
+          subject-name: browser-inference-core-artifact-integrity.yaml
+          subject-digest: sha256:${{ steps.freeze.outputs.integrity-sha256 }}
+          create-storage-record: false
       - name: Publish append-only artifact commit
         id: publish
         shell: bash

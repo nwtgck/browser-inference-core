@@ -3,11 +3,13 @@ import { fileIdentitySchema, jsonObjectSchema, jsonSchema, patchReceiptSchema, t
 import { llamaValidationSchema, preparationOptionsSchema } from '#dto-internal/llama-cpp/artifacts';
 import { upstreamsSchema as speechUpstreamsSchema } from '#dto-internal/speech-cpp/artifacts';
 import { stableDiffusionValidationSchema, upstreamsSchema } from '#dto-internal/stable-diffusion-cpp/artifacts';
+import { treeFingerprintSchema } from '#dto-internal/shared/integrity';
 
 const patchSummarySchema = patchReceiptSchema.pick({ file: true, target: true, mode: true, sha256: true, reason: true });
 export type PatchSummary = z.infer<typeof patchSummarySchema>;
 const sourceFactsSchema = z.object({
   sourceCommit: z.string(),
+  treeFingerprint: treeFingerprintSchema,
   runtimes: z.object({
     'llama-cpp': z.object({
       upstream: z.string(),
@@ -34,11 +36,12 @@ const reportDataSchema = z.object({
 }).catchall(jsonSchema);
 export type ReportData = z.infer<typeof reportDataSchema>;
 const frozenPublicationSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   sourceCommit: z.string(),
   tree: z.string(),
   branch: z.string(),
   manifest: fileIdentitySchema,
+  integrity: fileIdentitySchema,
   runtimeManifests: z.object({ 'llama-cpp': fileIdentitySchema, 'stable-diffusion-cpp': fileIdentitySchema, 'speech-cpp': fileIdentitySchema }).catchall(jsonSchema),
   report: z.object({ sha256: z.string(), data: reportDataSchema }).catchall(jsonSchema),
 }).catchall(jsonSchema);

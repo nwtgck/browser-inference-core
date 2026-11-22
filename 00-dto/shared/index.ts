@@ -6,3 +6,5 @@ export type { CompileEntry, AstNode, EmscriptenReleases, BrowserSession } from '
 export { decodeCompilationDatabase, decodeClangAst, decodeEmscriptenReleases } from '#dto-internal/shared/external';
 export type { LicenseNotice, LicenseComponent, LicenseIndex, PackageMetadata, NpmPackResult, NpmPackageEntry, NpmLock, PatchSummary, SourceFacts, ReportData, FrozenPublication } from '#dto-internal/shared/publication';
 export { decodeLicenseIndex, decodePackageMetadata, decodeNpmPack, decodeNpmLock, decodeFrozenPublication } from '#dto-internal/shared/publication';
+export type { ArtifactIntegrity, TreeFingerprint } from '#dto-internal/shared/integrity';
+export { decodeArtifactIntegrity } from '#dto-internal/shared/integrity';

@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, rm } from 'node:fs/promises';
+import { readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeFrozenPublication, type SourceFacts } from '#dto/shared';
 import { decodeConsumerReportEnvelope } from '#dto/llama-cpp';
 import { bytesIdentity } from '#tools/package/files';
-import { packageFixture, fixtureSource, sourceRoot } from '#tests/tools/package/fixtures.test-support';
-import { freezePackage, confirmPublication, checkFrozen } from '#tools/publication/artifacts';
+import { packageFixture, fixtureSource, fixtureTreeFingerprint, sourceRoot } from '#tests/tools/package/fixtures.test-support';
+import { freezePackage, confirmPublication, checkFrozen, revalidatePublication } from '#tools/publication/artifacts';
+import { artifactIntegrityPath, readArtifactIntegrity } from '#tools/package/integrity';
+import { validatePackage } from '#tools/package/aggregate';
 import { writeConfirmedReport } from '#tools/publication/consumer';
 import { extractNpmResolution } from '#tools/publication/npm-lock';
 import { localGit, verifyGitTree } from '#tools/publication/git';
@@ -14,7 +16,7 @@ import { runProcess } from '#tools/shared/process';
 import { readConsumerReport } from '#tools/automation/comments/archive';
 
 function fixtureSourceFacts({ sourceCommit }: { sourceCommit: string }): SourceFacts {
-  return { sourceCommit, runtimes: { 'llama-cpp': { upstream: 'b'.repeat(40), preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: { 'stable-diffusion': { path: 'fixture', repository: 'fixture', commit: 'b'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: { speech: { path: 'fixture', repository: 'fixture', commit: 'd'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', commit: 'e'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
+  return { sourceCommit, treeFingerprint: fixtureTreeFingerprint, runtimes: { 'llama-cpp': { upstream: 'b'.repeat(40), preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: { 'stable-diffusion': { path: 'fixture', repository: 'fixture', commit: 'b'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', sourceSubdirectory: 'ggml', commit: 'c'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: { speech: { path: 'fixture', repository: 'fixture', commit: 'd'.repeat(40) }, ggml: { path: 'fixture', repository: 'fixture', commit: 'e'.repeat(40) } }, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
 }
 
 test('freeze validates source once and reuses the same report after immutable Git confirmation', async () => {
@@ -29,6 +31,7 @@ test('freeze validates source once and reuses the same report after immutable Gi
     receipt,
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    repository: 'fixture/browser-inference-core',
     verifySource: async ({ sourceCommit }) => {
       checks++;
       return fixtureSourceFacts({ sourceCommit });
@@ -37,6 +40,10 @@ test('freeze validates source once and reuses the same report after immutable Gi
   assert.equal(checks, 1);
   const commit = (await localGit({ cwd: work, args: ['commit-tree', frozen.tree], input: 'Synthetic packaging test\n' })).toString('utf8').trim();
   const publication = await confirmPublication({ work, receipt, commit });
+  const integrity = await readArtifactIntegrity({ directory: work, manifest: await readFile(join(work, 'manifest.json')), sourceCommit: fixtureSource });
+  assert.deepEqual(integrity?.identity, frozen.integrity);
+  assert.deepEqual(integrity?.document.source.tree_fingerprint, fixtureTreeFingerprint);
+  assert.equal(integrity?.document.source.repository, 'https://github.com/fixture/browser-inference-core');
   // Reports read the confirmed Git-bound private receipt, with no payload scan.
   await rm(join(work, 'runtimes'), { recursive: true });
   const resolution = extractNpmResolution({ repository: 'fixture/browser-inference-core', commit, version: '0.1.0', lock: { lockfileVersion: 3, packages: { '': { dependencies: { 'browser-inference-core': `github:fixture/browser-inference-core#${commit}` } }, 'node_modules/browser-inference-core': { version: '0.1.0', resolved: `git+https://github.com/fixture/browser-inference-core.git#${commit}` } } } });
@@ -99,11 +106,13 @@ test('Git publication rejects different staged blob bytes despite a valid source
   await using fixture = await packageFixture();
   const work = join(fixture.root, 'publication');
   const receipt = join(fixture.root, 'frozen.json');
-  const frozen = await freezePackage({ sourceRoot, packageDirectory: fixture.directory, work, receipt, branch: 'artifacts/test', expectedSource: fixtureSource, verifySource: async ({ sourceCommit }) => fixtureSourceFacts({ sourceCommit }) });
+  const frozen = await freezePackage({ sourceRoot, packageDirectory: fixture.directory, work, receipt, branch: 'artifacts/test', expectedSource: fixtureSource, repository: 'fixture/browser-inference-core', verifySource: async ({ sourceCommit }) => fixtureSourceFacts({ sourceCommit }) });
   await writeFile(join(work, 'README.md'), Buffer.alloc((await readFile(join(work, 'README.md'))).length, 120));
   await localGit({ cwd: work, args: ['add', '--all'] });
   const changedTree = (await localGit({ cwd: work, args: ['write-tree'] })).toString('utf8').trim();
-  await assert.rejects(verifyGitTree({ work, tree: changedTree, files: fixture.validated.files }), /Git blob differs/u);
+  const files = new Map(fixture.validated.files);
+  files.set(artifactIntegrityPath, { path: artifactIntegrityPath, ...frozen.integrity });
+  await assert.rejects(verifyGitTree({ work, tree: changedTree, files }), /Git blob differs/u);
   const commit = (await localGit({ cwd: work, args: ['commit-tree', changedTree], input: 'Wrong publication tree\n' })).toString('utf8').trim();
   await assert.rejects(confirmPublication({ work, receipt, commit }), /frozen Git tree/u);
   const raw = decodeFrozenPublication({ input: JSON.parse(await readFile(receipt, 'utf8')) });
@@ -124,7 +133,7 @@ test('npm lock validation rejects mutable, wrong-repository and install-script r
   }
 });
 
-test('source failures and mutations after the private npm pack never produce a publication receipt', async () => {
+test('source failures and mutations during freeze never produce a publication receipt', async () => {
   await using fixture = await packageFixture();
   let checks = 0;
   const failedWork = join(fixture.root, 'source-failure');
@@ -136,6 +145,7 @@ test('source failures and mutations after the private npm pack never produce a p
     receipt: failedReceipt,
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    repository: 'fixture/browser-inference-core',
     verifySource: async () => {
       checks++;
       throw new Error('Selected source receipt mismatch');
@@ -154,6 +164,7 @@ test('source failures and mutations after the private npm pack never produce a p
       receipt,
       branch: 'artifacts',
       expectedSource: fixtureSource,
+      repository: 'fixture/browser-inference-core',
       verifySource: async ({ sourceCommit }) => {
         checks++;
         const path = join(work, relative);
@@ -162,8 +173,38 @@ test('source failures and mutations after the private npm pack never produce a p
         await writeFile(path, data);
         return fixtureSourceFacts({ sourceCommit });
       },
-    }), /Git blob/u);
+    }), /Git blob|Artifact hash\/size mismatch/u);
     await assert.rejects(readFile(receipt), { code: 'ENOENT' });
   }
   assert.equal(checks, 4);
+});
+
+test('the attested envelope stays in the exact Git/npm closure and cannot be dropped on revalidation', async () => {
+  await using fixture = await packageFixture();
+  const work = join(fixture.root, 'publication');
+  const receipt = join(fixture.root, 'frozen.json');
+  const verifySource = async ({ sourceCommit }: { sourceCommit: string }) => fixtureSourceFacts({ sourceCommit });
+  const frozen = await freezePackage({ sourceRoot, packageDirectory: fixture.directory, work, receipt, branch: 'artifacts', expectedSource: fixtureSource, repository: 'fixture/browser-inference-core', verifySource });
+  const commit = (await localGit({ cwd: work, args: ['commit-tree', frozen.tree], input: 'Attested publication\n' })).toString('utf8').trim();
+  // Independently downloaded package files are validated without the publisher's .git directory.
+  const downloaded = join(fixture.root, 'downloaded');
+  await cp(fixture.directory, downloaded, { recursive: true });
+  await cp(join(work, artifactIntegrityPath), join(downloaded, artifactIntegrityPath));
+  const validated = await validatePackage({ sourceRoot, directory: downloaded, requireClean: true, checkNpmPack: true });
+  assert.deepEqual(validated.files.get(artifactIntegrityPath), { path: artifactIntegrityPath, ...frozen.integrity });
+  assert.ok(!validated.manifest.files.some(file => file.path === artifactIntegrityPath));
+  assert.deepEqual((await revalidatePublication({ sourceRoot, packageDirectory: downloaded, work, commit, verifySource })).source.treeFingerprint, fixtureTreeFingerprint);
+  await assert.rejects(revalidatePublication({ sourceRoot, packageDirectory: downloaded, work, commit, verifySource: async ({ sourceCommit }) => ({ ...fixtureSourceFacts({ sourceCommit }), treeFingerprint: { ...fixtureTreeFingerprint, value: 'c'.repeat(64) } }) }), /tree fingerprint differs/u);
+  await assert.rejects(freezePackage({ sourceRoot, packageDirectory: downloaded, work: join(fixture.root, 'refrozen'), receipt: join(fixture.root, 'refrozen.json'), branch: 'artifacts', expectedSource: fixtureSource, repository: 'fixture/browser-inference-core', verifySource }), /previous integrity envelope/u);
+  await writeFile(join(downloaded, 'extra.yaml'), 'unexpected metadata');
+  await assert.rejects(validatePackage({ sourceRoot, directory: downloaded, requireClean: true, checkNpmPack: false }), /complete package tree/u);
+  await rm(join(downloaded, 'extra.yaml'));
+  await rm(join(downloaded, artifactIntegrityPath));
+  await assert.rejects(revalidatePublication({ sourceRoot, packageDirectory: downloaded, work, commit, verifySource }), /missing its integrity envelope/u);
+
+  // A later worktree change cannot replace the frozen blob or its attestation digest.
+  await writeFile(join(work, artifactIntegrityPath), 'changed after signing');
+  assert.deepEqual((await confirmPublication({ work, receipt, commit })).frozen.integrity, frozen.integrity);
+  await writeFile(receipt, JSON.stringify({ ...frozen, integrity: { ...frozen.integrity, sha256: '0'.repeat(64) } }));
+  await assert.rejects(confirmPublication({ work, receipt, commit }), /integrity envelope differs/u);
 });

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { artifactDirectories } from '#tools/shared/contracts';
-import { decodeAbiSchema, type RuntimeName, type AbiSchema, type AbiExtension, type AbiExtensionDeclaration, type PatchReceipt, type FileEntry } from '#dto/shared';
+import { decodeAbiSchema, type RuntimeName, type AbiSchema, type AbiExtension, type AbiExtensionDeclaration, type PatchReceipt, type FileEntry, type TreeFingerprint } from '#dto/shared';
 import { decodeLlamaManifest, decodeLlamaProvenance, type LlamaProvenance, type LlamaManifest } from '#dto/llama-cpp';
 import { decodeStableDiffusionManifest, decodeStableDiffusionProvenance, type StableDiffusionProvenance, type StableDiffusionManifest, type Upstreams } from '#dto/stable-diffusion-cpp';
 import { decodeSpeechManifest, decodeSpeechProvenance, type SpeechManifest, type SpeechProvenance, type Upstreams as SpeechUpstreams } from '#dto/speech-cpp';
@@ -25,6 +25,7 @@ import { packageFiles } from '#tools/package/files';
 
 export const sourceRoot = resolve('.');
 export const fixtureSource = 'a'.repeat(40);
+export const fixtureTreeFingerprint: TreeFingerprint = { algorithm: 'sha256', scheme: 'git-committed-tree-sha256-v1', value: 'b'.repeat(64), reproduce: '# Synthetic source verifier used only by package tests.\n' };
 
 export async function write({ path, data }: { path: string; data: string | Uint8Array }): Promise<void> {
   await mkdir(dirname(path), { recursive: true });

@@ -105,10 +105,19 @@ directories keep their shorter names.
 
 Each format-2 runtime manifest owns its payload inventory, provenance and
 validation. The root manifest binds root files and all runtime manifests; the
-combined inventories cover the complete tree and reject mixed source commits. Public exports select the runtime explicitly; direct
+combined inventories cover the payload tree and reject mixed source commits. Public exports select the runtime explicitly; direct
 filesystem consumers use the physical paths above. No duplicate
 Wasm payloads are shipped. Publication waits for all complete runtime packages;
 there is no last-writer-wins replacement of one runtime with the other.
+
+Published packages also contain `browser-inference-core-artifact-integrity.yaml`.
+It embeds the exact root JSON manifest and a SHA-256 fingerprint of the complete
+committed source, including recursive submodules. The publish job attests the
+frozen YAML digest before appending its artifact commit. The YAML is separately
+validated outside the JSON inventories to avoid a circular self-hash. See
+[artifact integrity](docs/artifact-integrity.md) for signer policies, package and
+source verification, offline preservation, and the distinction between a
+pull-request event's merge commit and its actual checked-out source head.
 
 Install the exact artifact commit reported after successful publication, then
 use the `browser-inference-core` package name and runtime-specific imports. The

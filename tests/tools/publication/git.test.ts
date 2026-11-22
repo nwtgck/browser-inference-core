@@ -87,6 +87,7 @@ test('freeze rejects source branches, overlapping, existing and parent-linked st
     receipt: join(root, 'frozen.json'),
     branch: 'artifacts',
     expectedSource: fixtureSource,
+    repository: 'fixture/browser-inference-core',
     verifySource: async () => {
       checks++;
       throw new Error('Must reject before source verification');

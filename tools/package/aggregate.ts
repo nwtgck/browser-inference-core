@@ -14,17 +14,19 @@ import { assertSame, copyRegular, copyBoundTree, readBoundFile, readMetadataByte
 import { readRuntimePackage, validatePackageMetadata, type RuntimeValidation } from './runtime.js';
 import { verifyRuntimePackage as readLlama, verifyRuntimeInput as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
 import { verifyRuntimePackage as readImage, verifyRuntimeInput as verifyImage } from '#runtimes/stable-diffusion-cpp/tools/verify';
+import { artifactIntegrityPath, readArtifactIntegrity, type ValidatedIntegrity } from './integrity.js';
 
 const rootFiles = ['LICENSE', 'README.md', 'package.json'] as const;
 export type RuntimeManifests = { 'llama-cpp': LlamaManifest; 'stable-diffusion-cpp': StableDiffusionManifest; 'speech-cpp': SpeechManifest };
 export type ValidatedPackage = {
   manifest: RootManifest; manifestIdentity: FileIdentity; metadata: PackageMetadata; runtimes: RuntimeManifests;
+  integrity: ValidatedIntegrity | undefined;
   /** Transient closure for Git/npm boundaries. Never another serialized inventory. */
   files: Map<string, FileEntry>;
 };
 type RuntimeValidations = { 'llama-cpp': RuntimeValidation<LlamaManifest>; 'stable-diffusion-cpp': RuntimeValidation<StableDiffusionManifest>; 'speech-cpp': RuntimeValidation<SpeechManifest> };
 
-async function validateAggregateRoot({ directory, manifest, manifestIdentity, metadata, runtimes, checkNpm }: { directory: string; manifest: RootManifest; manifestIdentity: FileIdentity; metadata: PackageMetadata; runtimes: RuntimeValidations; checkNpm: boolean }): Promise<ValidatedPackage> {
+async function validateAggregateRoot({ directory, manifest, manifestBytes, manifestIdentity, metadata, runtimes, checkNpm }: { directory: string; manifest: RootManifest; manifestBytes: Buffer; manifestIdentity: FileIdentity; metadata: PackageMetadata; runtimes: RuntimeValidations; checkNpm: boolean }): Promise<ValidatedPackage> {
   validatePackageMetadata({ metadata, name: packageName, exports: packageExports() });
   const expected = inventory({ entries: manifest.files });
   const owned = [...rootFiles, ...runtimeNames.map(runtime => `${artifactDirectories[runtime]}/manifest.json`)].sort();
@@ -58,11 +60,17 @@ async function validateAggregateRoot({ directory, manifest, manifestIdentity, me
   }
   closure.set('manifest.json', { path: 'manifest.json', ...manifestIdentity });
   assertSame({ actual: await fileIdentity({ path: join(directory, 'manifest.json') }), expected: manifestIdentity, message: 'Aggregate manifest changed after reading' });
+  // The enclosing, attested YAML cannot appear in its own embedded JSON inventory.
+  // Permit only this one separately decoded and byte-bound metadata file.
+  const integrity = await readArtifactIntegrity({ directory, manifest: manifestBytes, sourceCommit: manifest.sourceCommit });
+  if (integrity !== undefined) {
+    closure.set(artifactIntegrityPath, { path: artifactIntegrityPath, ...integrity.identity });
+  }
   assertSame({ actual: [...await listPackagePaths({ root: directory, exclude: [] })].sort(), expected: [...closure.keys()].sort(), message: 'Manifest closure does not cover the complete package tree' });
   if (checkNpm) {
     await checkNpmPack({ directory, files: closure });
   }
-  return { manifest, manifestIdentity, metadata, runtimes: { 'llama-cpp': runtimes['llama-cpp'].manifest, 'stable-diffusion-cpp': runtimes['stable-diffusion-cpp'].manifest, 'speech-cpp': runtimes['speech-cpp'].manifest }, files: closure };
+  return { manifest, manifestIdentity, metadata, integrity, runtimes: { 'llama-cpp': runtimes['llama-cpp'].manifest, 'stable-diffusion-cpp': runtimes['stable-diffusion-cpp'].manifest, 'speech-cpp': runtimes['speech-cpp'].manifest }, files: closure };
 }
 
 /** External artifact entry: decode each manifest once, then share complete typed values. */
@@ -94,7 +102,7 @@ export async function validatePackage({ sourceRoot, directory, requireClean, che
   const llama = await verifyLlama({ sourceRoot, input: llamaInput, requireClean, checkNpmPack: checkNpm });
   const image = await verifyImage({ sourceRoot, input: imageInput, requireClean, checkNpmPack: checkNpm });
   const speech = await verifySpeech({ sourceRoot, input: speechInput, requireClean, checkNpmPack: checkNpm });
-  return validateAggregateRoot({ directory, manifest, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
+  return validateAggregateRoot({ directory, manifest, manifestBytes: raw, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
 }
 
 export async function assemblePackage({ sourceRoot, inputs, destination, checkNpmPack: checkNpm }: { sourceRoot: string; inputs: string; destination: string; checkNpmPack: boolean }): Promise<ValidatedPackage> {
@@ -139,7 +147,7 @@ async function assembleValidatedPackage({ sourceRoot, runtimes, destination, che
       }
       await copyRegular({ source: join(sourceRoot, 'LICENSE'), destination: join(output, 'LICENSE') });
       await copyRegular({ source: join(sourceRoot, 'tools/package/runtime-readme.md'), destination: join(output, 'README.md') });
-      const metadata: PackageMetadata & { private: boolean; files: string[] } = { name: packageName, version: '0.1.0', private: true, type: 'module', license: 'MIT', files: ['runtimes/', 'manifest.json', 'README.md', 'LICENSE'], exports: packageExports() };
+      const metadata: PackageMetadata & { private: boolean; files: string[] } = { name: packageName, version: '0.1.0', private: true, type: 'module', license: 'MIT', files: ['runtimes/', 'manifest.json', artifactIntegrityPath, 'README.md', 'LICENSE'], exports: packageExports() };
       await writeFile(join(output, 'package.json'), JSON.stringify(metadata, undefined, 2) + '\n');
       const entries: FileEntry[] = [];
       for (const path of [...rootFiles, ...runtimeNames.map(runtime => artifactDirectories[runtime] + '/manifest.json')].sort()) {
@@ -148,7 +156,7 @@ async function assembleValidatedPackage({ sourceRoot, runtimes, destination, che
       const manifest: RootManifest = { formatVersion: 6, sourceCommit: llama.manifest.sourceCommit, runtimes: { 'llama-cpp': { manifest: `${artifactDirectories['llama-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'stable-diffusion-cpp': { manifest: `${artifactDirectories['stable-diffusion-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'speech-cpp': { manifest: `${artifactDirectories['speech-cpp']}/manifest.json`, manifestFormatVersion: 2 } }, files: entries };
       const raw = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
       await writeFile(join(output, 'manifest.json'), raw);
-      return validateAggregateRoot({ directory: output, manifest, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
+      return validateAggregateRoot({ directory: output, manifest, manifestBytes: raw, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
     },
   });
 }

@@ -14,6 +14,7 @@ import { prepareRuntimeSources as prepareSpeechRuntimeSources } from '#runtimes/
 import { loadConfiguration as loadSpeechConfiguration, upstreamFacts as speechUpstreamFacts } from '#runtimes/speech-cpp/tools/config';
 import { sourceCaptureSelection as speechSelection } from '#runtimes/speech-cpp/tools/build';
 import { sourceCaptureSelection as imageSelection } from '#runtimes/stable-diffusion-cpp/tools/build';
+import { captureTreeFingerprint } from '#tools/source/fingerprint';
 
 function identityFacts({ identity }: { identity: SourceIdentity }) {
   return typeof identity.bytes === 'number' && typeof identity.sha256 === 'string' ? { bytes: identity.bytes, sha256: identity.sha256 } : { symlink: identity.symlink };
@@ -131,6 +132,7 @@ export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCom
   }
   return {
     sourceCommit,
+    treeFingerprint: await captureTreeFingerprint({ sourceRoot, sourceCommit }),
     runtimes: {
       'llama-cpp': { upstream: llamaCommit, preparations: Object.fromEntries(Object.entries(prepared).map(([name, receipt]) => [name, { upstream: receipt.upstream, options: receipt.options, patches: receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: treeIdentity({ files: receipt.outputs }) }])), verifiedVariants: llamaVariants },
       'stable-diffusion-cpp': { upstreams: image.receipt.upstreams, preparation: image.identity, patches: image.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: imageVariants },
