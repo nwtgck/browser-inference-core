@@ -34,7 +34,7 @@
     {
       "path": "runtimes/llama-cpp-browser-core/manifest.json",
       "bytes": 20867539,
-      "sha256": "c32e63204eb6fa2edd86c2a662e28a58d2bde98d72894a87d6227393da09b51f"
+      "sha256": "2c58e47d7d5baadfd45fef329750a2bb7996c7c4396abab526068963a1e05250"
     },
     {
       "path": "runtimes/speech-cpp-browser-core/manifest.json",

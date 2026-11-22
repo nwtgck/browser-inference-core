@@ -64,7 +64,7 @@ source:
 manifest:
   path: manifest.json
   size: 1520
-  sha256: 34f78204272dae395e1bfb410205ecf21f63d76857bc23650fca098986b2a103
+  sha256: 22b5543ce9e5e5c9e68c4ccce29100ef537f392333bc129ceb6e7f70ee12b1ea
   contents: |
     {
       "formatVersion": 6,
@@ -102,7 +102,7 @@ manifest:
         {
           "path": "runtimes/llama-cpp-browser-core/manifest.json",
           "bytes": 20867539,
-          "sha256": "c32e63204eb6fa2edd86c2a662e28a58d2bde98d72894a87d6227393da09b51f"
+          "sha256": "2c58e47d7d5baadfd45fef329750a2bb7996c7c4396abab526068963a1e05250"
         },
         {
           "path": "runtimes/speech-cpp-browser-core/manifest.json",
