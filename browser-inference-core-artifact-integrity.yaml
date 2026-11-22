@@ -1,0 +1,118 @@
+# The exact bytes of this YAML are the GitHub Actions attestation subject.
+# Verify the attestation for the expected repository and build.yml workflow first.
+# gh attestation verify browser-inference-core-artifact-integrity.yaml --repo nwtgck/browser-inference-core \
+#   --signer-workflow nwtgck/browser-inference-core/.github/workflows/build.yml --deny-self-hosted-runners
+# Commands in signed files still require review; never automatically execute them.
+# tree_fingerprint covers committed paths, modes, blob bytes and recursive submodules.
+# It excludes the index, working-tree changes and untracked files. Initialize recursive
+# submodules at source.commit, run reproduce at that checkout root, and compare value.
+# manifest.contents preserves the exact manifest.json bytes, including its final newline.
+# Verify manifest.json against size/sha256, then every root/runtime inventory entry.
+# This envelope is outside those inventories to avoid a manifest/self-hash cycle.
+schema_version: 1
+kind: browser_inference_core_artifact_integrity
+source:
+  repository: https://github.com/nwtgck/browser-inference-core
+  commit: db440dc338beb1aebc77c1711e7755e72e326990
+  tree_fingerprint:
+    algorithm: sha256
+    scheme: git-committed-tree-sha256-v1
+    value: 82bcafeaf2a743f5171c2f48bdc088d47b599b3337428639e6ddaff7561d9428
+    reproduce: |
+      # Run with Bash from the repository root after initializing recursive submodules.
+      # Hashes committed objects only; changed and untracked worktree files are excluded.
+      # The subshell preserves the caller's environment, directory, options and functions.
+      (
+        set -euo pipefail
+        export LC_ALL=C GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 || exit
+
+        fingerprint() (
+          cd -- "$1" || exit
+          prefix="$(git rev-parse --show-prefix)" || exit
+          test -z "$prefix" || { echo 'Run at a repository root.' >&2; exit 1; }
+          commit="$(git rev-parse --verify "$2^{commit}")" || exit
+
+          hash="$(
+            git ls-tree -rz --full-tree "$commit" |
+            while IFS= read -r -d '' entry; do
+              header="${entry%%$'\t'*}"
+              path="${entry#*$'\t'}"
+              IFS=' ' read -r mode type oid <<< "$header" || exit
+
+              case "$mode:$type" in
+                100644:blob|100755:blob|120000:blob)
+                  digest="$(git cat-file blob "$oid" | sha256sum)" || exit
+                  ;;
+                160000:commit)
+                  test -d "$path" && test ! -L "$path" && test -e "$path/.git" || exit 1
+                  head="$(git -C "$path" rev-parse --verify HEAD)" || exit
+                  test "$head" = "$oid" || { echo "Submodule commit mismatch: $path" >&2; exit 1; }
+                  digest="$(fingerprint "$path" "$oid")" || exit
+                  ;;
+                *) echo "Unsupported Git entry: $header" >&2; exit 1 ;;
+              esac
+
+              printf '%s\0%s\0%s\0' "$mode" "$path" "${digest%% *}" || exit
+            done | sha256sum
+          )" || exit
+
+          printf '%s\n' "${hash%% *}"
+        ) || exit
+
+        fingerprint . HEAD
+      )
+manifest:
+  path: manifest.json
+  size: 1520
+  sha256: 34f78204272dae395e1bfb410205ecf21f63d76857bc23650fca098986b2a103
+  contents: |
+    {
+      "formatVersion": 6,
+      "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+      "runtimes": {
+        "llama-cpp": {
+          "manifest": "runtimes/llama-cpp-browser-core/manifest.json",
+          "manifestFormatVersion": 2
+        },
+        "stable-diffusion-cpp": {
+          "manifest": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
+          "manifestFormatVersion": 2
+        },
+        "speech-cpp": {
+          "manifest": "runtimes/speech-cpp-browser-core/manifest.json",
+          "manifestFormatVersion": 2
+        }
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "bytes": 1064,
+          "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4"
+        },
+        {
+          "path": "README.md",
+          "bytes": 6243,
+          "sha256": "fc1de63f61b517e4d412ecca0529263e2b2e5aad0d81a3eaab66a338fc96e312"
+        },
+        {
+          "path": "package.json",
+          "bytes": 5652,
+          "sha256": "df2c893a3649ed6fe9230c74a96fee76d16cb1a7755debfce5eb73999e4e0951"
+        },
+        {
+          "path": "runtimes/llama-cpp-browser-core/manifest.json",
+          "bytes": 20867539,
+          "sha256": "c32e63204eb6fa2edd86c2a662e28a58d2bde98d72894a87d6227393da09b51f"
+        },
+        {
+          "path": "runtimes/speech-cpp-browser-core/manifest.json",
+          "bytes": 246344,
+          "sha256": "862ac82cdbace6bfcdd384eee666827fcefd4c45d4003b92e6e17df9f2eed06f"
+        },
+        {
+          "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
+          "bytes": 1172295,
+          "sha256": "ea7d9dbe37c60f80450ab9b7e9a064408c48bd209b6db5dbe617966617f1c08c"
+        }
+      ]
+    }

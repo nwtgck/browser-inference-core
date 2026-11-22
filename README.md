@@ -77,13 +77,35 @@ consult the manifest's validation fields for measured evidence.
 
 The format-6 root manifest binds root files and all three runtime manifests. Each
 runtime manifest owns its complete payload inventory; together they cover the
-installed tree. Physical runtime files live under
+payload tree. Physical runtime files live under
 `runtimes/llama-cpp-browser-core/`, `runtimes/stable-diffusion-cpp-browser-core/` and
 `runtimes/speech-cpp-browser-core/`; each
 retains its own format-2 manifest and validation scope. ABI-3 catalogs select
 target metadata by the compiled native fingerprint; each profile also includes
 its target metadata in `abi.json`. Use the public import
 paths above when consuming modules and types.
+
+Published packages include `browser-inference-core-artifact-integrity.yaml` at
+their physical root. Its exact bytes are attested by the source repository's
+`build.yml` workflow. The YAML contains the complete root JSON manifest and a
+SHA-256 (Secure Hash Algorithm, 256-bit) fingerprint of the committed source and
+recursive submodules, with an inline Bash reproduction recipe. It is separately
+bound to the root manifest rather than included in its own embedded inventory.
+
+Verify the YAML before trusting its contents or running its recipe:
+
+```sh
+gh attestation verify /path/to/package/browser-inference-core-artifact-integrity.yaml \
+  --repo nwtgck/browser-inference-core \
+  --signer-workflow nwtgck/browser-inference-core/.github/workflows/build.yml \
+  --deny-self-hosted-runners
+```
+
+Choose the repository and signer you independently expect; forks have different
+identities. Verify the root manifest and every runtime payload against the signed
+inventory afterwards. The source repository's `docs/artifact-integrity.md`
+describes complete verification and offline signature-bundle preservation. Local
+development assemblies can omit this publication envelope.
 
 The source repository and build tools are maintained separately from this runtime
 package. Pin the exact artifact commit emitted by the source repository's successful
