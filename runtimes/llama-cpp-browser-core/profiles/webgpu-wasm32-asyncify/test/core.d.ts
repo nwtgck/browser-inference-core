@@ -458,6 +458,8 @@ interface WasmModule {
   _llama_max_tensor_buft_overrides(): number;
   _ggml_backend_cpu_buffer_type(): number;
   _ggml_backend_dev_buffer_type(_0: number): number;
+  _llama_vocab_get_attr(_0: number, _1: number): number;
+  _llama_vocab_get_text(_0: number, _1: number): number;
   _llama_sampler_init(_0: number, _1: number): number;
   _llama_sampler_init_grammar_lazy_patterns(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number): number;
   _llama_sampler_init_grammar(_0: number, _1: number, _2: number): number;
@@ -495,7 +497,6 @@ interface WasmModule {
   _llama_sampler_chain_get(_0: number, _1: number): number;
   _llama_sampler_name(_0: number): number;
   _llama_vocab_type(_0: number): number;
-  _llama_vocab_get_text(_0: number, _1: number): number;
   _gguf_find_tensor(_0: number, _1: number): bigint;
   _llama_model_dflash_variant(_0: number): number;
   _ggml_time_ms(): bigint;
@@ -606,10 +607,10 @@ interface WasmModule {
   _ggml_sigmoid(_0: number, _1: number): number;
   _ggml_prec_set_acc(_0: number, _1: number): number;
   _ggml_argsort(_0: number, _1: number, _2: number): number;
+  _ggml_pad(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): number;
   _ggml_conv_1d_ph(_0: number, _1: number, _2: number, _3: number, _4: number): number;
   _ggml_conv_1d(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): number;
   _ggml_argmax(_0: number, _1: number): number;
-  _ggml_pad(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): number;
   _ggml_pad_reflect_1d(_0: number, _1: number, _2: number, _3: number): number;
   _ggml_new_tensor_4d(_0: number, _1: number, _2: bigint, _3: bigint, _4: bigint, _5: bigint): number;
   _ggml_relu(_0: number, _1: number): number;
@@ -742,7 +743,6 @@ interface WasmModule {
   _mtmd_helper_gen_audio_get_output(_0: number, _1: number, _2: number, _3: number, _4: number): number;
   _mtmd_helper_gen_audio_flush(_0: number): number;
   _llama_n_ctx_seq(_0: number): number;
-  _llama_vocab_get_attr(_0: number, _1: number): number;
   _llama_n_threads(_0: number): number;
   _llama_n_threads_batch(_0: number): number;
   _llama_state_seq_get_size(_0: number, _1: number): number;
@@ -1098,6 +1098,7 @@ interface WasmModule {
   _ggml_backend_cpu_set_abort_callback(_0: number, _1: number, _2: number): void;
   _ggml_backend_cpu_set_use_ref(_0: number, _1: number): void;
   _ggml_backend_cpu_buffer_from_ptr(_0: number, _1: number): number;
+  _ggml_flash_attn_ext_has_indexed_bias(_0: number): number;
   _ggml_can_repeat(_0: number, _1: number): number;
   _ggml_is_contiguous_rows(_0: number): number;
   _ggml_is_contiguous_1(_0: number): number;
@@ -1106,6 +1107,7 @@ interface WasmModule {
   _ggml_prec_get_acc(_0: number): number;
   _ggml_get_data_f32(_0: number): number;
   _ggml_prec_get_src(_0: number, _1: number): number;
+  _ggml_are_same_stride(_0: number, _1: number): number;
   _ggml_is_contiguously_allocated(_0: number): number;
   _ggml_unary_op_name(_0: number): number;
   _ggml_set_abort_callback(_0: number): number;
@@ -1132,7 +1134,6 @@ interface WasmModule {
   _ggml_is_contiguous_to_2(_0: number): number;
   _ggml_is_contiguous_to_3(_0: number): number;
   _ggml_is_permuted(_0: number): number;
-  _ggml_are_same_stride(_0: number, _1: number): number;
   _ggml_is_view(_0: number): number;
   _ggml_used_mem(_0: number): number;
   _ggml_set_no_alloc(_0: number, _1: number): void;
@@ -1167,6 +1168,7 @@ interface WasmModule {
   _ggml_gelu_erf_inplace(_0: number, _1: number): number;
   _ggml_gelu_quick_inplace(_0: number, _1: number): number;
   _ggml_silu_back(_0: number, _1: number, _2: number): number;
+  _ggml_sigmoid_back(_0: number, _1: number, _2: number): number;
   _ggml_exp_inplace(_0: number, _1: number): number;
   _ggml_floor(_0: number, _1: number): number;
   _ggml_floor_inplace(_0: number, _1: number): number;
@@ -1218,6 +1220,7 @@ interface WasmModule {
   _ggml_pad_ext_circular(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number): number;
   _ggml_timestep_embedding(_0: number, _1: number, _2: number, _3: number): number;
   _ggml_flash_attn_ext_get_prec(_0: number): number;
+  _ggml_flash_attn_ext_add_indexed_bias(_0: number, _1: number, _2: number): void;
   _ggml_flash_attn_back(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): number;
   _ggml_win_part(_0: number, _1: number, _2: number): number;
   _ggml_win_unpart(_0: number, _1: number, _2: number, _3: number, _4: number): number;

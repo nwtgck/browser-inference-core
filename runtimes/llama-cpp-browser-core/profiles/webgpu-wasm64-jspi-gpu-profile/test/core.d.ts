@@ -463,6 +463,8 @@ interface WasmModule {
   _llama_max_tensor_buft_overrides(): Promise<bigint>;
   _ggml_backend_cpu_buffer_type(): Promise<bigint>;
   _ggml_backend_dev_buffer_type(_0: bigint): Promise<bigint>;
+  _llama_vocab_get_attr(_0: bigint, _1: number): Promise<number>;
+  _llama_vocab_get_text(_0: bigint, _1: number): Promise<bigint>;
   _llama_sampler_init(_0: bigint, _1: bigint): Promise<bigint>;
   _llama_sampler_init_grammar_lazy_patterns(_0: bigint, _1: bigint, _2: bigint, _3: bigint, _4: bigint, _5: bigint, _6: bigint): Promise<bigint>;
   _llama_sampler_init_grammar(_0: bigint, _1: bigint, _2: bigint): Promise<bigint>;
@@ -500,7 +502,6 @@ interface WasmModule {
   _llama_sampler_chain_get(_0: bigint, _1: number): Promise<bigint>;
   _llama_sampler_name(_0: bigint): Promise<bigint>;
   _llama_vocab_type(_0: bigint): Promise<number>;
-  _llama_vocab_get_text(_0: bigint, _1: number): Promise<bigint>;
   _gguf_find_tensor(_0: bigint, _1: bigint): Promise<bigint>;
   _llama_model_dflash_variant(_0: bigint): Promise<number>;
   _ggml_time_ms(): Promise<bigint>;
@@ -611,10 +612,10 @@ interface WasmModule {
   _ggml_sigmoid(_0: bigint, _1: bigint): Promise<bigint>;
   _ggml_prec_set_acc(_0: bigint, _1: number): Promise<number>;
   _ggml_argsort(_0: bigint, _1: bigint, _2: number): Promise<bigint>;
+  _ggml_pad(_0: bigint, _1: bigint, _2: number, _3: number, _4: number, _5: number): Promise<bigint>;
   _ggml_conv_1d_ph(_0: bigint, _1: bigint, _2: bigint, _3: number, _4: number): Promise<bigint>;
   _ggml_conv_1d(_0: bigint, _1: bigint, _2: bigint, _3: number, _4: number, _5: number): Promise<bigint>;
   _ggml_argmax(_0: bigint, _1: bigint): Promise<bigint>;
-  _ggml_pad(_0: bigint, _1: bigint, _2: number, _3: number, _4: number, _5: number): Promise<bigint>;
   _ggml_pad_reflect_1d(_0: bigint, _1: bigint, _2: number, _3: number): Promise<bigint>;
   _ggml_new_tensor_4d(_0: bigint, _1: number, _2: bigint, _3: bigint, _4: bigint, _5: bigint): Promise<bigint>;
   _ggml_relu(_0: bigint, _1: bigint): Promise<bigint>;
@@ -747,7 +748,6 @@ interface WasmModule {
   _mtmd_helper_gen_audio_get_output(_0: bigint, _1: bigint, _2: bigint, _3: bigint, _4: bigint): Promise<number>;
   _mtmd_helper_gen_audio_flush(_0: bigint): Promise<number>;
   _llama_n_ctx_seq(_0: bigint): Promise<number>;
-  _llama_vocab_get_attr(_0: bigint, _1: number): Promise<number>;
   _llama_n_threads(_0: bigint): Promise<number>;
   _llama_n_threads_batch(_0: bigint): Promise<number>;
   _llama_state_seq_get_size(_0: bigint, _1: number): Promise<bigint>;
@@ -1101,6 +1101,7 @@ interface WasmModule {
   _ggml_backend_cpu_set_abort_callback(_0: bigint, _1: bigint, _2: bigint): Promise<void>;
   _ggml_backend_cpu_set_use_ref(_0: bigint, _1: number): Promise<void>;
   _ggml_backend_cpu_buffer_from_ptr(_0: bigint, _1: bigint): Promise<bigint>;
+  _ggml_flash_attn_ext_has_indexed_bias(_0: bigint): Promise<number>;
   _ggml_can_repeat(_0: bigint, _1: bigint): Promise<number>;
   _ggml_is_contiguous_rows(_0: bigint): Promise<number>;
   _ggml_is_contiguous_1(_0: bigint): Promise<number>;
@@ -1109,6 +1110,7 @@ interface WasmModule {
   _ggml_prec_get_acc(_0: bigint): Promise<number>;
   _ggml_get_data_f32(_0: bigint): Promise<bigint>;
   _ggml_prec_get_src(_0: bigint, _1: number): Promise<number>;
+  _ggml_are_same_stride(_0: bigint, _1: bigint): Promise<number>;
   _ggml_is_contiguously_allocated(_0: bigint): Promise<number>;
   _ggml_unary_op_name(_0: number): Promise<bigint>;
   _ggml_set_abort_callback(_0: bigint): Promise<bigint>;
@@ -1135,7 +1137,6 @@ interface WasmModule {
   _ggml_is_contiguous_to_2(_0: bigint): Promise<number>;
   _ggml_is_contiguous_to_3(_0: bigint): Promise<number>;
   _ggml_is_permuted(_0: bigint): Promise<number>;
-  _ggml_are_same_stride(_0: bigint, _1: bigint): Promise<number>;
   _ggml_is_view(_0: bigint): Promise<number>;
   _ggml_used_mem(_0: bigint): Promise<bigint>;
   _ggml_set_no_alloc(_0: bigint, _1: number): Promise<void>;
@@ -1170,6 +1171,7 @@ interface WasmModule {
   _ggml_gelu_erf_inplace(_0: bigint, _1: bigint): Promise<bigint>;
   _ggml_gelu_quick_inplace(_0: bigint, _1: bigint): Promise<bigint>;
   _ggml_silu_back(_0: bigint, _1: bigint, _2: bigint): Promise<bigint>;
+  _ggml_sigmoid_back(_0: bigint, _1: bigint, _2: bigint): Promise<bigint>;
   _ggml_exp_inplace(_0: bigint, _1: bigint): Promise<bigint>;
   _ggml_floor(_0: bigint, _1: bigint): Promise<bigint>;
   _ggml_floor_inplace(_0: bigint, _1: bigint): Promise<bigint>;
@@ -1221,6 +1223,7 @@ interface WasmModule {
   _ggml_pad_ext_circular(_0: bigint, _1: bigint, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number): Promise<bigint>;
   _ggml_timestep_embedding(_0: bigint, _1: bigint, _2: number, _3: number): Promise<bigint>;
   _ggml_flash_attn_ext_get_prec(_0: bigint): Promise<number>;
+  _ggml_flash_attn_ext_add_indexed_bias(_0: bigint, _1: bigint, _2: bigint): Promise<void>;
   _ggml_flash_attn_back(_0: bigint, _1: bigint, _2: bigint, _3: bigint, _4: bigint, _5: number): Promise<bigint>;
   _ggml_win_part(_0: bigint, _1: bigint, _2: number): Promise<bigint>;
   _ggml_win_unpart(_0: bigint, _1: bigint, _2: number, _3: number, _4: number): Promise<bigint>;

@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+  "sourceCommit": "83f03c2654c711b61f3f315d5be12a058af7c6fb",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -29,7 +29,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+          "sourceCommit": "83f03c2654c711b61f3f315d5be12a058af7c6fb",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -177,7 +177,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+            "sourceCommit": "83f03c2654c711b61f3f315d5be12a058af7c6fb",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
@@ -2196,7 +2196,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "bd1c8c51420513b82ae7206ed8044d9e",
+            "identity": "559ea3a93b39801fb4a20bc266ccc6f4",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -2209,7 +2209,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+          "sourceCommit": "83f03c2654c711b61f3f315d5be12a058af7c6fb",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2357,7 +2357,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "db440dc338beb1aebc77c1711e7755e72e326990",
+            "sourceCommit": "83f03c2654c711b61f3f315d5be12a058af7c6fb",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
@@ -4392,7 +4392,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "6162806f37b764d0a99245460abf92ee",
+            "identity": "c863646aefe6592caaab1f60852f6687",
             "compilerWrapper": "ccache"
           },
           "validation": {

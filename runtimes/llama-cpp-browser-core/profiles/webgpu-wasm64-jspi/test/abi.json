@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 8,
-  "schemaSha256": "efcf4c5654e4da3b20fcbb23f354c213f8270bc6128aa957f3bf5f380ec0b505",
+  "schemaSha256": "4ca73e6779255892c78065aa57e95572d5a937cb1eb99509ab66224f48661bb7",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -8948,6 +8948,45 @@
       "bridge": false
     },
     {
+      "name": "ggml_flash_attn_ext_add_indexed_bias",
+      "export": "_ggml_flash_attn_ext_add_indexed_bias",
+      "returnType": "void",
+      "returnKind": "void",
+      "abiType": {
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "a",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "table",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "indices",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "ggml_flash_attn_ext_add_sinks",
       "export": "_ggml_flash_attn_ext_add_sinks",
       "returnType": "void",
@@ -8985,6 +9024,29 @@
       "abiType": {
         "kind": "integer",
         "bits": 32,
+        "signed": false
+      },
+      "parameters": [
+        {
+          "name": "a",
+          "cType": "const struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "ggml_flash_attn_ext_has_indexed_bias",
+      "export": "_ggml_flash_attn_ext_has_indexed_bias",
+      "returnType": "bool",
+      "returnKind": "boolean",
+      "abiType": {
+        "kind": "integer",
+        "bits": 8,
         "signed": false
       },
       "parameters": [
@@ -20423,6 +20485,46 @@
         },
         {
           "name": "a",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
+      "name": "ggml_sigmoid_back",
+      "export": "_ggml_sigmoid_back",
+      "returnType": "struct ggml_tensor *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "ctx",
+          "cType": "struct ggml_context *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "a",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "b",
           "cType": "struct ggml_tensor *",
           "kind": "pointer",
           "abiType": {
@@ -39512,7 +39614,7 @@
       "name": "llama_model_quantize_params",
       "cType": "struct llama_model_quantize_params",
       "id": 28,
-      "size": 64,
+      "size": 136,
       "alignment": 8,
       "fields": [
         {
@@ -39705,6 +39807,116 @@
             "bits": 64,
             "signed": false,
             "pointerSized": true
+          }
+        },
+        {
+          "name": "activations",
+          "cType": "const struct llama_model_imatrix_data *",
+          "id": 15,
+          "offset": 64,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "statistics",
+          "cType": "const struct llama_model_imatrix_data *",
+          "id": 16,
+          "offset": 72,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "stats_schema",
+          "cType": "const char *const *",
+          "id": 17,
+          "offset": 80,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "target_bpw",
+          "cType": "float",
+          "id": 18,
+          "offset": 88,
+          "size": 4,
+          "kind": "float",
+          "abiType": {
+            "kind": "float",
+            "bits": 32
+          }
+        },
+        {
+          "name": "target_size",
+          "cType": "int64_t",
+          "id": 19,
+          "offset": 96,
+          "size": 8,
+          "kind": "i64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": true
+          }
+        },
+        {
+          "name": "state_file",
+          "cType": "const char *",
+          "id": 20,
+          "offset": 104,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "target_exclude",
+          "cType": "const enum ggml_type *",
+          "id": 21,
+          "offset": 112,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "abort_callback",
+          "cType": "ggml_abort_callback",
+          "id": 22,
+          "offset": 120,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64,
+            "callback": "ggml_abort_callback"
+          }
+        },
+        {
+          "name": "abort_callback_data",
+          "cType": "void *",
+          "id": 23,
+          "offset": 128,
+          "size": 8,
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
           }
         }
       ]
@@ -41260,7 +41472,7 @@
       "name": "mtmd_helper_cap",
       "cType": "struct mtmd_helper_cap",
       "id": 50,
-      "size": 8,
+      "size": 9,
       "alignment": 1,
       "fields": [
         {
@@ -41329,7 +41541,7 @@
           }
         },
         {
-          "name": "text_gen",
+          "name": "audio_duplex",
           "cType": "bool",
           "id": 5,
           "offset": 5,
@@ -41342,7 +41554,7 @@
           }
         },
         {
-          "name": "audio_gen",
+          "name": "text_gen",
           "cType": "bool",
           "id": 6,
           "offset": 6,
@@ -41355,10 +41567,23 @@
           }
         },
         {
-          "name": "audio_gen_spk_ref",
+          "name": "audio_gen",
           "cType": "bool",
           "id": 7,
           "offset": 7,
+          "size": 1,
+          "kind": "boolean",
+          "abiType": {
+            "kind": "integer",
+            "bits": 8,
+            "signed": false
+          }
+        },
+        {
+          "name": "audio_gen_spk_ref",
+          "cType": "bool",
+          "id": 8,
+          "offset": 8,
           "size": 1,
           "kind": "boolean",
           "abiType": {
@@ -43939,6 +44164,7 @@
     "GGML_OP_SCALE",
     "GGML_OP_SET",
     "GGML_OP_SET_ROWS",
+    "GGML_OP_SIGMOID_BACK",
     "GGML_OP_SILU_BACK",
     "GGML_OP_SIN",
     "GGML_OP_SLEEP",
@@ -44235,6 +44461,7 @@
     "MTMD_GEN_AUDIO_TYPE_KOKORO",
     "MTMD_GEN_AUDIO_TYPE_LFM3A",
     "MTMD_GEN_AUDIO_TYPE_MINIMAX_MUSIC3",
+    "MTMD_GEN_AUDIO_TYPE_MOSHI",
     "MTMD_GEN_AUDIO_TYPE_NONE",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS",
     "MTMD_GEN_AUDIO_TYPE_QWEN3TTS",
@@ -44399,7 +44626,7 @@
     "GGML_OP_CONV_TRANSPOSE_1D": "48",
     "GGML_OP_CONV_TRANSPOSE_2D": "56",
     "GGML_OP_COS": "12",
-    "GGML_OP_COUNT": "100",
+    "GGML_OP_COUNT": "101",
     "GGML_OP_COUNT_EQUAL": "18",
     "GGML_OP_CPY": "33",
     "GGML_OP_CROSS_ENTROPY_LOSS": "94",
@@ -44463,6 +44690,7 @@
     "GGML_OP_SCALE": "31",
     "GGML_OP_SET": "32",
     "GGML_OP_SET_ROWS": "41",
+    "GGML_OP_SIGMOID_BACK": "100",
     "GGML_OP_SILU_BACK": "22",
     "GGML_OP_SIN": "11",
     "GGML_OP_SLEEP": "99",
@@ -44756,15 +44984,16 @@
     "MTMD_GEN_AUDIO_TYPE_CHATTERBOX": "5",
     "MTMD_GEN_AUDIO_TYPE_DRAMA3": "6",
     "MTMD_GEN_AUDIO_TYPE_FISH_S2": "10",
-    "MTMD_GEN_AUDIO_TYPE_KOKORO": "11",
+    "MTMD_GEN_AUDIO_TYPE_KOKORO": "12",
     "MTMD_GEN_AUDIO_TYPE_LFM3A": "4",
     "MTMD_GEN_AUDIO_TYPE_MINIMAX_MUSIC3": "9",
+    "MTMD_GEN_AUDIO_TYPE_MOSHI": "11",
     "MTMD_GEN_AUDIO_TYPE_NONE": "0",
     "MTMD_GEN_AUDIO_TYPE_POCKETTTS": "2",
     "MTMD_GEN_AUDIO_TYPE_QWEN3TTS": "1",
     "MTMD_GEN_AUDIO_TYPE_SOPRANO": "3",
-    "MTMD_GEN_AUDIO_TYPE_TINY_VOCA": "12",
-    "MTMD_GEN_AUDIO_TYPE_VOXCPM2": "13",
+    "MTMD_GEN_AUDIO_TYPE_TINY_VOCA": "13",
+    "MTMD_GEN_AUDIO_TYPE_VOXCPM2": "14",
     "MTMD_GEN_AUDIO_TYPE_YUE2": "8",
     "MTMD_GEN_AUDIO_TYPE_ZONOS3": "7",
     "MTMD_GEN_PROCESS_TYPE_GEN_CODE": "0",
@@ -45162,8 +45391,10 @@
     "_ggml_fill_inplace",
     "_ggml_flash_attn_back",
     "_ggml_flash_attn_ext",
+    "_ggml_flash_attn_ext_add_indexed_bias",
     "_ggml_flash_attn_ext_add_sinks",
     "_ggml_flash_attn_ext_get_prec",
+    "_ggml_flash_attn_ext_has_indexed_bias",
     "_ggml_flash_attn_ext_rows",
     "_ggml_flash_attn_ext_set_n_kv_max",
     "_ggml_floor",
@@ -45432,6 +45663,7 @@
     "_ggml_sgn",
     "_ggml_sgn_inplace",
     "_ggml_sigmoid",
+    "_ggml_sigmoid_back",
     "_ggml_sigmoid_inplace",
     "_ggml_silu",
     "_ggml_silu_back",
@@ -46195,8 +46427,10 @@
     "ggml_fill_inplace",
     "ggml_flash_attn_back",
     "ggml_flash_attn_ext",
+    "ggml_flash_attn_ext_add_indexed_bias",
     "ggml_flash_attn_ext_add_sinks",
     "ggml_flash_attn_ext_get_prec",
+    "ggml_flash_attn_ext_has_indexed_bias",
     "ggml_flash_attn_ext_rows",
     "ggml_flash_attn_ext_set_n_kv_max",
     "ggml_floor",
@@ -46464,6 +46698,7 @@
     "ggml_sgn",
     "ggml_sgn_inplace",
     "ggml_sigmoid",
+    "ggml_sigmoid_back",
     "ggml_sigmoid_inplace",
     "ggml_silu",
     "ggml_silu_back",

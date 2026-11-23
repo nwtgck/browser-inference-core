@@ -252,8 +252,10 @@ export interface LowLevelFunctions {
   ggml_fill_inplace(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   ggml_flash_attn_back(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: number): Promise<bigint>;
   ggml_flash_attn_ext(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: number, arg6: number, arg7: number): Promise<bigint>;
+  ggml_flash_attn_ext_add_indexed_bias(arg0: bigint, arg1: bigint, arg2: bigint): Promise<void>;
   ggml_flash_attn_ext_add_sinks(arg0: bigint, arg1: bigint): Promise<void>;
   ggml_flash_attn_ext_get_prec(arg0: bigint): Promise<number>;
+  ggml_flash_attn_ext_has_indexed_bias(arg0: bigint): Promise<number>;
   ggml_flash_attn_ext_rows(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: number, arg7: number, arg8: number): Promise<bigint>;
   ggml_flash_attn_ext_set_n_kv_max(arg0: bigint, arg1: number): Promise<void>;
   ggml_floor(arg0: bigint, arg1: bigint): Promise<bigint>;
@@ -529,6 +531,7 @@ export interface LowLevelFunctions {
   ggml_sgn(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_sgn_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_sigmoid(arg0: bigint, arg1: bigint): Promise<bigint>;
+  ggml_sigmoid_back(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
   ggml_sigmoid_inplace(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_silu(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_silu_back(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
