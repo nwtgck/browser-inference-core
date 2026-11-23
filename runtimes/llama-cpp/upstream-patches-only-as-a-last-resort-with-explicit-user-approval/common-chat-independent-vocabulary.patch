@@ -1,6 +1,6 @@
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
-@@ -932,29 +932,14 @@
+@@ -937,29 +937,14 @@
      return tmpls->template_default->source();
  }
  
@@ -38,28 +38,35 @@
      if (default_template_src.empty() || default_template_src == "chatml") {
          if (!template_tool_use_src.empty()) {
              default_template_src = template_tool_use_src;
-@@ -978,8 +963,7 @@
-     std::string token_eos = eos_token_override;
+@@ -984,8 +969,7 @@
      bool        add_bos   = false;
      bool        add_eos   = false;
+     common_peg_tokens specials;
 -    if (model) {
 -        const auto * vocab     = llama_model_get_vocab(model);
 +    if (vocab) {
          const auto   get_token = [&](llama_token token, const char * name, const char * jinja_variable_name) {
              if (token == LLAMA_TOKEN_NULL) {
                  if (default_template_src.find(jinja_variable_name) != std::string::npos ||
-@@ -1017,15 +1001,46 @@
+@@ -1025,15 +1009,46 @@
              LOG_ERR("%s: failed to parse tool use chat template (ignoring it): %s\n", __func__, e.what());
          }
      }
 -    // task templates of the model, kept with a chat template override
+-    if (model) {
+-        if (const char * src = llama_model_chat_template(model, "tts")) {
+-            try {
+-                tmpls->template_tts = std::make_unique<common_chat_template>(src, token_bos, token_eos);
+-            } catch (const std::exception & e) {
+-                LOG_ERR("%s: failed to parse the tts chat template (ignoring it): %s\n", __func__, e.what());
+-            }
 +    // Task templates are retained even with a default template override.
 +    if (!template_tts_src.empty()) {
 +        try {
 +            tmpls->template_tts = std::make_unique<common_chat_template>(template_tts_src, token_bos, token_eos);
 +        } catch (const std::exception & e) {
 +            LOG_ERR("%s: failed to parse the tts chat template (ignoring it): %s\n", __func__, e.what());
-+        }
+         }
 +    }
 +    return tmpls;
 +}
@@ -92,22 +99,15 @@
 +        model ? llama_model_get_vocab(model) : nullptr, default_template_src,
 +        template_tool_use_src, tts ? tts : "", has_explicit_template,
 +        bos_token_override, eos_token_override);
-     if (model) {
--        if (const char * src = llama_model_chat_template(model, "tts")) {
--            try {
--                tmpls->template_tts = std::make_unique<common_chat_template>(src, token_bos, token_eos);
--            } catch (const std::exception & e) {
--                LOG_ERR("%s: failed to parse the tts chat template (ignoring it): %s\n", __func__, e.what());
--            }
--        }
++    if (model) {
          // dictionaries for tts_dict(), listed by name in tokenizer.tts_dicts
          tmpls->tts_dicts = std::make_shared<common_tts_dicts>();
          for (int32_t i = 0; i < llama_model_meta_arr_n(model, "tokenizer.tts_dicts"); i++) {
-@@ -1048,6 +1063,7 @@
-     }
+@@ -1057,6 +1072,7 @@
      return tmpls;
  }
-+
  
++
  const char * common_chat_format_name(common_chat_format format) {
      switch (format) {
+         case COMMON_CHAT_FORMAT_CONTENT_ONLY:
