@@ -1,0 +1,102 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1523,10 +1523,13 @@
+     uint32_t  workgroup_size;
+     uint32_t  subgroup_size;
+     int       vectorized;
++    bool      f32_accumulator;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+-               num_cols == other.num_cols && workgroup_size == other.workgroup_size && subgroup_size == other.subgroup_size && vectorized == other.vectorized;
++               num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
++               subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
++               f32_accumulator == other.f32_accumulator;
+     }
+ };
+ 
+@@ -1540,6 +1543,7 @@
+         ggml_webgpu_hash_combine(seed, key.workgroup_size);
+         ggml_webgpu_hash_combine(seed, key.subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
++        ggml_webgpu_hash_combine(seed, key.f32_accumulator);
+         return seed;
+     }
+ };
+@@ -3272,6 +3276,10 @@
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
++        if (key.src0_type == GGML_TYPE_NVFP4) {
++            const auto precision = ggml_prec_get_acc(context.dst);
++            key.f32_accumulator = precision == GGML_PREC_BF16 || precision == GGML_PREC_F32;
++        }
+         key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 && context.src0->ne[1] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+@@ -3285,6 +3293,9 @@
+         std::vector<std::string> defines;
+         std::string              variant = "mul_mat_id";
+         defines.push_back("MUL_MAT_ID");
++        if (key.f32_accumulator) {
++            defines.push_back("MUL_MAT_ID_ACC_F32");
++        }
+ 
+         // src1 type
+         switch (context.src1->type) {
+@@ -3384,6 +3395,9 @@
+             variant += "_vectorized";
+         }
+ 
++        if (key.f32_accumulator) {
++            variant += "_acc_f32";
++        }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+         auto decisions       = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -5,14 +5,20 @@
+ 
+ #include "mul_mat_decls.tmpl"
+ 
++#ifdef MUL_MAT_ID_ACC_F32
++#define MUL_MAT_ID_ACC_TYPE f32
++#else
++#define MUL_MAT_ID_ACC_TYPE f16
++#endif
++
+ #ifdef VEC
+-fn store_val(acc: array<array<f16, TILE_M>, TILE_N>, tn: u32, tm: u32) -> vec4<f32> {
++fn store_val(acc: array<array<MUL_MAT_ID_ACC_TYPE, TILE_M>, TILE_N>, tn: u32, tm: u32) -> vec4<f32> {
+     return vec4<f32>(f32(acc[tn][tm]), f32(acc[tn][tm + 1]), f32(acc[tn][tm + 2]), f32(acc[tn][tm + 3]));
+ }
+ #endif
+ 
+ #ifdef SCALAR
+-fn store_val(acc: array<array<f16, TILE_M>, TILE_N>, tn: u32, tm: u32) -> f32 {
++fn store_val(acc: array<array<MUL_MAT_ID_ACC_TYPE, TILE_M>, TILE_N>, tn: u32, tm: u32) -> f32 {
+     return f32(acc[tn][tm]);
+ }
+ #endif
+@@ -125,7 +131,7 @@
+     let dst2_stride = params.m * params.n_expert_used;
+     let dst1_stride = params.m;
+ 
+-    var acc: array<array<f16, TILE_M>, TILE_N>;
++    var acc: array<array<MUL_MAT_ID_ACC_TYPE, TILE_M>, TILE_N>;
+ 
+     for (var k_outer = 0u; k_outer < params.k; k_outer += TILE_K) {
+ 
+@@ -151,7 +157,11 @@
+                     let src1_idx = src1_n * TILE_K + k_inner;
+                     let src1_val = shmem[TILE_SRC0_SHMEM + src1_idx];
+                     for (var tm = 0u; tm < TILE_M; tm++) {
++#ifdef MUL_MAT_ID_ACC_F32
++                        acc[tn][tm] += f32(src0_tile[tm]) * f32(src1_val);
++#else
+                         acc[tn][tm] += src0_tile[tm] * src1_val;
++#endif
+                     }
+                 }
+             }

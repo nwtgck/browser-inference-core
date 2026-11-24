@@ -346,6 +346,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-nvfp4-expert-accumulation.patch',
+    target: 'llama-webgpu',
+    reason: 'honor NVFP4 expert matrix accumulator precision',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-direct-mapped-read.patch',
     target: 'llama-webgpu',
     reason: 'direct mapped read',
