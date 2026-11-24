@@ -1,7 +1,37 @@
 #pragma once
 
 namespace expert_cases {
+static void nvfp4_accumulator() {
+    auto ctx = recording_context();
+    ggml_tensor weights{}, input{}, indices{}, output{};
+    weights.type = GGML_TYPE_NVFP4;
+    input.type = output.type = GGML_TYPE_F32;
+    indices.type = GGML_TYPE_I32;
+    output.op = GGML_OP_MUL_MAT_ID;
+    weights.ne[0] = input.ne[0] = 1152;
+    weights.ne[1] = output.ne[0] = 36;
+    weights.ne[2] = 17;
+    ggml_webgpu_shader_lib_context context{};
+    context.src0 = &weights;
+    context.src1 = &input;
+    context.src2 = &indices;
+    context.dst = &output;
+    const auto select = [&](ggml_prec precision) {
+        BICORE_CHECK(ggml_prec_set_acc(&output, precision));
+        return ctx->shader_lib->get_mul_mat_id_pipeline(context, false).pipeline;
+    };
+    const auto narrow = select(GGML_PREC_UNDEFINED);
+    const auto wide = select(GGML_PREC_BF16);
+    BICORE_CHECK(narrow.Get() != wide.Get());
+    BICORE_CHECK(narrow.Get()->code.find("src0_tile[tm] * src1_val") != std::string::npos);
+    BICORE_CHECK(wide.Get()->code.find("array<array<f32,") != std::string::npos);
+    BICORE_CHECK(wide.Get()->code.find("f32(src0_tile[tm]) * f32(src1_val)") != std::string::npos);
+    BICORE_CHECK(select(GGML_PREC_F32).Get() == wide.Get());
+    BICORE_CHECK(select(GGML_PREC_UNDEFINED).Get() == narrow.Get());
+}
+
 static void all(const std::filesystem::path & output) {
+    nvfp4_accumulator();
     auto ctx = recording_context();
     std::ofstream cases(output / "cases.json");
     cases << "[\n";

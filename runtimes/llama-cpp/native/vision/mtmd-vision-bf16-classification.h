@@ -53,6 +53,8 @@ static inline constexpr int32_t lcb_mtmd_review_projector(projector_type type) {
     case PROJECTOR_TYPE_QWEN3TTS_GEN:
     case PROJECTOR_TYPE_POCKETTTS_SPKENC:
     case PROJECTOR_TYPE_POCKETTTS_GEN:
+    case PROJECTOR_TYPE_MOSHI:
+    case PROJECTOR_TYPE_MOSHI_GEN:
     case PROJECTOR_TYPE_SOPRANO:
     case PROJECTOR_TYPE_KOKORO:
     case PROJECTOR_TYPE_TINY_VOCA:

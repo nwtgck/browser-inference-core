@@ -9,6 +9,8 @@ static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_MUSE_GLIMMER) == MTMD_VIS
 static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_GEMMA4UV) == MTMD_VISION_BF16_CANDIDATE_REVIEWED);
 static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_LLAMA4) == MTMD_VISION_BF16_CANDIDATE_UNREVIEWED);
 static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_LFM3A_GEN) == MTMD_VISION_BF16_CANDIDATE_NOT_APPLICABLE);
+static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_MOSHI) == MTMD_VISION_BF16_CANDIDATE_NOT_APPLICABLE);
+static_assert(lcb_mtmd_review_projector(PROJECTOR_TYPE_MOSHI_GEN) == MTMD_VISION_BF16_CANDIDATE_NOT_APPLICABLE);
 
 int main() {
     for (auto type : {PROJECTOR_TYPE_MLP, PROJECTOR_TYPE_QWEN2VL, PROJECTOR_TYPE_QWEN25VL, PROJECTOR_TYPE_QWEN3VL,

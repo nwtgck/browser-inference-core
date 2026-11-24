@@ -627,6 +627,26 @@ not establish target-device speed.
   withdraws it; remove the patch, preparation, dedicated embedding, build wiring,
   tests and provenance entry together.
 
+## WebGPU NVFP4 expert matrix accumulator precision
+
+- **Patch:** `ggml-webgpu-nvfp4-expert-accumulation.patch`.
+- **Upstream:** introduced against llama.cpp `c212d25ad`.
+- **Scope:** the WebGPU expert matrix shader uses F32 products and accumulators
+  when an NVFP4 operation requests a BF16 or F32 accumulator. F16 accumulation
+  can overflow before the graph applies its weight scale. Shared staging,
+  tensor storage and the single-token expert matvec keep their existing layouts.
+- **Integration:** apply in ordinary and profiling WebGPU builds, extending the
+  existing derived expert matrix shader and separating its pipeline cache keys
+  by accumulator precision. The default shader keeps its F16 arithmetic.
+- **Alternative:** defer to upstream precision support or use a backend that
+  honors the requested range for this model.
+- **Validation and maintenance:** exercise the provider's precision selection
+  and cache reuse, and compare a synthetic NVFP4 graph against scalar results
+  on a software WebGPU adapter. Recheck the GGML precision contract and
+  expert matrix paths when rebasing.
+- **Removal:** remove the patch and its test when the upstream WebGPU shader
+  honors the NVFP4 accumulator request in the derived matrix path.
+
 ## Fused WebGPU gather normalization tail
 
 - **Patch:** `ggml-webgpu-router-tail.patch`.
