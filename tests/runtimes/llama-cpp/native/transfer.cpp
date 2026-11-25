@@ -11,6 +11,7 @@
 #include "cases/depth-mix.hpp"
 #include "cases/situ.hpp"
 #include "cases/loop-controller.hpp"
+#include "cases/dense-q4-swiglu.hpp"
 #ifdef GGML_WEBGPU_GPU_PROFILE
 #include "cases/q8-diagnostic.hpp"
 #endif
@@ -24,6 +25,7 @@ int main() {
     depth_mix_cases::all();
     situ_cases::all();
     loop_controller_cases::all();
+    dense_q4_swiglu_cases::all();
 #ifdef GGML_WEBGPU_GPU_PROFILE
     q8_diagnostic_cases::all();
 #endif

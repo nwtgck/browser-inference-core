@@ -1,0 +1,833 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4871,6 +4871,8 @@
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
++#include "ggml-webgpu-dense-q4-swiglu.hpp"
++
+ // Returns the encoded command, or std::nullopt if the operation is a no-op
+ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+                                                            ggml_cgraph *  cgraph,
+@@ -4912,6 +4914,7 @@
+             if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
++            if (auto fused = webgpu_dense_q4_swiglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -13,6 +13,7 @@
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
++#include "ggml-webgpu-dense-q4-swiglu-shaders.hpp"
+ #include "ggml-webgpu-loop-controller-shaders.hpp"
+ #include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
+@@ -1823,6 +1824,9 @@
+     using optional_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline,
+         ggml_webgpu_mul_mat_vec_pipeline_key, ggml_webgpu_mul_mat_vec_pipeline_key_hash>;
+     std::unique_ptr<optional_cache_type> optional_matvec;
++    using dense_swiglu_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline, uint32_t,
++        std::hash<uint32_t>>;
++    std::unique_ptr<dense_swiglu_cache_type> optional_dense_swiglu;
+     pre_wgsl::Preprocessor preprocessor;
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+@@ -2634,6 +2638,27 @@
+         return pipeline;
+     }
+ 
++    webgpu_pipeline get_dense_q4_swiglu_pipeline(uint32_t subgroup, bool & created) {
++        require_healthy_device();
++        GGML_ASSERT(subgroup == 16 || subgroup == 32);
++        if (!optional_dense_swiglu) {
++            optional_dense_swiglu = std::make_unique<dense_swiglu_cache_type>(
++                optional_device->control, optional_device->generation);
++        }
++        try {
++            return optional_dense_swiglu->select(subgroup, true,
++                [&] {
++                    created = true;
++                    const auto source = preprocessor.preprocess(wgsl_dense_q4_swiglu,
++                        {"LOGICAL_SUBGROUP_WIDTH=" + std::to_string(subgroup)});
++                    return create_scoped_pipeline(source, "dense_q4_swiglu_r4_sg" + std::to_string(subgroup));
++                },
++                [] { return webgpu_pipeline{}; }).pipeline;
++        } catch (const std::exception & error) {
++            GGML_ABORT("ggml_webgpu: optional dense Q4 SwiGLU pipeline is terminal: %s", error.what());
++        }
++    }
++
+     webgpu_pipeline get_short_conv_state_pipeline() {
+         if (!short_conv_state_pipeline.pipeline) {
+             short_conv_state_pipeline = ggml_webgpu_create_pipeline(device, wgsl_short_conv_concat_state, "short_conv_concat_state_f32");
+@@ -3139,25 +3164,7 @@
+ 
+         webgpu_pipeline pipeline;
+         if (optional_result) {
+-            struct ops {
+-                using Pipeline = webgpu_pipeline;
+-                wgpu::Device & device;
+-                wgpu::Instance & instance;
+-                const std::string & source;
+-                const std::string & label;
+-                std::uint64_t now_ns() const noexcept {
+-                    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+-                        std::chrono::steady_clock::now().time_since_epoch()).count());
+-                }
+-                void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
+-                Pipeline create() { return ggml_webgpu_create_pipeline(device, source, label); }
+-                wgpu::Future pop(wgpu::CallbackMode mode,
+-                    void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView, ggml_webgpu_optional::Ticket*) noexcept,
+-                    ggml_webgpu_optional::Ticket * ticket) { return device.PopErrorScope(mode, callback, ticket); }
+-                wgpu::WaitStatus wait(wgpu::Future future, std::uint64_t timeout) { return instance.WaitAny(future, timeout); }
+-                bool valid(const Pipeline & value) { return static_cast<bool>(value.pipeline); }
+-            } api{device, instance, processed, variant};
+-            *optional_result = ggml_webgpu_optional::create_optional(api, optional_device->control, 5000000000ull);
++            *optional_result = create_scoped_pipeline(processed, variant);
+             if (optional_result->outcome != ggml_webgpu_optional::Outcome::ready) { return {}; }
+             pipeline = optional_result->pipeline;
+         } else {
+@@ -4733,6 +4740,29 @@
+     }
+ 
+   private:
++    ggml_webgpu_optional::Attempt<webgpu_pipeline> create_scoped_pipeline(
++        const std::string & source, const std::string & label) {
++        struct ops {
++            using Pipeline = webgpu_pipeline;
++            wgpu::Device & device;
++            wgpu::Instance & instance;
++            const std::string & source;
++            const std::string & label;
++            std::uint64_t now_ns() const noexcept {
++                return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                    std::chrono::steady_clock::now().time_since_epoch()).count());
++            }
++            void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
++            Pipeline create() { return ggml_webgpu_create_pipeline(device, source, label); }
++            wgpu::Future pop(wgpu::CallbackMode mode,
++                void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView, ggml_webgpu_optional::Ticket*) noexcept,
++                ggml_webgpu_optional::Ticket * ticket) { return device.PopErrorScope(mode, callback, ticket); }
++            wgpu::WaitStatus wait(wgpu::Future future, std::uint64_t timeout) { return instance.WaitAny(future, timeout); }
++            bool valid(const Pipeline & value) { return static_cast<bool>(value.pipeline); }
++        } api{device, instance, source, label};
++        return ggml_webgpu_optional::create_optional(api, optional_device->control, 5000000000ull);
++    }
++
+     static webgpu_pipeline ggml_webgpu_create_pipeline(wgpu::Device & device,
+                                                        std::string    shader_code,
+                                                        std::string    label) {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+@@ -11,6 +11,10 @@
+ class webgpu_fusion_view_sources {
+ public:
+     explicit webgpu_fusion_view_sources(const ggml_cgraph & graph) : graph_(graph) {}
++
++    void invalidate() noexcept {
++        roots_.reset();
++    }
+ 
+     bool contains(const ggml_tensor * source) {
+         const std::less<const ggml_tensor *> order;
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
+@@ -0,0 +1,289 @@
++#pragma once
++
++#include <array>
++#include <iterator>
++
++// The encoder shares the ordinary matvec layout and WebGPU binding helpers.
++namespace webgpu_dense_q4_swiglu {
++
++constexpr int64_t input_width = 6656;
++constexpr int64_t output_width = 19968;
++constexpr uint32_t workgroup = 128;
++constexpr uint32_t rows_per_subgroup = 4;
++constexpr int operations = 3;
++
++static bool packed_bytes(const ggml_tensor * tensor, uint64_t & bytes) {
++    const uint64_t block = ggml_blck_size(tensor->type);
++    const uint64_t unit = ggml_type_size(tensor->type);
++    if (tensor->ne[0] <= 0 || uint64_t(tensor->ne[0]) % block != 0 ||
++        uint64_t(tensor->ne[0]) / block > UINT32_MAX / unit || tensor->nb[0] != unit) {
++        return false;
++    }
++    bytes = uint64_t(tensor->ne[0]) / block * unit;
++    for (int axis = 1; axis < GGML_MAX_DIMS; ++axis) {
++        if (tensor->ne[axis] <= 0 || uint64_t(tensor->ne[axis]) > UINT32_MAX / bytes ||
++            tensor->nb[axis] != bytes) {
++            return false;
++        }
++        bytes *= uint64_t(tensor->ne[axis]);
++    }
++    return true;
++}
++
++static bool shape(const ggml_tensor * tensor, ggml_type type, int64_t width, int64_t rows) {
++    uint64_t bytes;
++    return tensor && tensor->type == type && tensor->ne[0] == width && tensor->ne[1] == rows &&
++        tensor->ne[2] == 1 && tensor->ne[3] == 1 && packed_bytes(tensor, bytes);
++}
++
++static bool matches_projection_weight(const ggml_tensor * weight) {
++    return weight && weight->type == GGML_TYPE_Q4_K &&
++        weight->ne[0] == input_width && weight->ne[1] == output_width;
++}
++
++static bool default_params(const ggml_tensor * tensor, size_t skip) {
++    return std::all_of(std::begin(tensor->op_params) + skip, std::end(tensor->op_params),
++        [](int32_t word) { return word == 0; });
++}
++
++struct pattern {
++    ggml_tensor * gate;
++    ggml_tensor * up;
++    ggml_tensor * output;
++};
++
++static std::optional<pattern> match(const ggml_cgraph & graph, int index) {
++    if (index < 0 || index >= graph.n_nodes || graph.n_nodes - index < operations) {
++        return std::nullopt;
++    }
++    const auto * first = graph.nodes[index];
++    const auto * second = graph.nodes[index + 1];
++    auto * output = graph.nodes[index + 2];
++    if (first->op != GGML_OP_MUL_MAT || !matches_projection_weight(first->src[0]) ||
++        second->op != GGML_OP_MUL_MAT || output->op != GGML_OP_GLU ||
++        ggml_get_glu_op(output) != GGML_GLU_OP_SWIGLU || !default_params(output, 1)) {
++        return std::nullopt;
++    }
++    auto * gate = output->src[0];
++    auto * up = output->src[1];
++    if (first == second || !((gate == first && up == second) || (gate == second && up == first))) {
++        return std::nullopt;
++    }
++    if (gate->src[1] != up->src[1] || !shape(gate->src[1], GGML_TYPE_F32, input_width, 1) ||
++        !shape(gate->src[0], GGML_TYPE_Q4_K, input_width, output_width) ||
++        !shape(up->src[0], GGML_TYPE_Q4_K, input_width, output_width) ||
++        !default_params(gate, 0) || !default_params(up, 0)) {
++        return std::nullopt;
++    }
++    for (const auto * node : {gate, up, output}) {
++        if (node->view_src || node->view_offs || !shape(node, GGML_TYPE_F32, output_width, 1) ||
++            std::any_of(std::begin(node->src) + 2, std::end(node->src),
++                [](const ggml_tensor * source) { return source != nullptr; })) {
++            return std::nullopt;
++        }
++    }
++    const int indices[] = {index, index + 1, index + 2};
++    const int outputs[] = {index + 2};
++    const ggml_op ops[] = {GGML_OP_MUL_MAT, GGML_OP_MUL_MAT, GGML_OP_GLU};
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices, operations, ops, outputs, 1)) {
++        return std::nullopt;
++    }
++    return pattern{gate, up, output};
++}
++
++struct binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0;
++    uint64_t size = 0;
++    uint32_t element_offset = 0;
++};
++
++struct buffer_facts {
++    WGPUBuffer handle = nullptr;
++    uint64_t size = 0;
++    bool storage = false;
++};
++
++static bool get_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                        std::array<buffer_facts, 4> & facts, binding & result) {
++    const auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
++        !tensor->data) {
++        return false;
++    }
++    const auto * buffer_ctx = static_cast<const ggml_backend_webgpu_buffer_context *>(buffer->context);
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer) {
++        return false;
++    }
++
++    const auto * root = tensor->view_src ? tensor->view_src : tensor;
++    uint64_t bytes, root_bytes;
++    const auto base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
++    const auto root_data = reinterpret_cast<uintptr_t>(root->data);
++    if (root->view_src || root->view_offs || root->type != tensor->type || root->buffer != buffer ||
++        root_data < base || tensor->view_offs > UINTPTR_MAX - root_data ||
++        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs ||
++        !packed_bytes(tensor, bytes)) {
++        return false;
++    }
++    if (root != tensor && (!packed_bytes(root, root_bytes) || tensor->view_offs > root_bytes ||
++        bytes > root_bytes - tensor->view_offs)) {
++        return false;
++    }
++
++    const uint64_t payload = root_data - base + tensor->view_offs;
++    const uint64_t unit = ggml_type_size(tensor->type);
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint64_t alignment = limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1)) || payload % 4 != 0) {
++        return false;
++    }
++    // Match ordinary quantized matvec's block-aligned rebase, with a checked
++    // underflow path for a tensor offset which cannot be expressed in blocks.
++    uint64_t offset = payload & ~(alignment - 1);
++    while ((payload - offset) % unit != 0) {
++        if (offset < alignment) {
++            return false;
++        }
++        offset -= alignment;
++    }
++    const uint64_t prefix = payload - offset;
++    if (prefix > UINT32_MAX - bytes) {
++        return false;
++    }
++    // F32 and Q4_K units are multiples of four bytes.
++    const uint64_t size = prefix + bytes;
++    if (size > limits.maxStorageBufferBindingSize || offset > buffer->size || size > buffer->size - offset) {
++        return false;
++    }
++
++    const auto handle = buffer_ctx->buffer.Get();
++    auto found = std::find_if(facts.begin(), facts.end(), [handle](const buffer_facts & fact) {
++        return !fact.handle || fact.handle == handle;
++    });
++    if (found == facts.end()) {
++        return false;
++    }
++    if (!found->handle) {
++        *found = {handle, buffer_ctx->buffer.GetSize(),
++            (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) != wgpu::BufferUsage::None};
++    }
++    if (!found->storage || offset > found->size || size > found->size - offset) {
++        return false;
++    }
++    result = {buffer_ctx->buffer, offset, size, uint32_t(prefix / unit)};
++    return true;
++}
++
++static bool bindings_overlap(const binding & first, const binding & second) {
++    // The binding ranges include the payload. Reject overlap by physical
++    // handle even when the ggml buffer wrappers are distinct.
++    return first.buffer.Get() == second.buffer.Get() &&
++        first.offset < second.offset + second.size && second.offset < first.offset + first.size;
++}
++
++struct dispatch_plan {
++    std::array<binding, 4> bindings;
++    uint32_t subgroup;
++    uint32_t workgroups;
++};
++
++static std::optional<dispatch_plan> plan(webgpu_context & ctx, const ggml_cgraph & graph,
++                                        int index, webgpu_fusion_view_sources & views) {
++    const auto matched = match(graph, index);
++    if (!matched) {
++        return std::nullopt;
++    }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxStorageBuffersPerShaderStage < 4 || limits.maxBindingsPerBindGroup < 5 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size ||
++        limits.maxComputeWorkgroupSizeX < workgroup || ctx->param_arena.slot_size < 20 * sizeof(uint32_t)) {
++        return std::nullopt;
++    }
++
++    dispatch_plan result{};
++    for (auto * projection : {matched->gate, matched->up}) {
++        const auto ordinary = ggml_webgpu_mat_context(ctx, projection->src[0], projection->src[1], projection);
++        // Check the disjoint-binding key first. The physical check below
++        // establishes this assumption before entering the optional factory.
++        const auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(ordinary, false, false);
++        if (key.use_mmvq || key.num_cols != 1 || key.requested_subgroup_size || key.workgroup_size != workgroup ||
++            (key.subgroup_size != 16 && key.subgroup_size != 32) ||
++            (result.subgroup && result.subgroup != key.subgroup_size)) {
++            return std::nullopt;
++        }
++        result.subgroup = key.subgroup_size;
++    }
++    static_assert(WEBGPU_MUL_MAT_VEC_K_Q_OUTPUTS_PER_WG == rows_per_subgroup);
++    const uint32_t output_tile = workgroup / result.subgroup * rows_per_subgroup;
++    result.workgroups = (output_width + output_tile - 1) / output_tile;
++    if (result.workgroups > limits.maxComputeWorkgroupsPerDimension ||
++        views.contains(matched->gate) || views.contains(matched->up)) {
++        return std::nullopt;
++    }
++
++    ctx->shader_lib->require_healthy_device();
++    const ggml_tensor * tensors[] = {matched->gate->src[0], matched->gate->src[1],
++        matched->up->src[0], matched->output};
++    std::array<buffer_facts, 4> facts{};
++    for (size_t i = 0; i < result.bindings.size(); ++i) {
++        const auto * root = tensors[i]->view_src;
++        if (root && (root == matched->gate || root == matched->up || root == matched->output)) {
++            return std::nullopt;
++        }
++        if (!get_binding(ctx, tensors[i], facts, result.bindings[i])) {
++            return std::nullopt;
++        }
++        for (size_t j = 0; j < i; ++j) {
++            if (bindings_overlap(result.bindings[i], result.bindings[j])) {
++                return std::nullopt;
++            }
++        }
++    }
++    return result;
++}
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, ggml_cgraph & graph, int index,
++                                               webgpu_fusion_view_sources & views, int & consumed) {
++    auto dispatch = plan(ctx, graph, index, views);
++    if (!dispatch) {
++        return std::nullopt;
++    }
++    bool created = false;
++    const uint32_t subgroup = dispatch->subgroup;
++    auto pipeline = ctx->shader_lib->get_dense_q4_swiglu_pipeline(subgroup, created);
++    if (created) {
++        // A cold optional attempt can yield even when it returns no pipeline.
++        // Refresh the shared view index before this or a later fusion uses it.
++        views.invalidate();
++    }
++    if (!pipeline.pipeline) {
++        return std::nullopt;
++    }
++    if (created) {
++        dispatch = plan(ctx, graph, index, views);
++        if (!dispatch || dispatch->subgroup != subgroup) {
++            return std::nullopt;
++        }
++    }
++
++    const auto & bindings = dispatch->bindings;
++    constexpr uint32_t weight_stride = input_width / 256;
++    const std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[3].element_offset, output_width, 1, input_width,
++        weight_stride, input_width, weight_stride * output_width, input_width, weight_stride * output_width, input_width,
++        1, 1, 1, 1, bindings[2].element_offset, 0, 0, 0,
++    };
++    const std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, bindings[0].buffer, bindings[0].offset, bindings[0].size),
++        ggml_webgpu_make_bind_group_entry(1, bindings[1].buffer, bindings[1].offset, bindings[1].size),
++        ggml_webgpu_make_bind_group_entry(2, bindings[2].buffer, bindings[2].offset, bindings[2].size),
++        ggml_webgpu_make_bind_group_entry(3, bindings[3].buffer, bindings[3].offset, bindings[3].size),
++    };
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, dispatch->workgroups);
++    GGML_ASSERT(encoded.num_kernels == 1);
++    consumed = operations;
++    return encoded;
++}
++
++}  // namespace webgpu_dense_q4_swiglu
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/dense_q4_swiglu.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/dense_q4_swiglu.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/dense_q4_swiglu.wgsl
+@@ -0,0 +1,394 @@
++enable subgroups;
++enable f16;
++
++// LOGICAL_SUBGROUP_WIDTH is the checked fixed subgroup width for the unchanged accumulator.
++// The actual workgroup has 128 invocations.
++
++fn get_byte(value: u32, index: u32) -> u32 {
++    return (value >> (index * 8)) & 0xFF;
++}
++
++fn get_byte_i32(value: u32, index: u32) -> i32 {
++    return bitcast<i32>(((value >> (index * 8)) & 0xFF) << 24) >> 24;
++}
++
++
++fn f16_from_u16(bits: u32) -> f16 {
++    let packed = unpack2x16float(bits);
++    return f16(packed[0]);
++}
++
++
++fn load_u16_at_src0(byte_offset: u32) -> u32 {
++    let word = src0[byte_offset / 4u];
++    let shift = (byte_offset & 0x2u) * 8u;
++    return (word >> shift) & 0xFFFFu;
++}
++
++// Always reads the 4-byte-aligned word containing byte_offset.
++// Caller extracts the 16-bit half it needs via & 0xFFFFu or >> 16u.
++// this is used in k-quants for better performance
++fn load_u32_at_src0_aligned(byte_offset: u32) -> u32 {
++    return src0[(byte_offset & ~3u) / 4u];
++}
++
++fn load_u32_at_src0(byte_offset: u32) -> u32 {
++    let word_idx = byte_offset / 4u;
++    let shift = (byte_offset & 0x3u) * 8u;
++    let lo = src0[word_idx];
++    let hi = src0[word_idx + select(0u, 1u, shift != 0u)];
++    return (lo >> shift) | (hi << ((32u - shift) & 31u));
++}
++
++fn load_f16_at_src0(byte_offset: u32) -> f16 {
++    let packed = unpack2x16float(load_u16_at_src0(byte_offset));
++    return f16(packed[0]);
++}
++
++fn load_f16_as_f32_at_src0(byte_offset: u32) -> f32 {
++    let word = src0[byte_offset / 4u];
++    let shift = (byte_offset & 0x2u) * 8u;
++    let d_bits = (word >> shift) & 0xFFFFu;
++    return unpack2x16float(d_bits)[0];
++}
++
++
++
++
++// bf16 helpers
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++fn byte_of(v: u32, b: u32) -> u32 {
++    return (v >> (b * 8u)) & 0xFFu;
++}
++
++fn sbyte_of(v: u32, b: u32) -> i32 {
++    let raw = i32((v >> (b * 8u)) & 0xFFu);
++    return select(raw, raw - 256, raw >= 128);
++}
++
++
++
++fn inner_dot(src0_val: u32, src1_val: f32) -> f32 {
++    return f32(src0_val) * f32(src1_val);
++}
++
++
++
++
++
++
++
++
++
++
++
++
++fn load_u16_at_src2(byte_offset: u32) -> u32 {
++    let word = src2[byte_offset / 4u];
++    let shift = (byte_offset & 0x2u) * 8u;
++    return (word >> shift) & 0xFFFFu;
++}
++
++fn load_u32_at_src2_aligned(byte_offset: u32) -> u32 {
++    return src2[(byte_offset & ~3u) / 4u];
++}
++
++fn load_u32_at_src2(byte_offset: u32) -> u32 {
++    let word_idx = byte_offset / 4u;
++    let shift = (byte_offset & 0x3u) * 8u;
++    let lo = src2[word_idx];
++    let hi = src2[word_idx + select(0u, 1u, shift != 0u)];
++    return (lo >> shift) | (hi << ((32u - shift) & 31u));
++}
++
++fn load_f16_at_src2(byte_offset: u32) -> f16 {
++    let packed = unpack2x16float(load_u16_at_src2(byte_offset));
++    return f16(packed[0]);
++}
++
++fn load_f16_as_f32_at_src2(byte_offset: u32) -> f32 {
++    let word = src2[byte_offset / 4u];
++    let shift = (byte_offset & 0x2u) * 8u;
++    let d_bits = (word >> shift) & 0xFFFFu;
++    return unpack2x16float(d_bits)[0];
++}
++
++struct DualAccumulator {
++    gate: array<array<f32, 4>, 1>,
++    up: array<array<f32, 4>, 1>,
++};
++
++fn accumulate_gate_up(thread_id: u32, row_base: u32, src0_batch_offset: u32, src2_batch_offset: u32, src1_idx_base: u32) -> DualAccumulator {
++    var acc: DualAccumulator;
++
++    let tid = thread_id % 16;
++    let block_group = thread_id / 16;
++    let num_block_groups: u32 = LOGICAL_SUBGROUP_WIDTH / 16;
++
++    let il = tid / 4u;
++    let ir = tid % 4u;
++    let im = il / 2u;
++    let in = il % 2u;
++    let l0 = 4u * (2u * ir + in);
++
++    let y_offset = 64u * im + l0;
++    let q_offset = 32u * im + l0;
++    let sc0_byte = 4u + im * 2u;
++    let sc2_byte = 4u + (im + 2u) * 2u;
++    let sc4_byte = 4u + (im + 4u) * 2u;
++
++    let num_blocks = params.k / 256;
++
++    for (var block = block_group; block < num_blocks; block += num_block_groups) {
++        let x_base = src1_idx_base + block * 256 + y_offset;
++        var x_block: array<array<f32, 16>, 1>;
++        for (var col = 0u; col < 1;col += 1) {
++            let col_base = x_base + col * params.stride_11;
++            for (var i = 0u; i < 4u; i++) {
++                x_block[col][i]       = f32(src1[col_base + i]);
++                x_block[col][i + 4u]  = f32(src1[col_base + 32u + i]);
++                x_block[col][i + 8u]  = f32(src1[col_base + 128u + i]);
++                x_block[col][i + 12u] = f32(src1[col_base + 160u + i]);
++            }
++        }
++
++        var sumx = vec4<f32>(0.0, 0.0, 0.0, 0.0);
++        for (var i = 0u; i < 4u; i++) {
++            sumx[0] += x_block[0u][i];
++            sumx[1] += x_block[0u][i + 4u];
++            sumx[2] += x_block[0u][i + 8u];
++            sumx[3] += x_block[0u][i + 12u];
++        }
++
++        for (var row = 0u; row < 4; row++) {
++            let output_row = row_base + row;
++            if (output_row < params.m) {
++                let block_byte_base = (src0_batch_offset + output_row * params.stride_01 + block) * 144;
++
++                let d = f32(load_f16_at_src0(block_byte_base + 0u));
++                let dmin = f32(load_f16_at_src0(block_byte_base + 2u));
++
++                let sc0_u32 = load_u32_at_src0_aligned(block_byte_base + sc0_byte);
++                let sc0 = select(sc0_u32 & 0xFFFFu, sc0_u32 >> 16u, (sc0_byte & 2u) != 0u);
++                let sc2_u32 = load_u32_at_src0_aligned(block_byte_base + sc2_byte);
++                let sc2 = select(sc2_u32 & 0xFFFFu, sc2_u32 >> 16u, (sc2_byte & 2u) != 0u);
++                let sc4_u32 = load_u32_at_src0_aligned(block_byte_base + sc4_byte);
++                let sc4 = select(sc4_u32 & 0xFFFFu, sc4_u32 >> 16u, (sc4_byte & 2u) != 0u);
++
++                let sc16_0 = sc0 & 0x3F3Fu;
++                let sc16_1 = sc2 & 0x3F3Fu;
++                let sc16_2 = (sc4 & 0x0F0Fu) | ((sc0 & 0xC0C0u) >> 2u);
++                let sc16_3 = ((sc4 >> 4u) & 0x0F0Fu) | ((sc2 & 0xC0C0u) >> 2u);
++
++                let scale0 = f32(sc16_0 & 0xFFu);
++                let scale1 = f32((sc16_0 >> 8u) & 0xFFu);
++                let min0 = f32(sc16_1 & 0xFFu);
++                let min1 = f32((sc16_1 >> 8u) & 0xFFu);
++                let scale2 = f32(sc16_2 & 0xFFu);
++                let scale3 = f32((sc16_2 >> 8u) & 0xFFu);
++                let min2 = f32(sc16_3 & 0xFFu);
++                let min3 = f32((sc16_3 >> 8u) & 0xFFu);
++
++                let q1_u32 = load_u32_at_src0_aligned(block_byte_base + 16u + q_offset);
++                let q2_u32 = load_u32_at_src0_aligned(block_byte_base + 80u + q_offset);
++
++                for (var col = 0u;col < 1;col += 1) {
++                    var dot = vec4<f32>(0.0, 0.0, 0.0, 0.0);
++                    for (var i = 0u; i < 4u; i++) {
++                        let q1b = byte_of(q1_u32, i);
++                        let q2b = byte_of(q2_u32, i);
++                        dot[0] += x_block[col][i] * f32(q1b & 0x0Fu);
++                        dot[1] += x_block[col][i + 4u] * f32(q1b >> 4u);
++                        dot[2] += x_block[col][i + 8u] * f32(q2b & 0x0Fu);
++                        dot[3] += x_block[col][i + 12u] * f32(q2b >> 4u);
++                    }
++
++                    acc.gate[col][row] += d * (dot[0] * scale0 + dot[1] * scale1 + dot[2] * scale2 + dot[3] * scale3)
++                              - dmin * (sumx[0] * min0 + sumx[1] * min1 + sumx[2] * min2 + sumx[3] * min3);
++                }
++            }
++        }
++        for (var row = 0u; row < 4; row++) {
++            let output_row = row_base + row;
++            if (output_row < params.m) {
++                let block_byte_base = (src2_batch_offset + output_row * params.stride_01 + block) * 144;
++
++                let d = f32(load_f16_at_src2(block_byte_base + 0u));
++                let dmin = f32(load_f16_at_src2(block_byte_base + 2u));
++
++                let sc0_u32 = load_u32_at_src2_aligned(block_byte_base + sc0_byte);
++                let sc0 = select(sc0_u32 & 0xFFFFu, sc0_u32 >> 16u, (sc0_byte & 2u) != 0u);
++                let sc2_u32 = load_u32_at_src2_aligned(block_byte_base + sc2_byte);
++                let sc2 = select(sc2_u32 & 0xFFFFu, sc2_u32 >> 16u, (sc2_byte & 2u) != 0u);
++                let sc4_u32 = load_u32_at_src2_aligned(block_byte_base + sc4_byte);
++                let sc4 = select(sc4_u32 & 0xFFFFu, sc4_u32 >> 16u, (sc4_byte & 2u) != 0u);
++
++                let sc16_0 = sc0 & 0x3F3Fu;
++                let sc16_1 = sc2 & 0x3F3Fu;
++                let sc16_2 = (sc4 & 0x0F0Fu) | ((sc0 & 0xC0C0u) >> 2u);
++                let sc16_3 = ((sc4 >> 4u) & 0x0F0Fu) | ((sc2 & 0xC0C0u) >> 2u);
++
++                let scale0 = f32(sc16_0 & 0xFFu);
++                let scale1 = f32((sc16_0 >> 8u) & 0xFFu);
++                let min0 = f32(sc16_1 & 0xFFu);
++                let min1 = f32((sc16_1 >> 8u) & 0xFFu);
++                let scale2 = f32(sc16_2 & 0xFFu);
++                let scale3 = f32((sc16_2 >> 8u) & 0xFFu);
++                let min2 = f32(sc16_3 & 0xFFu);
++                let min3 = f32((sc16_3 >> 8u) & 0xFFu);
++
++                let q1_u32 = load_u32_at_src2_aligned(block_byte_base + 16u + q_offset);
++                let q2_u32 = load_u32_at_src2_aligned(block_byte_base + 80u + q_offset);
++
++                for (var col = 0u;col < 1;col += 1) {
++                    var dot = vec4<f32>(0.0, 0.0, 0.0, 0.0);
++                    for (var i = 0u; i < 4u; i++) {
++                        let q1b = byte_of(q1_u32, i);
++                        let q2b = byte_of(q2_u32, i);
++                        dot[0] += x_block[col][i] * f32(q1b & 0x0Fu);
++                        dot[1] += x_block[col][i + 4u] * f32(q1b >> 4u);
++                        dot[2] += x_block[col][i + 8u] * f32(q2b & 0x0Fu);
++                        dot[3] += x_block[col][i + 12u] * f32(q2b >> 4u);
++                    }
++
++                    acc.up[col][row] += d * (dot[0] * scale0 + dot[1] * scale1 + dot[2] * scale2 + dot[3] * scale3)
++                              - dmin * (sumx[0] * min0 + sumx[1] * min1 + sumx[2] * min2 + sumx[3] * min3);
++                }
++            }
++        }
++    }
++
++    return acc;
++}
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++struct MulMatParams {
++    offset_src0: u32,
++    offset_src1: u32,
++    offset_dst: u32,
++    m: u32,
++    n: u32,
++    k: u32,
++    stride_01: u32,
++    stride_11: u32,
++    stride_02: u32,
++    stride_12: u32,
++    stride_03: u32,
++    stride_13: u32,
++    bs02: u32,
++    bs03: u32,
++    broadcast2: u32,
++    broadcast3: u32,
++    offset_src2: u32,
++    offset_dst_up: u32,
++    reserved0: u32,
++    reserved1: u32
++};
++
++@group(0) @binding(0) var<storage, read_write> src0: array<u32>;
++@group(0) @binding(1) var<storage, read_write> src1: array<f32>;
++@group(0) @binding(2) var<storage, read_write> src2: array<u32>;
++@group(0) @binding(3) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(4) var<uniform> params: MulMatParams;
++
++fn op(a: f32, b: f32) -> f32 {
++    return a / (1.0 + exp(-a)) * b;
++}
++
++@compute @workgroup_size(128)
++fn main(
++    @builtin(workgroup_id) wg_id: vec3<u32>,
++    @builtin(num_workgroups) num_wg: vec3<u32>,
++    @builtin(subgroup_id) subgroup_id: u32,
++    @builtin(subgroup_invocation_id) subgroup_invocation_id: u32,
++    @builtin(num_subgroups) num_subgroups: u32
++) {
++    let rows_per_wg: u32 = (128 / LOGICAL_SUBGROUP_WIDTH) * 4;
++    let output_groups = (params.m + rows_per_wg - 1u) / rows_per_wg;
++    let wg_linear = wg_id.y * num_wg.x + wg_id.x;
++    let batch_idx = wg_linear / output_groups;
++    let total_batches = params.bs02 * params.broadcast2 * params.bs03 * params.broadcast3;
++    if (batch_idx >= total_batches) {
++        return;
++    }
++    let row_base = (wg_linear % output_groups) * rows_per_wg + subgroup_id * 4;
++
++    let dst2_stride = params.m * params.n;
++    let dst2_idx = batch_idx % (params.bs02 * params.broadcast2);
++    let dst3_stride = dst2_stride * params.bs02 * params.broadcast2;
++    let dst3_idx = batch_idx / (params.bs02 * params.broadcast2);
++    let src03_idx = dst3_idx / params.broadcast3;
++    let src02_idx = dst2_idx / params.broadcast2;
++    let src0_batch_offset = params.offset_src0 + src03_idx * params.stride_03 + src02_idx * params.stride_02;
++    let src2_batch_offset = params.offset_src2 + src03_idx * params.stride_03 + src02_idx * params.stride_02;
++    let src1_idx_base = params.offset_src1 + dst3_idx * params.stride_13 + dst2_idx * params.stride_12;
++    let dst_idx_base = params.offset_dst + dst3_idx * dst3_stride + dst2_idx * dst2_stride + row_base;
++    let dst_up_idx_base = params.offset_dst_up + dst3_idx * dst3_stride + dst2_idx * dst2_stride + row_base;
++
++    let expected_subgroups: u32 = 128 / LOGICAL_SUBGROUP_WIDTH;
++    let owns_rows = subgroup_id < expected_subgroups;
++    var acc: DualAccumulator;
++    if (num_subgroups == expected_subgroups) {
++        // All workgroup invocations fit exactly in full subgroups. Preserve
++        // the original accumulator call and floating-point operation order.
++        acc = accumulate_gate_up(subgroup_invocation_id, row_base, src0_batch_offset, src2_batch_offset, src1_idx_base);
++    } else {
++        // subgroup_size is a maximum: legal partial subgroups may have fewer
++        // active invocations. Compute-stage lane IDs are dense from zero.
++        let active_count = subgroupAdd(1u);
++        if (owns_rows) {
++            for (var virtual_tid = subgroup_invocation_id; virtual_tid < LOGICAL_SUBGROUP_WIDTH; virtual_tid += active_count) {
++                let partial = accumulate_gate_up(virtual_tid, row_base, src0_batch_offset, src2_batch_offset, src1_idx_base);
++                for (var col = 0u; col < 1; col++) {
++                    for (var row = 0u; row < 4; row++) {
++                        acc.gate[col][row] += partial.gate[col][row];
++                        acc.up[col][row] += partial.up[col][row];
++                    }
++                }
++            }
++        }
++    }
++    // Extra partial subgroups still reach every collective in uniform flow;
++    // only the expected subgroups access source rows or write output rows.
++    for (var row = 0u; row < 4; row++) {
++        let total_gate = subgroupAdd(acc.gate[0][row]);
++        let total_up = subgroupAdd(acc.up[0][row]);
++        if (owns_rows && subgroup_invocation_id == 0u && row_base + row < params.m) {
++            dst[dst_idx_base + row] = op(total_gate, total_up);
++        }
++    }
++}

@@ -1196,3 +1196,33 @@ not establish target-device speed.
   and full-model throughput remain unmeasured.
 - **Removal:** retire the extension when upstream supplies an equivalent BF16
   geometry. Review its conversion, accumulation order and dispatch on pin changes.
+
+## Dense Q4_K SwiGLU projection fusion
+
+- **Patch** `ggml-webgpu-dense-q4-swiglu.patch` against llama.cpp `c212d25ad`.
+- **Scope** Fuse two dense Q4_K × F32 matvecs with the same F32 input and
+  their split SwiGLU into one dispatch. Admission covers K6656/M19968/N1,
+  one batch, and ordinary independent matvecs with fixed subgroup width 16
+  or 32. The four-row reduction and the activation approximation follow the
+  ordinary shaders. The input sums for Q4_K minimum offsets are shared across
+  both projections without changing their accumulation order.
+- **Contract** Check the graph closure, raw view readers, GPUBuffer ownership,
+  alignment and live ranges. Equivalent separate operations are available
+  for other shapes, observable intermediate values, overlapping live ranges
+  and rejected optional pipelines. Recheck the graph after cold creation,
+  invalidating the shared view index even when optional creation is rejected.
+- **Integration** The normal and GPU-profiling recipes specialize the same
+  WGSL with the selected fixed subgroup width. The optional cache uses the
+  existing device generation and error scope handling. The public ABI and
+  GGML tensor storage format are unchanged.
+- **Validation and limits** The complete-provider contract checks dispatch,
+  bindings, and fallback for raw views, aliasing and scope rejection. In a
+  software WebGPU comparison over real-size packed Q4_K weights, the fused
+  chain cut isolated GPU time by about 10–13% across both subgroup widths.
+  The normal Wasm ABI used the fused dispatch and produced identical output
+  in a synthetic graph with the same weights. Physical-device and full-model throughput
+  remain unmeasured.
+- **Alternative and removal** Use the two independent matvecs and separate
+  SwiGLU until upstream can fuse them with equivalent numerical and lifetime
+  behavior. Review Q4_K packing, graph closure and the independent subgroup
+  reduction when updating upstream.

@@ -739,6 +739,19 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-dense-q4-swiglu.patch',
+    target: 'llama-webgpu',
+    reason: 'share Q4_K input partial sums and fuse dense SwiGLU projections',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/dense_q4_swiglu.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
