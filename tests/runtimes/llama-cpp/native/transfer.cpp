@@ -6,6 +6,7 @@
 #include "cases/scheduler.hpp"
 #include "cases/fusion.hpp"
 #include "cases/indexed-decode.hpp"
+#include "cases/indexed-live-grid.hpp"
 #include "cases/indexed-q2.hpp"
 #include "cases/short-conv.hpp"
 #include "cases/depth-mix.hpp"
@@ -20,6 +21,7 @@ int main() {
     transfer_cases::all();
     fusion_cases::all();
     indexed_decode_cases::all();
+    indexed_live_grid_cases::all();
     indexed_q2_cases::all();
     short_conv_cases::all();
     depth_mix_cases::all();

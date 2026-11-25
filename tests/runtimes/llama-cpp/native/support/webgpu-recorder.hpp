@@ -17,6 +17,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -67,6 +68,7 @@ struct WGPUBufferImpl {
     WGPUBufferUsage usage = WGPUBufferUsage_None;
     WGPUQueue queue = nullptr;
     bool mapped = false;
+    uint64_t logical_size = 0; // Allows metadata-only tensor buffers in encoding tests.
 };
 struct WGPUBindGroupLayoutImpl {
     unsigned refs = 1;
@@ -113,6 +115,8 @@ struct RecordedDispatch {
     unsigned pipeline;
     unsigned group;
     uint32_t x, y, z;
+    WGPUBuffer arguments = nullptr;
+    uint64_t argument_offset = 0;
 };
 struct RecordedWrite {
     WGPUBuffer buffer;
@@ -122,6 +126,8 @@ struct RecordedWrite {
 struct CommandObserver {
     unsigned passes = 0, ends = 0;
     std::vector<RecordedDispatch> dispatches;
+    std::vector<std::array<uint32_t, 3>> indirect_grids;
+    std::function<void(const WGPUBindGroupImpl &)> on_direct_dispatch;
     std::vector<RecordedWrite> writes;
     std::vector<std::pair<uint32_t, uint32_t>> timestamp_pairs;
     std::vector<uint32_t> resolved_queries;
@@ -150,12 +156,14 @@ struct ResourceObserver {
     unsigned buffers_released = 0, pipelines_released = 0;
     std::function<void(WGPUBuffer)> before_buffer_destroy;
     GroupFailure group_failure = GroupFailure::none;
+    bool reject_indirect_buffer = false;
 };
 static ResourceObserver resources;
 struct Future {
     std::function<void()> complete;
 };
 static std::map<std::uint64_t, Future> futures;
+static std::map<std::uint64_t, Future> spontaneous_scopes;
 static unsigned created = 0, pushes = 0, pops = 0, waits = 0;
 static std::uint64_t next_future = 1;
 static WGPUErrorType inject = WGPUErrorType_NoError;
@@ -191,6 +199,11 @@ WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device, const WGPUBufferDescriptor 
     result->bytes.resize(descriptor->size);
     result->usage = descriptor->usage;
     result->queue = device->queue;
+    if ((descriptor->usage & WGPUBufferUsage_Indirect) && resources.reject_indirect_buffer) {
+        BICORE_CHECK(!device->scopes.empty() && device->scopes.back().first == WGPUErrorFilter_Validation);
+        device->scopes.back().second = WGPUErrorType_Validation;
+        resources.reject_indirect_buffer = false;
+    }
     return result;
 }
 void wgpuBufferDestroy(WGPUBuffer value) {
@@ -201,7 +214,7 @@ void wgpuBufferDestroy(WGPUBuffer value) {
     ++commands.buffers_destroyed;
 }
 uint64_t wgpuBufferGetSize(WGPUBuffer value) {
-    return value->bytes.size();
+    return value->logical_size ? value->logical_size : value->bytes.size();
 }
 WGPUBufferUsage wgpuBufferGetUsage(WGPUBuffer value) {
     return value->usage;
@@ -280,17 +293,28 @@ void wgpuComputePassEncoderSetBindGroup(WGPUComputePassEncoder pass, uint32_t in
     pass->group = group;
     commands.order.push_back('B');
 }
-void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder pass, uint32_t x, uint32_t y, uint32_t z) {
-    ExternalAllocation external;
-    BICORE_CHECK(pass != nullptr && !pass->ended && pass->pipeline != nullptr && pass->group != nullptr);
-    commands.dispatches.push_back({pass->pipeline->id, pass->group->id, x, y, z});
-    commands.order.push_back('D');
+static void record_dispatch_execution(WGPUComputePassEncoder pass, WGPUBuffer arguments, uint64_t offset) {
     wgpuBindGroupAddRef(pass->group);
     auto group = wgpu::BindGroup::Acquire(pass->group);
     wgpuComputePipelineAddRef(pass->pipeline);
     auto pipeline = wgpu::ComputePipeline::Acquire(pass->pipeline);
-    pass->operations->push_back([group, pipeline] {
+    if (arguments) {
+        wgpuBufferAddRef(arguments);
+    }
+    auto indirect = wgpu::Buffer::Acquire(arguments);
+    pass->operations->push_back([group, pipeline, indirect, offset] {
         BICORE_CHECK(group && pipeline);
+        if (indirect) {
+            // The device reads the argument at execution, after earlier dispatches.
+            const auto & buffer = *indirect.Get();
+            std::array<uint32_t, 3> grid{};
+            BICORE_CHECK(!buffer.destroyed && offset <= buffer.bytes.size() &&
+                         sizeof(grid) <= buffer.bytes.size() - offset);
+            std::memcpy(grid.data(), buffer.bytes.data() + offset, sizeof(grid));
+            commands.indirect_grids.push_back(grid);
+        } else if (commands.on_direct_dispatch) {
+            commands.on_direct_dispatch(*group.Get());
+        }
         const auto & uniform = group.Get()->bindings.back();
         BICORE_CHECK(uniform.buffer && !uniform.buffer->destroyed);
         uint32_t value = 0;
@@ -298,6 +322,23 @@ void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder pass, uint3
         commands.observed_params.push_back(value);
         ++commands.executed;
     });
+}
+void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder pass, uint32_t x, uint32_t y, uint32_t z) {
+    ExternalAllocation external;
+    BICORE_CHECK(pass != nullptr && !pass->ended && pass->pipeline != nullptr && pass->group != nullptr);
+    commands.dispatches.push_back({pass->pipeline->id, pass->group->id, x, y, z});
+    commands.order.push_back('D');
+    record_dispatch_execution(pass, nullptr, 0);
+}
+void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder pass, WGPUBuffer arguments,
+                                                      uint64_t offset) {
+    ExternalAllocation external;
+    BICORE_CHECK(pass != nullptr && !pass->ended && pass->pipeline != nullptr && pass->group != nullptr);
+    BICORE_CHECK(arguments && !arguments->destroyed && (arguments->usage & WGPUBufferUsage_Indirect) &&
+                 offset % 4 == 0);
+    commands.dispatches.push_back({pass->pipeline->id, pass->group->id, 0, 0, 0, arguments, offset});
+    commands.order.push_back('I');
+    record_dispatch_execution(pass, arguments, offset);
 }
 void wgpuComputePassEncoderEnd(WGPUComputePassEncoder pass) {
     BICORE_CHECK(pass != nullptr && !pass->ended);
@@ -580,15 +621,17 @@ void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter) {
 }
 WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackInfo info) {
     ++pops;
-    BICORE_CHECK(info.mode == WGPUCallbackMode_WaitAnyOnly);
+    BICORE_CHECK(info.mode == WGPUCallbackMode_WaitAnyOnly || info.mode == WGPUCallbackMode_AllowSpontaneous);
     BICORE_CHECK(!device->scopes.empty());
     const auto error = device->scopes.back().second;
     device->scopes.pop_back();
     const auto id = next_future++;
-    futures.emplace(id, Future{[=] {
-                        const WGPUStringView message = {"recorded scope", WGPU_STRLEN};
-                        info.callback(WGPUPopErrorScopeStatus_Success, error, message, info.userdata1, info.userdata2);
-                    }});
+    auto & completions = info.mode == WGPUCallbackMode_WaitAnyOnly ? futures : spontaneous_scopes;
+    completions.emplace(id, Future{[=] {
+                            const WGPUStringView message = {"recorded scope", WGPU_STRLEN};
+                            info.callback(WGPUPopErrorScopeStatus_Success, error, message, info.userdata1,
+                                          info.userdata2);
+                        }});
     return {id};
 }
 WGPUWaitStatus wgpuInstanceWaitAny(WGPUInstance, size_t count, WGPUFutureWaitInfo * infos, std::uint64_t) {

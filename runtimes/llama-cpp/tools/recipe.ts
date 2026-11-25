@@ -774,6 +774,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-live-grid.patch',
+    target: 'llama-webgpu',
+    reason: 'dispatch only live workgroups for selected indexed prefill matrices',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

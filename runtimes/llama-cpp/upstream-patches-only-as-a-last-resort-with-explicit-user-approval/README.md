@@ -1234,3 +1234,32 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   SwiGLU until upstream can fuse them with equivalent numerical and lifetime
   behavior. Review Q4_K packing, graph closure and the independent subgroup
   reduction when updating upstream.
+
+## Indirect dispatch for indexed prefill
+
+- **Patch** `ggml-webgpu-indexed-live-grid.patch` against llama.cpp `c212d25ad`.
+- **Scope** Use the existing 32-slot gather to write an indirect grid for
+  K640/M2560/E512 Q2_0 with split bindings and K2816/M1408/E48 or E128 paired
+  Q4_0 with a single binding. Require 128 input tokens, the original F32
+  input and output, and room for the upper grid bound in one dimension.
+  Reuse the original matrix shader and its precision and tensor layouts.
+- **Lifetime** Share one 12-byte storage and indirect buffer on one device.
+  Every gather overwrites all three arguments before its matrix dispatch.
+  Submission batches keep each pair together and share an ordered queue.
+  The first eligible graph issues scoped buffer creation and uses direct
+  dispatch. Later graphs use the indirect path once all three scope callbacks
+  successfully validate the buffer. Pending or rejected creation uses direct
+  dispatch. No GPU completion or readback is added to graph encoding.
+- **Integration** Use the same gather source and patch in ordinary and
+  profiling builds. The cache distinguishes the direct and indirect gather
+  variants. Profiling continues to time the gather and matrix dispatches
+  separately. The public ABI and model weight placement stay the same.
+- **Validation and limits** Check pending initialization, same-queue reuse,
+  device and shape fallback, and zero valid experts. Software WebGPU tests
+  compared both paths bit-for-bit with a CPU reference for the Q2_0 split and
+  E48 Q4_0 fixtures. An E128 Q4_0 device still needs the original single weight
+  binding. Prefill time on physical adapters depends on routing and how many
+  empty workgroups the direct grid would submit.
+- **Alternative and removal** Retain the direct upper-bound grid until
+  upstream can dispatch only the active indexed tiles. Review the gather
+  descriptor width, scope semantics and queue submission boundaries on updates.
