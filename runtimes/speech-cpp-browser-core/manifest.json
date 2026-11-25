@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "4dc6c990ad186c749154f52bf3f9a67400ceba5a",
+  "sourceCommit": "a3e42c51f539e714b68a0579a4052eb04565c85c",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -29,7 +29,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "4dc6c990ad186c749154f52bf3f9a67400ceba5a",
+          "sourceCommit": "a3e42c51f539e714b68a0579a4052eb04565c85c",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -177,7 +177,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "4dc6c990ad186c749154f52bf3f9a67400ceba5a",
+            "sourceCommit": "a3e42c51f539e714b68a0579a4052eb04565c85c",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
@@ -2209,7 +2209,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "4dc6c990ad186c749154f52bf3f9a67400ceba5a",
+          "sourceCommit": "a3e42c51f539e714b68a0579a4052eb04565c85c",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2357,7 +2357,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "4dc6c990ad186c749154f52bf3f9a67400ceba5a",
+            "sourceCommit": "a3e42c51f539e714b68a0579a4052eb04565c85c",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
