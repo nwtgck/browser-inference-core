@@ -1365,3 +1365,20 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   the existing backend selection and cooperative dispatch when supported.
   Remove this patch when upstream supplies equivalent selection for these
   packed formats.
+
+## Packed row views in the Inkling graph
+
+- **Patch** `inkling-packed-row-views.patch` against llama.cpp `c212d25ad`.
+- **Scope** In WebGPU preparations, read packed F32 rows of loop messages
+  and mixed attention inputs as views. Use the canonical contiguous layout
+  for a single token and preserve the bank's token stride for batches.
+  Other tensor formats use the existing extraction path.
+- **Contract** Keep the row offsets, token order, tensor shapes, and model
+  arithmetic. Both token counts use a view with an explicit source edge.
+  GGML tracks the bank's lifetime across all consumers. Keep the ordinary
+  COPY-based graph when this overlay is omitted.
+- **Validation and removal** Compare the actual CPU and Wasm64 model graphs
+  across prefill, decode, and append with an authored Inkling GGUF. Confirm
+  matching logits, scheduler allocations, and the affected dispatches.
+  Review consumer strides, aliasing, and placement when updating upstream.
+  Remove this patch when upstream reads these rows without a materialized copy.

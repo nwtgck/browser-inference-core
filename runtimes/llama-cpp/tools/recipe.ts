@@ -858,6 +858,12 @@ export const modelPatches = {
     reason: 'Skip ranking only when every pool is selected.',
     files: ['src/models/qwen4exp.cpp'],
   },
+  inklingRowViews: {
+    file: 'inkling-packed-row-views.patch',
+    target: 'llama',
+    reason: 'Read packed loop messages and attention inputs through row views.',
+    files: ['src/models/inkling2.cpp'],
+  },
   chat: {
     file: 'common-chat-independent-vocabulary.patch',
     target: 'llama',

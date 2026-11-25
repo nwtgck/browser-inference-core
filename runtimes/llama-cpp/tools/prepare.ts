@@ -210,6 +210,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
         await cp(join(root, shaderBase), join(canonicalRoot, shaderBase), { recursive: true });
         const result = await prepareWebgpu({ source: root, original: canonicalRoot, scratch: scratch.root, patchRoot, runtime: owned, mode: gpuProfile ? 'profile' : 'normal', python });
         patches.push(...result.patches);
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingRowViews }));
         shaders = result.shaders;
         switch (target) {
         case 'native': {
