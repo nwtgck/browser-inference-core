@@ -23,34 +23,43 @@
          ggml_webgpu_hash_combine(seed, key.src0_type);
          ggml_webgpu_hash_combine(seed, key.src1_type);
          ggml_webgpu_hash_combine(seed, key.vectorized);
-@@ -3375,6 +3378,16 @@
+@@ -3375,6 +3378,22 @@
          }
          const int64_t m = context.dst->ne[0];
          const int64_t n = context.dst->ne[1];
 +        constexpr uint32_t packed_f32_tile_k = 64;
-+        constexpr size_t packed_f32_shared_bytes = packed_f32_tile_k * GGML_WEBGPU_F16_SIZE_BYTES *
-+            (WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_TILE_M + WEBGPU_MUL_MAT_WG_SIZE_N * WEBGPU_MUL_MAT_TILE_N);
++        const bool packed_small_shape = key.small_m_tile == 4 && k == 10240;
++        const bool packed_standard_shape = (k == 4608 && m == 64) || (k == 2304 && m == 128) ||
++            (k == 2048 && m == 256) || (k == 2560 && (m == 48 || m == 512)) || (k == 5120 && m == 48);
++        constexpr uint32_t packed_standard_rows =
++            WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_TILE_M + WEBGPU_MUL_MAT_WG_SIZE_N * WEBGPU_MUL_MAT_TILE_N;
++        const size_t packed_f32_shared_bytes = packed_f32_tile_k * GGML_WEBGPU_F16_SIZE_BYTES *
++            (packed_small_shape ? key.small_m_tile + 32u : packed_standard_rows);
 +        // Complete K tiles and full vec4 output rows keep the packed loop inside its input and output ranges.
 +        key.packed_f32 = key.vectorized && !key.use_subgroup_matrix && !key.src_overlap &&
 +                         key.src0_type == GGML_TYPE_F32 && key.src1_type == GGML_TYPE_F32 &&
-+                         context.dst->type == GGML_TYPE_F32 && k == 4608 && m == 64 && n >= 16 && n <= 128 &&
++                         context.dst->type == GGML_TYPE_F32 && (packed_small_shape || packed_standard_shape) &&
++                         n >= 16 && n <= 128 &&
 +                         context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
 +                         WEBGPU_MUL_MAT_TILE_M == 4 && WEBGPU_MUL_MAT_TILE_N == 4 &&
 +                         context.wg_mem_limit_bytes >= packed_f32_shared_bytes;
          constexpr int64_t q8_min_groups = 640;
          const bool q8_c8_short_shape = n == 128 &&
                                         ((k == 2304 && (m == 1024 || m == 3072)) ||
-@@ -3516,6 +3529,9 @@
+@@ -3516,6 +3535,12 @@
          uint32_t tile_k;
          if (key.use_subgroup_matrix) {
              tile_k = is_quant ? WEBGPU_MUL_MAT_SUBGROUP_TILE_K_QUANT : WEBGPU_MUL_MAT_SUBGROUP_TILE_K_FLOAT;
 +        } else if (key.packed_f32) {
 +            tile_k = packed_f32_tile_k;
 +            defines.push_back("PACKED_F32_REG_TILE");
++            if (key.small_m_tile) {
++                defines.push_back("PACKED_F32_ONE_COLUMN");
++            }
          } else {
              tile_k = is_quant ? WEBGPU_MUL_MAT_REG_TILE_K_QUANT : WEBGPU_MUL_MAT_REG_TILE_K_FLOAT;
          }
-@@ -3556,6 +3572,9 @@
+@@ -3556,6 +3581,9 @@
  
          if (key.small_m_tile) {
              variant += "_small_m" + std::to_string(key.small_m_tile);
@@ -110,22 +119,24 @@
  
  @compute @workgroup_size(TOTAL_WORKGROUP_SIZE)
  fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
-@@ -110,7 +114,14 @@
+@@ -110,7 +114,16 @@
      let offset_m = wg_m * WORKGROUP_SIZE_M * TILE_M;
      let offset_n = wg_n * WORKGROUP_SIZE_N * TILE_N;
  
 +#ifdef PACKED_F32_REG_TILE
 +    var acc0: vec4<f32>;
++#ifndef PACKED_F32_ONE_COLUMN
 +    var acc1: vec4<f32>;
 +    var acc2: vec4<f32>;
 +    var acc3: vec4<f32>;
++#endif
 +#else
      var acc: array<array<f32, TILE_N>, TILE_M>;
 +#endif
  
      for (var k_outer = 0u; k_outer < params.k; k_outer += TILE_K) {
  
-@@ -122,6 +133,42 @@
+@@ -122,6 +135,52 @@
  
          let k_end = min(TILE_K, params.k - k_outer);
  
@@ -140,35 +151,45 @@
 +            let a2 = vec4<f32>(shmem[a_idx + 2u * k_vecs]);
 +            let a3 = vec4<f32>(shmem[a_idx + 3u * k_vecs]);
 +            let b0 = vec4<f32>(shmem[b_idx]);
++#ifndef PACKED_F32_ONE_COLUMN
 +            let b1 = vec4<f32>(shmem[b_idx + k_vecs]);
 +            let b2 = vec4<f32>(shmem[b_idx + 2u * k_vecs]);
 +            let b3 = vec4<f32>(shmem[b_idx + 3u * k_vecs]);
++#endif
 +            let a_x = vec4<f32>(a0.x, a1.x, a2.x, a3.x);
 +            acc0 += a_x * b0.x;
++#ifndef PACKED_F32_ONE_COLUMN
 +            acc1 += a_x * b1.x;
 +            acc2 += a_x * b2.x;
 +            acc3 += a_x * b3.x;
++#endif
 +            let a_y = vec4<f32>(a0.y, a1.y, a2.y, a3.y);
 +            acc0 += a_y * b0.y;
++#ifndef PACKED_F32_ONE_COLUMN
 +            acc1 += a_y * b1.y;
 +            acc2 += a_y * b2.y;
 +            acc3 += a_y * b3.y;
++#endif
 +            let a_z = vec4<f32>(a0.z, a1.z, a2.z, a3.z);
 +            acc0 += a_z * b0.z;
++#ifndef PACKED_F32_ONE_COLUMN
 +            acc1 += a_z * b1.z;
 +            acc2 += a_z * b2.z;
 +            acc3 += a_z * b3.z;
++#endif
 +            let a_w = vec4<f32>(a0.w, a1.w, a2.w, a3.w);
 +            acc0 += a_w * b0.w;
++#ifndef PACKED_F32_ONE_COLUMN
 +            acc1 += a_w * b1.w;
 +            acc2 += a_w * b2.w;
 +            acc3 += a_w * b3.w;
++#endif
 +        }
 +#else
          for (var k_inner = 0u; k_inner < k_end; k_inner++) {
              var src0_tile: array<f16, TILE_M>;
              for (var tm = 0u; tm < TILE_M; tm++) {
-@@ -138,12 +185,30 @@
+@@ -138,12 +197,32 @@
                  }
              }
          }
@@ -185,6 +206,7 @@
 +        if (output_col_base < params.n) {
 +            dst[dst_offset / 4u] = acc0;
 +        }
++#ifndef PACKED_F32_ONE_COLUMN
 +        if (output_col_base + 1u < params.n) {
 +            dst[(dst_offset + params.m) / 4u] = acc1;
 +        }
@@ -194,12 +216,13 @@
 +        if (output_col_base + 3u < params.n) {
 +            dst[(dst_offset + 3u * params.m) / 4u] = acc3;
 +        }
++#endif
 +    }
 +#else
      for (var tn = 0u; tn < TILE_N; tn++) {
          let global_col = output_col_base + tn;
          if (global_col < params.n) {
-@@ -156,4 +221,5 @@
+@@ -156,4 +235,5 @@
              }
          }
      }

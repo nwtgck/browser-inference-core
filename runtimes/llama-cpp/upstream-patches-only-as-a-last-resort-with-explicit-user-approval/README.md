@@ -922,9 +922,11 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Patch** `ggml-webgpu-f32-packed-prefill.patch` against llama.cpp
   `c212d25ad`.
 - **Scope** Use a K64 tile for aligned, non-overlapping F32 matrices with
-  K4608, M64, 16 to 128 columns and a single batch. The register-tile path
-  requires at least 8 KiB of workgroup storage. The existing matvec and
-  subgroup-matrix paths keep their own selection.
+  16 to 128 columns and a single batch. Use the existing four-row tile
+  at K10240/M4 with 4,608 B of workgroup storage. Use the existing standard
+  tile at K4608/M64, K2304/M128, K2048/M256, K2560/M48, K2560/M512, and
+  K5120/M48 with 8 KiB of workgroup storage. The matvec and subgroup-matrix
+  paths keep their own selection.
 - **Contract** Stage four adjacent half values together and accumulate the
   four output rows as a vector in ascending K order. Keep the existing
   rounding to F16, F32 accumulation, workgroup grid, bindings, and output

@@ -65,7 +65,9 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
         BICORE_CHECK(d.use_subgroup_matrix == input.subgroup);
         BICORE_CHECK(pipeline.name.ends_with("_packed_k64") == input.packed_f32);
         if (input.packed_f32) {
-            BICORE_CHECK(d.tile_m == 4 && d.tile_n == 4 && d.tile_k == 64 && d.wg_size == 64);
+            const bool one_column = input.expected_small_m == 4;
+            BICORE_CHECK(d.tile_m == 4 && d.tile_n == (one_column ? 1u : 4u) && d.tile_k == 64 &&
+                         d.wg_size == (one_column ? 32u : 64u));
         }
         if (selected) {
             BICORE_CHECK(d.tile_m == (selected == 2 ? 8u : 4u) && d.tile_n == 4 && d.tile_k == 32 && d.wg_size == 64);
@@ -76,8 +78,9 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
             const auto expected = *input.expected_small_m;
             BICORE_CHECK((pipeline.name.find("_small_m") != std::string::npos) == (expected != 0));
             if (expected) {
-                BICORE_CHECK(pipeline.name.ends_with("_small_m" + std::to_string(expected)));
-                BICORE_CHECK(d.tile_m == expected && d.tile_n == 1 && d.tile_k == 8);
+                BICORE_CHECK(pipeline.name.ends_with("_small_m" + std::to_string(expected) +
+                                                     (input.packed_f32 ? "_packed_k64" : "")));
+                BICORE_CHECK(d.tile_m == expected && d.tile_n == 1 && d.tile_k == (input.packed_f32 ? 64u : 8u));
                 BICORE_CHECK(d.wg_size_m == 1 && d.wg_size_n == 32 && d.wg_size == 32);
             } else if (input.n == 4) {
                 BICORE_CHECK((production_dispatch(c, 65535, input.overlap, true) == std::array<uint32_t, 2>{1, 1}));
@@ -433,6 +436,22 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(f32(4608, 64, 129, 8192, false));
     cases.push_back(f32(4604, 64, 64, 8192, false));
     cases.push_back(f32(4608, 68, 64, 8192, false));
+    cases.push_back(f32(2304, 128, 128, 8192, true));
+    cases.push_back(f32(2048, 256, 128, 8192, true));
+    cases.push_back(f32(2560, 512, 128, 8192, true));
+    cases.push_back(f32(2560, 48, 64, 8192, true));
+    cases.push_back(f32(5120, 48, 128, 8192, true));
+    cases.push_back(f32(2560, 52, 64, 8192, false));
+    const auto four_rows = [&](int64_t k, int64_t n, uint32_t shared, bool packed) {
+        auto test = f32(k, 4, n, shared, packed);
+        test.expected_small_m = 4;
+        return test;
+    };
+    cases.push_back(four_rows(10240, 19, 4607, false));
+    cases.push_back(four_rows(10240, 19, 4608, true));
+    cases.push_back(four_rows(10240, 128, 4608, true));
+    cases.push_back(four_rows(10240, 129, 4608, false));
+    cases.push_back(four_rows(10236, 128, 4608, false));
     auto packed_fallback = f32(4608, 64, 64, 8192, false);
     packed_fallback.overlap = true;
     cases.push_back(packed_fallback);
