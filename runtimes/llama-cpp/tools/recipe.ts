@@ -977,6 +977,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q8-decode-paired-words.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse the word shared by adjacent packed Q8_0 loads in independent matvecs',
+    files: [
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

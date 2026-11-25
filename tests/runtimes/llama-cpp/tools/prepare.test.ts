@@ -48,11 +48,15 @@ test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout
     ['add_cast_f16.wgsl', 'ggml-webgpu-add-cast-f16-shaders.hpp'],
     ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
     ['indexed_vec_mask_block.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
+    ['mul_mat_vec_acc.tmpl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],
   ] as const) {
-    const mask = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
-    assert.ok(mask);
-    assert.deepEqual(receipt.shaders[header]?.[name], mask);
+    const prepared = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
+    assert.ok(prepared);
+    assert.deepEqual(receipt.shaders[header]?.[name], prepared);
   }
+  const accumulator = 'mul_mat_vec_acc.tmpl';
+  assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[accumulator],
+    receipt.inputs[`ggml/src/ggml-webgpu/wgsl-shaders/${accumulator}`]);
 });
 
 test('coherent source preparation preserves previous output and unchanged mtimes', { timeout: 120000 }, async () => {

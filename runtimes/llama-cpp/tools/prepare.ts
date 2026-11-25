@@ -82,7 +82,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-loop-controller-shaders.hpp': edited({ names: ['loop_controller.wgsl'] }),
     'ggml-webgpu-dense-q4-swiglu-shaders.hpp': edited({ names: ['dense_q4_swiglu.wgsl'] }),
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),
-    'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...accumulator, ...edited({ names: ['q8_subgroup_matvec.wgsl'] }) },
+    'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_vec_acc.tmpl', 'q8_subgroup_matvec.wgsl'] }) },
     'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': { ...common, ...edited({ names: ['iq3s_id_subgroup.wgsl'] }), 'mul_mat_vec_acc.tmpl': join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') },
     'ggml-webgpu-mul-mat-id-group-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_id_group.wgsl', 'mul_mat_id_group_decls.tmpl'] }), ...upstream({ names: ['quant_inner_loops.tmpl'] }) },
     'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': { ...common, ...accumulator, ...upstream({ names: ['mul_mat_vec_q_acc.tmpl'] }), ...edited({ names: ['mul_mat_vec_f32_epilogue.wgsl'] }) },
