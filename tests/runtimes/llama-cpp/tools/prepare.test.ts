@@ -24,7 +24,7 @@ test('concrete normal/profile recipes preserve order and isolate dedicated templ
   assert.ok(profile.findIndex(patch => patch.file === 'ggml-webgpu-q8-diagnostic.patch') < profile.findIndex(patch => patch.file === 'ggml-webgpu-matmul-vec4-layout-profile.patch'));
 });
 
-test('the canonical WebGPU embed uses the prepared argsort and Hadamard shaders', { timeout: 120000 }, async () => {
+test('WebGPU embeds use the prepared argsort, Hadamard, and F16 mask shaders', { timeout: 120000 }, async () => {
   await using directory = {
     path: await mkdtemp(join(tmpdir(), 'llama-argsort-source-test-')),
     async [Symbol.asyncDispose]() {
@@ -44,6 +44,9 @@ test('the canonical WebGPU embed uses the prepared argsort and Hadamard shaders'
     assert.notEqual(prepared.sha256, receipt.inputs[shader]?.sha256);
     assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[name], prepared);
   }
+  const mask = receipt.outputs['ggml/src/ggml-webgpu/wgsl-shaders/add_cast_f16.wgsl'];
+  assert.ok(mask);
+  assert.deepEqual(receipt.shaders['ggml-webgpu-add-cast-f16-shaders.hpp']?.['add_cast_f16.wgsl'], mask);
 });
 
 test('coherent source preparation preserves previous output and unchanged mtimes', { timeout: 120000 }, async () => {

@@ -67,6 +67,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
   const edited = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(patched, shaderBase, name)]));
   const upstream = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(original, shaderBase, name)]));
   return {
+    'ggml-webgpu-add-cast-f16-shaders.hpp': edited({ names: ['add_cast_f16.wgsl'] }),
     'ggml-webgpu-hc-shaders.hpp': edited({ names: ['hc_pre.wgsl', 'hc_post.wgsl'] }),
     'ggml-webgpu-moe-sum-shaders.hpp': edited({ names: ['moe_expert_sum.wgsl'] }),
     'ggml-webgpu-scale-unary-shaders.hpp': edited({ names: ['scale_unary.wgsl'] }),

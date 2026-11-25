@@ -1411,3 +1411,22 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   register-tile shader on representative decode and prefill shapes. Omitting
   this overlay uses the original matrix product. Remove it when upstream
   WebGPU accelerates the Hadamard hint with compatible layout and precision.
+
+## WebGPU packed F16 mask addition
+
+- **Patch** `ggml-webgpu-add-cast-f16.patch` against llama.cpp `c212d25ad`.
+- **Scope** In the existing WebGPU graph, combine F32 bias addition with its
+  F16 cast. Accept a packed F32 mask or an immediately preceding private
+  F16-to-F32 mask cast. Keep the ordinary operations for an unsupported layout,
+  device limit, or graph slice.
+- **Contract** Keep F32 addition and the native conversions used by ordinary
+  WebGPU casts. Each invocation writes two F16 values as one output word. Use
+  the shared raw-view index to preserve all readers of discarded values.
+  Verify every aligned binding range and reject
+  overlaps by physical buffer identity. Compatible disjoint ranges may share
+  the same GPU buffer. GGML graph placement and allocations are unchanged.
+- **Validation and removal** Exercise both routes, raw-view readers in a later
+  graph slice, and overlapping storage in the normal and profiling providers.
+  Replay the emitted original and fused shaders in the same arena with causal
+  masks and rounding boundaries. Remove when upstream provides the equivalent
+  packed fusion with the same lifetime and conversion guarantees.
