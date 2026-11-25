@@ -137,7 +137,114 @@ static void supported_type_controls(std::vector<Case> & cases) {
     }
 }
 
+static void q2_paired_prefill(const std::filesystem::path & output) {
+    auto ctx = recording_context();
+    auto & limits = ctx->global_ctx->capabilities.limits;
+    limits.minStorageBufferOffsetAlignment = 256;
+    limits.maxBufferSize = limits.maxStorageBufferBindingSize = 128 * 1024 * 1024;
+    limits.maxComputeInvocationsPerWorkgroup = limits.maxComputeWorkgroupSizeX = 64;
+    limits.maxComputeWorkgroupStorageSize = 6144;
+    limits.maxComputeWorkgroupsPerDimension = 65535;
+    ctx->batch_compute_passes = false;
+
+    enum class Precision { automatic, accumulator, input };
+    const auto run = [&](int64_t n, size_t prefix, bool overlap, bool paired, const char * capture,
+                         Precision precision = Precision::automatic) {
+        std::array<ggml_tensor, 3> tensors{};
+        const std::array columns{INT64_C(5120), INT64_C(5120), INT64_C(17408)};
+        const std::array rows{INT64_C(17408), n, n};
+        std::array<ggml_backend_buffer, 3> allocations{};
+        std::vector<ggml_backend_webgpu_buffer_context> backing;
+        backing.reserve(tensors.size());
+        for (size_t i = 0; i < tensors.size(); ++i) {
+            auto & tensor = tensors[i];
+            tensor.type = i == 0 ? GGML_TYPE_Q2_0 : GGML_TYPE_F32;
+            tensor.ne[0] = columns[i];
+            tensor.ne[1] = rows[i];
+            tensor.ne[2] = tensor.ne[3] = 1;
+            tensor.nb[0] = ggml_type_size(tensor.type);
+            tensor.nb[1] = ggml_row_size(tensor.type, tensor.ne[0]);
+            tensor.nb[2] = tensor.nb[3] = tensor.nb[1] * tensor.ne[1];
+            const size_t offset = i == 0 ? prefix : 0;
+            auto * buffer = new WGPUBufferImpl;
+            buffer->logical_size = ROUNDUP_POW2(offset + ggml_nbytes(&tensor), 4);
+            buffer->usage = WGPUBufferUsage_Storage;
+            backing.emplace_back(wgpu::Buffer::Acquire(buffer), "Q2 prefill operand", ctx->global_ctx);
+            allocations[i].context = &backing.back();
+            allocations[i].size = buffer->logical_size;
+            tensor.data = reinterpret_cast<void *>(uintptr_t(webgpu_ptr_base) + offset);
+            tensor.buffer = &allocations[i];
+        }
+        if (overlap) {
+            tensors[1].buffer = tensors[0].buffer;
+        }
+        tensors[2].op = GGML_OP_MUL_MAT;
+        if (precision == Precision::accumulator) {
+            BICORE_CHECK(ggml_prec_set_acc(&tensors[2], GGML_PREC_F32));
+        } else if (precision == Precision::input) {
+            BICORE_CHECK(ggml_prec_set_src(&tensors[2], GGML_PREC_F32, 1));
+        }
+        ctx->param_arena.reset();
+        ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+        ctx->bind_group_cache.begin_graph(0);
+        commands = {};
+        BICORE_CHECK(ggml_webgpu_mul_mat(ctx, &tensors[0], &tensors[1], &tensors[2]).num_kernels == 1);
+        ctx->bind_group_cache.end_graph();
+        BICORE_CHECK(commands.dispatches.size() == 1 && ctx->bind_group_cache.slots.size() == 1);
+        const auto & dispatch = commands.dispatches.front();
+        const auto & slot = ctx->bind_group_cache.slots.front();
+        const auto & pipeline = *slot.pipeline.Get();
+        BICORE_CHECK(pipeline.id == dispatch.pipeline && pipeline.name.ends_with("_half_pairs_m8") == paired);
+        const uint32_t groups = paired ? 1088 : 2176;
+        BICORE_CHECK(dispatch.x <= limits.maxComputeWorkgroupsPerDimension && dispatch.z == 1);
+        BICORE_CHECK(limits.maxComputeWorkgroupsPerDimension < groups ? dispatch.y > 1
+                                                                      : dispatch.x == groups && dispatch.y == 1);
+        ctx->param_arena.flush(ctx->global_ctx->queue);
+        BICORE_CHECK(commands.writes.size() == 1 && commands.writes.front().bytes.size() >= 64);
+        std::array<uint32_t, 16> params{};
+        std::memcpy(params.data(), commands.writes.front().bytes.data(), sizeof(params));
+        if (!overlap) {
+            BICORE_CHECK(slot.bindings.size() == 4 && slot.bindings[0].offset == 0 &&
+                         slot.bindings[0].size == ROUNDUP_POW2(prefix + 17408 * 80 * 18, 4));
+            BICORE_CHECK(params[0] == prefix / 18 && params[6] == 80);
+        }
+        const auto command = ctx->active_command_encoder.Finish();
+        ctx->global_ctx->queue.Submit(1, &command);
+        drain_queue(ctx->global_ctx->queue.Get());
+        if (capture && !output.empty()) {
+            std::ofstream(output / (std::string(capture) + ".wgsl")) << pipeline.code;
+            std::ofstream bytecode(output / (std::string(capture) + ".params"), std::ios::binary);
+            bytecode.write(reinterpret_cast<const char *>(params.data()), sizeof(params));
+            BICORE_CHECK(bool(bytecode));
+        }
+        return pipeline.id;
+    };
+
+    const auto wide = run(128, 0, false, true, "q2-dense-wide");
+    // The extra block puts the final four packed bytes across the last two
+    // aligned words. The binding includes exactly two bytes of terminal pad.
+    BICORE_CHECK(run(128, 18, false, true, nullptr) == wide);
+    --limits.maxComputeWorkgroupSizeX;
+    const auto scalar = run(128, 0, false, false, "q2-dense-stock");
+    ++limits.maxComputeWorkgroupSizeX;
+    --limits.maxComputeInvocationsPerWorkgroup;
+    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    ++limits.maxComputeInvocationsPerWorkgroup;
+    --limits.maxComputeWorkgroupStorageSize;
+    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    ++limits.maxComputeWorkgroupStorageSize;
+    limits.maxComputeWorkgroupsPerDimension = 1087;
+    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    limits.maxComputeWorkgroupsPerDimension = 65535;
+    BICORE_CHECK(run(127, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(128, 0, true, false, nullptr) != wide);
+    BICORE_CHECK(run(128, 0, false, false, nullptr, Precision::accumulator) == scalar);
+    BICORE_CHECK(run(128, 0, false, false, nullptr, Precision::input) == scalar);
+    BICORE_CHECK(scalar != wide && run(128, 0, false, true, nullptr) == wide);
+}
+
 static void all(const std::filesystem::path & output) {
+    q2_paired_prefill(output);
     std::vector<Case> cases;
     for (const auto type : {GGML_TYPE_Q4_0, GGML_TYPE_Q4_K}) {
         // Keep independent admission boundaries, then exercise interactions at

@@ -889,6 +889,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation:** Exercise actual factory dispatch and cache transitions in normal and profile providers. Check packed decoding, full output bits and guard regions in representative prefill shapes. At K3072/M2304/N128 the 64-row tile was faster than both 32-row candidates in mirrored software WebGPU comparisons. Physical-device prefill and ordinary first-token latency require model measurements.
 - **Removal:** Delete the patch and its recipe entry when upstream supplies an equivalent Q8 prefill path with comparable numerical behavior and device performance.
 
+## Wider paired-half Q2 prefill
+
+- **Patch:** `ggml-webgpu-q2-prefill-wide-m.patch`.
+- **Scope:** Ordinary contiguous Q2_0 x F32 to F32 GEMM at K5120/M17408/N128, with default input and accumulator precision, singleton batch axes, 64 invocations and at least 6,144 bytes of workgroup storage. The 1,088-workgroup grid must fit the X dimension. Explicit precision, source overlap, vector and subgroup-matrix paths retain their existing selection.
+- **Contract:** Reuse the 64x32 paired-half tile, K32, unchanged buffer bindings and 16-word uniform. Pack adjacent decoded half values into the existing shared-memory pairs. Preserve all four Q2_0 codes, round the decoded weights and activations to half, and accumulate with F32 in ascending K order. Adapter checks apply to the paired selection alone.
+- **Validation:** Cover ordinary and profiling provider selection, cache and limit fallbacks, and binding sizes that end after an 18-byte block. Replayed provider shaders agree with an independent arithmetic reference on the full shape and a guarded fixture with all four codes. The 64-row tile gave the larger gain over scalar M32 in mirrored software WebGPU comparisons. Physical-adapter performance and ordinary first-token latency remain unmeasured.
+- **Removal:** Retire the patch, recipe entry and focused tests when upstream provides equivalent Q2_0 prefill behavior and device performance.
+
 ## Ordinary fixed-subgroup Q4 matvecs
 
 - **Patch:** `ggml-webgpu-q4-subgroup-matvec.patch`.

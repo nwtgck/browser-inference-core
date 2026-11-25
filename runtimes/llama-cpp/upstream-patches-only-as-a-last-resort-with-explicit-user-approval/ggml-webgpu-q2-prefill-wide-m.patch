@@ -1,0 +1,61 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2045,6 +2045,14 @@
+         }
+         pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(shader_lib_ctx, src_overlap, vec4_aligned);
+     } else {
++        if (src0->type == GGML_TYPE_Q2_0) {
++            // The 64 x 32 x 32 paired tile uses 64 invocations and 6144 bytes.
++            // These limits gate only the paired path, not the fallback context.
++            const auto & limits = ctx->global_ctx->capabilities.limits;
++            shader_lib_ctx.supports_q2_paired_prefill =
++                limits.maxComputeInvocationsPerWorkgroup >= 64 && limits.maxComputeWorkgroupSizeX >= 64 &&
++                limits.maxComputeWorkgroupStorageSize >= 6144 && limits.maxComputeWorkgroupsPerDimension >= 1088;
++        }
+         pipeline = ctx->shader_lib->get_mul_mat_fast_pipeline(shader_lib_ctx, src_overlap,
+                                                              vec4_aligned && offset_dst % 4 == 0);
+     }
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -111,6 +111,7 @@
+     uint32_t    max_wg_size;
+     uint32_t    max_workgroups_per_dim = 0;
+     uint64_t    max_storage_binding_bytes = 0;
++    bool        supports_q2_paired_prefill = false;
+     bool        indexed_split_weights = false;
+     bool        indexed_src0_aligned = false;
+     bool        prefer_narrow_indexed_k = false;
+@@ -3299,7 +3300,16 @@
+         // Keep 40 workgroups on this long-K shape while using paired shared loads.
+         const bool q8_c4 = key.src0_type == GGML_TYPE_Q8_0 && k == 10240 && m == 320 && n == 128 &&
+                            context.dst->ne[2] == 1 && context.dst->ne[3] == 1;
+-        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4) &&
++        const bool q2_c8 = key.src0_type == GGML_TYPE_Q2_0 && context.supports_q2_paired_prefill &&
++                           k == 5120 && m == 17408 && n == 128 &&
++                           context.src0->ne[2] == 1 && context.src0->ne[3] == 1 &&
++                           context.src1->ne[2] == 1 && context.src1->ne[3] == 1 &&
++                           context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
++                           ggml_prec_get_acc(context.dst) == GGML_PREC_UNDEFINED &&
++                           ggml_prec_get_src(context.dst, 1) == GGML_PREC_UNDEFINED &&
++                           ggml_is_contiguous(context.src0) && ggml_is_contiguous(context.src1) &&
++                           ggml_is_contiguous(context.dst);
++        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4 || q2_c8) &&
+             key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
+             context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
+             !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
+@@ -121,9 +121,10 @@
+             let block_byte_base = block_idx * BLOCK_SIZE_BYTES;
+             let d = load_f16_as_f32_at_src0(block_byte_base);
+             let q_packed = load_u32_at_src0(block_byte_base + 2u + (global_k % BLOCK_SIZE) / 4u);
+-            for (var k = 0u; k < NQ; k++) {
+-                let q = (q_packed >> (2u * k)) & 3u;
+-                shmem[i + k] = f16((f32(q) - 1.0) * d);
++            for (var k = 0u; k < NQ; k += 2u) {
++                let codes = (q_packed >> (2u * k)) & 15u;
++                let q = vec2<f32>(f32(codes & 3u), f32(codes >> 2u));
++                shmem[(i + k) / 2u] = vec2<f16>((q - vec2<f32>(1.0)) * vec2<f32>(d));
+             }
+         }
+     }
