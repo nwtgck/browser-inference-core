@@ -5,6 +5,15 @@ constexpr int64_t rows = 2560;
 constexpr int64_t selected = 10;
 constexpr uint64_t alignment = 256;
 
+static void check_registry() {
+    ggml_backend_reg registry{};
+    registry.iface.get_proc_address = ggml_backend_webgpu_reg_get_proc_address;
+    const auto query = reinterpret_cast<int (*)()>(
+        ggml_backend_reg_get_proc_address(&registry, "ggml_backend_webgpu_indexed_q2_placement_v1"));
+    BICORE_CHECK(query && query() == 1);
+    BICORE_CHECK(!ggml_backend_reg_get_proc_address(&registry, "ggml_backend_webgpu_indexed_q2_placement_v2"));
+}
+
 static void check_encoded(int64_t tokens, bool split) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     transfer_cases::Memory memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
@@ -101,6 +110,7 @@ static void check_encoded(int64_t tokens, bool split) {
 }
 
 static void all() {
+    check_registry();
     check_encoded(1, false);
     check_encoded(1, true);
     check_encoded(5, false);

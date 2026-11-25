@@ -337,3 +337,18 @@ diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-we
 +    }
  
      // on smaller devices (or CI), tensors may be larger than the max storage buffer size
+@@ -6725,6 +7012,14 @@
+ }
+ 
++// Advertise the resident indexed Q2_0 path independently of device limits.
++static int ggml_backend_webgpu_indexed_q2_placement_v1() {
++    return 1;
++}
++
+ static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
++    if (name && strcmp(name, "ggml_backend_webgpu_indexed_q2_placement_v1") == 0) {
++        return reinterpret_cast<void *>(ggml_backend_webgpu_indexed_q2_placement_v1);
++    }
+ #ifdef __EMSCRIPTEN__
+     if (name && strcmp(name, GGML_BACKEND_TENSOR_GET_BATCH_V1) == 0) {

@@ -1069,9 +1069,13 @@ not establish target-device speed.
   offset. Validate limits, sizes, backing device, overlap, and matrix scratch.
   K640/M2560 matvecs can use a shorter workgroup; pipeline keys distinguish
   width, split mode and matrix tile geometry.
+- **Discovery:** the existing WebGPU backend registry reports
+  `ggml_backend_webgpu_indexed_q2_placement_v1` as an `int (*)()` returning 1.
+  Its presence identifies the runtime implementation. Check the selected
+  device's limits separately before requesting a weight placement override.
 - **Integration:** apply the host, shader-library and WGSL stages in both WebGPU
   preparations at llama.cpp `c212d25ad`. Use the existing shader generator and
-  argument buffer. The public ABI and CPU profiles are unchanged.
+  argument buffer. The existing Wasm export list and CPU profiles are unchanged.
 - **Validation and limits:** native contracts exercise placement rejection and
   real encoder ranges, including foreign allocations. Software WebGPU compares
   decode and prefill output with CPU references. Total GPU memory availability
