@@ -1382,3 +1382,24 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   matching logits, scheduler allocations, and the affected dispatches.
   Review consumer strides, aliasing, and placement when updating upstream.
   Remove this patch when upstream reads these rows without a materialized copy.
+
+## WebGPU 1024-point Hadamard transform
+
+- **Patch** `ggml-webgpu-fwht-1024.patch` against llama.cpp `c212d25ad`.
+- **Scope** Use a butterfly transform for an explicitly Hadamard-hinted
+  F32 matrix product with packed 1024-element columns, at least five columns,
+  and default source and accumulator precision. Require 128 invocations and
+  4 KiB of workgroup storage. Keep the ordinary matvec and subgroup-matrix
+  routes for their existing inputs.
+- **Contract** Preserve the register-tile path's half-precision input rounding
+  and the normalized Sylvester coefficients. The F32 accumulation order
+  changes. Each workgroup reads one input column and writes the matching output
+  column. Accept contiguous input views and reject overlapping aligned storage
+  ranges. The dispatch binds the input and output plus uniforms. The graph and
+  loader retain the dense weights for fallback.
+- **Validation and removal** Exercise the complete normal and profiling
+  providers with contiguous views, shared buffers, explicit precision, and
+  unsupported layouts and limits. Compare the emitted WGSL with the dense
+  register-tile shader on representative decode and prefill shapes. Omitting
+  this overlay uses the original matrix product. Remove it when upstream
+  WebGPU accelerates the Hadamard hint with compatible layout and precision.

@@ -839,6 +839,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp', 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-fwht-1024.patch',
+    target: 'llama-webgpu',
+    reason: 'replace explicitly hinted 1024-point Hadamard matrix products with a butterfly transform',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_fwht_1024.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

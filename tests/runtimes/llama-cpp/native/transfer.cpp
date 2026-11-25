@@ -15,6 +15,7 @@
 #include "cases/loop-controller.hpp"
 #include "cases/dense-q4-swiglu.hpp"
 #include "cases/q8-sigmoid-mul.hpp"
+#include "cases/fwht-1024.hpp"
 #ifdef GGML_WEBGPU_GPU_PROFILE
 #include "cases/q8-diagnostic.hpp"
 #endif
@@ -32,6 +33,7 @@ int main() {
     loop_controller_cases::all();
     dense_q4_swiglu_cases::all();
     q8_sigmoid_mul_cases::all();
+    fwht_1024_cases::all();
 #ifdef GGML_WEBGPU_GPU_PROFILE
     q8_diagnostic_cases::all();
 #endif
