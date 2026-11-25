@@ -1,0 +1,277 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -436,6 +436,7 @@
+     std::array<std::array<webgpu_pipeline, 3>, depth_mix::max_depth - 1> depth_mix_pipelines;
+ 
+     webgpu_pipeline indexed_vec_mask;
++    webgpu_pipeline indexed_vec_mask_block;
+ 
+     webgpu_param_arena       param_arena;
+     webgpu_bind_group_cache  bind_group_cache;
+@@ -3036,6 +3037,38 @@
+     return ggml_backend_webgpu_build(ctx, pipeline, op.params, op.entries, wg_x);
+ }
+ 
++static webgpu_dispatch_desc ggml_webgpu_make_indexed_vec_mask(
++        webgpu_context & ctx, ggml_tensor * node, ggml_tensor * dense,
++        const ggml_webgpu_indexed_vec_layout & layout, std::optional<wgpu::BindGroupEntry> blocks) {
++    auto * table = node->src[6];
++    auto * ids = node->src[7];
++    auto * raw = node->src[3];
++    auto & pipeline = blocks ? ctx->indexed_vec_mask_block : ctx->indexed_vec_mask;
++    if (!pipeline.pipeline) {
++        pipeline = ggml_webgpu_create_pipeline(ctx->global_ctx->device,
++            blocks ? wgsl_indexed_vec_mask_block : wgsl_indexed_vec_mask,
++            blocks ? "indexed_vec_mask_block" : "indexed_vec_mask");
++    }
++    uint32_t x, y;
++    compute_2d_workgroups(layout.groups, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, x, y);
++    std::vector<wgpu::BindGroupEntry> entries;
++    entries.reserve(blocks ? 5u : 4u);
++    entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, table));
++    entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, ids));
++    entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, raw));
++    entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, 3, dense));
++    if (blocks) {
++        entries.push_back(std::move(*blocks));
++    }
++    return {pipeline,
++        {uint32_t(dense->ne[0]), uint32_t(dense->ne[1]), uint32_t(dense->ne[2]), uint32_t(table->ne[1]),
++         0, uint32_t(table->ne[0]), layout.pairs,
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, table) / sizeof(float)),
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, ids) / sizeof(int32_t)),
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, raw) / sizeof(uint16_t)), 0},
++        std::move(entries), {x, y}};
++}
++
+ static webgpu_encoded_op ggml_webgpu_flash_attn_vec(webgpu_context &          ctx,
+                                                     ggml_tensor *             Q,
+                                                     ggml_tensor *             K,
+@@ -3044,12 +3077,13 @@
+                                                     ggml_tensor *             sinks,
+                                                     ggml_tensor *             dst,
+                                                     ggml_webgpu_flash_attn_op op,
+-                                                    std::optional<webgpu_dispatch_desc> producer = std::nullopt) {
++                                                    const ggml_webgpu_indexed_vec_layout * indexed = nullptr) {
+     webgpu_pipeline pipeline  = ctx->shader_lib->get_flash_attn_vec_pipeline(op.shader_lib_ctx, op.kv_overlap);
+     auto *          decisions = static_cast<ggml_webgpu_flash_attn_vec_decisions *>(pipeline.context.get());
+ 
+     wgpu::Buffer blk_buf         = {};
+     uint64_t     blk_size_bytes  = 0;
++    uint64_t     blk_bind_offset = 0;
+     uint32_t     blk_nblk0       = 0;
+     uint32_t     blk_nblk1       = 0;
+     uint32_t     blk_batch_count = 0;
+@@ -3089,38 +3123,18 @@
+         scratch_offset  = ROUNDUP_POW2(scratch_offset + tmp_size_bytes, align_bytes);
+     }
+ 
+-    webgpu_pipeline                   blk_pipeline;
+-    std::vector<uint32_t>             blk_params;
+-    std::vector<wgpu::BindGroupEntry> blk_entries;
++    // Each fused workgroup covers whole 32-cell blocks in a dense, single-query
++    // mask. The existing producer and classifier handle other tile geometries.
++    const bool fuse_mask_blocks = indexed && Q->ne[1] == 1 && decisions->kv_tile == 32 &&
++                                  mask->ne[0] == K->ne[1] && K->ne[1] % 32 == 0;
+     if (op.has_mask) {
+-        blk_nblk0                   = CEIL_DIV((uint32_t) K->ne[1], decisions->kv_tile);
+-        blk_nblk1                   = (uint32_t) Q->ne[1];
+-        blk_buf                     = ggml_webgpu_tensor_buf(dst);
+-        const uint32_t stride_mask3 = (uint32_t) (mask->nb[3] / ggml_type_size(mask->type));
+-        const uint32_t stride_mask2 = (uint32_t) (mask->nb[2] / ggml_type_size(mask->type));
+-        const uint32_t mask_ne2     = (uint32_t) mask->ne[2];
+-        blk_batch_count             = (uint32_t) (mask->ne[3] * mask_ne2);
+-        const uint64_t blk_elems    = (uint64_t) blk_nblk0 * blk_nblk1 * blk_batch_count;
+-        blk_size_bytes              = ROUNDUP_POW2(blk_elems * sizeof(uint32_t), WEBGPU_STORAGE_BUF_BINDING_MULT);
+-        const ggml_webgpu_shader_lib_context blk_shader_ctx = op.shader_lib_ctx;
+-        blk_pipeline = ctx->shader_lib->get_flash_attn_blk_pipeline(blk_shader_ctx, decisions->kv_tile);
+-
+-        blk_params = {
+-            (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, mask) / ggml_type_size(mask->type)),  // offset_mask
+-            (uint32_t) Q->ne[1],                                                                   // seq_len_q
+-            (uint32_t) K->ne[1],                                                                   // seq_len_kv
+-            stride_mask3,                                                                          // stride_mask3
+-            stride_mask2,                                                                          // stride_mask2
+-            mask_ne2,                                                                              // mask_ne2
+-            blk_nblk0,                                                                             // nblk0
+-            blk_nblk1,                                                                             // nblk1
+-        };
+-        blk_entries = {
+-            ggml_webgpu_make_bind_group_entry(0, ggml_webgpu_tensor_buf(mask),
+-                                              ggml_webgpu_tensor_align_offset(ctx, mask),
+-                                              ggml_webgpu_tensor_binding_size(ctx, mask)),
+-            ggml_webgpu_make_bind_group_entry(1, blk_buf, scratch_offset, blk_size_bytes),
+-        };
++        blk_nblk0 = CEIL_DIV((uint32_t) K->ne[1], decisions->kv_tile);
++        blk_nblk1 = (uint32_t) Q->ne[1];
++        blk_buf = ggml_webgpu_tensor_buf(dst);
++        blk_batch_count = (uint32_t) (mask->ne[3] * mask->ne[2]);
++        const uint64_t blk_elems = (uint64_t) blk_nblk0 * blk_nblk1 * blk_batch_count;
++        blk_size_bytes = ROUNDUP_POW2(blk_elems * sizeof(uint32_t), WEBGPU_STORAGE_BUF_BINDING_MULT);
++        blk_bind_offset = scratch_offset;
+         scratch_offset = ROUNDUP_POW2(scratch_offset + blk_size_bytes, align_bytes);
+     }
+ 
+@@ -3162,7 +3176,7 @@
+     }
+     if (op.has_mask) {
+         split_entries.push_back(
+-            ggml_webgpu_make_bind_group_entry(split_binding_index++, blk_buf, blk_entries[1].offset, blk_size_bytes));
++            ggml_webgpu_make_bind_group_entry(split_binding_index++, blk_buf, blk_bind_offset, blk_size_bytes));
+     }
+     split_entries.push_back(
+         ggml_webgpu_make_bind_group_entry(split_binding_index++, tmp_buf, tmp_bind_offset, tmp_bind_size));
+@@ -3205,16 +3219,34 @@
+     GGML_ASSERT(split_wg_total <= UINT32_MAX);
+ 
+     std::vector<webgpu_dispatch_desc> dispatches;
+-    if (producer) {
++    if (indexed) {
+         // The same offsets must be used by reserve, the producer and vec.
+-        GGML_ASSERT(ggml_webgpu_tensor_offset(mask) == scratch_offset);
++        GGML_ASSERT(op.has_mask && ggml_webgpu_tensor_offset(mask) == scratch_offset);
+         dispatches.reserve(4);
+-        dispatches.push_back(std::move(*producer));
+-    }
+-
+-    if (op.has_mask) {
++        auto blocks = fuse_mask_blocks ?
++            std::make_optional(ggml_webgpu_make_bind_group_entry(4, blk_buf, blk_bind_offset, blk_size_bytes)) :
++            std::nullopt;
++        dispatches.push_back(ggml_webgpu_make_indexed_vec_mask(ctx, dst, mask, *indexed, std::move(blocks)));
++    }
++
++    if (op.has_mask && !fuse_mask_blocks) {
+         dispatches.push_back({
+-            blk_pipeline, std::move(blk_params), std::move(blk_entries), { blk_nblk0, blk_nblk1 * blk_batch_count }
++            ctx->shader_lib->get_flash_attn_blk_pipeline(op.shader_lib_ctx, decisions->kv_tile),
++            {
++                (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, mask) / ggml_type_size(mask->type)),
++                (uint32_t) Q->ne[1],
++                (uint32_t) K->ne[1],
++                (uint32_t) (mask->nb[3] / ggml_type_size(mask->type)),
++                (uint32_t) (mask->nb[2] / ggml_type_size(mask->type)),
++                (uint32_t) mask->ne[2],
++                blk_nblk0,
++                blk_nblk1,
++            },
++            {
++                ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, mask),
++                ggml_webgpu_make_bind_group_entry(1, blk_buf, blk_bind_offset, blk_size_bytes),
++            },
++            {blk_nblk0, blk_nblk1 * blk_batch_count},
+         });
+     }
+     dispatches.push_back({
+@@ -3227,29 +3259,6 @@
+     }
+ 
+     return ggml_backend_webgpu_build_multi(ctx, dispatches);
+-}
+-
+-static webgpu_dispatch_desc ggml_webgpu_make_indexed_vec_mask(
+-        webgpu_context & ctx, ggml_tensor * node, ggml_tensor * dense,
+-        const ggml_webgpu_indexed_vec_layout & layout) {
+-    auto * table = node->src[6];
+-    auto * ids = node->src[7];
+-    auto * raw = node->src[3];
+-    if (!ctx->indexed_vec_mask.pipeline) {
+-        ctx->indexed_vec_mask = ggml_webgpu_create_pipeline(ctx->global_ctx->device, wgsl_indexed_vec_mask,
+-                                                           "indexed_vec_mask");
+-    }
+-    uint32_t x, y;
+-    compute_2d_workgroups(layout.groups, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, x, y);
+-    return {ctx->indexed_vec_mask,
+-        {uint32_t(dense->ne[0]), uint32_t(dense->ne[1]), uint32_t(dense->ne[2]), uint32_t(table->ne[1]),
+-         0, uint32_t(table->ne[0]), layout.pairs,
+-         uint32_t(ggml_webgpu_tensor_misalignment(ctx, table) / sizeof(float)),
+-         uint32_t(ggml_webgpu_tensor_misalignment(ctx, ids) / sizeof(int32_t)),
+-         uint32_t(ggml_webgpu_tensor_misalignment(ctx, raw) / sizeof(uint16_t)), 0},
+-        {ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, table), ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, ids),
+-         ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, raw), ggml_webgpu_make_tensor_bind_group_entry(ctx, 3, dense)},
+-        {x, y}};
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_flash_attn(webgpu_context & ctx,
+@@ -3284,7 +3293,7 @@
+     }
+     return ggml_webgpu_flash_attn_vec(ctx, Q, K, V, &dense, sinks, dst,
+                                      ggml_webgpu_flash_attn_prepare(ctx, Q, K, V, &dense, sinks, dst, false),
+-                                     ggml_webgpu_make_indexed_vec_mask(ctx, dst, &dense, *layout));
++                                     &*layout);
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_unary_op(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask_block.wgsl
+@@ -0,0 +1,70 @@
++enable f16;
++
++// Shares the uniform layout of indexed_vec_mask. The dispatcher requires one query per stream.
++struct Params {
++    kv: u32,
++    queries: u32,
++    heads: u32,
++    table_heads: u32,
++    head_first: u32,
++    buckets: u32,
++    pairs: u32,
++    table_offset: u32,
++    ids_offset: u32,
++    raw_offset: u32,
++    out_offset: u32,
++}
++
++@group(0) @binding(0) var<storage, read_write> table: array<f32>;
++@group(0) @binding(1) var<storage, read_write> relative_ids: array<i32>;
++@group(0) @binding(2) var<storage, read_write> raw: array<f16>;
++@group(0) @binding(3) var<storage, read_write> out_mask: array<vec2<f16>>;
++@group(0) @binding(4) var<storage, read_write> states: array<u32>;
++@group(0) @binding(5) var<uniform> params: Params;
++
++const PAIRS_PER_BLOCK: u32 = 16u;
++const WORKGROUP_SIZE: u32 = 128u;
++const MASK_MAX: f32 = 65504.0;
++var<workgroup> values: array<vec2<f16>, WORKGROUP_SIZE>;
++
++@compute @workgroup_size(WORKGROUP_SIZE)
++fn main(@builtin(global_invocation_id) id: vec3<u32>,
++        @builtin(local_invocation_id) lane: vec3<u32>,
++        @builtin(num_workgroups) grid: vec3<u32>) {
++    let pair = id.x + grid.x * WORKGROUP_SIZE * id.y;
++    if (pair < params.pairs) {
++        let left = pair * 2u;
++        let row = left / params.kv;
++        let flat_query = row / params.heads;
++        let head = params.head_first + row % params.heads;
++        let cell = flat_query * params.kv + left % params.kv;
++        let bias_base = params.table_offset + (flat_query * params.table_heads + head) * params.buckets;
++        let b0 = u32(relative_ids[params.ids_offset + cell]);
++        let b1 = u32(relative_ids[params.ids_offset + cell + 1u]);
++        let value = vec2<f16>(
++            f16(table[bias_base + b0] + f32(raw[params.raw_offset + cell])),
++            f16(table[bias_base + b1] + f32(raw[params.raw_offset + cell + 1u])));
++        values[lane.x] = value;
++        out_mask[params.out_offset + pair] = value;
++    }
++    workgroupBarrier();
++
++    if (pair < params.pairs && lane.x % PAIRS_PER_BLOCK == 0u) {
++        // Use the classifier's F16 inputs and its per-cell clamp and reduction order.
++        let first = f32(values[lane.x].x);
++        var mmin = min(MASK_MAX, first);
++        var mmax = max(-MASK_MAX, first);
++        for (var i = 1u; i < 2u * PAIRS_PER_BLOCK; i += 1u) {
++            let v = f32(values[lane.x + i / 2u][i % 2u]);
++            mmin = min(mmin, min(MASK_MAX, v));
++            mmax = max(mmax, max(-MASK_MAX, v));
++        }
++        var state = 1u;
++        if (mmax <= -MASK_MAX) {
++            state = 0u;
++        } else if (mmin == 0.0 && mmax == 0.0) {
++            state = 2u;
++        }
++        states[pair / PAIRS_PER_BLOCK] = state;
++    }
++}

@@ -2,7 +2,67 @@
 
 namespace flash_mask_binding_cases {
 
+inline void indexed_decode_blocks() {
+    struct Shape {
+        int64_t queries, keys, streams;
+        bool fused;
+    };
+    for (const auto [queries, keys, streams, fused] :
+         {Shape{1, 32, 1, true}, Shape{1, 256, 2, true}, Shape{4, 256, 1, false}, Shape{1, 34, 1, false}}) {
+        transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+        auto & caps = gpu.context->global_ctx->capabilities;
+        caps.supports_subgroups = true;
+        caps.min_subgroup_size = caps.max_subgroup_size = 16;
+        gpu.type.iface.get_max_size = ggml_backend_webgpu_buffer_type_get_max_size;
+        gpu.context->param_arena.cleanup();
+        gpu.context->param_arena.init(gpu.context->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES, 8, 256);
+        transfer_cases::Memory graph_memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
+        auto * ctx = graph_memory.get();
+        constexpr int64_t dim = 128, heads = 6, kv_heads = 2, buckets = 65;
+        auto * q = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, dim, queries, heads, streams);
+        auto * k = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, dim, keys, kv_heads, streams);
+        auto * v = ggml_dup_tensor(ctx, k);
+        auto * raw = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, keys, queries, 1, streams);
+        auto * table = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, buckets, heads, queries * streams);
+        auto * ids = ggml_new_tensor_2d(ctx, GGML_TYPE_I32, keys, queries * streams);
+        for (auto * input : {q, k, v, raw, table, ids}) {
+            ggml_set_input(input);
+        }
+        auto * out = ggml_flash_attn_ext(ctx, q, k, v, raw, 0.125f, 0.0f, 0.0f);
+        ggml_flash_attn_ext_add_indexed_bias(out, table, ids);
+        out->op_params[5] = GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS;
+        ggml_set_output(out);
+        auto * graph = ggml_new_graph_custom(ctx, 16, false);
+        ggml_build_forward_expand(graph, out);
+        const std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(ggml_gallocr_new(&gpu.type),
+                                                                                    ggml_gallocr_free);
+        BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
+        BICORE_CHECK(ggml_backend_dev_supports_op(&gpu.device, out));
+        commands = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        const auto & slots = gpu.context->bind_group_cache.slots;
+        BICORE_CHECK(slots.size() == commands.executed);
+        BICORE_CHECK(slots.size() == (fused ? 2u : 3u) + (keys > 64 ? 1u : 0u));
+        const auto & producer = slots[0];
+        BICORE_CHECK(producer.pipeline.Get()->name == (fused ? "indexed_vec_mask_block" : "indexed_vec_mask"));
+        if (!fused) {
+            BICORE_CHECK(slots[1].pipeline.Get()->name == "flash_attn_vec_blk_kvt32_wg32");
+        }
+        const auto & written = fused ? producer.bindings[4] : slots[1].bindings[1];
+        const auto & split = slots[fused ? 1 : 2];
+        const auto read = std::find_if(split.bindings.begin(), split.bindings.end(), [&](const auto & entry) {
+            return entry.buffer.Get() == written.buffer.Get() && entry.offset == written.offset &&
+                   entry.size == written.size;
+        });
+        BICORE_CHECK(read != split.bindings.end());
+        BICORE_CHECK(written.buffer.Get() == producer.bindings[3].buffer.Get());
+        BICORE_CHECK(written.offset + written.size <= producer.bindings[3].offset);
+    }
+}
+
 inline void all() {
+    indexed_decode_blocks();
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     auto & caps = gpu.context->global_ctx->capabilities;
     caps.supports_subgroups = true;

@@ -607,6 +607,28 @@ not establish target-device speed.
 - **Removal** Use the upstream accumulator once it provides equivalent
   decoding and performance. Review the E2M1 and UE4M3 tables on upstream updates.
 
+## Indexed vector attention mask and block fusion
+
+- **Patch** `ggml-webgpu-indexed-mask-block-fusion.patch` against llama.cpp
+  `c212d25ad`. It applies after `ggml-webgpu-indexed-half-flash.patch`.
+- **Scope** Write the rounded F16 mask and the vector Flash Attention block
+  states in the same WebGPU dispatch. Select it for one query per stream with
+  complete 32-cell tiles. Other mask layouts and tile sizes use their original
+  dispatches.
+- **Contract** Reuse the allocated mask and block ranges and the existing
+  split and reduction shaders. Use the original block classifier's per-cell
+  clamp and reduction order. Source preparation embeds the original and fused
+  producers for both normal and profiling builds.
+- **Validation** The provider recorder checks dispatch count, fallback and the
+  block scratch bindings. Software WebGPU compares the two outputs with the
+  separate passes for four context lengths and exercises non-finite mask
+  input, multiple streams and a two-dimensional dispatch. A small Inkling
+  fixture compares logits, generated tokens and saved state through the
+  Wasm64 ABI. Measure model-wide throughput on target devices separately.
+- **Alternative** Keep the separate producer and mask classifier. The upstream
+  shader API has no option to combine these passes. Remove this patch when
+  upstream provides equivalent dispatch and numerical behavior.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.

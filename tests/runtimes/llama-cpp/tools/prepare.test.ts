@@ -47,6 +47,7 @@ test('WebGPU embeds use the prepared argsort, Hadamard, and Flash Attention shad
   for (const [name, header] of [
     ['add_cast_f16.wgsl', 'ggml-webgpu-add-cast-f16-shaders.hpp'],
     ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
+    ['indexed_vec_mask_block.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
   ] as const) {
     const mask = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
     assert.ok(mask);

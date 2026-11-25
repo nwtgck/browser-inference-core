@@ -918,6 +918,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-mask-block-fusion.patch',
+    target: 'llama-webgpu',
+    reason: 'compose indexed decode masks and classify their full Flash Attention blocks in one dispatch',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask_block.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-q2-dense-subgroup-matvec.patch',
     target: 'llama-webgpu',
     reason: 'reduce selected dense Q2_0 matvecs within independent subgroups',
