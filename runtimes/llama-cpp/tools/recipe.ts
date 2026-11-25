@@ -665,6 +665,31 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-depth-mix-view-sources.patch',
+    target: 'llama-webgpu',
+    reason: 'preserve depth mix intermediates read through views without source edges',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-fusion-view-sources-normal-encode.patch',
+    target: 'llama-webgpu',
+    reason: 'share view source checks across the ordinary graph encoder',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal'],
+  },
+  {
+    file: 'ggml-webgpu-fusion-view-sources-profile-encode.patch',
+    target: 'llama-webgpu',
+    reason: 'share view source checks across the profiled graph encoder',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

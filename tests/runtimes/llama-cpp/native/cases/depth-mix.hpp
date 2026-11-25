@@ -6,6 +6,7 @@ enum class Guard { ordinary, graph_output, external_consumer };
 
 struct Mix {
     ggml_tensor * normalized;
+    ggml_tensor * probabilities;
     ggml_tensor * output;
 };
 
@@ -28,7 +29,7 @@ static Mix mix(ggml_context * ctx, ggml_tensor * current, int depth, int queries
     auto * probabilities = ggml_soft_max_ext(ctx, scores, nullptr, 1.0f / std::sqrt(2304.0f), 0.0f);
     auto * output = ggml_mul_mat(ctx, ggml_cont(ctx, ggml_transpose(ctx, normalized)), probabilities);
     ggml_set_output(output);
-    return {normalized, output};
+    return {normalized, probabilities, output};
 }
 
 static void check_grid(const RecordedDispatch & dispatch, const webgpu_pipeline & pipeline, uint32_t x, uint32_t y) {
@@ -129,12 +130,45 @@ static void storage_limit(uint32_t subgroup, int depth, uint32_t limit) {
     run(3);
 }
 
+static void view_reader(bool of_intermediate) {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
+    BICORE_CHECK(memory);
+    auto * ctx = memory.get();
+    auto * layout = ggml_new_graph_custom(ctx, 64, false);
+    const auto selected = mix(ctx, input(ctx, 1), 2, 1);
+    ggml_build_forward_expand(layout, selected.output);
+    const int mix_end = ggml_graph_n_nodes(layout);
+    auto * source = of_intermediate ? selected.probabilities : selected.output;
+    auto * alias = ggml_view_tensor(ctx, source);
+    BICORE_CHECK(alias->view_src == source && !alias->src[0]);
+    auto * reader = ggml_dup(ctx, alias);
+    ggml_set_output(reader);
+    ggml_build_forward_expand(layout, reader);
+    const auto allocator =
+        std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>(ggml_gallocr_new(&gpu.type), ggml_gallocr_free);
+    BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), layout));
+    const auto run = [&](ggml_cgraph * graph, unsigned expected) {
+        commands = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        BICORE_CHECK(commands.executed == expected && commands.dispatches.size() == expected);
+    };
+    // A scheduler slice can end before the reader and still shares the parent visit set.
+    auto slice = ggml_graph_view(layout, 0, mix_end);
+    const unsigned mix_dispatches = of_intermediate ? 7 : 3;
+    run(&slice, mix_dispatches);
+    run(layout, mix_dispatches + 1);
+}
+
 static void all() {
     graph(0, Guard::ordinary);
     graph(16, Guard::ordinary);
     graph(32, Guard::ordinary);
     graph(16, Guard::graph_output);
     graph(16, Guard::external_consumer);
+    view_reader(true);
+    view_reader(false);
     // The unoptimized blend has more workgroup memory than the score at D2 and D3.
     storage_limit(0, 2, 4096);
     storage_limit(0, 3, 4096);

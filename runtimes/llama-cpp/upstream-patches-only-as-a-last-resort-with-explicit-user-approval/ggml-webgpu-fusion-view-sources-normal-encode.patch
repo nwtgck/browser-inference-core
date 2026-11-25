@@ -1,0 +1,16 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4988,4 +4988,5 @@
+     int      num_encoded_ops      = 1;
+     int      node_idx             = 0;
++    webgpu_fusion_view_sources fusion_views(*cgraph);
+ 
+ #ifdef GGML_WEBGPU_GPU_PROFILE
+@@ -5004,5 +5005,5 @@
+             contains_set_rows = true;
+         }
+-        if (auto cmd = ggml_webgpu_encode(ctx, cgraph, node_idx, num_encoded_ops)) {
++        if (auto cmd = ggml_webgpu_encode(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) {
+             commands.push_back(*cmd);
+             num_batched_kernels += cmd.value().num_kernels;

@@ -1031,12 +1031,20 @@ not establish target-device speed.
 
 ## Single-token depth residual mixing
 
-- **Patch:** `ggml-webgpu-depth-mix.patch`, against llama.cpp `c212d25`.
+- **Patches:** `ggml-webgpu-depth-mix.patch` and
+  `ggml-webgpu-depth-mix-view-sources.patch`, with the normal and profiling
+  `ggml-webgpu-fusion-view-sources-*-encode.patch` adapters, against llama.cpp
+  `c212d25`.
 - **Scope:** contiguous F32 states of width 2304 and depth 2 to 5, with 1, 3 or
   4 learned queries. Match the complete sequence from depth concatenation to
   RMS normalization, query scores, unmasked softmax and weighted output.
   Keep the decomposed path for an incomplete sequence, an exposed or shared
   intermediate, unsupported layouts or device limits.
+- **View readers:** account for views that borrow storage without a `src`
+  edge, including readers in another scheduler slice. Index the enclosing
+  graph's view roots once per compute invocation when a candidate reaches the
+  closure check. The planned transpose's explicit source edge and the final
+  output's views are compatible with fusion.
 - **Contract:** normalize states directly into reusable device scratch, write
   probabilities to a separate scratch buffer, then blend without a transpose
   copy. The output can reuse storage whose last read has finished. Fixed SG16
@@ -1047,7 +1055,8 @@ not establish target-device speed.
   upstream WGSL generator. Model graph construction and public ABI are
   unchanged. The prepared source receipt covers the patch and shader inputs.
 - **Validation and limits:** native contracts cover dependent mixes in one
-  graph, scratch reuse, external consumers and workgroup-storage boundaries.
+  graph, scratch reuse, external consumers, raw views across graph slices and
+  workgroup-storage boundaries.
   Software WebGPU comparisons cover dependent outputs and actual partial
   subgroup packing. Full-model output and physical throughput remain
   unmeasured.

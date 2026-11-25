@@ -1,0 +1,98 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+@@ -0,0 +1,40 @@
++#pragma once
++
++#include "ggml-impl.h"
++
++#include <algorithm>
++#include <functional>
++#include <iterator>
++#include <optional>
++#include <vector>
++
++class webgpu_fusion_view_sources {
++public:
++    explicit webgpu_fusion_view_sources(const ggml_cgraph & graph) : graph_(graph) {}
++
++    bool contains(const ggml_tensor * source) {
++        const std::less<const ggml_tensor *> order;
++        if (!roots_) {
++            auto & roots = roots_.emplace();
++            // Raw views can use storage without a src edge. A graph slice
++            // keeps the original visit set, including readers in other slices.
++            const auto & visited = graph_.visited_hash_set;
++            for (size_t i = 0; i < visited.size; ++i) {
++                if (!ggml_bitset_get(visited.used, i)) {
++                    continue;
++                }
++                const auto * tensor = visited.keys[i];
++                const auto * root = tensor->view_src;
++                if (root && std::find(std::begin(tensor->src), std::end(tensor->src), root) == std::end(tensor->src)) {
++                    roots.push_back(root);
++                }
++            }
++            std::sort(roots.begin(), roots.end(), order);
++        }
++        return std::binary_search(roots_->begin(), roots_->end(), source, order);
++    }
++
++private:
++    const ggml_cgraph & graph_;
++    std::optional<std::vector<const ggml_tensor *>> roots_;
++};
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp
+@@ -1,5 +1,5 @@
+ #pragma once
+ 
+-#include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ 
+ #include <array>
+@@ -43,5 +43,5 @@
+ }
+ 
+-inline std::optional<plan> match(const ggml_cgraph & graph, int first) {
++inline std::optional<plan> match(const ggml_cgraph & graph, int first, webgpu_fusion_view_sources & views) {
+     if (first < 0 || first > graph.n_nodes - last_non_concat_nodes - 1) {
+         return {};
+@@ -125,4 +125,9 @@
+         return {};
+     }
++    for (int i = first; i < output_index; ++i) {
++        if (views.contains(graph.nodes[i])) {
++            return {};
++        }
++    }
+     return result;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4097,6 +4097,7 @@
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_depth_mix(webgpu_context & ctx, const ggml_cgraph & graph,
+-                                                           int index, int & encoded_ops) {
+-    const auto plan = depth_mix::match(graph, index);
++                                                           int index, webgpu_fusion_view_sources & views,
++                                                           int & encoded_ops) {
++    const auto plan = depth_mix::match(graph, index, views);
+     if (!plan) {
+         return std::nullopt;
+@@ -4757,4 +4758,5 @@
+                                                            ggml_cgraph *  cgraph,
+                                                            int            node_idx,
++                                                           webgpu_fusion_view_sources & fusion_views,
+                                                            int &          num_encoded_ops) {
+     ggml_tensor ** nodes = cgraph->nodes;
+@@ -4813,5 +4815,5 @@
+             if (auto fused = ggml_webgpu_short_conv_state(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             if (node->ne[0] == depth_mix::width && node->ne[1] == 2) {
+-                if (auto fused = ggml_webgpu_depth_mix(ctx, *cgraph, node_idx, num_encoded_ops)) { return fused; }
++                if (auto fused = ggml_webgpu_depth_mix(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             }
+             return ggml_webgpu_concat(ctx, src0, src1, node);
