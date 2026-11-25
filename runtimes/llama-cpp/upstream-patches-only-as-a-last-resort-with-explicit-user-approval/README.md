@@ -956,3 +956,38 @@ not establish target-device speed.
 - **Removal:** upstream preserves the representable allocation limit before
   narrowing, or supported profiles no longer include 32-bit WebGPU hosts. Remove
   this patch, preparation, provenance and independent tests together.
+
+## Scalar Flash Attention masking and KV tiles
+
+- **Patches:** `ggml-webgpu-flash-attn-maskskip.patch` and
+  `ggml-webgpu-flash-attn-wide-scalar-kv.patch`, against llama.cpp `c212d25`.
+- **Mask scope:** scalar prefill with F32 Q, F16 K/V in separate bindings, at
+  least 32 queries and 768 keys, and an F16 mask with contiguous key rows and
+  zero ALiBi max bias. Before loading K and V, skip a tile only when every
+  in-bounds score for every active query has the F16 negative infinity mask.
+  A partial subgroup conservatively retains the tile. Other variants retain
+  their existing mask behavior.
+- **Tile scope:** the same scalar prefill types and length bounds, with or
+  without a mask, equal Q/K and V head dimensions of 128, 256 or 512, and at
+  least 32 KiB of workgroup storage. Calculate the KV tile width using the
+  shader's shared K/V staging, query and probability arrays and any mask votes,
+  rounding each allocation for WebGPU validation.
+  Cache the actual geometry before creating a pipeline. Different tile widths
+  can change floating-point rounding in probability and output accumulation.
+- **Integration:** both patches apply to normal and profiling source
+  preparations. The aligned-word shader family embeds the patched scalar tile
+  through the upstream generator. The source receipt records the patch and
+  shader input identities. The width patch follows the mask patch to account
+  for its shared votes. There is no public ABI or binding layout change.
+- **Validation and limits:** native provider cases check admission, cache and
+  shader specialization. Software WebGPU comparisons cover causal and sliding
+  windows, head-specific masks, sinks, tails, and nonzero binding offsets.
+  Exact skipping preserves the tested finite outputs at the same geometry and
+  follows CPU mask semantics for nonfinite K/V in wholly masked tiles. Mixed
+  tiles retain the existing shader arithmetic. Wider-tile comparisons use
+  numerical tolerances. Measurements cover kernels on a software adapter.
+- **No-patch alternative:** retain the upstream scalar kernel and tile sizing,
+  or adopt corresponding upstream support when available.
+- **Removal:** retire each patch when upstream provides equivalent behavior or
+  its scope is withdrawn. Recheck the per-tile reduction, mask indexing and
+  workgroup storage budget when either upstream shader or factory changes.

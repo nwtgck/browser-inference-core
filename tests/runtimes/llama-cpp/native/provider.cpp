@@ -259,6 +259,7 @@ static void encoding_and_upload() {
 #include "cases/matrix.hpp"
 #include "cases/cache.hpp"
 #include "cases/expert.hpp"
+#include "cases/attention.hpp"
 
 int main(int argc, char ** argv) {
     BICORE_CHECK(argc == 2);
@@ -274,6 +275,7 @@ int main(int argc, char ** argv) {
     matrix_cases::all(argv[1]);
     cache_cases::all();
     expert_cases::all(argv[1]);
+    attention_cases::all();
 #ifdef GGML_WEBGPU_GPU_PROFILE
     profile_query_cases::all();
 #endif

@@ -559,6 +559,23 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-flash-attn-maskskip.patch',
+    target: 'llama-webgpu',
+    reason: 'skip fully masked KV tiles in long F16 attention',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-flash-attn-wide-scalar-kv.patch',
+    target: 'llama-webgpu',
+    reason: 'use wider KV tiles within the scalar attention shared-memory limit',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

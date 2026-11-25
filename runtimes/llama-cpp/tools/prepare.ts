@@ -111,12 +111,13 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
     }
   }
   canonical['common_decls.tmpl'] = join(words, shaderBase, 'common_decls.tmpl');
+  canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
   headers['ggml-webgpu-aligned-word-load-shaders.hpp'] = canonical;
   const shaders: Record<string, Record<string, FileIdentity>> = {};
   const generator = join(original, shaderBase, 'embed_wgsl.py');
   // Each dedicated header is emitted once by the unmodified upstream generator.
-  // The canonical family takes upstream shaders and the accepted word template;
-  // e.g. the dedicated RMS shader must not replace upstream row_norm here.
+  // Use upstream shaders except for the explicit tile-attention and word-template inputs.
+  // Dedicated variants such as the fused RMS shader keep their separate headers.
   for (const [header, files] of Object.entries(headers)) {
     const shaderRoot = join(scratch, 'shaders', header.slice(0, -4));
     for (const [name, path] of Object.entries(files)) {
