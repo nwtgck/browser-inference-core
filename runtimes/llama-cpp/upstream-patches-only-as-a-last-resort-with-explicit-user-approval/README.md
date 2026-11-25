@@ -835,6 +835,14 @@ not establish target-device speed.
 - **Validation:** Test the shape, token, storage and precision boundaries in both provider modes. Compare actual shader output, including sparse and dense column counts, using deterministic inputs and local samples of packed model weights. Software WebGPU timing covers the isolated tile, with model timing on physical adapters pending.
 - **Removal:** Remove when upstream supports equivalently fast indexed prefill for these layouts without changing precision or fallback behavior.
 
+## Paired Q4_K loads for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-q4-k-paired.patch`.
+- **Scope:** Use K64 for indexed Q4_K x F32 to F32 at K/M 512/2048 or 2048/512. Require at least 12 input tokens and 8,448 bytes of workgroup storage. Lower limits, other dimensions and single-token matvec use their existing selections.
+- **Contract:** Decode the low and high nibbles of a packed Q4_K word together. Each half uses its original scale and minimum, F32 dequantization and F16 rounding before the original ascending K accumulation. Reuse gather, tile grid, binding layout and cache key. Use a dedicated indexed shader declaration input and the `tk64_paired` profile suffix.
+- **Validation:** Exercise both shape, token, storage and dtype boundaries through the normal and GPU-profile factories. Compare the emitted WGSL and deterministic packed-weight outputs. Isolated software WebGPU comparisons do not establish physical-adapter or model throughput.
+- **Removal:** Remove when upstream supplies equivalent indexed loads with the same precision and compatible fallback behavior.
+
 ## Wider-M paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.

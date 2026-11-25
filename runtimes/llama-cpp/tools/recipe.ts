@@ -389,6 +389,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-q4-k-paired.patch',
+    target: 'llama-webgpu',
+    reason: 'decode paired Q4_K nibbles in the indexed K64 weight tile',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-direct-mapped-read.patch',
     target: 'llama-webgpu',
     reason: 'direct mapped read',

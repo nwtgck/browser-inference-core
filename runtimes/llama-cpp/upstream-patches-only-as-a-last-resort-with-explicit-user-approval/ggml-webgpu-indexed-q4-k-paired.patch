@@ -1,0 +1,95 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3353,6 +3353,8 @@
+         const int64_t m = context.src0->ne[1];
+         const bool measured_shape = (m == 2304 && (k == 1152 || k == 2304)) || (m == 512 && k == 2304);
+-        if (eligible_type && key.src1_type == GGML_TYPE_F32 && context.dst &&
+-            context.dst->type == GGML_TYPE_F32 && measured_shape && context.dst->ne[2] >= 12 &&
++        const bool paired_q4_k_shape = key.src0_type == GGML_TYPE_Q4_K &&
++                                       ((k == 512 && m == 2048) || (k == 2048 && m == 512));
++        if (((eligible_type && measured_shape) || paired_q4_k_shape) && key.src1_type == GGML_TYPE_F32 &&
++            context.dst && context.dst->type == GGML_TYPE_F32 && context.dst->ne[2] >= 12 &&
+             context.wg_mem_limit_bytes >= shared_bytes) {
+             key.tile_k = wide_tile_k;
+@@ -3479,4 +3481,8 @@
+         if (tile_k == wide_tile_k) {
+             variant += "_tk64";
++            if (key.src0_type == GGML_TYPE_Q4_K) {
++                defines.push_back("BICORE_INDEXED_Q4_K_PAIRED_K64");
++                variant += "_paired";
++            }
+         }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -4,5 +4,5 @@
+ #include "common_decls.tmpl"
+ 
+-#include "mul_mat_decls.tmpl"
++#include "mul_mat_id_group_decls.tmpl"
+ 
+ #ifdef MUL_MAT_ID_ACC_F32
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -357,4 +357,55 @@
+ }
+ 
++#ifdef BICORE_INDEXED_Q4_K_PAIRED_K64
++fn store_q4_k_nibbles(qs_word: u32, phase: u32, dm: vec2<f32>, scale_min: vec2<u32>, dst: u32) {
++    let qs = vec4<f32>(
++        f32((qs_word >> (phase +  0u)) & 0xFu),
++        f32((qs_word >> (phase +  8u)) & 0xFu),
++        f32((qs_word >> (phase + 16u)) & 0xFu),
++        f32((qs_word >> (phase + 24u)) & 0xFu)
++    );
++    let dl = dm[0] * f32(scale_min[0]);
++    let ml = dm[1] * f32(scale_min[1]);
++    store_shmem_kquants(vec4<f16>(dl * qs - vec4(ml, ml, ml, ml)), dst);
++}
++
++fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
++    // A block of 64 consecutive K values shares 32 packed nibble pairs.
++    for (var pair = thread_id * NQ; pair < TILE_SRC0_SHMEM / 2u; pair += TOTAL_WORKGROUP_SIZE * NQ) {
++        let tile_m = pair / 32u;
++        let tile_k = pair % 32u;
++        let dst = tile_m * 64u + tile_k;
++        let global_m = offset_m + tile_m;
++        let global_k = k_outer + tile_k;
++        if (global_m >= params.m || global_k >= params.k) {
++            store_shmem_kquants(vec4<f16>(0.0), dst);
++            store_shmem_kquants(vec4<f16>(0.0), dst + 32u);
++            continue;
++        }
++
++        let block = global_k / 256u;
++        let chunk = (global_k % 256u) / 64u;
++        let byte_base = (batch_offset + global_m * params.stride_01 + block) * 144u;
++        let dm = unpack2x16float(load_u32_at_src0_aligned(byte_base));
++        let qs_word = load_u32_at_src0_aligned(byte_base + 16u + 32u * chunk + tile_k);
++        let sc_word = load_u32_at_src0_aligned(byte_base + 4u);
++        let mn_word = load_u32_at_src0_aligned(byte_base + 8u);
++        let s = 2u * (chunk % 2u);
++        let first_bytes = vec2<u32>(get_byte(sc_word, s), get_byte(mn_word, s));
++        let second_bytes = vec2<u32>(get_byte(sc_word, s + 1u), get_byte(mn_word, s + 1u));
++        var first = first_bytes & vec2<u32>(63u);
++        var second = second_bytes & vec2<u32>(63u);
++        if (chunk >= 2u) {
++            let low_word = load_u32_at_src0_aligned(byte_base + 12u);
++            let low_even = get_byte(low_word, s);
++            let low_odd = get_byte(low_word, s + 1u);
++            first = vec2<u32>(low_even & 15u, low_even >> 4u) | ((first_bytes >> vec2<u32>(6u)) << vec2<u32>(4u));
++            second = vec2<u32>(low_odd & 15u, low_odd >> 4u) | ((second_bytes >> vec2<u32>(6u)) << vec2<u32>(4u));
++        }
++        store_q4_k_nibbles(qs_word, 0u, dm, first, dst);
++        store_q4_k_nibbles(qs_word, 4u, dm, second, dst + 32u);
++    }
++}
++#else
+ fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
+     for (var elem_idx = thread_id * NQ; elem_idx < TILE_SRC0_SHMEM; elem_idx += TOTAL_WORKGROUP_SIZE * NQ) {
+@@ -599,4 +650,5 @@
+     }
+ }
++#endif // BICORE_INDEXED_Q4_K_PAIRED_K64
+ #endif // k-quants
+ 

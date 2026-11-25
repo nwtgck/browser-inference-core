@@ -16,6 +16,7 @@ const shaderBase = `${webgpuBase}/wgsl-shaders`;
 const derivedShaders = {
   'ssm_conv_silu.wgsl': 'ssm_conv.wgsl',
   'mul_mat_id_group.wgsl': 'mul_mat_id.wgsl',
+  'mul_mat_id_group_decls.tmpl': 'mul_mat_decls.tmpl',
   'mul_mat_id_gather_logical32.wgsl': 'mul_mat_id_gather.wgsl',
   'mul_mat_reg_tile_half_pairs.wgsl': 'mul_mat_reg_tile.wgsl',
   'mul_mat_half_pairs_decls.tmpl': 'mul_mat_decls.tmpl',
@@ -76,7 +77,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),
     'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...accumulator, ...edited({ names: ['q8_subgroup_matvec.wgsl'] }) },
     'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': { ...common, ...edited({ names: ['iq3s_id_subgroup.wgsl'] }), 'mul_mat_vec_acc.tmpl': join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') },
-    'ggml-webgpu-mul-mat-id-group-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_id_group.wgsl'] }), ...upstream({ names: ['mul_mat_decls.tmpl', 'quant_inner_loops.tmpl'] }) },
+    'ggml-webgpu-mul-mat-id-group-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_id_group.wgsl', 'mul_mat_id_group_decls.tmpl'] }), ...upstream({ names: ['quant_inner_loops.tmpl'] }) },
     'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': { ...common, ...accumulator, ...upstream({ names: ['mul_mat_vec_q_acc.tmpl'] }), ...edited({ names: ['mul_mat_vec_f32_epilogue.wgsl'] }) },
     'ggml-webgpu-quant-half-pairs-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_reg_tile_half_pairs.wgsl', 'mul_mat_half_pairs_decls.tmpl', 'quant_half_pairs_inner_loops.tmpl'] }) },
   };
