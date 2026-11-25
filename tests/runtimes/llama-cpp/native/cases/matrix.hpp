@@ -321,7 +321,10 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(q8(3104, 2304, 128, 0, 288));
     cases.push_back(q8(3072, 2240, 128, 0, 280));
     cases.push_back(q8(3072, 2304, 160, 0, 360));
-    cases.push_back(q8(2304, 384, 128, 0, 48));
+    cases.push_back(q8(2304, 384, 128, 1, 48));
+    cases.push_back(q8(2304, 384, 127, 0, 48));
+    cases.push_back(q8(2272, 384, 128, 0, 48));
+    cases.push_back(q8(2304, 416, 128, 0, 52));
     cases.push_back(q8(2304, 1088, 128, 0, 136));
     cases.push_back(q8(2336, 3072, 128, 0, 384));
     cases.push_back(q8(2304, 3072, 129, 0, 480));
