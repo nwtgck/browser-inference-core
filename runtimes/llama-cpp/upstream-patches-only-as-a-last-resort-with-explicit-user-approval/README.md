@@ -866,9 +866,9 @@ not establish target-device speed.
 ## Wider-M paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.
-- **Scope:** Ordinary single-matrix Q8_0 x F32 to F32 with complete tiles. Use the 64x32 tile for K>=5120 with at least 640 output workgroups, or for K=2304, N=128 and M=1024 or 3072. Keep the overlap, subgroup-matrix, vector and base-geometry exclusions. Selection uses tensor shape and backend capabilities without model or device identifiers.
+- **Scope:** Ordinary single-matrix Q8_0 x F32 to F32 with complete tiles. Use the 64x32 tile for K>=5120 with at least 640 output workgroups, or at N=128 for K/M pairs 2304/1024, 2304/3072 and 3072/2304. Keep the overlap, subgroup-matrix, vector and base-geometry exclusions. Selection uses tensor shape and backend capabilities without model or device identifiers.
 - **Contract:** Reuse the paired-half M8 cache key, labels, WG64/TK32 tile and 16-word UBO. Decode signed packed Q8 bytes with the canonical 34-byte block layout and multiply the F32 scale before rounding the products to half. Store adjacent values as pairs and accumulate in the original K order. Preserve the existing bindings, offsets and global memory layout. No new buffers, exports, probe or host synchronization.
-- **Validation:** Exercise actual factory dispatch and cache transitions in normal and profile providers. Check packed decoding, full output bits and guard regions in a representative prefill. Isolated software WebGPU timings establish a candidate; physical-device prefill and ordinary first-token latency require model measurements.
+- **Validation:** Exercise actual factory dispatch and cache transitions in normal and profile providers. Check packed decoding, full output bits and guard regions in representative prefill shapes. At K3072/M2304/N128 the 64-row tile was faster than both 32-row candidates in mirrored software WebGPU comparisons. Physical-device prefill and ordinary first-token latency require model measurements.
 - **Removal:** Delete the patch and its recipe entry when upstream supplies an equivalent Q8 prefill path with comparable numerical behavior and device performance.
 
 ## Ordinary fixed-subgroup Q4 matvecs

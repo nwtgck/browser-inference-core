@@ -1,6 +1,6 @@
 --- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
-@@ -2995,7 +2995,16 @@
+@@ -2995,7 +2995,18 @@
                  q6_c8_groups = std::min<uint64_t>(8, q6_c8_groups * std::min<uint64_t>(8, factor));
              }
          }
@@ -8,7 +8,9 @@
 +        const int64_t m = context.dst->ne[0];
 +        const int64_t n = context.dst->ne[1];
 +        constexpr int64_t q8_min_groups = 640;
-+        const bool q8_c8_short_shape = k == 2304 && n == 128 && (m == 1024 || m == 3072);
++        const bool q8_c8_short_shape = n == 128 &&
++                                       ((k == 2304 && (m == 1024 || m == 3072)) ||
++                                        (k == 3072 && m == 2304));
 +        // Divide the minimum group count by the column tiles rather than multiplying extents.
 +        const bool q8_c8 = key.src0_type == GGML_TYPE_Q8_0 && k % 32 == 0 &&
 +                           m >= 64 && m % 64 == 0 && n >= 128 && n % 32 == 0 &&
