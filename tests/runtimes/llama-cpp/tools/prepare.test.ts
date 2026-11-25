@@ -24,7 +24,7 @@ test('concrete normal/profile recipes preserve order and isolate dedicated templ
   assert.ok(profile.findIndex(patch => patch.file === 'ggml-webgpu-q8-diagnostic.patch') < profile.findIndex(patch => patch.file === 'ggml-webgpu-matmul-vec4-layout-profile.patch'));
 });
 
-test('WebGPU embeds use the prepared argsort, Hadamard, and Flash Attention shaders', { timeout: 120000 }, async () => {
+test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout: 120000 }, async () => {
   await using directory = {
     path: await mkdtemp(join(tmpdir(), 'llama-argsort-source-test-')),
     async [Symbol.asyncDispose]() {
@@ -37,7 +37,7 @@ test('WebGPU embeds use the prepared argsort, Hadamard, and Flash Attention shad
     options: { target: 'native', webgpu: true, gpuProfile: false, fileRows: false, qsa: false, mtmdMode: 'cpu' },
     python: 'python3',
   });
-  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_decls.tmpl']) {
+  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_decls.tmpl', 'row_norm.wgsl']) {
     const shader = `ggml/src/ggml-webgpu/wgsl-shaders/${name}`;
     const prepared = receipt.outputs[shader];
     assert.ok(prepared);

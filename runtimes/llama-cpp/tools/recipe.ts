@@ -955,6 +955,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-rms-norm-vec4.patch',
+    target: 'llama-webgpu',
+    reason: 'vectorize aligned F32 RMS loads and stores while preserving reduction order',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

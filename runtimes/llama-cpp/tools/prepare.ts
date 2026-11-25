@@ -124,6 +124,7 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
   canonical['mul_mat_fwht_1024.wgsl'] = join(source, shaderBase, 'mul_mat_fwht_1024.wgsl');
   canonical['argsort.wgsl'] = join(source, shaderBase, 'argsort.wgsl');
+  canonical['row_norm.wgsl'] = join(source, shaderBase, 'row_norm.wgsl');
   headers['ggml-webgpu-aligned-word-load-shaders.hpp'] = canonical;
   const shaders: Record<string, Record<string, FileIdentity>> = {};
   const generator = join(original, shaderBase, 'embed_wgsl.py');

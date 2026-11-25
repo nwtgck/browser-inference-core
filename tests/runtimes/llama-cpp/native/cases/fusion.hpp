@@ -244,7 +244,56 @@ static void router_tail_graph(bool natural, RouterDenominator denominator, Route
     }
 }
 
+static void rms_vec4() {
+    struct Case {
+        int64_t width, rows;
+        size_t prefix, padding;
+        bool inplace, affine;
+        uint32_t invocation_limit;
+        std::string_view pipeline;
+    };
+    for (const auto & test : {
+             Case{2304, 1, 0, 0, false, false, 256, "rms_norm_src_f32_dst_f32"},
+             Case{4096, 1, 0, 0, false, false, 256, "rms_norm_src_f32_dst_f32_vec4"},
+             Case{128, 8, 16, 16, false, false, 256, "rms_norm_src_f32_dst_f32_vec4"},
+             Case{128, 8, 16, 0, true, false, 256, "rms_norm_src_f32_dst_f32_vec4_inplace"},
+             Case{128, 8, 4, 16, false, false, 256, "rms_norm_src_f32_dst_f32"},
+             Case{128, 8, 16, 4, false, false, 256, "rms_norm_src_f32_dst_f32"},
+             Case{127, 8, 0, 0, false, false, 256, "rms_norm_src_f32_dst_f32"},
+             Case{128, 8, 0, 0, false, false, 64, "rms_norm_src_f32_dst_f32"},
+             Case{128, 8, 0, 0, false, true, 256, "rms_norm_scale_f32_vec4"},
+             Case{128, 8, 4, 0, false, true, 256, "rms_norm_scale_f32"},
+         }) {
+        transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+        gpu.context->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup = test.invocation_limit;
+        const transfer_cases::Memory memory(ggml_init({32 * 1024, nullptr, true}), ggml_free);
+        const size_t stride = test.width * sizeof(float) + test.padding;
+        auto * allocation =
+            ggml_new_tensor_1d(memory.get(), GGML_TYPE_F32, (stride * test.rows + test.prefix) / sizeof(float));
+        ggml_set_input(allocation);
+        auto * input = ggml_view_2d(memory.get(), allocation, test.width, test.rows, stride, test.prefix);
+        auto * rms = test.inplace ? ggml_rms_norm_inplace(memory.get(), input, 1e-6f)
+                                  : ggml_rms_norm(memory.get(), input, 1e-6f);
+        auto * output = test.affine ? ggml_scale_bias(memory.get(), rms, 0.75f, -0.125f) : rms;
+        ggml_set_output(output);
+        auto * graph = ggml_new_graph_custom(memory.get(), 16, false);
+        ggml_build_forward_expand(graph, output);
+        const transfer_cases::Buffer buffer(ggml_backend_alloc_ctx_tensors_from_buft(memory.get(), &gpu.type),
+                                            ggml_backend_buffer_free);
+        BICORE_CHECK(buffer && ggml_backend_dev_supports_op(&gpu.device, rms));
+        commands = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        const auto & slots = gpu.context->bind_group_cache.slots;
+        BICORE_CHECK(slots.size() == 1 && commands.executed == 1);
+        BICORE_CHECK(slots.front().pipeline.Get()->name == test.pipeline);
+        BICORE_CHECK(slots.front().bindings.size() == (test.inplace ? 2u : 3u));
+        BICORE_CHECK(commands.dispatches.front().x == test.rows && commands.dispatches.front().y == 1);
+    }
+}
+
 static void all() {
+    rms_vec4();
     for (const auto family : {Family::scale_unary, Family::rms_scale})
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})
             graph(family, guard);

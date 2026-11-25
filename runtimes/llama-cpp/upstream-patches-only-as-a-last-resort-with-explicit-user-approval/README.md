@@ -629,6 +629,28 @@ not establish target-device speed.
   shader API has no option to combine these passes. Remove this patch when
   upstream provides equivalent dispatch and numerical behavior.
 
+## Vectorized F32 row RMS normalization
+
+- **Patch** `ggml-webgpu-rms-norm-vec4.patch` against llama.cpp `c212d25ad`.
+  Source preparation embeds the patched row shader after RMS/SCALE support.
+- **Scope** Use four consecutive F32 elements per lane for aligned RMS
+  normalization with at least eight rows or 4,096 columns. The same shader
+  supports the existing affine epilogue. Unaligned layouts, smaller
+  dispatches, other norm operations and reduced device limits select the
+  scalar implementation.
+- **Contract** The 32 physical invocations preserve the element assignment,
+  accumulation order and reduction tree of the scalar 128-lane variant.
+  The vector shader uses the existing storage bindings, dispatch grid and
+  graph allocations.
+- **Validation** The provider recorder exercises aligned and shifted views,
+  padded rows, in-place writes, affine fusion and the scalar fallback.
+  Software WebGPU compares numerical outputs and times individual kernels.
+  A small Inkling fixture compares logits, tokens and saved state through
+  the Wasm64 ABI. Physical-device throughput depends on the workload.
+- **Alternative** Retain the scalar input and output path. Upstream exposes no
+  setting for this layout. Remove the patch when upstream ships equivalent
+  vectorized normalization and numerical behavior.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.
