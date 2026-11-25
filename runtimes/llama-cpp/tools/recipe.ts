@@ -786,6 +786,20 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-fusion-intermediate-views.patch',
+    target: 'llama-webgpu',
+    reason: 'preserve RMS, scale, matvec and expert-sum intermediates read through raw views',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

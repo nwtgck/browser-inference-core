@@ -69,8 +69,9 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     commands = {};
     int consumed = 1;
     const auto before = ::created;
-    const auto result = family == Family::scale_unary ? ggml_webgpu_scale_unary(gpu.context, graph, 0, consumed)
-                                                      : ggml_webgpu_rms_scale(gpu.context, graph, 0, consumed);
+    webgpu_fusion_view_sources views(*graph);
+    const auto result = family == Family::scale_unary ? ggml_webgpu_scale_unary(gpu.context, graph, 0, views, consumed)
+                                                      : ggml_webgpu_rms_scale(gpu.context, graph, 0, views, consumed);
     output->data = original_data;
     output->buffer = original_buffer;
     BICORE_CHECK(!result && consumed == 1 && ::created == before && commands.dispatches.empty());

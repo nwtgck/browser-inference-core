@@ -1263,3 +1263,27 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Alternative and removal** Retain the direct upper-bound grid until
   upstream can dispatch only the active indexed tiles. Review the gather
   descriptor width, scope semantics and queue submission boundaries on updates.
+
+## Raw-view readers of fused intermediates
+
+- **Patch** `ggml-webgpu-fusion-intermediate-views.patch` against llama.cpp `c212d25ad`.
+- **Scope** Preserve the stored values read through raw views of RMS norm and
+  scale chains, F32 matvec epilogues, and intermediate MoE adds. A raw view
+  can share storage without a source edge counted by upstream's fusion check.
+- **Contract** Consult the existing lazy view-source index for the intermediate
+  values that the selected shader would omit. A view of the value the shader
+  writes remains eligible, including an in-place final MUL that writes the
+  entire RMS result range with the same layout. A raw view of the unary result can still use the
+  two-operation scale fusion, and the RMS preference checks the same eligible
+  three-operation plan. Graph slices share the visit set, including later
+  readers. The index enumerates occupied slots using the used bitset and keeps
+  the existing invalidation at the cold optional-pipeline boundary.
+- **Integration and validation** Apply the admission checks in both WebGPU
+  preparations. Complete-provider fixtures check the same graphs as one batch
+  and as separate producer and reader slices, including terminal view and
+  shorter-fusion controls. Shader source, bindings, and the public ABI retain
+  their existing contracts.
+- **Alternative and removal** Use the separate operations until upstream
+  checks view-only uses of discarded storage across scheduler splits. Review
+  visited-set ownership, aliases and which outputs the fused shaders write when
+  updating upstream.

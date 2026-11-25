@@ -1,0 +1,271 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-f32-matvec-epilogue.hpp
+@@ -26,7 +26,8 @@
+     return true;
+ }
+ 
+-inline bool plan_f32_matvec_epilogue(const ggml_cgraph * graph, int index, f32_matvec_epilogue_plan & plan) {
++inline bool plan_f32_matvec_epilogue(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                                     f32_matvec_epilogue_plan & plan) {
+     plan = {};
+     if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 4) { return false; }
+     ggml_tensor * matmul = graph->nodes[index];
+@@ -45,9 +46,9 @@
+         !f32_matvec_epilogue_layout(input, input_bytes)) { return false; }
+     const ggml_op ops[] = { GGML_OP_MUL_MAT, GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE };
+     scale_unary_plan post;
+-    if (!ggml_can_fuse(graph, index, ops, 4) || !plan_scale_unary(graph, index + 1, 3, post) ||
++    if (!ggml_can_fuse(graph, index, ops, 4) || !plan_scale_unary(graph, index + 1, 3, views, post) ||
+         post.source != matmul || ggml_get_unary_op(post.unary) != GGML_UNARY_OP_SIGMOID ||
+-        !ggml_are_same_shape(matmul, post.output)) { return false; }
++        !ggml_are_same_shape(matmul, post.output) || views.contains(matmul)) { return false; }
+     plan = { matmul, weights, input, post.output, weights_bytes, input_bytes, 16,
+              { ggml_get_op_params_f32(post.first_scale, 0), ggml_get_op_params_f32(post.first_scale, 1),
+                ggml_get_op_params_f32(post.final_scale, 0), ggml_get_op_params_f32(post.final_scale, 1) } };
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-fusion-view-sources.hpp
+@@ -3,6 +3,7 @@
+ #include "ggml-impl.h"
+ 
+ #include <algorithm>
++#include <bit>
+ #include <functional>
+ #include <iterator>
+ #include <optional>
+@@ -23,14 +24,15 @@
+             // Raw views can use storage without a src edge. A graph slice
+             // keeps the original visit set, including readers in other slices.
+             const auto & visited = graph_.visited_hash_set;
+-            for (size_t i = 0; i < visited.size; ++i) {
+-                if (!ggml_bitset_get(visited.used, i)) {
+-                    continue;
+-                }
+-                const auto * tensor = visited.keys[i];
+-                const auto * root = tensor->view_src;
+-                if (root && std::find(std::begin(tensor->src), std::end(tensor->src), root) == std::end(tensor->src)) {
+-                    roots.push_back(root);
++            const size_t words = ggml_bitset_size(visited.size);
++            for (size_t word = 0; word < words; ++word) {
++                for (ggml_bitset_t used = visited.used[word]; used; used &= used - 1) {
++                    const size_t i = (word << BITSET_SHR) + std::countr_zero(used);
++                    const auto * tensor = visited.keys[i];
++                    const auto * root = tensor->view_src;
++                    if (root && std::find(std::begin(tensor->src), std::end(tensor->src), root) == std::end(tensor->src)) {
++                        roots.push_back(root);
++                    }
+                 }
+             }
+             std::sort(roots.begin(), roots.end(), order);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-moe-sum.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+ // Source-bound admission for ordered expert-output ADD chains.
+@@ -32,7 +33,8 @@
+         v->nb[0] == 4 && v->nb[1] == r->nb[2] && v->nb[2] == r->nb[3] && v->nb[3] == r->nb[3];
+ }
+ 
+-inline bool plan_moe_sum(const ggml_cgraph * graph, int index, moe_sum_plan & result) {
++inline bool plan_moe_sum(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                         moe_sum_plan & result) {
+     result = {};
+     if (!graph || index < 0 || index >= graph->n_nodes) { return false; }
+     ggml_tensor * first = graph->nodes[index];
+@@ -55,6 +57,9 @@
+     if (!ggml_can_fuse(graph, index, ops, n)) { return false; }
+     ggml_tensor * last = graph->nodes[index + n - 1];
+     if (last->view_src) { return false; }
++    for (int i = 0; i < n - 1; ++i) {
++        if (views.contains(graph->nodes[index + i])) { return false; }
++    }
+     result = {root, last, uint32_t(root->ne[1]), uint32_t(root->ne[0] / 4), uint32_t(root->ne[2]), n};
+     return true;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+ struct rms_scale_plan {
+@@ -36,7 +37,8 @@
+     return true;
+ }
+ 
+-inline bool plan_rms_scale(const ggml_cgraph * graph, int index, rms_scale_plan & plan) {
++inline bool plan_rms_scale(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                           rms_scale_plan & plan) {
+     plan = {};
+     if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2 ||
+         !ggml_can_fuse(graph, index, { GGML_OP_RMS_NORM, GGML_OP_SCALE })) { return false; }
+@@ -56,6 +58,7 @@
+         !rms_scale_layout(rms, true, rms_bytes, rms_elements, rms_rows) ||
+         !rms_scale_layout(output, true, output_bytes, output_elements, output_rows) ||
+         elements != rms_elements || elements != output_elements || rows != rms_rows || rows != output_rows) { return false; }
++    if (views.contains(rms)) { return false; }
+     plan = { source, rms, output, source_bytes, output_bytes, elements, rows };
+     return true;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+ struct scale_unary_plan {
+@@ -23,7 +24,8 @@
+     return true;
+ }
+ 
+-inline bool plan_scale_unary(const ggml_cgraph * graph, int index, int operations, scale_unary_plan & plan) {
++inline bool plan_scale_unary(const ggml_cgraph * graph, int index, int operations,
++                             webgpu_fusion_view_sources & views, scale_unary_plan & plan) {
+     plan = {};
+     if (!graph || index < 0 || index >= graph->n_nodes || (operations != 2 && operations != 3) ||
+         operations > graph->n_nodes - index) { return false; }
+@@ -41,6 +43,8 @@
+         if (!scale_unary_dense(node) || node->src[0] != (i ? graph->nodes[index + i - 1] : source)) { return false; }
+         for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
+     }
++    // The two-operation fusion still writes the unary result.
++    if (views.contains(first) || (operations == 3 && views.contains(unary))) { return false; }
+     plan = { source, graph->nodes[index + operations - 1], first, unary,
+              operations == 3 ? graph->nodes[index + 2] : nullptr,
+              uint32_t(ggml_nelements(source)), operations };
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4028,9 +4028,10 @@
+ static std::optional<webgpu_encoded_op> ggml_webgpu_moe_sum(webgpu_context & ctx,
+                                                           ggml_cgraph * graph,
+                                                           int node_idx,
++                                                          webgpu_fusion_view_sources & views,
+                                                           int & num_encoded_ops) {
+     moe_sum_plan plan;
+-    if (!plan_moe_sum(graph, node_idx, plan)) { return std::nullopt; }
++    if (!plan_moe_sum(graph, node_idx, views, plan)) { return std::nullopt; }
+     auto * src = plan.source;
+     auto * dst = plan.output;
+     if (!src->buffer || !dst->buffer || !src->buffer->context || !dst->buffer->context ||
+@@ -4163,10 +4164,11 @@
+ // Leave the ordinary path untouched until every graph, lifetime and binding guard succeeds.
+ static std::optional<webgpu_encoded_op> ggml_webgpu_scale_unary(webgpu_context & ctx,
+                                                                ggml_cgraph * graph, int index,
++                                                               webgpu_fusion_view_sources & views,
+                                                                int & num_encoded_ops) {
+     for (int operations : { 3, 2 }) {
+         scale_unary_plan plan;
+-        if (!plan_scale_unary(graph, index, operations, plan)) { continue; }
++        if (!plan_scale_unary(graph, index, operations, views, plan)) { continue; }
+         const auto & limits = ctx->global_ctx->capabilities.limits;
+         uint32_t x, y;
+         if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
+@@ -4249,14 +4251,15 @@
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_rms_scale(webgpu_context & ctx,
+                                                              ggml_cgraph * graph, int index,
++                                                             webgpu_fusion_view_sources & views,
+                                                              int & num_encoded_ops) {
+     rms_scale_plan plan;
+-    if (!plan_rms_scale(graph, index, plan)) { return std::nullopt; }
++    if (!plan_rms_scale(graph, index, views, plan)) { return std::nullopt; }
+     // Preserve the existing three-operation SCALE/UNARY/SCALE fusion. Taking
+     // its first SCALE here would increase that chain from two dispatches to three.
+     // Prefer it conservatively even if its later runtime bindings must fall back.
+     scale_unary_plan longer;
+-    if (plan_scale_unary(graph, index + 1, 3, longer)) { return std::nullopt; }
++    if (plan_scale_unary(graph, index + 1, 3, views, longer)) { return std::nullopt; }
+     const auto & limits = ctx->global_ctx->capabilities.limits;
+     uint32_t x, y;
+     if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
+@@ -4896,9 +4899,10 @@
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_f32_matvec_epilogue(webgpu_context & ctx,
+                                                                        ggml_cgraph * graph, int index,
++                                                                       webgpu_fusion_view_sources & views,
+                                                                        int & num_encoded_ops) {
+     f32_matvec_epilogue_plan plan;
+-    if (!plan_f32_matvec_epilogue(graph, index, plan)) { return std::nullopt; }
++    if (!plan_f32_matvec_epilogue(graph, index, views, plan)) { return std::nullopt; }
+     const auto & limits = ctx->global_ctx->capabilities.limits;
+     if (limits.maxComputeInvocationsPerWorkgroup < 256 || limits.maxComputeWorkgroupSizeX < 256 ||
+         limits.maxComputeWorkgroupsPerDimension < 1 || limits.maxStorageBuffersPerShaderStage < 3 ||
+@@ -4927,7 +4931,8 @@
+     return encoded;
+ }
+ 
+-static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx) {
++static bool ggml_webgpu_can_fuse_rms_norm_mul(const struct ggml_cgraph * cgraph, int node_idx,
++                                            webgpu_fusion_view_sources & views) {
+     if (!ggml_can_fuse(cgraph, node_idx, { GGML_OP_RMS_NORM, GGML_OP_MUL })) {
+         return false;
+     }
+@@ -4951,7 +4956,12 @@
+         return false;
+     }
+ 
+-    return true;
++    // An in-place final MUL writes the same storage the raw view will read.
++    if (mul->view_src == rms_norm && mul->view_offs == 0 && ggml_are_same_layout(mul, rms_norm) &&
++        ggml_webgpu_tensor_equal(mul, rms_norm)) {
++        return true;
++    }
++    return !views.contains(rms_norm);
+ }
+ 
+ static bool ggml_webgpu_can_fuse_gdn_cache(const struct ggml_cgraph * cgraph, int node_idx, int & num_encoded_ops) {
+@@ -5105,7 +5115,7 @@
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             if (auto fused = webgpu_dense_q4_swiglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+-            if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT_ID:
+@@ -5113,7 +5123,7 @@
+         case GGML_OP_FLASH_ATTN_EXT:
+             return ggml_webgpu_flash_attn(ctx, src0, src1, src2, node->src[3], node->src[4], node);
+         case GGML_OP_ADD:
+-            if (auto sum = ggml_webgpu_moe_sum(ctx, cgraph, node_idx, num_encoded_ops)) {
++            if (auto sum = ggml_webgpu_moe_sum(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) {
+                 return sum;
+             }
+             return ggml_webgpu_binary_op(ctx, src0, src1, node);
+@@ -5134,12 +5144,12 @@
+         case GGML_OP_GROUP_NORM:
+             return ggml_webgpu_group_norm(ctx, src0, node);
+         case GGML_OP_RMS_NORM:
+-            if (ggml_webgpu_can_fuse_rms_norm_mul(cgraph, node_idx)) {
++            if (ggml_webgpu_can_fuse_rms_norm_mul(cgraph, node_idx, fusion_views)) {
+                 num_encoded_ops        = 2;
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+                 return ggml_webgpu_rms_norm_mul(ctx, src0, node, mul_node->src[0], mul_node->src[1], mul_node);
+             } else {
+-                if (auto fused = ggml_webgpu_rms_scale(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++                if (auto fused = ggml_webgpu_rms_scale(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+                 return ggml_webgpu_row_norm(ctx, src0, node);
+             }
+         case GGML_OP_NORM:
+@@ -5151,7 +5161,7 @@
+             return ggml_webgpu_glu(ctx, src0, src1, node);
+         case GGML_OP_SCALE:
+             if (auto fused = ggml_webgpu_situ(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+-            if (auto fused = ggml_webgpu_scale_unary(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_scale_unary(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_scale(ctx, src0, node);
+         case GGML_OP_SOFT_MAX:
+             return ggml_webgpu_soft_max(ctx, src0, src1, src2, node);

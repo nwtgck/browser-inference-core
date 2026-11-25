@@ -5,6 +5,7 @@
 #include "support/transfer-backend.hpp"
 #include "cases/scheduler.hpp"
 #include "cases/fusion.hpp"
+#include "cases/raw-view-fusions.hpp"
 #include "cases/indexed-decode.hpp"
 #include "cases/indexed-live-grid.hpp"
 #include "cases/indexed-q2.hpp"
@@ -20,6 +21,7 @@
 int main() {
     transfer_cases::all();
     fusion_cases::all();
+    raw_view_fusion_cases::all();
     indexed_decode_cases::all();
     indexed_live_grid_cases::all();
     indexed_q2_cases::all();
