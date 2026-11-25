@@ -1065,6 +1065,42 @@ not establish target-device speed.
   device limits and numerical behavior. Review graph order, RMS and matvec
   reductions and storage binding rules when updating the upstream revision.
 
+## Packed expert SITU activation
+
+- **Patch:** `ggml-webgpu-situ-packed.patch`, against llama.cpp `c212d25`.
+- **Purpose:** evaluate the nine materialized pointwise operations of the
+  packed expert SITU activation in one WebGPU dispatch on single-token graphs. The
+  existing graph builders and indexed expert projections provide the inputs
+  and consume the result through their current interfaces.
+- **Scope:** contiguous F32 output of width 1152, eight selected experts, and
+  one token. The gate and up views must describe the first and second halves
+  of each row of the same dense F32 source. Admit the exact branch order,
+  original sigmoid input, and final multiplication. Retain the separate
+  dispatches for other operation sequences, unsupported shapes or layouts,
+  device limits, unfinished graph slices, aliased binding ranges, and any
+  discarded intermediate a different consumer can observe. Views of the
+  final output remain valid. The shared graph view-source index detects raw
+  view readers without explicit source edges, including readers in a later
+  scheduler slice.
+- **Contract:** keep the four scale/bias expressions, the standard TANH clamp,
+  SIGMOID, and the original multiplication order. Both storage bindings use
+  the same access mode when their non-overlapping ranges share an allocation.
+  The shader reads packed gate/up and writes the final value directly, without
+  scratch or a model/adapter allowlist. A supported wider scope must preserve
+  the same view offsets, lifetimes, binding limits, and numerical expressions.
+- **Integration:** the normal and profiling recipes use the same matcher and
+  embed the dedicated shader with the upstream generator. The public ABI and
+  the Q8 diagnostic encoder seam are unchanged.
+- **Validation and limits:** native recorder checks cover the fused dispatch,
+  raw view readers, supported final aliases, and overlapping storage fallback.
+  Software WebGPU checks compared packed inputs and downstream outputs,
+  including scale bias, non-finite inputs and shared allocations. Floating-point
+  lowering can vary across adapters. Full-model physical throughput is unmeasured.
+- **No-patch alternative:** retain the existing nine-operation WebGPU graph.
+- **Removal:** retire when upstream admits and fuses the same graph with
+  equivalent layout, alias and numerical behavior. Recheck operation order and
+  storage binding rules at each upstream update.
+
 ## Indexed Q2_0 GPU-resident weights
 
 - **Purpose:** execute indexed Q2_0 expert operations on WebGPU when model

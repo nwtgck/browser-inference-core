@@ -690,6 +690,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
     modes: ['profile'],
   },
+  {
+    file: 'ggml-webgpu-situ-packed.patch',
+    target: 'llama-webgpu',
+    reason: 'fuse the packed expert SITU activation for single-token evaluation',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/situ_packed.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

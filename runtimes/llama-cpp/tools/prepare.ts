@@ -76,6 +76,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-depth-mix-shaders.hpp': edited({ names: ['depth_normalize.wgsl', 'depth_scores.wgsl', 'depth_blend.wgsl'] }),
     'ggml-webgpu-l2-clip-shaders.hpp': edited({ names: ['l2_clip.wgsl'] }),
     'ggml-webgpu-router-tail-shaders.hpp': edited({ names: ['router_tail.wgsl', 'router_tail_merged.wgsl'] }),
+    'ggml-webgpu-situ-shaders.hpp': edited({ names: ['situ_packed.wgsl'] }),
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),
     'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...accumulator, ...edited({ names: ['q8_subgroup_matvec.wgsl'] }) },
     'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': { ...common, ...edited({ names: ['iq3s_id_subgroup.wgsl'] }), 'mul_mat_vec_acc.tmpl': join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') },

@@ -9,6 +9,7 @@
 #include "cases/indexed-q2.hpp"
 #include "cases/short-conv.hpp"
 #include "cases/depth-mix.hpp"
+#include "cases/situ.hpp"
 #ifdef GGML_WEBGPU_GPU_PROFILE
 #include "cases/q8-diagnostic.hpp"
 #endif
@@ -20,6 +21,7 @@ int main() {
     indexed_q2_cases::all();
     short_conv_cases::all();
     depth_mix_cases::all();
+    situ_cases::all();
 #ifdef GGML_WEBGPU_GPU_PROFILE
     q8_diagnostic_cases::all();
 #endif
