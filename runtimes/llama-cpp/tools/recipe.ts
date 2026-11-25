@@ -597,6 +597,20 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-short-conv.patch',
+    target: 'llama-webgpu',
+    reason: 'single-token short convolution and state store',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/short_conv_residual.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

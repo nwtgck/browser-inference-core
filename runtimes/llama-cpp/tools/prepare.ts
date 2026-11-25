@@ -72,6 +72,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-scale-unary-shaders.hpp': edited({ names: ['scale_unary.wgsl'] }),
     'ggml-webgpu-rms-scale-shaders.hpp': { 'rms_norm_scale.wgsl': join(patched, shaderBase, 'row_norm.wgsl') },
     'ggml-webgpu-ssm-conv-silu-shaders.hpp': edited({ names: ['ssm_conv_silu.wgsl'] }),
+    'ggml-webgpu-short-conv-residual-shaders.hpp': edited({ names: ['short_conv_residual.wgsl', 'short_conv_concat_state.wgsl'] }),
     'ggml-webgpu-l2-clip-shaders.hpp': edited({ names: ['l2_clip.wgsl'] }),
     'ggml-webgpu-router-tail-shaders.hpp': edited({ names: ['router_tail.wgsl', 'router_tail_merged.wgsl'] }),
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),

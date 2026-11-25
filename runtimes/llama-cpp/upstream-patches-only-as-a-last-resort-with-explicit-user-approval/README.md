@@ -693,6 +693,16 @@ not establish target-device speed.
 - **Validation and maintenance:** the complete-provider test exercises both allocation layouts, clamp and epsilon pipeline selection, uploaded epsilon parameters, and fallback for an exposed denominator or different SCALE parameters. The initial software WebGPU comparison checked sorted IDs and normalized weights for tiny denominators, cancellation and nonfinite values. Confirm the SCALE parameter order and reduction tree at an upstream update. Isolated comparison does not establish target model throughput.
 - **Removal:** remove this stage when upstream fuses the ordered gather with epsilon normalization while preserving the existing alias contract.
 
+## WebGPU single-token short convolution and state store
+
+- **Patch:** `ggml-webgpu-short-conv.patch`, introduced against llama.cpp `c212d25ad`.
+- **Scope:** fuse four-tap F32 `SSM_CONV → RESHAPE → ADD → SCALE` into one dispatch for a single token and sequence. Preserve the tap order and evaluate the residual and scale in their original order. A separate fusion materializes `CONCAT` and writes the usual three-column recurrent state copy in one dispatch using raw 32-bit loads and stores.
+- **Admission:** the epilogue accepts disjoint tensors and exact per-channel residual/output reuse. State fusion requires four disjoint aligned binding ranges and keeps both destinations visible. Graph closure checks protect observed intermediates and side consumers. Dynamic taps retain their existing epilogue. Rollback `SET_ROWS`, multi-token shapes and unsupported layouts retain their existing state update.
+- **Integration:** compose in normal and profiling builds, emitting both WGSL sources through the upstream generator. The existing convolution/SiLU fusion continues to be tried first.
+- **No-patch alternative:** retain the staged convolution, residual math and recurrent copy.
+- **Validation and maintenance:** complete-provider cases cover both widths and allocation layouts, independent selection of the two fusions, observed intermediates and overlapping bindings. All 28 llvmpipe fixture pairs matched bit-for-bit for outputs and recurrent state. The fused source retains the F32 operation order, and adapter compilers can reassociate expressions across the former dispatch boundaries. These checks do not establish physical-device model throughput. Recheck the GGML copy destination view, the four-tap expression and the storage access modes when updating upstream.
+- **Removal:** remove this stage when upstream provides equivalent convolution and recurrent-state fusion, or the owner drops the optimization.
+
 ## Profile-only Q8 kernel diagnostic
 
 - **Patch:** `ggml-webgpu-q8-diagnostic.patch`.

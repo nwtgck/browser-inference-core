@@ -6,6 +6,7 @@
 #include "cases/scheduler.hpp"
 #include "cases/fusion.hpp"
 #include "cases/indexed-decode.hpp"
+#include "cases/short-conv.hpp"
 #ifdef GGML_WEBGPU_GPU_PROFILE
 #include "cases/q8-diagnostic.hpp"
 #endif
@@ -14,6 +15,7 @@ int main() {
     transfer_cases::all();
     fusion_cases::all();
     indexed_decode_cases::all();
+    short_conv_cases::all();
 #ifdef GGML_WEBGPU_GPU_PROFILE
     q8_diagnostic_cases::all();
 #endif
