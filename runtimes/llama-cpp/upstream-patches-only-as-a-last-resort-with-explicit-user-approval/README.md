@@ -693,6 +693,12 @@ not establish target-device speed.
 - **Validation and maintenance:** the complete-provider test exercises both allocation layouts, clamp and epsilon pipeline selection, uploaded epsilon parameters, and fallback for an exposed denominator or different SCALE parameters. The initial software WebGPU comparison checked sorted IDs and normalized weights for tiny denominators, cancellation and nonfinite values. Confirm the SCALE parameter order and reduction tree at an upstream update. Isolated comparison does not establish target model throughput.
 - **Removal:** remove this stage when upstream fuses the ordered gather with epsilon normalization while preserving the existing alias contract.
 
+## Raw-view readers of fused convolution and router intermediates
+
+The `ggml-webgpu-conv-router-view-sources.patch` stage protects intermediates whose storage is observed through a raw GGML view. The upstream fusion check counts `src` edges, while `ggml_view_tensor` can expose a storage root through `view_src` alone. A scheduler slice can omit the reader while sharing the original graph visit set. The convolution and router encoders reuse the existing lazy index of those readers and leave the original dispatches in place when a discarded tensor remains observable. A raw view of the final result continues to observe storage written by the fusion.
+
+Apply the stage in ordinary and profiling builds after the shared encoder and fusion view index are installed. The native complete-provider cases cover clamp and epsilon routing, short-convolution residuals, single-token and batched convolution with SiLU, and readers outside the encoded slice. The recurrent copy still writes the full concatenation and the persistent cell. Remove the stage when upstream reports these readers in fusion admission or the corresponding fusions are removed.
+
 ## WebGPU single-token short convolution and state store
 
 - **Patch:** `ggml-webgpu-short-conv.patch`, introduced against llama.cpp `c212d25ad`.

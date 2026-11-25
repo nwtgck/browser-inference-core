@@ -752,6 +752,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-conv-router-view-sources.patch',
+    target: 'llama-webgpu',
+    reason: 'preserve convolution and router intermediates read through raw views',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-silu.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

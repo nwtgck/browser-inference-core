@@ -1,0 +1,149 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4430,9 +4430,9 @@
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_router_tail(webgpu_context & ctx,
+                                                                ggml_cgraph * graph, int index,
+-                                                               int & num_encoded_ops) {
++                                                               webgpu_fusion_view_sources & views, int & num_encoded_ops) {
+     router_tail_plan plan;
+-    if (!plan_router_tail(graph, index, plan)) { return std::nullopt; }
++    if (!plan_router_tail(graph, index, views, plan)) { return std::nullopt; }
+     const auto & limits = ctx->global_ctx->capabilities.limits;
+     const uint32_t wg = limits.maxComputeInvocationsPerWorkgroup;
+     if (!wg || (wg & (wg - 1)) || plan.used > wg || limits.maxComputeWorkgroupSizeX < wg ||
+@@ -4488,9 +4488,10 @@
+ }
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_short_conv_residual(webgpu_context & ctx, ggml_cgraph * graph,
+-                                                                        int index, int & consumed) {
++                                                                        int index, webgpu_fusion_view_sources & views,
++                                                                        int & consumed) {
+     short_conv_residual_plan plan{};
+-    if (!plan_short_conv_residual(graph, index, plan)) {
++    if (!plan_short_conv_residual(graph, index, views, plan)) {
+         return std::nullopt;
+     }
+     constexpr uint32_t wg = 128;
+@@ -4622,9 +4623,10 @@
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_ssm_conv_silu(webgpu_context & ctx,
+                                                                  ggml_cgraph * graph, int index,
++                                                                 webgpu_fusion_view_sources & views,
+                                                                  int & num_encoded_ops) {
+     ssm_conv_silu_plan plan;
+-    if (!plan_ssm_conv_silu(graph, index, plan)) { return std::nullopt; }
++    if (!plan_ssm_conv_silu(graph, index, views, plan)) { return std::nullopt; }
+     const auto & limits = ctx->global_ctx->capabilities.limits;
+     const uint64_t tokens_per_wg = plan.output->ne[1] == 1 ? 1 : 8;
+     const uint64_t token_tiles = (uint64_t(plan.output->ne[1]) + tokens_per_wg - 1) / tokens_per_wg;
+@@ -4911,7 +4913,7 @@
+         case GGML_OP_SET_ROWS:
+             return ggml_webgpu_set_rows(ctx, src0, src1, node);
+         case GGML_OP_GET_ROWS:
+-            if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_router_tail(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             if (auto fused = webgpu_dense_q4_swiglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+@@ -4983,8 +4985,8 @@
+         case GGML_OP_SOLVE_TRI:
+             return ggml_webgpu_solve_tri(ctx, src0, src1, node);
+         case GGML_OP_SSM_CONV:
+-            if (auto fused = ggml_webgpu_ssm_conv_silu(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+-            if (auto fused = ggml_webgpu_short_conv_residual(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_ssm_conv_silu(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_short_conv_residual(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_ssm_conv(ctx, src0, src1, node);
+         case GGML_OP_SSM_SCAN:
+             return ggml_webgpu_ssm_scan(ctx, src0, src1, src2, node->src[3], node->src[4], node->src[5], node->src[6],
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+ struct router_tail_plan {
+@@ -39,7 +40,8 @@
+     return tensor && tensor->ne[0] == a && tensor->ne[1] == b && tensor->ne[2] == c && tensor->ne[3] == d;
+ }
+ 
+-inline bool plan_router_tail(const ggml_cgraph * graph, int index, router_tail_plan & plan) {
++inline bool plan_router_tail(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                             router_tail_plan & plan) {
+     plan = {};
+     if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 6) { return false; }
+     ggml_tensor * node[6];
+@@ -84,6 +86,8 @@
+     // Includes COMPUTE, OUTPUT, outside users and intermediate parent-view checks.
+     // Full raw adjacency also preserves scheduler callback/subgraph boundaries.
+     if (!ggml_can_fuse_subgraph_ext(graph, indices, 6, ops, outputs, 1)) { return false; }
++    // The output is a view of div and is still written. Protect only the discarded storage.
++    if (views.contains(gather) || views.contains(sum) || views.contains(normalizer)) { return false; }
+     plan = { probs, ids, gather, flattened, sum, normalizer, div, output, probs_bytes, ids_bytes, output_bytes,
+              uint32_t(experts), uint32_t(used), uint32_t(tokens), uint32_t(ids->nb[1] / 4) };
+     return true;
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ 
+ struct short_conv_residual_plan {
+     const ggml_tensor * history;
+@@ -12,7 +13,8 @@
+ // Binding validation is separate. A logical match cannot authorize overlap between
+ // different channels or a mutable input and the output. One exact same-range
+ // residual/output mapping is safe because each invocation uses its own channel.
+-inline bool plan_short_conv_residual(const ggml_cgraph * graph, int index, short_conv_residual_plan & plan) {
++inline bool plan_short_conv_residual(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                                     short_conv_residual_plan & plan) {
+     constexpr ggml_op ops[] = {GGML_OP_SSM_CONV, GGML_OP_RESHAPE, GGML_OP_ADD, GGML_OP_SCALE};
+     if (!graph || index < 0 || index > graph->n_nodes - 4) {
+         return false;
+@@ -56,6 +58,10 @@
+     if (!ggml_can_fuse_subgraph(graph, index, 4, ops, outputs, 1)) {
+         return false;
+     }
++    // The reshape shares the convolution storage. Neither the convolution nor the add is written by the fusion.
++    if (views.contains(conv) || views.contains(add)) {
++        return false;
++    }
+     plan = {history, weights, residual, output};
+     return true;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-silu.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-silu.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-silu.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-silu.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "ggml-impl.h"
++#include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+ struct ssm_conv_silu_plan {
+@@ -31,7 +32,8 @@
+     return true;
+ }
+ 
+-inline bool plan_ssm_conv_silu(const ggml_cgraph * graph, int index, ssm_conv_silu_plan & plan) {
++inline bool plan_ssm_conv_silu(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                              ssm_conv_silu_plan & plan) {
+     plan = {};
+     if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2 ||
+         !ggml_can_fuse(graph, index, { GGML_OP_SSM_CONV, GGML_OP_UNARY })) { return false; }
+@@ -50,6 +52,7 @@
+         history->ne[0] != weights->ne[0] - 1 + output->ne[1] ||
+         history->ne[1] != weights->ne[1] || output->ne[0] != history->ne[1] ||
+         output->ne[2] != history->ne[2]) { return false; }
++    if (views.contains(conv)) { return false; }
+     plan = { history, weights, conv, output, h, w, o };
+     return true;
+ }

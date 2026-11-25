@@ -4,6 +4,7 @@ namespace fusion_cases {
 enum class Family { scale_unary, rms_scale };
 enum class Guard { ordinary, exposed_intermediate, external_consumer, raw_intermediate, raw_output };
 enum class RouterDenominator { clamp, epsilon, other_epsilon, other_scale, exposed };
+enum class RouterAlias { none, sum, result };
 
 static void graph(Family family, Guard guard, bool final_scale = false) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
@@ -155,7 +156,7 @@ static void l2_clip_graph(int64_t width, int64_t heads, int64_t tokens, bool inp
     }
 }
 
-static void router_tail_graph(bool natural, RouterDenominator denominator) {
+static void router_tail_graph(bool natural, RouterDenominator denominator, RouterAlias alias = RouterAlias::none) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     auto & limits = gpu.context->global_ctx->capabilities.limits;
     limits.maxComputeInvocationsPerWorkgroup = 1024;
@@ -178,7 +179,8 @@ static void router_tail_graph(bool natural, RouterDenominator denominator) {
         clamp ? ggml_clamp(memory.get(), sum, 0x1p-14f, INFINITY) : ggml_scale_bias(memory.get(), sum, scale, epsilon);
     if (denominator == RouterDenominator::exposed)
         ggml_set_output(normalizer);
-    auto * output = ggml_reshape_3d(memory.get(), ggml_div(memory.get(), flat, normalizer), 1, 8, 1);
+    auto * div = ggml_div(memory.get(), flat, normalizer);
+    auto * output = ggml_reshape_3d(memory.get(), div, 1, 8, 1);
     auto * weights_consumer = ggml_scale(memory.get(), output, 2.0f);
     auto * ids_consumer = ggml_cont(memory.get(), ids);
     ggml_set_output(weights_consumer);
@@ -186,6 +188,15 @@ static void router_tail_graph(bool natural, RouterDenominator denominator) {
     auto * graph = ggml_new_graph_custom(memory.get(), 64, false);
     ggml_build_forward_expand(graph, weights_consumer);
     ggml_build_forward_expand(graph, ids_consumer);
+    const int stop = graph->n_nodes;
+    if (alias != RouterAlias::none) {
+        auto * root = alias == RouterAlias::sum ? sum : div;
+        auto * view = ggml_view_tensor(memory.get(), root);
+        BICORE_CHECK(view->view_src == root && !view->src[0]);
+        auto * reader = ggml_dup(memory.get(), view);
+        ggml_set_output(reader);
+        ggml_build_forward_expand(graph, reader);
+    }
     const auto allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>(
         natural ? ggml_gallocr_new(&gpu.type) : nullptr, ggml_gallocr_free);
     const auto storage =
@@ -193,12 +204,20 @@ static void router_tail_graph(bool natural, RouterDenominator denominator) {
                                ggml_backend_buffer_free);
     BICORE_CHECK(natural ? allocator && ggml_gallocr_alloc_graph(allocator.get(), graph) : bool(storage));
 
-    commands = {};
-    readback = {};
-    BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
-    ggml_backend_synchronize(&gpu.backend);
-    const bool fused = clamp || denominator == RouterDenominator::epsilon;
-    BICORE_CHECK(commands.dispatches.size() == (fused ? 6u : 9u));
+    const bool fused = alias != RouterAlias::sum && (clamp || denominator == RouterDenominator::epsilon);
+    const unsigned dispatches = fused ? 6u : 9u;
+    const auto compute = [&](ggml_cgraph * view, unsigned expected) {
+        commands = {};
+        readback = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, view) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        BICORE_CHECK(commands.dispatches.size() == expected);
+    };
+    if (alias != RouterAlias::none) {
+        auto slice = ggml_graph_view(graph, 0, stop);
+        compute(&slice, dispatches);
+    }
+    compute(graph, dispatches + unsigned(alias != RouterAlias::none));
     if (!fused)
         return;
 
@@ -241,10 +260,14 @@ static void all() {
     l2_clip_graph(128, 24, 129, false, Guard::ordinary, false);
     l2_clip_graph(128, 24, 2, false, Guard::raw_intermediate, false);
     l2_clip_graph(128, 24, 2, false, Guard::raw_output, true);
-    for (bool natural : {false, true})
+    for (bool natural : {false, true}) {
         for (const auto denominator :
              {RouterDenominator::clamp, RouterDenominator::epsilon, RouterDenominator::other_epsilon,
               RouterDenominator::other_scale, RouterDenominator::exposed})
             router_tail_graph(natural, denominator);
+        router_tail_graph(natural, RouterDenominator::clamp, RouterAlias::sum);
+        router_tail_graph(natural, RouterDenominator::epsilon, RouterAlias::sum);
+        router_tail_graph(natural, RouterDenominator::epsilon, RouterAlias::result);
+    }
 }
 } // namespace fusion_cases
