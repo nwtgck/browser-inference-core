@@ -1111,6 +1111,42 @@ not establish target-device speed.
   equivalent layout, alias and numerical behavior. Recheck operation order and
   storage binding rules at each upstream update.
 
+## Paired single-token F32 loop controller
+
+- **Patches** `ggml-webgpu-loop-controller.patch` and
+  `ggml-webgpu-loop-controller-context-normal.patch`, against llama.cpp
+  `c212d25`. The profiling recipe already exposes the stock factory context.
+- **Scope** Two contiguous F32 K64/M2304/T1 matrix-vector projections sharing a
+  gate, followed by the exact TANH, MUL, SUB, TANH, MUL and ADD data dependencies.
+  Both projections must select the existing 256-invocation, four-row vec4
+  geometry. Preserve the stock operations for unrecognized graphs, other layouts
+  and limits, partial overlaps, or observable intermediates. The shared view index
+  accounts for raw view readers in other scheduler slices.
+- **Contract** Evaluate both projections with the same two-stage subgroup
+  reduction or workgroup tree as the stock operation. Evaluate the stock TANH
+  clamp and elementwise update formula. Bind disjoint ranges on the same device
+  allocation using consistent storage access. When the current input and the
+  result have identical ranges, a single binding reads and writes each element
+  in place. The fused pass writes only the destination and uses workgroup-local
+  storage. WGSL permits FMA contraction across the fused MUL, SUB and ADD, so
+  intermediate rounding can differ from the storage boundaries of separate
+  passes. Subgroup packing and floating-point results can vary by adapter.
+- **Integration** The normal and profiling recipes embed the same dedicated
+  WGSL using the upstream generator. The planner uses the existing graph and
+  matvec factory within the WebGPU backend.
+- **Validation and limits** Native encoder tests cover dispatch, bindings and
+  parameters, ownership and closure. Dawn/llvmpipe replay compared the emitted
+  WGSL with stock, including non-finite inputs and cancellation. The 48-chain
+  replay shortened from 241.60 ms to 134.87 ms on llvmpipe reporting a subgroup
+  width of 32 with 16 active lanes. The Apple Metal adapter reported width 32,
+  and its active lane count, numerical results and model throughput remain
+  unmeasured. A separate 64-invocation prototype was tested at fixed subgroup
+  width 16. The production path uses the canonical 256-invocation geometry.
+- **Alternative** Retain the two projections and six pointwise passes.
+- **Removal** Retire when upstream fuses this graph with equivalent numerical,
+  layout and lifetime behavior. Recheck the canonical matvec factory, reduction
+  and pointwise operations when updating upstream.
+
 ## Indexed Q2_0 GPU-resident weights
 
 - **Purpose:** execute indexed Q2_0 expert operations on WebGPU when model

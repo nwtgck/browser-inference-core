@@ -720,6 +720,25 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-loop-controller-context-normal.patch',
+    target: 'llama-webgpu',
+    reason: 'share the ordinary matvec factory context with controller fusion admission',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal'],
+  },
+  {
+    file: 'ggml-webgpu-loop-controller.patch',
+    target: 'llama-webgpu',
+    reason: 'fuse the paired F32 projections and elementwise update on single-token graphs',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-loop-controller.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/loop_controller.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
