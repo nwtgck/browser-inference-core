@@ -1,0 +1,65 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -879,3 +879,3 @@
+ }
+-static webgpu_encoded_op ggml_backend_webgpu_build(webgpu_context & ctx, webgpu_pipeline & pipeline,
++static webgpu_encoded_op ggml_backend_webgpu_build(webgpu_context & ctx, const webgpu_pipeline & pipeline,
+     const std::vector<uint32_t> & params, const std::vector<wgpu::BindGroupEntry> & entries,
+@@ -1957,3 +1957,3 @@
+     dispatches.push_back({
+-        qq8_pipeline, std::move(q8_params), std::move(q8_entries), { q8_wg_x, q8_wg_y }
++        std::move(qq8_pipeline), std::move(q8_params), std::move(q8_entries), { q8_wg_x, q8_wg_y }
+     });
+@@ -2043,2 +2043,3 @@
+         if (use_mmvq) {
++            dispatches.reserve(2);
+             ggml_webgpu_quantize_q8_dispatch(ctx, src0, src1, dst, dispatches);
+@@ -2088,3 +2089,4 @@
+     // Build bind group entries
+-    std::vector<wgpu::BindGroupEntry> entries = {};
++    std::vector<wgpu::BindGroupEntry> entries;
++    entries.reserve(src_overlap ? 2 : 3);
+     if (use_mmvq) {
+@@ -2140,4 +2142,7 @@
+ 
++    if (dispatches.empty()) {
++        return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
++    }
+     dispatches.push_back({
+-        pipeline, std::move(params), std::move(entries), { wg_x, wg_y }
++        std::move(pipeline), std::move(params), std::move(entries), { wg_x, wg_y }
+     });
+@@ -2305,3 +2310,3 @@
+                               ggml_webgpu_mul_mat_vec4_aligned(src1, params[1]);
+-    webgpu_pipeline pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx, vec4_aligned);
++    const auto & pipeline = ctx->shader_lib->get_mul_mat_id_vec_pipeline(shader_lib_ctx, vec4_aligned);
+ 
+@@ -2496,2 +2501,3 @@
+     std::vector<webgpu_dispatch_desc> dispatches;
++    dispatches.reserve(2);
+ 
+@@ -2576,3 +2582,3 @@
+     dispatches.push_back({
+-        gather_pipeline, std::move(gather_params), std::move(gather_entries), { 1, 1 }
++        std::move(gather_pipeline), std::move(gather_params), std::move(gather_entries), { 1, 1 }
+     });
+@@ -2621,3 +2627,3 @@
+     dispatches.push_back({
+-        main_pipeline, std::move(main_params), std::move(main_entries), { wg_x, wg_y }
++        std::move(main_pipeline), std::move(main_params), std::move(main_entries), { wg_x, wg_y }
+     });
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3789,3 +3789,5 @@
+ 
+-    webgpu_pipeline get_mul_mat_id_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool vec4_aligned) {
++    // The cache only inserts. Rehash preserves element references, and encoding borrows
++    // the pipeline only for the synchronous dispatch builder.
++    const webgpu_pipeline & get_mul_mat_id_vec_pipeline(const ggml_webgpu_shader_lib_context & context, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_id_pipeline_key key = {};
+@@ -3942,4 +3944,3 @@
+         pipeline.context              = decisions;
+-        mul_mat_id_vec_pipelines[key] = pipeline;
+-        return mul_mat_id_vec_pipelines[key];
++        return mul_mat_id_vec_pipelines.emplace(key, std::move(pipeline)).first->second;
+     }

@@ -880,6 +880,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-matmul-host-dispatch.patch',
+    target: 'llama-webgpu',
+    reason: 'reduce temporary allocations in matrix dispatch encoding',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp', 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

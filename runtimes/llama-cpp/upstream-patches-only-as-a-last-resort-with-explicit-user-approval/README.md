@@ -738,6 +738,16 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation and limits:** complete-source native tests observe bounded warm allocations and existing cache, queue, free and failure behavior. Normal and diagnostic providers compile the complete final source. Native mock allocations are not browser/GPU timings and do not establish model throughput or target-device improvement.
 - **Removal condition:** remove the stage, provenance/build wiring and tests when upstream provides equivalent synchronous assembly without the copies, or the owner drops the optimization.
 
+## Matrix dispatch assembly at the call sites
+
+- **Patch** `ggml-webgpu-matmul-host-dispatch.patch`.
+- **Scope** Submit ordinary single-dispatch matrix products through the existing synchronous builder. Reserve and move the two dispatch descriptions for MMVQ and indexed prefill. Borrow indexed matvec pipelines from the insertion-only cache during encoding.
+- **No-patch alternative** Keep the existing temporary dispatch descriptions and pipeline copies.
+- **Contract** Keep uniform layout, bindings, shader selection, direct and indirect dispatch order, and synchronous ownership transfer. The profiling result owns its pipeline names. Indexed matvec cache insertions and rehashes preserve borrowed references.
+- **Integration** Apply the same host and shader-library stage after the normal and GPU-profile recipes compose their dispatch paths.
+- **Validation** Complete native providers exercise the warm allocation bound, uniform uploads, indexed pipeline lifetime and existing direct/indirect routes in both modes. CPU recorder timing covers warm encoding only.
+- **Removal** Remove the stage and its tests when upstream provides equivalent call-site assembly and cached pipeline ownership.
+
 ## Profile query capacity with multi-dispatch operations
 
 - **Patch:** `ggml-webgpu-profile-query-budget.patch`.

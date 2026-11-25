@@ -287,11 +287,41 @@ static void unary_parameters() {
     BICORE_CHECK(dispatches[4].pipeline != dispatches[5].pipeline);
 }
 
+static void indexed_matvec_lifetime() {
+    auto ctx = recording_context();
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> memory(ggml_init({4096, nullptr, true}), ggml_free);
+    auto * weights = ggml_new_tensor_3d(memory.get(), GGML_TYPE_IQ4_NL, 2304, 2304, 128);
+    auto * input = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, 2304, 1, 1);
+    auto * ids = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, 8, 1);
+    ggml_webgpu_shader_lib_context context{};
+    context.src0 = weights;
+    context.src1 = input;
+    context.src2 = ids;
+    context.dst = ggml_mul_mat_id(memory.get(), weights, input, ids);
+    context.max_wg_size = 256;
+    const auto & first = ctx->shader_lib->get_mul_mat_id_vec_pipeline(context, false);
+    const auto handle = first.pipeline;
+    const auto name = first.name;
+    const auto decisions = first.context;
+    for (int64_t experts = 129; experts <= 256; ++experts) {
+        weights->ne[2] = experts;
+        const auto & added = ctx->shader_lib->get_mul_mat_id_vec_pipeline(context, false);
+        BICORE_CHECK(added.pipeline.Get() != handle.Get());
+        BICORE_CHECK(first.pipeline.Get() == handle.Get() && first.name == name && first.context == decisions);
+    }
+    weights->ne[2] = 128;
+    allocation_fault::state = {true, -1, 0};
+    const auto & repeated = ctx->shader_lib->get_mul_mat_id_vec_pipeline(context, false);
+    allocation_fault::state.observing = false;
+    BICORE_CHECK(&repeated == &first && allocation_fault::state.allocations == 0);
+}
+
 static void all() {
     key_only_ownership();
     bounds_and_free();
     queued_ownership();
     actual_graphs();
     unary_parameters();
+    indexed_matvec_lifetime();
 }
 } // namespace cache_cases

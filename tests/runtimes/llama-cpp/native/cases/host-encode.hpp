@@ -1,3 +1,5 @@
+#include "support/transfer-backend.hpp"
+
 namespace host_encoding {
 enum class Mode { lvalue, rvalue, multi1, multi2, multi0, multi74 };
 
@@ -200,6 +202,98 @@ static void guards() {
         BICORE_CHECK(ctx->param_arena.next_slot == (kind == 0 ? 0u : kind == 1 ? 74u : 1u));
     }
 }
+
+static void matmul_callers(bool mmvq) {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    auto & ctx = gpu.context;
+    auto & capabilities = ctx->global_ctx->capabilities;
+    capabilities.supports_subgroups = true;
+    capabilities.min_subgroup_size = capabilities.max_subgroup_size = 16;
+    capabilities.supports_dot_product = mmvq;
+    ctx->global_ctx->vendor = mmvq ? "amd" : "intel";
+    ctx->batch_compute_passes = true;
+    const transfer_cases::Memory model(ggml_init({65536, nullptr, true}), ggml_free);
+    auto * weight = ggml_new_tensor_2d(model.get(), GGML_TYPE_Q4_K, 2048, 256);
+    auto * input = ggml_new_tensor_2d(model.get(), GGML_TYPE_F32, 2048, 1);
+    auto * output = ggml_mul_mat(model.get(), weight, input);
+    auto * graph = ggml_new_graph_custom(model.get(), 16, false);
+    ggml_build_forward_expand(graph, output);
+    const std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(ggml_gallocr_new(&gpu.type),
+                                                                                ggml_gallocr_free);
+    BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
+
+    const size_t kernels = mmvq ? 2 : 1;
+    for (const bool warm : {false, true}) {
+        commands = {};
+        commands.order.reserve(5 * kernels + 1);
+        ctx->param_arena.reset();
+        ctx->bind_group_cache.begin_graph(0);
+        ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+#ifndef GGML_WEBGPU_GPU_PROFILE
+        ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
+#endif
+        const auto compiled = created;
+        const auto groups = resources.groups_created;
+        allocation_fault::state = {warm, -1, 0};
+        const auto result = ggml_webgpu_mul_mat(ctx, weight, input, output);
+        allocation_fault::state.observing = false;
+        BICORE_CHECK(result.num_kernels == kernels && commands.dispatches.size() == kernels);
+        if (warm) {
+            BICORE_CHECK(created == compiled && resources.groups_created == groups);
+            // One staging list per dispatch and two batch arrays. Each caller
+            // owns params, entries and at most one label allocation per dispatch,
+            // with one extra descriptor vector for the MMVQ pair.
+            size_t budget = 2 + 4 * kernels + size_t(mmvq);
+#ifdef GGML_WEBGPU_GPU_PROFILE
+            budget += 2 * kernels;
+#endif
+            BICORE_CHECK(allocation_fault::state.allocations <= budget);
+        }
+        const auto & slots = ctx->bind_group_cache.slots;
+        const auto & main = slots.back().group.Get()->bindings;
+        BICORE_CHECK(main.size() == 4 && main[0].buffer == ggml_webgpu_tensor_buf(weight).Get());
+        BICORE_CHECK(main[0].offset == ggml_webgpu_tensor_offset(weight));
+        BICORE_CHECK(main[2].buffer == ggml_webgpu_tensor_buf(output).Get() && main[2].size == 1024);
+        BICORE_CHECK(main[2].offset == ggml_webgpu_tensor_offset(output));
+        BICORE_CHECK(main[3].offset == 256 * (kernels - 1));
+        if (mmvq) {
+            const auto & quant = slots.front().group.Get()->bindings;
+            BICORE_CHECK(quant[0].buffer == ggml_webgpu_tensor_buf(input).Get());
+            BICORE_CHECK(quant[0].offset == ggml_webgpu_tensor_offset(input) && quant[1].buffer == main[2].buffer);
+            BICORE_CHECK(main[1].buffer == quant[1].buffer && main[1].offset == main[2].offset + 1024);
+            BICORE_CHECK(main[1].size == 2304);
+            BICORE_CHECK(main[1].offset == quant[1].offset && main[1].size == quant[1].size);
+        } else {
+            BICORE_CHECK(main[1].buffer == ggml_webgpu_tensor_buf(input).Get());
+            BICORE_CHECK(main[1].offset == ggml_webgpu_tensor_offset(input));
+        }
+        for (size_t i = 0; i < kernels; ++i) {
+            BICORE_CHECK(!commands.dispatches[i].arguments &&
+                         commands.dispatches[i].pipeline == slots[i].pipeline.Get()->id);
+#ifdef GGML_WEBGPU_GPU_PROFILE
+            BICORE_CHECK(result.pipeline_names[i] == slots[i].pipeline.Get()->name);
+#endif
+        }
+#ifndef GGML_WEBGPU_GPU_PROFILE
+        ctx->active_compute_pass.End();
+        ctx->active_compute_pass = nullptr;
+#endif
+        ctx->bind_group_cache.end_graph();
+        ctx->param_arena.flush(ctx->global_ctx->queue);
+        BICORE_CHECK(commands.writes.size() == 1 && commands.writes.front().bytes.size() == 256 * kernels);
+        constexpr std::array<uint32_t, 16> expected{0, 0, 0, 256, 1, 2048, 8, 2048, 2048, 2048, 2048, 2048, 1, 1, 1, 1};
+        const auto & bytes = commands.writes.front().bytes;
+        BICORE_CHECK(std::memcmp(bytes.data() + 256 * (kernels - 1), expected.data(), sizeof(expected)) == 0);
+        if (mmvq) {
+            constexpr std::array<uint32_t, 8> quant{0, 2048, 2048, 2048, 2048, 1, 1, 1};
+            BICORE_CHECK(std::memcmp(bytes.data(), quant.data(), sizeof(quant)) == 0);
+        }
+        const auto encoded = ctx->active_command_encoder.Finish();
+        ctx->global_ctx->queue.Submit(1, &encoded);
+        drain_queue(ctx->global_ctx->queue.Get());
+        BICORE_CHECK(commands.executed == kernels);
+    }
+}
 } // namespace host_encoding
 
 static void host_encoding_contracts() {
@@ -225,5 +319,7 @@ static void host_encoding_contracts() {
     ++cases;
     BICORE_CHECK(cases == 164);
     host_encoding::guards();
-    std::cout << "164 current host-encoding allocation/order/upload/lifetime cases passed\n";
+    host_encoding::matmul_callers(false);
+    host_encoding::matmul_callers(true);
+    std::cout << "Host-encoding allocation/order/upload/lifetime cases passed\n";
 }
