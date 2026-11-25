@@ -611,6 +611,19 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-depth-mix.patch',
+    target: 'llama-webgpu',
+    reason: 'single-token depth residual mixing',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/depth_normalize.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/depth_scores.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/depth_blend.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

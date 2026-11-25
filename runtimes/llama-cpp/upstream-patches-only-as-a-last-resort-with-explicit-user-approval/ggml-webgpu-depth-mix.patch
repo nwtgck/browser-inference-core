@@ -1,0 +1,615 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5,6 +5,8 @@
+ 
+ #include "ggml-webgpu.h"
+ #include "ggml-webgpu-hc.hpp"
++#include "ggml-webgpu-depth-mix.hpp"
++#include "ggml-webgpu-depth-mix-shaders.hpp"
+ #include "ggml-webgpu-l2-clip.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
+ #include "ggml-webgpu-scale-unary.hpp"
+@@ -416,6 +418,10 @@
+     webgpu_global_context global_ctx;
+ 
+     std::unique_ptr<ggml_webgpu_shader_lib> shader_lib;
++
++    wgpu::Buffer depth_mix_values;
++    wgpu::Buffer depth_mix_probabilities;
++    std::array<std::array<webgpu_pipeline, 3>, depth_mix::max_depth - 1> depth_mix_pipelines;
+ 
+     webgpu_param_arena       param_arena;
+     webgpu_bind_group_cache  bind_group_cache;
+@@ -3986,6 +3992,131 @@
+     return encoded;
+ }
+ 
++static std::optional<webgpu_encoded_op> ggml_webgpu_depth_mix(webgpu_context & ctx, const ggml_cgraph & graph,
++                                                           int index, int & encoded_ops) {
++    const auto plan = depth_mix::match(graph, index);
++    if (!plan) {
++        return std::nullopt;
++    }
++
++    constexpr uint32_t score_workgroup = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++    constexpr uint32_t compact_workgroup = 128;
++    constexpr uint32_t row_bytes = depth_mix::width * sizeof(float);
++    constexpr uint32_t values_capacity = depth_mix::max_depth * row_bytes;
++    constexpr uint32_t probabilities_capacity = depth_mix::max_depth * depth_mix::max_queries * sizeof(float);
++    const uint32_t depth = plan->depth;
++    const uint32_t query_count = plan->query_count;
++    const auto & capabilities = ctx->global_ctx->capabilities;
++    const auto & limits = capabilities.limits;
++    const bool compact = capabilities.supports_subgroups;
++    if (compact && (capabilities.min_subgroup_size != capabilities.max_subgroup_size ||
++                    (capabilities.min_subgroup_size != 16 && capabilities.min_subgroup_size != 32))) {
++        return std::nullopt;
++    }
++    const uint32_t blend_groups = compact ? depth_mix::width / compact_workgroup : depth_mix::width / 4;
++    const uint32_t stock_softmax_workgroup = limits.maxComputeInvocationsPerWorkgroup;
++    // Each shader is subject to the limit independently; workgroup allocations are rounded individually.
++    const auto workgroup_array = [](uint32_t elements) -> uint32_t {
++        return ROUNDUP_POW2(elements * sizeof(float), 16u);
++    };
++    const uint32_t normalize_shared = workgroup_array(128u);
++    const uint32_t score_shared = workgroup_array(score_workgroup * depth) + workgroup_array(depth) + workgroup_array(8u);
++    const uint32_t blend_shared = compact ? 0u : workgroup_array(4u * score_workgroup);
++    const uint32_t shared_bytes = std::max({normalize_shared, score_shared, blend_shared});
++    if (stock_softmax_workgroup < score_workgroup || (stock_softmax_workgroup & (stock_softmax_workgroup - 1)) ||
++        limits.maxComputeWorkgroupSizeX < score_workgroup || limits.maxComputeWorkgroupStorageSize < shared_bytes ||
++        limits.maxComputeWorkgroupsPerDimension < blend_groups || limits.maxStorageBuffersPerShaderStage < depth + 1 ||
++        limits.maxBindingsPerBindGroup < depth + 2 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        limits.maxStorageBufferBindingSize < values_capacity || limits.maxBufferSize < values_capacity) {
++        return std::nullopt;
++    }
++
++    std::array<webgpu_rms_scale_binding, depth_mix::max_depth> states;
++    for (uint32_t i = 0; i < depth; ++i) {
++        if (!ggml_webgpu_rms_scale_binding(ctx, plan->states[i], row_bytes, states[i])) {
++            return std::nullopt;
++        }
++    }
++    webgpu_rms_scale_binding query, output;
++    if (!ggml_webgpu_rms_scale_binding(ctx, plan->queries, query_count * row_bytes, query) ||
++        !ggml_webgpu_rms_scale_binding(ctx, plan->output, query_count * row_bytes, output) ||
++        query.element_offset % 4 != 0 || output.element_offset % 4 != 0) {
++        return std::nullopt;
++    }
++    // A vec4 storage array must contain complete elements, including any binding prefix.
++    if (query.size % 16 != 0) {
++        return std::nullopt;
++    }
++
++    if (!ctx->depth_mix_values) {
++        wgpu::Buffer values;
++        wgpu::Buffer probabilities;
++        ggml_webgpu_create_buffer(ctx->global_ctx->device, values, values_capacity, wgpu::BufferUsage::Storage,
++                                 "depth mix normalized states");
++        ggml_webgpu_create_buffer(ctx->global_ctx->device, probabilities, probabilities_capacity, wgpu::BufferUsage::Storage,
++                                 "depth mix probabilities");
++        // Separate resources avoid conflicting writable and read-only usage in the score dispatch.
++        ctx->depth_mix_values = std::move(values);
++        ctx->depth_mix_probabilities = std::move(probabilities);
++    }
++
++    // The device capabilities and selected subgroup policy are constant for this context.
++    auto & pipelines = ctx->depth_mix_pipelines[depth - 2];
++    if (!pipelines[0].pipeline) {
++        const std::string shape = "DEPTH=" + std::to_string(depth);
++        pre_wgsl::Preprocessor preprocessor;
++        const auto norm = preprocessor.preprocess(wgsl_depth_normalize,
++            {shape, "SCRATCH_BINDING=" + std::to_string(depth), "PARAM_BINDING=" + std::to_string(depth + 1)});
++        std::vector<std::string> score_defines {shape, "WORKGROUP=" + std::to_string(score_workgroup) + "u"};
++        if (compact) {
++            score_defines.push_back("USE_SUBGROUP_REDUCTION");
++        }
++        const auto scores = preprocessor.preprocess(wgsl_depth_scores, score_defines);
++        std::vector<std::string> blend_defines {shape,
++            "WORKGROUP=" + std::to_string(compact ? compact_workgroup : score_workgroup) + "u"};
++        if (!compact) {
++            blend_defines.push_back("PRESERVE_REDUCTION");
++        }
++        const auto blend = preprocessor.preprocess(wgsl_depth_blend, blend_defines);
++        pipelines = std::array{
++            ggml_webgpu_create_pipeline(ctx->global_ctx->device, norm.c_str(), "depth_mix_normalize"),
++            ggml_webgpu_create_pipeline(ctx->global_ctx->device, scores.c_str(), "depth_mix_scores"),
++            ggml_webgpu_create_pipeline(ctx->global_ctx->device, blend.c_str(), compact ? "depth_mix_blend_compact" : "depth_mix_blend_tree"),
++        };
++    }
++
++    std::vector<uint32_t> offsets(8);
++    std::vector<wgpu::BindGroupEntry> norm_entries;
++    norm_entries.reserve(depth + 1);
++    for (uint32_t i = 0; i < depth; ++i) {
++        offsets[i] = states[i].element_offset;
++        norm_entries.push_back(ggml_webgpu_make_bind_group_entry(i, states[i].buffer, states[i].offset, states[i].size));
++    }
++    // All external source reads precede the final dispatch. An output can
++    // reuse dead input storage without a writable binding to that input.
++    const auto values = [&](uint32_t slot) {
++        return ggml_webgpu_make_bind_group_entry(slot, ctx->depth_mix_values, 0, depth * row_bytes);
++    };
++    const auto probabilities = [&](uint32_t slot) {
++        return ggml_webgpu_make_bind_group_entry(slot, ctx->depth_mix_probabilities, 0, depth * query_count * sizeof(float));
++    };
++    norm_entries.push_back(values(depth));
++
++    std::vector<webgpu_dispatch_desc> dispatches;
++    dispatches.reserve(3);
++    dispatches.push_back({pipelines[0], std::move(offsets), std::move(norm_entries), {depth, 1}});
++    dispatches.push_back({pipelines[1], {query.element_offset / 4, ggml_webgpu_u32_from_f32(plan->score_scale)},
++         {values(0), ggml_webgpu_make_bind_group_entry(1, query.buffer, query.offset, query.size), probabilities(2)},
++         {query_count, 1}});
++    dispatches.push_back({pipelines[2], {output.element_offset},
++         {values(0), probabilities(1), ggml_webgpu_make_bind_group_entry(2, output.buffer, output.offset, output.size)},
++         {blend_groups, query_count}});
++    auto encoded = ggml_backend_webgpu_build_multi(ctx, dispatches);
++    encoded_ops = plan->consumed;
++    return encoded;
++}
++
+ static std::optional<webgpu_encoded_op> ggml_webgpu_l2_clip(webgpu_context & ctx, const ggml_cgraph * graph,
+                                                           int index, int & encoded_ops) {
+     l2_clip_plan plan;
+@@ -4577,6 +4708,9 @@
+             return ggml_webgpu_add_id(ctx, src0, src1, src2, node);
+         case GGML_OP_CONCAT:
+             if (auto fused = ggml_webgpu_short_conv_state(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (node->ne[0] == depth_mix::width && node->ne[1] == 2) {
++                if (auto fused = ggml_webgpu_depth_mix(ctx, *cgraph, node_idx, num_encoded_ops)) { return fused; }
++            }
+             return ggml_webgpu_concat(ctx, src0, src1, node);
+         case GGML_OP_REPEAT:
+             return ggml_webgpu_repeat(ctx, src0, node);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-depth-mix.hpp
+@@ -0,0 +1,130 @@
++#pragma once
++
++#include "ggml-impl.h"
++
++#include <array>
++#include <cmath>
++#include <optional>
++
++namespace depth_mix {
++
++inline constexpr int width = 2304;
++inline constexpr int max_depth = 5;
++inline constexpr int max_queries = 4;
++inline constexpr float epsilon = 1e-6f;
++inline constexpr int last_non_concat_nodes = 7;
++inline constexpr int max_consumed_nodes = max_depth - 1 + last_non_concat_nodes;
++
++struct plan {
++    std::array<const ggml_tensor *, max_depth> states{};
++    const ggml_tensor * queries;
++    const ggml_tensor * output;
++    int depth;
++    int query_count;
++    int consumed;
++    float score_scale;
++};
++
++inline bool f32_rect(const ggml_tensor * node, int64_t columns, int64_t rows) {
++    return node && node->type == GGML_TYPE_F32 && node->ne[0] == columns && node->ne[1] == rows &&
++           node->ne[2] == 1 && node->ne[3] == 1 && ggml_is_contiguous(node);
++}
++
++inline bool op_arity(const ggml_tensor * node, ggml_op op, int sources, bool view = false) {
++    if (!node || node->op != op || (node->view_src != nullptr) != view) {
++        return false;
++    }
++    for (int i = 0; i < GGML_MAX_SRC; ++i) {
++        if ((node->src[i] != nullptr) != (i < sources)) {
++            return false;
++        }
++    }
++    return true;
++}
++
++inline std::optional<plan> match(const ggml_cgraph & graph, int first) {
++    if (first < 0 || first > graph.n_nodes - last_non_concat_nodes - 1) {
++        return {};
++    }
++    const auto * entry = graph.nodes[first];
++    if (entry->op != GGML_OP_CONCAT || entry->type != GGML_TYPE_F32 || entry->ne[0] != width ||
++        entry->ne[1] != 2 || entry->ne[2] != 1 || entry->ne[3] != 1 || ggml_get_op_params_i32(entry, 0) != 1) {
++        return {};
++    }
++
++    // The current left-to-right graph visits the output's transpose branch first.
++    // All original state views are ready before the CONCAT sequence starts.
++    int depth = 2;
++    while (depth < max_depth && first + depth - 1 < graph.n_nodes &&
++           graph.nodes[first + depth - 1]->op == GGML_OP_CONCAT) {
++        ++depth;
++    }
++    const int consumed = depth - 1 + last_non_concat_nodes;
++    if (consumed > graph.n_nodes - first) {
++        return {};
++    }
++
++    const auto * stack = graph.nodes[first + depth - 2];
++    const auto * norm = graph.nodes[first + depth - 1];
++    const auto * transpose = graph.nodes[first + depth];
++    const auto * projection = graph.nodes[first + depth + 1];
++    const auto * repeat = graph.nodes[first + depth + 2];
++    const auto * scores = graph.nodes[first + depth + 3];
++    const auto * softmax = graph.nodes[first + depth + 4];
++    const auto * output = graph.nodes[first + depth + 5];
++    const int64_t q = output->ne[1];
++    if ((q != 1 && q != 3 && q != 4) ||
++        !op_arity(norm, GGML_OP_RMS_NORM, 1) || !op_arity(transpose, GGML_OP_TRANSPOSE, 1, true) ||
++        !op_arity(projection, GGML_OP_CONT, 1) || !op_arity(repeat, GGML_OP_REPEAT, 1) ||
++        !op_arity(scores, GGML_OP_MUL_MAT, 2) || !op_arity(softmax, GGML_OP_SOFT_MAX, 1) ||
++        !op_arity(output, GGML_OP_MUL_MAT, 2)) {
++        return {};
++    }
++    if (norm->src[0] != stack || transpose->src[0] != norm || projection->src[0] != transpose ||
++        scores->src[0] != norm || scores->src[1] != repeat || softmax->src[0] != scores ||
++        output->src[0] != projection || output->src[1] != softmax ||
++        transpose->view_src != norm || transpose->view_offs != 0 || transpose->type != GGML_TYPE_F32 ||
++        transpose->ne[0] != depth || transpose->ne[1] != width || transpose->ne[2] != 1 || transpose->ne[3] != 1 ||
++        transpose->nb[0] != norm->nb[1] || transpose->nb[1] != norm->nb[0]) {
++        return {};
++    }
++    const auto * queries = repeat->src[0];
++    if (!f32_rect(norm, width, depth) || !f32_rect(projection, depth, width) ||
++        !f32_rect(repeat, width, q) || !f32_rect(queries, width, q) ||
++        !f32_rect(scores, depth, q) || !f32_rect(softmax, depth, q) || !f32_rect(output, width, q) ||
++        ggml_get_op_params_f32(norm, 0) != epsilon ||
++        ggml_get_op_params_f32(softmax, 0) != 1.0f / std::sqrt(static_cast<float>(width)) ||
++        ggml_get_op_params_i32(softmax, 1) != 0) {
++        return {};
++    }
++
++    plan result{{}, queries, output, depth, static_cast<int>(q), consumed, ggml_get_op_params_f32(softmax, 0)};
++    const auto * part = stack;
++    for (int count = depth; count >= 2; --count) {
++        if (graph.nodes[first + count - 2] != part || !op_arity(part, GGML_OP_CONCAT, 2) ||
++            ggml_get_op_params_i32(part, 0) != 1 || !f32_rect(part, width, count) ||
++            !f32_rect(part->src[0], width, 1)) {
++            return {};
++        }
++        result.states[depth - count] = part->src[0];
++        part = part->src[1];
++    }
++    if (!f32_rect(part, width, 1)) {
++        return {};
++    }
++    result.states[depth - 1] = part;
++
++    std::array<int, max_consumed_nodes> indices;
++    std::array<ggml_op, max_consumed_nodes> ops;
++    for (int i = 0; i < consumed; ++i) {
++        indices[i] = first + i;
++        ops[i] = graph.nodes[first + i]->op;
++    }
++    const int output_index = first + consumed - 1;
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices.data(), consumed, ops.data(), &output_index, 1)) {
++        return {};
++    }
++    return result;
++}
++
++} // namespace depth_mix
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/depth_normalize.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/depth_normalize.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/depth_normalize.wgsl
+@@ -0,0 +1,65 @@
++// The replay expands DEPTH and SCRATCH_BINDING before compiling WGSL.
++struct Params {
++    source_offsets: vec4<u32>,
++    source_offset4: u32,
++};
++
++@group(0) @binding(0) var<storage, read> source0: array<f32>;
++@group(0) @binding(1) var<storage, read> source1: array<f32>;
++#if DEPTH >= 3
++@group(0) @binding(2) var<storage, read> source2: array<f32>;
++#endif
++#if DEPTH >= 4
++@group(0) @binding(3) var<storage, read> source3: array<f32>;
++#endif
++#if DEPTH >= 5
++@group(0) @binding(4) var<storage, read> source4: array<f32>;
++#endif
++@group(0) @binding(SCRATCH_BINDING) var<storage, read_write> values: array<f32>;
++@group(0) @binding(PARAM_BINDING) var<uniform> params: Params;
++
++const WIDTH = 2304u;
++const WG_SIZE = 128u;
++var<workgroup> partial: array<f32, WG_SIZE>;
++
++fn load(row: u32, col: u32) -> f32 {
++    switch row {
++        case 0u: { return source0[params.source_offsets.x + col]; }
++        case 1u: { return source1[params.source_offsets.y + col]; }
++#if DEPTH >= 3
++        case 2u: { return source2[params.source_offsets.z + col]; }
++#endif
++#if DEPTH >= 4
++        case 3u: { return source3[params.source_offsets.w + col]; }
++#endif
++#if DEPTH >= 5
++        case 4u: { return source4[params.source_offset4 + col]; }
++#endif
++        default: { return 0.0; }
++    }
++}
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) local: vec3<u32>) {
++    let row = group.x;
++    let lane = local.x;
++    var squares = 0.0;
++    for (var col = lane; col < WIDTH; col += WG_SIZE) {
++        let value = load(row, col);
++        squares += value * value;
++    }
++    partial[lane] = squares;
++    workgroupBarrier();
++    for (var step = WG_SIZE / 2u; step > 0u; step /= 2u) {
++        if (lane < step) {
++            partial[lane] += partial[lane + step];
++        }
++        workgroupBarrier();
++    }
++
++    // Preserve WGSL row_norm's F32 square/reduce/scale sequence.
++    let scale = 1.0 / sqrt(partial[0] / f32(WIDTH) + 1e-6);
++    for (var col = lane; col < WIDTH; col += WG_SIZE) {
++        values[row * WIDTH + col] = scale * (load(row, col) - 0.0);
++    }
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/depth_scores.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/depth_scores.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/depth_scores.wgsl
+@@ -0,0 +1,126 @@
++#ifdef USE_SUBGROUP_REDUCTION
++enable subgroups;
++#endif
++
++struct Params {
++    query_offset4: u32,
++    score_scale: f32,
++};
++
++@group(0) @binding(0) var<storage, read> values: array<vec4<f32>>;
++@group(0) @binding(1) var<storage, read> queries: array<vec4<f32>>;
++@group(0) @binding(2) var<storage, read_write> probabilities: array<f32>;
++@group(0) @binding(3) var<uniform> params: Params;
++
++const VECTORS_PER_ROW = 576u;
++const DEPTH_COUNT = u32(DEPTH);
++const WG_SIZE = u32(WORKGROUP);
++var<workgroup> partials: array<f32, DEPTH_COUNT * WG_SIZE>;
++var<workgroup> scores: array<f32, DEPTH_COUNT>;
++var<workgroup> softmax_partial: array<f32, 8>;
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) local: vec3<u32>
++#ifdef USE_SUBGROUP_REDUCTION
++    , @builtin(subgroup_id) subgroup: u32, @builtin(subgroup_invocation_id) invocation: u32,
++      @builtin(num_subgroups) subgroups: u32, @builtin(subgroup_size) subgroup_size: u32
++#endif
++) {
++    let query = group.x;
++    let lane = local.x;
++#ifdef USE_SUBGROUP_REDUCTION
++    // The workgroup's invocations can equal the total subgroup capacity only
++    // when every subgroup is full. Both built-ins are workgroup-uniform.
++    let full_subgroups = subgroups * subgroup_size == WG_SIZE;
++#endif
++    var totals: array<f32, DEPTH_COUNT>;
++    for (var i = lane; i < VECTORS_PER_ROW; i += WG_SIZE) {
++        let x = queries[params.query_offset4 + query * VECTORS_PER_ROW + i];
++        for (var d = 0u; d < DEPTH_COUNT; d++) {
++            totals[d] += dot(values[d * VECTORS_PER_ROW + i], x);
++        }
++    }
++    for (var d = 0u; d < DEPTH_COUNT; d++) {
++#ifdef USE_SUBGROUP_REDUCTION
++        if (full_subgroups) {
++            let total = subgroupAdd(totals[d]);
++            if (invocation == 0u) {
++                partials[d * WG_SIZE + subgroup] = total;
++            }
++        } else {
++            partials[d * WG_SIZE + lane] = totals[d];
++        }
++#else
++        partials[d * WG_SIZE + lane] = totals[d];
++#endif
++    }
++    workgroupBarrier();
++#ifdef USE_SUBGROUP_REDUCTION
++    if (full_subgroups) {
++        for (var d = subgroup; d < DEPTH_COUNT; d += subgroups) {
++            var sum = 0.0;
++            for (var i = invocation; i < subgroups; i += subgroup_size) {
++                sum += partials[d * WG_SIZE + i];
++            }
++            let total = subgroupAdd(sum);
++            if (invocation == 0u) {
++                scores[d] = total;
++            }
++        }
++    } else
++#endif
++    {
++        // All 256 local invocations participate even when subgroup packing is partial.
++        for (var step = WG_SIZE / 2u; step > 0u; step /= 2u) {
++            if (lane < step) {
++                for (var d = 0u; d < DEPTH_COUNT; d++) {
++                    partials[d * WG_SIZE + lane] += partials[d * WG_SIZE + lane + step];
++                }
++            }
++            workgroupBarrier();
++        }
++        if (lane < DEPTH_COUNT) {
++            scores[lane] = partials[lane * WG_SIZE];
++        }
++    }
++    workgroupBarrier();
++
++    var scaled = -1e30;
++    var row_max = -1e30;
++    if (lane < DEPTH_COUNT) {
++        scaled = scores[lane] * params.score_scale + 0.0;
++        row_max = max(row_max, scaled);
++    }
++    if (lane < 8u) {
++        softmax_partial[lane] = row_max;
++    }
++    workgroupBarrier();
++    for (var step = 4u; step > 0u; step /= 2u) {
++        if (lane < step) {
++            softmax_partial[lane] = max(softmax_partial[lane], softmax_partial[lane + step]);
++        }
++        workgroupBarrier();
++    }
++    row_max = softmax_partial[0];
++    workgroupBarrier();
++
++    var exponential = 0.0;
++    if (lane < DEPTH_COUNT) {
++        exponential = exp(scaled - row_max);
++    }
++    if (lane < 8u) {
++        softmax_partial[lane] = 0.0 + exponential;
++    }
++    workgroupBarrier();
++    // With depth <= 5 the stock power-of-two softmax tree's earlier rounds add zeros only.
++    for (var step = 4u; step > 0u; step /= 2u) {
++        if (lane < step) {
++            softmax_partial[lane] += softmax_partial[lane + step];
++        }
++        workgroupBarrier();
++    }
++    if (lane < DEPTH_COUNT) {
++        let reciprocal = 1.0 / softmax_partial[0];
++        probabilities[query * DEPTH_COUNT + lane] = exponential * reciprocal;
++    }
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/depth_blend.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/depth_blend.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/depth_blend.wgsl
+@@ -0,0 +1,110 @@
++#ifdef USE_SUBGROUP_REDUCTION
++enable subgroups;
++#endif
++
++struct Params {
++    output_offset: u32,
++};
++
++@group(0) @binding(0) var<storage, read> values: array<f32>;
++@group(0) @binding(1) var<storage, read> probabilities: array<f32>;
++@group(0) @binding(2) var<storage, read_write> output_values: array<f32>;
++@group(0) @binding(3) var<uniform> params: Params;
++
++const WIDTH = 2304u;
++const DEPTH_COUNT = u32(DEPTH);
++const WG_SIZE = u32(WORKGROUP);
++
++#ifdef PRESERVE_REDUCTION
++const OUTPUTS_PER_WG = 4u;
++var<workgroup> partials: array<f32, OUTPUTS_PER_WG * WG_SIZE>;
++#endif
++
++fn feature(depth: u32, column: u32) -> f32 {
++    return values[depth * WIDTH + column];
++}
++
++#if DEPTH == 4
++fn dot4(column: u32, p: u32) -> f32 {
++    let row = vec4(feature(0u, column), feature(1u, column), feature(2u, column), feature(3u, column));
++    let weights = vec4(probabilities[p], probabilities[p + 1u], probabilities[p + 2u], probabilities[p + 3u]);
++    return dot(row, weights);
++}
++#endif
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) local: vec3<u32>
++#ifdef USE_SUBGROUP_REDUCTION
++    , @builtin(subgroup_id) subgroup: u32, @builtin(subgroup_invocation_id) invocation: u32,
++      @builtin(num_subgroups) subgroups: u32, @builtin(subgroup_size) subgroup_size: u32
++#endif
++) {
++    let query = group.y;
++    let lane = local.x;
++    let p = query * DEPTH_COUNT;
++    let offset = params.output_offset + query * WIDTH;
++
++#ifdef PRESERVE_REDUCTION
++    // Keep the canonical matvec lane ownership and reduction while testing
++    // direct reads from depth-major storage. 2304 is divisible by four.
++    let first = group.x * OUTPUTS_PER_WG;
++    for (var r = 0u; r < OUTPUTS_PER_WG; r++) {
++        var term = 0.0;
++#if DEPTH == 4
++        if (lane == 0u) {
++            term += dot4(first + r, p);
++        }
++#else
++        if (lane < DEPTH_COUNT) {
++            term += feature(lane, first + r) * probabilities[p + lane];
++        }
++#endif
++#ifdef USE_SUBGROUP_REDUCTION
++        let total = subgroupAdd(term);
++        if (invocation == 0u) {
++            partials[r * WG_SIZE + subgroup] = total;
++        }
++#else
++        partials[r * WG_SIZE + lane] = term;
++#endif
++    }
++    workgroupBarrier();
++#ifdef USE_SUBGROUP_REDUCTION
++    for (var r = subgroup; r < OUTPUTS_PER_WG; r += subgroups) {
++        var sum = 0.0;
++        for (var i = invocation; i < subgroups; i += subgroup_size) {
++            sum += partials[r * WG_SIZE + i];
++        }
++        let total = subgroupAdd(sum);
++        if (invocation == 0u) {
++            output_values[offset + first + r] = total;
++        }
++    }
++#else
++    for (var step = WG_SIZE / 2u; step > 0u; step /= 2u) {
++        if (lane < step) {
++            for (var r = 0u; r < OUTPUTS_PER_WG; r++) {
++                partials[r * WG_SIZE + lane] += partials[r * WG_SIZE + lane + step];
++            }
++        }
++        workgroupBarrier();
++    }
++    if (lane < OUTPUTS_PER_WG) {
++        output_values[offset + first + lane] = partials[lane * WG_SIZE];
++    }
++#endif
++#else
++    let column = group.x * WG_SIZE + lane;
++    if (column < WIDTH) {
++#if DEPTH == 4
++        output_values[offset + column] = dot4(column, p);
++#else
++        var result = 0.0;
++        for (var r = 0u; r < DEPTH_COUNT; r++) {
++            result += feature(r, column) * probabilities[p + r];
++        }
++        output_values[offset + column] = result;
++#endif
++    }
++#endif
++}

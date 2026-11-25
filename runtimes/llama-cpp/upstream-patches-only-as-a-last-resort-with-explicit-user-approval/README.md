@@ -1018,3 +1018,30 @@ not establish target-device speed.
 - **Removal:** retire each patch when upstream provides equivalent behavior or
   its scope is withdrawn. Recheck the per-tile reduction, mask indexing and
   workgroup storage budget when either upstream shader or factory changes.
+
+## Single-token depth residual mixing
+
+- **Patch:** `ggml-webgpu-depth-mix.patch`, against llama.cpp `c212d25`.
+- **Scope:** contiguous F32 states of width 2304 and depth 2 to 5, with 1, 3 or
+  4 learned queries. Match the complete sequence from depth concatenation to
+  RMS normalization, query scores, unmasked softmax and weighted output.
+  Keep the decomposed path for an incomplete sequence, an exposed or shared
+  intermediate, unsupported layouts or device limits.
+- **Contract:** normalize states directly into reusable device scratch, write
+  probabilities to a separate scratch buffer, then blend without a transpose
+  copy. The output can reuse storage whose last read has finished. Fixed SG16
+  and SG32 use the compact blend. Score reduction uses subgroups when their
+  total capacity equals the workgroup size and uses a complete workgroup tree
+  otherwise. The choice of reduction can change floating-point rounding.
+- **Integration:** use both normal and profiling source preparations with the
+  upstream WGSL generator. Model graph construction and public ABI are
+  unchanged. The prepared source receipt covers the patch and shader inputs.
+- **Validation and limits:** native contracts cover dependent mixes in one
+  graph, scratch reuse, external consumers and workgroup-storage boundaries.
+  Software WebGPU comparisons cover dependent outputs and actual partial
+  subgroup packing. Full-model output and physical throughput remain
+  unmeasured.
+- **No-patch alternative:** retain the decomposed graph and existing kernels.
+- **Removal:** retire when upstream fuses this graph with equivalent admission,
+  device limits and numerical behavior. Review graph order, RMS and matvec
+  reductions and storage binding rules when updating the upstream revision.
