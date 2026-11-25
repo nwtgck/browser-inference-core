@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 3,
-  "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+  "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
   "schemaSha256": "5dbd61cc33911c2d66ebbc0bc928341e6193544fc44190dbdbf03bf43cb41fff",
   "upstreams": {
     "stable-diffusion": {
@@ -691,7 +691,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -1584,7 +1584,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -4035,7 +4035,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "d323aeb3e0271ea56ec6a8a2d5616904",
+            "identity": "9c5b74a6ac943469f717dc92093f00ef",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -4053,7 +4053,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -4946,7 +4946,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -7445,7 +7445,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "b9230150beef4effa7d2e936230a3057",
+            "identity": "29689960e1b9974166a08f1593d46773",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -7490,7 +7490,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -8383,7 +8383,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -10834,7 +10834,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "46056ca7ec5f395b626a2198b95f0750",
+            "identity": "651557bb26800788dc3114398ffb8606",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -10852,7 +10852,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -11745,7 +11745,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -14244,7 +14244,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "400fff9f5c4135d4478d5db6d84943d0",
+            "identity": "5237d5af960124dbe0f3060a60c39fd1",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -14289,7 +14289,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -15182,7 +15182,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -17633,7 +17633,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "3d68def84efac1d2206f88ec4425b78d",
+            "identity": "9337f2554b63495ee6e0913870bee0b0",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -17651,7 +17651,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+          "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -18544,7 +18544,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
+            "sourceCommit": "3673509a4566d47fed158c4bd6fe94b86877c1bf",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -21043,7 +21043,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "a978b372323810e793ccb51f736befa2",
+            "identity": "b34a3676eaee4d8b9a4e08e0dedbd7be",
             "compilerWrapper": "ccache"
           },
           "validation": {
