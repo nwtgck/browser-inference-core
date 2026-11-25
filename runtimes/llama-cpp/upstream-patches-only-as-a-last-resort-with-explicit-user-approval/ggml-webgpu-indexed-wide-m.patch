@@ -25,7 +25,7 @@
          return seed;
      }
  };
-@@ -3404,6 +3406,30 @@
+@@ -3404,6 +3406,43 @@
              key.tile_k = wide_tile_k;
          }
  
@@ -43,6 +43,19 @@
 +        const bool wide_down = k == 640 && m == 2560 &&
 +                               (key.src0_type == GGML_TYPE_IQ4_NL || key.src0_type == GGML_TYPE_Q5_1);
 +        const ggml_tensor * ids = context.src2;
++        const bool wide_iq4_gate = key.src0_type == GGML_TYPE_IQ4_NL && k == 2304;
++        const bool wide_nvfp4_down = key.src0_type == GGML_TYPE_NVFP4 && key.f32_accumulator && k == 1152;
++        if ((wide_iq4_gate || wide_nvfp4_down) && m == 2304 && key.n_experts == 128 &&
++            key.src1_type == GGML_TYPE_F32 && !key.vectorized && key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT &&
++            context.src0->ne[3] == 1 && context.src1->ne[0] == k &&
++            context.src1->ne[1] == (wide_iq4_gate ? 1 : 8) && context.src1->ne[2] == 128 &&
++            context.src1->ne[3] == 1 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 8 &&
++            ids->ne[1] == 128 && ids->ne[2] == 1 && ids->ne[3] == 1 && context.dst &&
++            context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
++            context.dst->ne[2] == 128 && context.dst->ne[3] == 1 && context.max_wg_size >= grouped_threads &&
++            context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
++            key.tile_m = wide_tile_m;
++        }
 +        if ((wide_gate_up || wide_down) && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
 +            !key.f32_accumulator && key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT && key.n_experts == 512 &&
 +            context.src1->ne[0] == k && context.src1->ne[1] == (wide_gate_up ? 1 : 10) &&
@@ -56,7 +69,7 @@
          auto it = mul_mat_id_pipelines.find(key);
          if (it != mul_mat_id_pipelines.end()) {
              return it->second;
-@@ -3500,7 +3526,7 @@
+@@ -3500,7 +3539,7 @@
          const uint32_t tile_k = key.tile_k;
  
          // Tiles
@@ -65,7 +78,7 @@
          defines.push_back("TILE_N=" + std::to_string(WEBGPU_MUL_MAT_TILE_N) + "u");
          defines.push_back("TILE_K=" + std::to_string(tile_k) + "u");
  
-@@ -3529,11 +3555,14 @@
+@@ -3529,11 +3568,14 @@
                  variant += "_paired";
              }
          }

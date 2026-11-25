@@ -162,7 +162,7 @@ static void indexed_k_adapter_selection() {
             operands[i]->buffer = &buffers[i];
         }
 
-        const auto record = [&](const char * vendor, uint32_t graph_index) {
+        const auto record = [&](const char * vendor, uint32_t graph_index, uint32_t expected_groups) {
             ctx->global_ctx->vendor = vendor;
             commands = {};
             ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
@@ -180,7 +180,7 @@ static void indexed_k_adapter_selection() {
             ctx->param_arena.flush(ctx->global_ctx->queue);
             BICORE_CHECK(encoded.num_kernels == 2 && commands.dispatches.size() == 2);
             const auto dispatch = commands.dispatches.back();
-            BICORE_CHECK(dispatch.x == 11232 && dispatch.y == 1 && dispatch.z == 1);
+            BICORE_CHECK(dispatch.x == expected_groups && dispatch.y == 1 && dispatch.z == 1);
             const auto encoded_commands = ctx->active_command_encoder.Finish();
             ctx->global_ctx->queue.Submit(1, &encoded_commands);
             drain_queue(ctx->global_ctx->queue.Get());
@@ -193,14 +193,15 @@ static void indexed_k_adapter_selection() {
         selection.src1 = input;
         selection.src2 = ids;
         selection.dst = dst;
+        selection.max_wg_size = std::min(limits.maxComputeInvocationsPerWorkgroup, limits.maxComputeWorkgroupSizeX);
         selection.wg_mem_limit_bytes = limits.maxComputeWorkgroupStorageSize;
         const auto wide = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
         selection.prefer_narrow_indexed_k = true;
         const auto narrow = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
         BICORE_CHECK(wide.pipeline.Get() != narrow.pipeline.Get());
-        BICORE_CHECK(record("intel", 0) == wide.pipeline.Get()->id);
-        BICORE_CHECK(record("apple", 1) == narrow.pipeline.Get()->id);
-        BICORE_CHECK(record("", 2) == wide.pipeline.Get()->id);
+        BICORE_CHECK(record("intel", 0, 11232) == wide.pipeline.Get()->id);
+        BICORE_CHECK(record("apple", 1, type == GGML_TYPE_IQ4_NL ? 5616 : 11232) == narrow.pipeline.Get()->id);
+        BICORE_CHECK(record("", 2, 11232) == wide.pipeline.Get()->id);
     }
 }
 
