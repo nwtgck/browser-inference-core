@@ -579,6 +579,15 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing independent indexed matvec or wait for upstream equivalent field loads.
 - **Removal:** upstream equivalent support, withdrawal of this optimization, or removal of its parent indexed IQ3 implementation; remove this stage, patch, build dependencies, tests and provenance together.
 
+## Fixed-subgroup indexed IQ4_NL and NVFP4 decode
+
+- **Patch:** `ggml-webgpu-quantized-expert-subgroup-decode.patch`.
+- **Scope:** use independent 16- or 32-lane subgroups for single-token IQ4_NL or NVFP4 indexed matvec with F32 activations, K1152 or K2304, M2304 and eight selected experts. Select by tensor shape, physical binding bounds and device limits. Preserve the existing IQ3_S scope and the canonical fallback.
+- **Integration:** both WebGPU modes share the existing independent subgroup shader, quantization loaders and partial-subgroup arithmetic. This stage reuses its buffer and dispatch checks with the corresponding GGML block traits. The upstream revision and applied patch remain in the preparation receipt.
+- **Validation and limits:** complete provider tests cover fixed and varying widths, boundary binding limits and unchanged IQ3_S selection. Software WebGPU replay of representative packed tensors covers the two K sizes and fixed widths. Independent reductions change F32 addition order. Physical-device throughput and model-level quality require measurement.
+- **No-patch alternative:** retain the existing cooperative indexed decode path.
+- **Removal:** upstream equivalent support or withdrawal of the optimization. Remove this stage, tests and provenance together.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.

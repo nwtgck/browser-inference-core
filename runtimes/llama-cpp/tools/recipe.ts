@@ -576,6 +576,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-quantized-expert-subgroup-decode.patch',
+    target: 'llama-webgpu',
+    reason: 'independent subgroups for selected IQ4_NL and NVFP4 expert decode shapes',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
