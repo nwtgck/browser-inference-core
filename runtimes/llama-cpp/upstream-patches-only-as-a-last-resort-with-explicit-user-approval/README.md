@@ -899,6 +899,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation** The normal and GPU-profile native recorders exercise cache, alignment, resource limits and encoder dispatch. The E48 single-binding software WebGPU fixture included packed nibbles with half-float infinity and NaN bit patterns next to finite scales. Its outputs matched the CPU reference bitwise and isolated GPU time was 24–28% shorter in mirrored runs. The E128 single-binding case was checked at native selection with a device limit that admits its 285,474,816-byte weight tensor. Physical-adapter throughput and model first-token latency require separate measurements.
 - **Removal** Remove this stage and its tests when upstream provides equivalent indexed loads with comparable precision and device performance.
 
+## Live activation columns for grouped indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-live-activation-columns.patch`, against llama.cpp `c212d25`.
+- **Scope:** Stage only the columns consumed by the active invocations in a grouped indexed matrix workgroup, with zero padding through the last column tile. Compute input and destination row offsets once from each gathered slot.
+- **Contract:** Reuse the existing metadata, two shared arrays, and the original layout of the output and staged activations. Preserve the ascending K accumulation order, dispatch geometry, precision, skipped-slot handling, and the shared memory capacity. The same grouped shader serves direct and indirect dispatch.
+- **Validation:** Compare grouped and sparse expert outputs against the previous implementation for representative routing layouts. Report paired software WebGPU timing separately from physical-adapter and full-model behavior.
+- **Removal:** Retire this shader change when upstream stages only consumed columns and avoids repeated offset calculation.
+
 ## Paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.

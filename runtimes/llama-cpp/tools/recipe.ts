@@ -924,6 +924,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-live-activation-columns.patch',
+    target: 'llama-webgpu',
+    reason: 'stage only live indexed activation columns and reuse the gathered row offsets',
+    files: ['ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
