@@ -150,7 +150,7 @@
 +}
 +
  static std::optional<webgpu_encoded_op> ggml_webgpu_l2_clip(webgpu_context & ctx, const ggml_cgraph * graph,
-                                                           int index, int & encoded_ops) {
+                                                           int index, webgpu_fusion_view_sources & views, int & encoded_ops) {
      l2_clip_plan plan;
 @@ -4577,6 +4708,9 @@
              return ggml_webgpu_add_id(ctx, src0, src1, src2, node);

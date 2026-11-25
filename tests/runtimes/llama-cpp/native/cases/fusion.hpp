@@ -2,7 +2,7 @@
 
 namespace fusion_cases {
 enum class Family { scale_unary, rms_scale };
-enum class Guard { ordinary, exposed_intermediate, external_consumer };
+enum class Guard { ordinary, exposed_intermediate, external_consumer, raw_intermediate, raw_output };
 enum class RouterDenominator { clamp, epsilon, other_epsilon, other_scale, exposed };
 
 static void graph(Family family, Guard guard, bool final_scale = false) {
@@ -75,11 +75,17 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     BICORE_CHECK(!result && consumed == 1 && ::created == before && commands.dispatches.empty());
 }
 
-static void l2_clip_graph(int64_t width, int64_t rows, bool inplace, Guard guard, bool expected_fusion) {
+static void l2_clip_graph(int64_t width, int64_t heads, int64_t tokens, bool inplace, Guard guard,
+                          bool expected_fusion) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    constexpr size_t fixture_bytes = 8 * 1024 * 1024;
+    auto & limits = gpu.context->global_ctx->capabilities.limits;
+    limits.maxStorageBufferBindingSize = fixture_bytes;
+    limits.maxBufferSize = fixture_bytes;
+    gpu.type.iface.get_max_size = [](ggml_backend_buffer_type_t) { return fixture_bytes; };
     const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
-    auto * input = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, width, rows);
+    auto * input = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, width, heads, tokens);
     ggml_set_input(input);
     auto * square = ggml_sqr(memory.get(), input);
     auto * sum = ggml_sum_rows(memory.get(), square);
@@ -93,8 +99,17 @@ static void l2_clip_graph(int64_t width, int64_t rows, bool inplace, Guard guard
         ggml_set_output(denominator);
     auto * graph = ggml_new_graph_custom(memory.get(), 64, false);
     ggml_build_forward_expand(graph, output);
+    const int clip_end = ggml_graph_n_nodes(graph);
+    const bool raw_view = guard == Guard::raw_intermediate || guard == Guard::raw_output;
     if (guard == Guard::external_consumer) {
         auto * consumer = ggml_scale(memory.get(), denominator, 2.0f);
+        ggml_set_output(consumer);
+        ggml_build_forward_expand(graph, consumer);
+    } else if (raw_view) {
+        auto * source = guard == Guard::raw_intermediate ? denominator : output;
+        auto * view = ggml_view_tensor(memory.get(), source);
+        BICORE_CHECK(view->view_src == source && !view->src[0]);
+        auto * consumer = ggml_dup(memory.get(), view);
         ggml_set_output(consumer);
         ggml_build_forward_expand(graph, consumer);
     }
@@ -106,25 +121,35 @@ static void l2_clip_graph(int64_t width, int64_t rows, bool inplace, Guard guard
     BICORE_CHECK(inplace ? allocator && ggml_gallocr_alloc_graph(allocator.get(), graph) : bool(buffer));
     BICORE_CHECK(input->buffer == output->buffer && (input->data == output->data) == inplace);
 
-    commands = {};
-    readback = {};
-    BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
-    BICORE_CHECK(commands.dispatches.size() == (expected_fusion ? 1u : unsigned(graph->n_nodes)));
-    ggml_backend_synchronize(&gpu.backend);
+    const auto run = [&](ggml_cgraph * slice, unsigned count) {
+        commands = {};
+        readback = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, slice) == GGML_STATUS_SUCCESS);
+        BICORE_CHECK(commands.dispatches.size() == count);
+        ggml_backend_synchronize(&gpu.backend);
+    };
+    const auto clip_dispatches = expected_fusion ? 1u : unsigned(clip_end);
+    if (raw_view) {
+        // The scheduler may send the reader to a later slice.
+        auto slice = ggml_graph_view(graph, 0, clip_end);
+        run(&slice, clip_dispatches);
+    }
+    run(graph, clip_dispatches + unsigned(ggml_graph_n_nodes(graph) - clip_end));
     if (!expected_fusion)
         return;
 
     const auto pipeline = gpu.context->shader_lib->get_l2_clip_pipeline(inplace);
     BICORE_CHECK(pipeline.name == (inplace ? "l2_clip_f32_inplace" : "l2_clip_f32"));
     BICORE_CHECK(commands.dispatches[0].pipeline == pipeline.pipeline.Get()->id);
-    BICORE_CHECK(commands.dispatches[0].x == uint32_t(rows) && commands.dispatches[0].y == 1);
+    BICORE_CHECK(commands.dispatches[0].x == uint32_t(heads * tokens) && commands.dispatches[0].y == 1);
 
     if (inplace) {
         const auto original_data = output->data;
         output->data = reinterpret_cast<void *>(uintptr_t(input->data) + sizeof(float));
         int consumed = 1;
         commands = {};
-        const auto rejected = ggml_webgpu_l2_clip(gpu.context, graph, 0, consumed);
+        webgpu_fusion_view_sources views(*graph);
+        const auto rejected = ggml_webgpu_l2_clip(gpu.context, graph, 0, views, consumed);
         output->data = original_data;
         BICORE_CHECK(!rejected && consumed == 1 && commands.dispatches.empty());
     }
@@ -204,12 +229,18 @@ static void all() {
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})
             graph(family, guard);
     graph(Family::scale_unary, Guard::ordinary, true);
-    l2_clip_graph(128, 24, true, Guard::ordinary, true);
-    l2_clip_graph(128, 8, false, Guard::ordinary, true);
-    l2_clip_graph(16, 24, false, Guard::ordinary, true);
-    l2_clip_graph(128, 12, false, Guard::ordinary, false);
-    l2_clip_graph(128, 24, false, Guard::exposed_intermediate, false);
-    l2_clip_graph(128, 24, false, Guard::external_consumer, false);
+    l2_clip_graph(128, 24, 1, true, Guard::ordinary, true);
+    l2_clip_graph(128, 8, 1, false, Guard::ordinary, true);
+    l2_clip_graph(16, 24, 1, false, Guard::ordinary, true);
+    l2_clip_graph(128, 12, 1, false, Guard::ordinary, false);
+    l2_clip_graph(128, 24, 1, false, Guard::exposed_intermediate, false);
+    l2_clip_graph(128, 24, 1, false, Guard::external_consumer, false);
+    l2_clip_graph(128, 24, 128, true, Guard::ordinary, true);
+    l2_clip_graph(128, 8, 53, false, Guard::ordinary, true);
+    l2_clip_graph(16, 24, 2, false, Guard::ordinary, true);
+    l2_clip_graph(128, 24, 129, false, Guard::ordinary, false);
+    l2_clip_graph(128, 24, 2, false, Guard::raw_intermediate, false);
+    l2_clip_graph(128, 24, 2, false, Guard::raw_output, true);
     for (bool natural : {false, true})
         for (const auto denominator :
              {RouterDenominator::clamp, RouterDenominator::epsilon, RouterDenominator::other_epsilon,

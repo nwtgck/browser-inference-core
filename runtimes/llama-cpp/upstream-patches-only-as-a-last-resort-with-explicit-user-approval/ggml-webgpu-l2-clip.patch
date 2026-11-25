@@ -17,9 +17,9 @@ diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-we
 +}
 +
 +static std::optional<webgpu_encoded_op> ggml_webgpu_l2_clip(webgpu_context & ctx, const ggml_cgraph * graph,
-+                                                          int index, int & encoded_ops) {
++                                                          int index, webgpu_fusion_view_sources & views, int & encoded_ops) {
 +    l2_clip_plan plan;
-+    if (!plan_l2_clip(graph, index, plan)) {
++    if (!plan_l2_clip(graph, index, views, plan)) {
 +        return std::nullopt;
 +    }
 +    constexpr uint32_t workgroup = ggml_webgpu_l2_clip_workgroup_size;
@@ -76,7 +76,7 @@ diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-we
          case GGML_OP_TRI:
 +            return ggml_webgpu_unary_op(ctx, src0, node);
 +        case GGML_OP_SQR:
-+            if (auto fused = ggml_webgpu_l2_clip(ctx, cgraph, node_idx, num_encoded_ops)) {
++            if (auto fused = ggml_webgpu_l2_clip(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) {
 +                return fused;
 +            }
              return ggml_webgpu_unary_op(ctx, src0, node);
@@ -134,11 +134,12 @@ diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-l2-clip.hpp b/ggml/src/ggml-webgpu
 new file mode 100644
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-l2-clip.hpp
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,109 @@
 +#pragma once
 +
 +#include "ggml-impl.h"
 +#include "ggml-webgpu-rms-scale.hpp"
++#include "ggml-webgpu-fusion-view-sources.hpp"
 +
 +#include <cmath>
 +#include <initializer_list>
@@ -160,7 +161,7 @@ new file mode 100644
 +
 +inline constexpr int l2_clip_node_count = sizeof(l2_clip_ops) / sizeof(l2_clip_ops[0]);
 +
-+inline bool plan_l2_clip(const ggml_cgraph * graph, int index, l2_clip_plan & plan) {
++inline bool plan_l2_clip(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views, l2_clip_plan & plan) {
 +    plan = {};
 +    if (!graph || index < 0 || index > graph->n_nodes - l2_clip_node_count) {
 +        return false;
@@ -169,7 +170,7 @@ new file mode 100644
 +    const auto width = square->ne[0];
 +    const auto rows = square->ne[1];
 +    if (square->op != GGML_OP_SQR || graph->nodes[index + 1]->op != GGML_OP_SUM_ROWS ||
-+        square->ne[2] != 1 || square->ne[3] != 1 ||
++        square->ne[2] < 1 || square->ne[2] > 128 || square->ne[3] != 1 ||
 +        !((width == 128 && (rows == 8 || rows == 24)) || (width == 16 && rows == 24))) {
 +        return false;
 +    }
@@ -212,7 +213,7 @@ new file mode 100644
 +    }
 +    for (const auto * row_tensor : {sum, norm, denom, fill, divide, clamp}) {
 +        if (row_tensor->ne[0] != 1 || row_tensor->ne[1] != rows ||
-+            row_tensor->ne[2] != 1 || row_tensor->ne[3] != 1) {
++            row_tensor->ne[2] != square->ne[2] || row_tensor->ne[3] != 1) {
 +            return false;
 +        }
 +    }
@@ -228,13 +229,19 @@ new file mode 100644
 +        return false;
 +    }
 +
++    for (int i = 0; i < l2_clip_node_count - 1; ++i) {
++        if (views.contains(graph->nodes[indices[i]])) {
++            return false;
++        }
++    }
++
 +    uint64_t input_bytes, output_bytes;
 +    uint32_t elements, layout_rows;
 +    if (!rms_scale_layout(input, true, input_bytes, elements, layout_rows) ||
 +        !rms_scale_layout(output, true, output_bytes, elements, layout_rows)) {
 +        return false;
 +    }
-+    plan = {input, output, input_bytes, output_bytes, uint32_t(width), uint32_t(rows), threshold};
++    plan = {input, output, input_bytes, output_bytes, uint32_t(width), layout_rows, threshold};
 +    return true;
 +}
 diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/l2_clip.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/l2_clip.wgsl
