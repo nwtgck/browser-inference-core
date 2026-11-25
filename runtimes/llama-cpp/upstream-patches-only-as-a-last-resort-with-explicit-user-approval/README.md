@@ -863,6 +863,16 @@ not establish target-device speed.
 - **Validation:** Complete-provider native tests exercise the cache, exact shape and limit boundaries, grid and uniform layout in both modes. Independent CPU references and authored software WebGPU inputs cover sparse and grouped routing. Warm software measurements are limited to isolated dispatches with a prefix of the expert weights. Physical-adapter and model first-token timing remain unmeasured.
 - **Removal:** Remove the patch, recipe entry and tests when upstream provides an equivalent indexed tile without changing the numerical or fallback contracts.
 
+## Paired Q4_0 blocks for indexed prefill
+
+- **Patch** `ggml-webgpu-indexed-q4-0-paired.patch`.
+- **Scope** Use a 64-row, K64 tile for single-binding indexed Q4_0 × F32 to F32 at K2816/M1408 with 48 or 128 experts, eight selected experts, 128 tokens and broadcast activation. Require contiguous, aligned root weights, matching I32 IDs, 64 invocations and 12,544 bytes of workgroup storage. Device features and tensor geometry determine eligibility.
+- **Contract** Load two adjacent 18-byte blocks in nine aligned words. Preserve each block's F32 scale multiplication, F16 rounding before staging and ascending K accumulation. The existing K and row tile cache key identifies the variant. The existing host uses the selected row tile for its grid and keeps the 32-slot gather and buffer layouts.
+- **Integration** Apply the checked normal and GPU-profile stage through the existing indexed shader embedding. Source selection and binding offset are derived from the existing WebGPU encoder. Ordinary placement and indexed matvec keep their current selection.
+- **No-patch alternative** Keep the 32-row, K32 path or wait for upstream tuning.
+- **Validation** The normal and GPU-profile native recorders exercise cache, alignment, resource limits and encoder dispatch. The E48 single-binding software WebGPU fixture included packed nibbles with half-float infinity and NaN bit patterns next to finite scales. Its outputs matched the CPU reference bitwise and isolated GPU time was 24–28% shorter in mirrored runs. The E128 single-binding case was checked at native selection with a device limit that admits its 285,474,816-byte weight tensor. Physical-adapter throughput and model first-token latency require separate measurements.
+- **Removal** Remove this stage and its tests when upstream provides equivalent indexed loads with comparable precision and device performance.
+
 ## Wider-M paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.

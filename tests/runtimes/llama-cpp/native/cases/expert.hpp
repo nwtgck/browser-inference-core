@@ -1,5 +1,6 @@
 #pragma once
 
+#include "indexed-q4-0-paired.hpp"
 #include "indexed-wide-m.hpp"
 
 namespace expert_cases {
@@ -123,6 +124,7 @@ static void all(const std::filesystem::path & output) {
     sparse_matrix(output);
     indexed_wide_k(output);
     indexed_wide_m(output);
+    indexed_q4_0_paired(output);
     auto ctx = recording_context();
     std::ofstream cases(output / "cases.json");
     cases << "[\n";

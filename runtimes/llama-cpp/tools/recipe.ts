@@ -709,6 +709,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-q4-0-paired.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse aligned Q4_0 block pairs in wider indexed prefill tiles',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
