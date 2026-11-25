@@ -1,0 +1,44 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -1569,6 +1569,21 @@
+ #define BLOCK_SIZE_BYTES 36
+ #define THREADS_PER_BLOCK 4
+ #define ELEMS_PER_THREAD (BLOCK_SIZE/THREADS_PER_BLOCK)
++// UE4M3 reserves code 127. Exponent zero includes zero and subnormal scales.
++fn decode_nvfp4_scale(u: u32) -> f32 {
++    let exp = (u >> 3u) & 15u;
++    let man = u & 7u;
++    let normal = bitcast<f32>(((exp + 120u) << 23u) | (man << 20u));
++    let value = select(normal, f32(man) * (1.0 / 512.0), exp == 0u);
++    return select(value, 0.0, u == 127u);
++}
++
++fn decode_nvfp4_value(code: u32) -> f32 {
++    // Pack E2M1 magnitudes [0, 1, 2, 3, 4, 6, 8, 12] into eight nibbles.
++    let magnitude = (0xc8643210u >> ((code & 7u) * 4u)) & 15u;
++    return f32(i32(magnitude) * (1 - 2 * i32(code >> 3u)));
++}
++
+ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
+     var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
+ 
+@@ -1587,7 +1602,7 @@
+             let output_row = row_base + row;
+             if (output_row < params.m) {
+                 let block_byte_base = (src0_batch_offset + output_row * params.stride_01 + block) * BLOCK_SIZE_BYTES;
+-                let d = ue4m3_to_fp32(get_byte(load_u32_at_src0_aligned(block_byte_base), sub)) * 0.5;
++                let d = decode_nvfp4_scale(get_byte(load_u32_at_src0_aligned(block_byte_base), sub)) * 0.5;
+                 let q_w0 = load_u32_at_src0_aligned(block_byte_base + 4u + 8u * sub);
+                 let q_w1 = load_u32_at_src0_aligned(block_byte_base + 8u + 8u * sub);
+                 for (var col = 0u;col < NUM_COLS;col += 1) {
+@@ -1595,8 +1610,8 @@
+                     for (var l = 0u; l < 8u; l++) {
+                         let q_word = select(q_w0, q_w1, l >= 4u);
+                         let q_byte = get_byte(q_word, l % 4u);
+-                        let q_lo = f32(kvalues_mxfp4[q_byte & 0xFu]) * d;
+-                        let q_hi = f32(kvalues_mxfp4[(q_byte >> 4u) & 0xFu]) * d;
++                        let q_lo = decode_nvfp4_value(q_byte & 0xFu) * d;
++                        let q_hi = decode_nvfp4_value(q_byte >> 4u) * d;
+                         row_sum += q_lo * x_block[col][l];
+                         row_sum += q_hi * x_block[col][l + 8u];
+                     }

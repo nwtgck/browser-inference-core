@@ -588,6 +588,25 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing cooperative indexed decode path.
 - **Removal:** upstream equivalent support or withdrawal of the optimization. Remove this stage, tests and provenance together.
 
+## Packed coefficient decode for independent NVFP4 matvecs
+
+- **Patch** `ggml-webgpu-indexed-nvfp4-packed-decode.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use packed E2M1 coefficient magnitudes and branchless UE4M3 scale
+  decoding in the existing independent indexed NVFP4 matvec. Apply the patch
+  to that shader family's private accumulator input.
+- **Contract** Preserve the packed weight bytes, scale rules for all byte
+  values, per-lane accumulation order, subgroup reduction, and tensor
+  bindings. Selection, workgroup layout, and resource allocation are shared
+  with the previous kernel. The cooperative and dense paths keep the
+  canonical accumulator.
+- **Validation** Compare the emitted shaders on real NVFP4 weight slices and
+  exhaustively check coefficient and scale decoding. Software GPU timings
+  cover the isolated gate/up and down projections. Target-device and
+  model-wide throughput depend on the rest of the decode graph.
+- **Removal** Use the upstream accumulator once it provides equivalent
+  decoding and performance. Review the E2M1 and UE4M3 tables on upstream updates.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.

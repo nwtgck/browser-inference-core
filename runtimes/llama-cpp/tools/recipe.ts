@@ -938,6 +938,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-nvfp4-packed-decode.patch',
+    target: 'iq3s',
+    reason: 'decode NVFP4 coefficients and scales with packed integer operations in the independent matvec',
+    files: ['ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
