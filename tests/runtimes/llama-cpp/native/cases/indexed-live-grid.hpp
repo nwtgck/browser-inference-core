@@ -5,6 +5,20 @@ namespace indexed_live_grid_cases {
 enum class Grid { direct, capped, indirect };
 using MainPipelines = std::array<unsigned, 2>;
 
+struct Matrix {
+    ggml_type type;
+    int64_t k, m, experts, used, input_rows;
+    uint32_t row_tile, max_tiles;
+    ggml_prec accumulator;
+};
+
+constexpr Matrix split_q2{GGML_TYPE_Q2_0, 640, 2560, 512, 10, 10, 32, 536, GGML_PREC_UNDEFINED};
+constexpr Matrix paired_q4{GGML_TYPE_Q4_0, 2816, 1408, 48, 8, 1, 64, 78, GGML_PREC_UNDEFINED};
+constexpr Matrix iq4_broadcast{GGML_TYPE_IQ4_NL, 2304, 2304, 128, 8, 1, 64, 156, GGML_PREC_UNDEFINED};
+constexpr Matrix iq4_per_slot{GGML_TYPE_IQ4_NL, 1152, 2304, 128, 8, 8, 64, 156, GGML_PREC_UNDEFINED};
+constexpr Matrix nvfp4_broadcast{GGML_TYPE_NVFP4, 2304, 2304, 128, 8, 1, 64, 156, GGML_PREC_BF16};
+constexpr Matrix nvfp4_per_slot{GGML_TYPE_NVFP4, 1152, 2304, 128, 8, 8, 64, 156, GGML_PREC_BF16};
+
 struct Graph {
     transfer_cases::Backend gpu{transfer_cases::BackendKind::webgpu};
     transfer_cases::Memory memory{ggml_init({128 * 1024, nullptr, true}), ggml_free};
@@ -15,23 +29,25 @@ struct Graph {
     const uint32_t row_groups;
     const uint32_t full_grid;
 
-    explicit Graph(bool split_weights)
-        : split(split_weights), row_groups(split ? 80 : 22), full_grid(split ? 42880 : 1716) {
+    explicit Graph(const Matrix & matrix, std::string_view vendor = {})
+        : split(matrix.type == GGML_TYPE_Q2_0), row_groups(CEIL_DIV(matrix.m, matrix.row_tile)),
+          full_grid(row_groups * matrix.max_tiles) {
         auto & global = *gpu.context->global_ctx;
+        global.vendor = vendor;
         global.command_submit_batch_size = 32;
         auto & limits = global.capabilities.limits;
-        limits.maxBufferSize = 256 * 1024 * 1024;
-        limits.maxStorageBufferBindingSize = 128 * 1024 * 1024;
-        const int64_t k = split ? 640 : 2816;
-        const int64_t m = split ? 2560 : 1408;
-        const int64_t used = split ? 10 : 8;
-        auto * weights =
-            ggml_new_tensor_3d(memory.get(), split ? GGML_TYPE_Q2_0 : GGML_TYPE_Q4_0, k, m, split ? 512 : 48);
-        auto * inputs = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, k, split ? used : 1, 128);
-        auto * ids_a = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, used, 128);
-        auto * ids_b = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, used, 128);
+        const bool large_binding = matrix.type == GGML_TYPE_IQ4_NL || matrix.type == GGML_TYPE_NVFP4;
+        limits.maxBufferSize = (large_binding ? 512 : 256) * 1024 * 1024;
+        limits.maxStorageBufferBindingSize = (large_binding ? 512 : 128) * 1024 * 1024;
+        auto * weights = ggml_new_tensor_3d(memory.get(), matrix.type, matrix.k, matrix.m, matrix.experts);
+        auto * inputs = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, matrix.k, matrix.input_rows, 128);
+        auto * ids_a = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, 128);
+        auto * ids_b = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, 128);
         auto * out_a = ggml_mul_mat_id(memory.get(), weights, inputs, ids_a);
         auto * out_b = ggml_mul_mat_id(memory.get(), weights, inputs, ids_b);
+        if (matrix.accumulator != GGML_PREC_UNDEFINED) {
+            BICORE_CHECK(ggml_prec_set_acc(out_a, matrix.accumulator) && ggml_prec_set_acc(out_b, matrix.accumulator));
+        }
         ggml_build_forward_expand(graph, out_a);
         ggml_build_forward_expand(graph, out_b);
         BICORE_CHECK(ggml_graph_n_nodes(graph) == 2);
@@ -141,8 +157,8 @@ static void deliver_scope() {
     callback.mapped().complete();
 }
 
-static void check_activation(bool split) {
-    Graph fixture(split);
+static void check_activation(const Matrix & matrix, std::string_view vendor = {}) {
+    Graph fixture(matrix, vendor);
     auto & limits = fixture.gpu.context->global_ctx->capabilities.limits;
     const unsigned prior_pushes = pushes;
     limits.maxComputeWorkgroupsPerDimension = fixture.full_grid - 1;
@@ -161,7 +177,7 @@ static void check_activation(bool split) {
 }
 
 static void check_rejection() {
-    Graph fixture(false);
+    Graph fixture(paired_q4);
     resources.reject_indirect_buffer = true;
     const auto direct = fixture.run(Grid::direct);
     BICORE_CHECK(!resources.reject_indirect_buffer && commands.buffers_created == 1 && spontaneous_scopes.size() == 3);
@@ -177,7 +193,7 @@ static void check_teardown() {
     std::weak_ptr<webgpu_global_context_struct> device;
     std::array<std::weak_ptr<ggml_webgpu_optional::ScopeData>, 3> scopes;
     {
-        Graph fixture(false);
+        Graph fixture(paired_q4);
         device = fixture.gpu.context->global_ctx;
         fixture.run(Grid::direct);
         BICORE_CHECK(spontaneous_scopes.size() == 3);
@@ -195,8 +211,21 @@ static void check_teardown() {
 }
 
 static void all() {
-    check_activation(true);
-    check_activation(false);
+    check_activation(split_q2);
+    check_activation(paired_q4);
+    for (const auto & matrix : {iq4_broadcast, iq4_per_slot, nvfp4_broadcast, nvfp4_per_slot}) {
+        check_activation(matrix, "apple");
+        check_activation(matrix, "nvidia");
+    }
+    Matrix f32 = nvfp4_per_slot;
+    f32.accumulator = GGML_PREC_F32;
+    check_activation(f32, "nvidia");
+    Matrix half = nvfp4_per_slot;
+    half.accumulator = GGML_PREC_UNDEFINED;
+    half.row_tile = 32;
+    Graph unchanged(half);
+    unchanged.run(Grid::direct);
+    BICORE_CHECK(spontaneous_scopes.empty());
     check_rejection();
     check_teardown();
 }

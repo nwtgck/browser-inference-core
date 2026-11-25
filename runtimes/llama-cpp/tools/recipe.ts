@@ -931,6 +931,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-quant-live-grid.patch',
+    target: 'llama-webgpu',
+    reason: 'extend the indirect grid to measured indexed IQ4_NL and NVFP4 prefill projections',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
