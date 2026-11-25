@@ -818,6 +818,20 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q8-sigmoid-mul.patch',
+    target: 'llama-webgpu',
+    reason: 'write the sigmoid-gated output directly from the fixed-subgroup Q8 matvec',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-checked-tensor-binding.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-q8-sigmoid-mul.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

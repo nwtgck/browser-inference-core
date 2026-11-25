@@ -1322,3 +1322,28 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   separate heads and batches, and F16 special values. Use upstream's original
   width in the absence of the overlay. Remove the patch when upstream bounds
   classifier work by the tile width with equivalent outputs.
+
+## Q8_0 matvec sigmoid gate
+
+- **Patch** `ggml-webgpu-q8-sigmoid-mul.patch` against llama.cpp `c212d25ad`.
+- **Scope** Fuse a dense K2304/M3072/N1 Q8_0 matvec, its F32 sigmoid, and
+  multiplication by an independent contiguous F32 vector of length 3072.
+  Require one batch and the ordinary Q8_0 pipeline with a fixed subgroup
+  width of 16 or 32. Use the same accumulator and multiply in the existing
+  operand order.
+- **Contract** The current backend graph slice must contain all three nodes.
+  Check direct and raw-view readers of the discarded tensors. Accept a raw
+  contiguous view as the other MUL input. An exact physical alias between
+  this input and the result uses a single binding and reads each element
+  before writing it. Check the GPU buffer ownership, lengths, alignment,
+  and binding limits. The Q4_K SwiGLU fusion shares these binding checks.
+- **Integration** The normal and profiling providers specialize the same
+  subgroup source. The two gate variants have separate pipeline cache keys.
+  GGML layouts, model placement, and the public ABI are unchanged.
+- **Validation and removal** Exercise both binding layouts, graph splits,
+  additional raw-view readers, and varying subgroup widths through the
+  complete provider. Replay the emitted shaders for both subgroup widths
+  with packed Q8_0 inputs and compare the complete output against the three
+  original dispatches. Keep the original dispatches for unsupported graphs
+  or limits. Remove this patch when upstream supports an equivalent
+  epilogue with the same lifetime, layout, and subgroup guarantees.
