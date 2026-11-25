@@ -216,6 +216,19 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-router-tail-epsilon.patch',
+    target: 'llama-webgpu',
+    reason: 'router tail epsilon normalization',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-host-encode-assembly.patch',
     target: 'llama-webgpu',
     reason: 'host encode assembly',

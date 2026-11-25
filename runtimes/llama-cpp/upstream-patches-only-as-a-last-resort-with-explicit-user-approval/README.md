@@ -675,6 +675,15 @@ not establish target-device speed.
 - **Validation and limits:** actual-ggml graph/allocator and complete-source dispatcher/factory tests, normal/profile syntax checks and synthetic software-GPU byte comparisons cover the guarded paths. These do not establish target-device speed or full-model quality. See `../../tests/runtimes/llama_cpp/webgpu-router-tail/README.md`.
 - **Removal:** remove the stage when upstream provides equivalent ordered gather normalization and alias handling, or the owner drops the optimization.
 
+## WebGPU router epsilon normalization
+
+- **Patch:** `ggml-webgpu-router-tail-epsilon.patch`, introduced against llama.cpp `c212d25ad`.
+- **Scope:** admit `SCALE(1, 1e-20)` as the denominator of the existing F32 gather normalization fusion. The workgroup reads the same ordered IDs, reduces the gathered weights with the same tree as `SUM_ROWS`, adds the epsilon and divides directly. Both the disjoint and single-token overlapping variants use separate pipeline keys for epsilon and clamp.
+- **Integration:** apply after the gather normalization tail in normal and profiling builds. The existing shader emission list generates both variants from the updated WGSL. The graph, tensor, view and binding guards of the existing fusion still apply.
+- **No-patch alternative:** execute the original gather, reduction, scale and division as four dispatches.
+- **Validation and maintenance:** the complete-provider test exercises both allocation layouts, clamp and epsilon pipeline selection, uploaded epsilon parameters, and fallback for an exposed denominator or different SCALE parameters. The initial software WebGPU comparison checked sorted IDs and normalized weights for tiny denominators, cancellation and nonfinite values. Confirm the SCALE parameter order and reduction tree at an upstream update. Isolated comparison does not establish target model throughput.
+- **Removal:** remove this stage when upstream fuses the ordered gather with epsilon normalization while preserving the existing alias contract.
+
 ## Profile-only Q8 kernel diagnostic
 
 - **Patch:** `ggml-webgpu-q8-diagnostic.patch`.

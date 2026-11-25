@@ -3,6 +3,7 @@
 namespace fusion_cases {
 enum class Family { scale_unary, rms_scale };
 enum class Guard { ordinary, exposed_intermediate, external_consumer };
+enum class RouterDenominator { clamp, epsilon, other_epsilon, other_scale, exposed };
 
 static void graph(Family family, Guard guard, bool final_scale = false) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
@@ -129,6 +130,75 @@ static void l2_clip_graph(int64_t width, int64_t rows, bool inplace, Guard guard
     }
 }
 
+static void router_tail_graph(bool natural, RouterDenominator denominator) {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    auto & limits = gpu.context->global_ctx->capabilities.limits;
+    limits.maxComputeInvocationsPerWorkgroup = 1024;
+    limits.maxComputeWorkgroupSizeX = 1024;
+    const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
+    BICORE_CHECK(memory);
+    auto * logits = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 128, 1);
+    auto * bias = ggml_new_tensor_1d(memory.get(), GGML_TYPE_F32, 128);
+    ggml_set_input(logits);
+    ggml_set_input(bias);
+    auto * probs = ggml_sigmoid(memory.get(), logits);
+    auto * ids = ggml_argsort_top_k(memory.get(), ggml_add(memory.get(), probs, bias), 8);
+    auto * gathered = ggml_get_rows(memory.get(), ggml_reshape_3d(memory.get(), probs, 1, 128, 1), ids);
+    auto * flat = ggml_reshape_2d(memory.get(), gathered, 8, 1);
+    auto * sum = ggml_sum_rows(memory.get(), flat);
+    const bool clamp = denominator == RouterDenominator::clamp;
+    const float scale = denominator == RouterDenominator::other_scale ? 2.0f : 1.0f;
+    const float epsilon = denominator == RouterDenominator::other_epsilon ? 1e-10f : 1e-20f;
+    auto * normalizer =
+        clamp ? ggml_clamp(memory.get(), sum, 0x1p-14f, INFINITY) : ggml_scale_bias(memory.get(), sum, scale, epsilon);
+    if (denominator == RouterDenominator::exposed)
+        ggml_set_output(normalizer);
+    auto * output = ggml_reshape_3d(memory.get(), ggml_div(memory.get(), flat, normalizer), 1, 8, 1);
+    auto * weights_consumer = ggml_scale(memory.get(), output, 2.0f);
+    auto * ids_consumer = ggml_cont(memory.get(), ids);
+    ggml_set_output(weights_consumer);
+    ggml_set_output(ids_consumer);
+    auto * graph = ggml_new_graph_custom(memory.get(), 64, false);
+    ggml_build_forward_expand(graph, weights_consumer);
+    ggml_build_forward_expand(graph, ids_consumer);
+    const auto allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>(
+        natural ? ggml_gallocr_new(&gpu.type) : nullptr, ggml_gallocr_free);
+    const auto storage =
+        transfer_cases::Buffer(natural ? nullptr : ggml_backend_alloc_ctx_tensors_from_buft(memory.get(), &gpu.type),
+                               ggml_backend_buffer_free);
+    BICORE_CHECK(natural ? allocator && ggml_gallocr_alloc_graph(allocator.get(), graph) : bool(storage));
+
+    commands = {};
+    readback = {};
+    BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+    ggml_backend_synchronize(&gpu.backend);
+    const bool fused = clamp || denominator == RouterDenominator::epsilon;
+    BICORE_CHECK(commands.dispatches.size() == (fused ? 6u : 9u));
+    if (!fused)
+        return;
+
+    // The three upstream operations still encode separately. Natural allocation
+    // reuses the probabilities for the weights, exercising the overlap path.
+    const auto pipeline = gpu.context->shader_lib->get_router_tail_pipeline(1024, natural, !clamp);
+    const auto sibling = gpu.context->shader_lib->get_router_tail_pipeline(1024, natural, clamp);
+    const auto & dispatch = commands.dispatches[3];
+    BICORE_CHECK(pipeline.pipeline.Get() && sibling.pipeline.Get() &&
+                 pipeline.pipeline.Get() != sibling.pipeline.Get());
+    BICORE_CHECK(dispatch.pipeline == pipeline.pipeline.Get()->id && dispatch.x == 1 && dispatch.y == 1 &&
+                 dispatch.z == 1);
+    if (!clamp) {
+        const auto & arena = gpu.context->param_arena;
+        const size_t offset = 3 * arena.slot_stride + 8 * sizeof(uint32_t);
+        const std::array expected{scale, epsilon};
+        const auto upload = std::find_if(commands.writes.begin(), commands.writes.end(), [&](const auto & write) {
+            return write.buffer == arena.buffer.Get() && write.offset == 0 &&
+                   write.bytes.size() >= offset + sizeof(expected);
+        });
+        BICORE_CHECK(upload != commands.writes.end());
+        BICORE_CHECK(std::memcmp(upload->bytes.data() + offset, expected.data(), sizeof(expected)) == 0);
+    }
+}
+
 static void all() {
     for (const auto family : {Family::scale_unary, Family::rms_scale})
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})
@@ -140,5 +210,10 @@ static void all() {
     l2_clip_graph(128, 12, false, Guard::ordinary, false);
     l2_clip_graph(128, 24, false, Guard::exposed_intermediate, false);
     l2_clip_graph(128, 24, false, Guard::external_consumer, false);
+    for (bool natural : {false, true})
+        for (const auto denominator :
+             {RouterDenominator::clamp, RouterDenominator::epsilon, RouterDenominator::other_epsilon,
+              RouterDenominator::other_scale, RouterDenominator::exposed})
+            router_tail_graph(natural, denominator);
 }
 } // namespace fusion_cases

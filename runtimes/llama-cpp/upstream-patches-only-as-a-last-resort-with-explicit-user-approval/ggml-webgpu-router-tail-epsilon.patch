@@ -1,0 +1,164 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-router-tail.hpp
+@@ -8,7 +8,7 @@
+     ggml_tensor * gather = nullptr;
+     ggml_tensor * flattened = nullptr;
+     ggml_tensor * sum = nullptr;
+-    ggml_tensor * clamp = nullptr;
++    ggml_tensor * normalizer = nullptr;
+     ggml_tensor * div = nullptr;
+     ggml_tensor * output = nullptr;
+     uint64_t probs_bytes = 0, ids_bytes = 0, output_bytes = 0;
+@@ -45,13 +45,13 @@
+     ggml_tensor * node[6];
+     for (int i = 0; i < 6; ++i) { node[i] = graph->nodes[index + i]; if (!node[i]) { return false; } }
+     auto * gather = node[0]; auto * flattened = node[1]; auto * sum = node[2];
+-    auto * clamp = node[3]; auto * div = node[4]; auto * output = node[5];
++    auto * normalizer = node[3]; auto * div = node[4]; auto * output = node[5];
+     auto * probs = gather->src[0]; auto * ids = gather->src[1];
+-    if (!probs || !ids || gather->view_src || sum->view_src || clamp->view_src || div->view_src ||
+-        gather->view_offs || sum->view_offs || clamp->view_offs || div->view_offs ||
++    if (!probs || !ids || gather->view_src || sum->view_src || normalizer->view_src || div->view_src ||
++        gather->view_offs || sum->view_offs || normalizer->view_offs || div->view_offs ||
+         flattened->src[0] != gather || flattened->view_src != gather || flattened->view_offs ||
+-        sum->src[0] != flattened || clamp->src[0] != sum ||
+-        div->src[0] != flattened || div->src[1] != clamp ||
++        sum->src[0] != flattened || normalizer->src[0] != sum ||
++        div->src[0] != flattened || div->src[1] != normalizer ||
+         output->src[0] != div || output->view_src != div || output->view_offs) { return false; }
+     for (int i = 0; i < 6; ++i) {
+         if (probs == node[i] || ids == node[i]) { return false; }
+@@ -66,21 +66,25 @@
+         ids->ne[0] > probs->ne[1] || ids->ne[1] != probs->ne[2]) { return false; }
+     const int64_t experts = probs->ne[1], used = ids->ne[0], tokens = ids->ne[1];
+     if (!router_tail_shape(gather, 1, used, tokens, 1) || !router_tail_shape(flattened, used, tokens, 1, 1) ||
+-        !router_tail_shape(sum, 1, tokens, 1, 1) || !router_tail_shape(clamp, 1, tokens, 1, 1) ||
++        !router_tail_shape(sum, 1, tokens, 1, 1) || !router_tail_shape(normalizer, 1, tokens, 1, 1) ||
+         !router_tail_shape(div, used, tokens, 1, 1) || !router_tail_shape(output, 1, used, tokens, 1)) { return false; }
+     for (auto * tensor : node) {
+         if (!router_tail_span(tensor, GGML_TYPE_F32, true, ignored)) { return false; }
+     }
+     if (!router_tail_span(output, GGML_TYPE_F32, true, output_bytes) || ids->nb[1] / 4 > UINT32_MAX) { return false; }
+-    const float low = ggml_get_op_params_f32(clamp, 0), high = ggml_get_op_params_f32(clamp, 1);
+-    if (!(low <= high)) { return false; }
++    const float p0 = ggml_get_op_params_f32(normalizer, 0), p1 = ggml_get_op_params_f32(normalizer, 1);
++    if (normalizer->op == GGML_OP_CLAMP) {
++        if (!(p0 <= p1)) { return false; }
++    } else if (normalizer->op != GGML_OP_SCALE || p0 != 1.0f || p1 != 1e-20f) {
++        return false;
++    }
+     const int indices[] = { index, index + 1, index + 2, index + 3, index + 4, index + 5 };
+-    const ggml_op ops[] = { GGML_OP_GET_ROWS, GGML_OP_RESHAPE, GGML_OP_SUM_ROWS, GGML_OP_CLAMP, GGML_OP_DIV, GGML_OP_RESHAPE };
++    const ggml_op ops[] = { GGML_OP_GET_ROWS, GGML_OP_RESHAPE, GGML_OP_SUM_ROWS, normalizer->op, GGML_OP_DIV, GGML_OP_RESHAPE };
+     const int outputs[] = { index + 5 };
+     // Includes COMPUTE, OUTPUT, outside users and intermediate parent-view checks.
+     // Full raw adjacency also preserves scheduler callback/subgraph boundaries.
+     if (!ggml_can_fuse_subgraph_ext(graph, indices, 6, ops, outputs, 1)) { return false; }
+-    plan = { probs, ids, gather, flattened, sum, clamp, div, output, probs_bytes, ids_bytes, output_bytes,
++    plan = { probs, ids, gather, flattened, sum, normalizer, div, output, probs_bytes, ids_bytes, output_bytes,
+              uint32_t(experts), uint32_t(used), uint32_t(tokens), uint32_t(ids->nb[1] / 4) };
+     return true;
+ }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4117,8 +4117,8 @@
+     }
+     std::vector<uint32_t> params = { bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset,
+                                     plan.experts, plan.ids_stride, plan.used, plan.used, plan.tokens,
+-                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.clamp, 0)),
+-                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.clamp, 1)) };
++                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.normalizer, 0)),
++                                    ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.normalizer, 1)) };
+     std::vector<wgpu::BindGroupEntry> entries;
+     if (merged) {
+         params[0] = uint32_t((bindings[0].tensor_offset - union_offset) / 4);
+@@ -4130,7 +4130,7 @@
+             entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
+         }
+     }
+-    auto pipeline = ctx->shader_lib->get_router_tail_pipeline(wg, merged);
++    auto pipeline = ctx->shader_lib->get_router_tail_pipeline(wg, merged, plan.normalizer->op == GGML_OP_SCALE);
+     auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, plan.tokens, 1);
+     num_encoded_ops = 6;
+     return encoded;
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2474,13 +2474,14 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_router_tail_pipeline(uint32_t wg_size, bool merged) {
+-        const uint64_t key = (uint64_t(wg_size) << 1) | uint64_t(merged);
++    webgpu_pipeline get_router_tail_pipeline(uint32_t wg_size, bool merged, bool epsilon) {
++        const uint64_t key = (uint64_t(wg_size) << 2) | (uint64_t(epsilon) << 1) | uint64_t(merged);
+         auto it = router_tail_pipelines.find(key);
+         if (it != router_tail_pipelines.end()) { return it->second; }
+         std::vector<std::string> defines = { "WG_SIZE=" + std::to_string(wg_size) };
++        if (epsilon) { defines.push_back("ADD_EPSILON"); }
+         const std::string code = preprocessor.preprocess(merged ? wgsl_router_tail_merged : wgsl_router_tail, defines);
+-        auto pipeline = ggml_webgpu_create_pipeline(device, code, "router_tail_f32_wg" + std::to_string(wg_size) + (merged ? "_merged" : ""));
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, "router_tail_f32_wg" + std::to_string(wg_size) + (merged ? "_merged" : "") + (epsilon ? "_epsilon" : ""));
+         router_tail_pipelines[key] = pipeline;
+         return pipeline;
+     }
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail.wgsl
+@@ -14,8 +14,13 @@
+     stride_dst: u32,
+     used: u32,
+     tokens: u32,
++#ifdef ADD_EPSILON
++    denominator_scale: f32,
++    denominator_epsilon: f32,
++#else
+     clamp_min: f32,
+     clamp_max: f32,
++#endif
+ };
+ @group(0) @binding(3)
+ var<uniform> params: Params;
+@@ -49,7 +54,11 @@
+     }
+ 
+     if (lid.x < params.used) {
++#ifdef ADD_EPSILON
++        let denominator = shared_sum[0] * params.denominator_scale + params.denominator_epsilon;
++#else
+         let denominator = clamp(shared_sum[0], f32(params.clamp_min), f32(params.clamp_max));
++#endif
+         dst[params.offset_dst + token * params.stride_dst + lid.x] = selected / denominator;
+     }
+ }
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/router_tail_merged.wgsl
+@@ -12,8 +12,13 @@
+     stride_dst: u32,
+     used: u32,
+     tokens: u32,
++#ifdef ADD_EPSILON
++    denominator_scale: f32,
++    denominator_epsilon: f32,
++#else
+     clamp_min: f32,
+     clamp_max: f32,
++#endif
+ };
+ @group(0) @binding(2)
+ var<uniform> params: Params;
+@@ -49,7 +54,11 @@
+     }
+ 
+     if (lid.x < params.used) {
++#ifdef ADD_EPSILON
++        let denominator = shared_sum[0] * params.denominator_scale + params.denominator_epsilon;
++#else
+         let denominator = clamp(shared_sum[0], f32(params.clamp_min), f32(params.clamp_max));
++#endif
+         probs[params.offset_dst + token * params.stride_dst + lid.x] = selected / denominator;
+     }
+ }
