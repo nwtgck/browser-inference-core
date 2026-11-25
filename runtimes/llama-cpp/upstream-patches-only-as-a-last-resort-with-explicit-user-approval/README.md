@@ -1111,13 +1111,15 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 ## Packed expert SITU activation
 
-- **Patch:** `ggml-webgpu-situ-packed.patch`, against llama.cpp `c212d25`.
+- **Patches:** `ggml-webgpu-situ-packed.patch` and
+  `ggml-webgpu-situ-packed-prefill.patch`, against llama.cpp `c212d25`.
 - **Purpose:** evaluate the nine materialized pointwise operations of the
-  packed expert SITU activation in one WebGPU dispatch on single-token graphs. The
+  packed expert SITU activation in one WebGPU dispatch across token batches. The
   existing graph builders and indexed expert projections provide the inputs
   and consume the result through their current interfaces.
 - **Scope:** contiguous F32 output of width 1152, eight selected experts, and
-  one token. The gate and up views must describe the first and second halves
+  a contiguous token batch that fits the device's binding and dispatch limits.
+  The gate and up views must describe the first and second halves
   of each row of the same dense F32 source. Admit the exact branch order,
   original sigmoid input, and final multiplication. Retain the separate
   dispatches for other operation sequences, unsupported shapes or layouts,

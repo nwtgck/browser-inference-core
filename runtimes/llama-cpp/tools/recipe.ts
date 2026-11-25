@@ -703,6 +703,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-situ-packed-prefill.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse the packed SITU activation across contiguous token batches',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp', 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-bf16-small-m.patch',
     target: 'llama-webgpu',
     reason: 'reuse small-M register tiles for long-K BF16 prefill',
