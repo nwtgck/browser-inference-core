@@ -87,7 +87,8 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
                                   input.n >= 5 && input.batch2 > 0 && input.batch3 > 0;
         if (input.expected_grid_x) {
             BICORE_CHECK(valid_layout && !input.subgroup);
-            const auto expected_matvec = input.expected_small_m.has_value() ? std::optional{false} : std::nullopt;
+            const bool verify_pipeline = input.expected_small_m.has_value() || input.expected_mode.has_value();
+            const auto expected_matvec = verify_pipeline ? std::optional{false} : std::nullopt;
             BICORE_CHECK((production_dispatch(c, 65535, input.overlap, expected_matvec) ==
                           std::array<uint32_t, 2>{input.expected_grid_x, 1}));
         } else if (valid_layout && !input.subgroup && input.m < 1000 && input.n < 1000 && input.batch2 < 100 &&
@@ -200,6 +201,19 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(q8(2336, 3072, 128, 0, 384));
     cases.push_back(q8(2304, 3072, 129, 0, 480));
     cases.push_back(q8(2304, 3072, 64, 0, 192));
+    cases.push_back(q8(10240, 320, 128, 1, 40));
+    cases.push_back(q8(10208, 320, 128, 0, 40));
+    cases.push_back(q8(10240, 384, 128, 0, 48));
+    cases.push_back(q8(10240, 320, 127, 0, 40));
+    auto long_k_batched = q8(10240, 320, 128, 0, 80);
+    long_k_batched.batch2 = 2;
+    cases.push_back(long_k_batched);
+    auto long_k_excluded = q8(10240, 320, 128, 0);
+    long_k_excluded.overlap = true;
+    cases.push_back(long_k_excluded);
+    long_k_excluded.overlap = false;
+    long_k_excluded.subgroup = true;
+    cases.push_back(long_k_excluded);
     auto short_batched = q8(2304, 3072, 128, 0, 768);
     short_batched.batch2 = 2;
     cases.push_back(short_batched);

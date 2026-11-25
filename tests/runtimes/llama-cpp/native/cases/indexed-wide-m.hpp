@@ -9,13 +9,11 @@ static void indexed_wide_m(const std::filesystem::path & output) {
         bool eligible;
     };
     constexpr Fixture fixtures[] = {
-        {GGML_TYPE_IQ3_S, 2560, 640, 1, true},
-        {GGML_TYPE_Q4_K, 2560, 640, 1, true},
-        {GGML_TYPE_IQ4_XS, 2560, 640, 1, true},
-        {GGML_TYPE_IQ4_NL, 640, 2560, 10, true},
-        {GGML_TYPE_IQ2_S, 2560, 640, 1, false},
-        {GGML_TYPE_IQ3_XXS, 2560, 640, 1, false},
-        {GGML_TYPE_Q5_1, 640, 2560, 10, false},
+        {GGML_TYPE_IQ3_S, 2560, 640, 1, true},  {GGML_TYPE_Q4_K, 2560, 640, 1, true},
+        {GGML_TYPE_IQ4_XS, 2560, 640, 1, true}, {GGML_TYPE_IQ4_NL, 640, 2560, 10, true},
+        {GGML_TYPE_IQ2_S, 2560, 640, 1, true},  {GGML_TYPE_IQ3_XXS, 2560, 640, 1, true},
+        {GGML_TYPE_Q5_1, 640, 2560, 10, true},  {GGML_TYPE_IQ2_XS, 2560, 640, 1, false},
+        {GGML_TYPE_Q5_0, 640, 2560, 10, false},
     };
     for (const auto [type, k, m, activation_slots, eligible] : fixtures) {
         auto ctx = recording_context();
