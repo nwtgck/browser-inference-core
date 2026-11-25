@@ -147,12 +147,17 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
     limits.maxComputeWorkgroupsPerDimension = 65535;
     ctx->batch_compute_passes = false;
 
+    struct Shape {
+        int64_t k, m;
+        uint32_t scalar_grid, paired_grid;
+    };
+    constexpr Shape gate{5120, 17408, 2176, 1088};
     enum class Precision { automatic, accumulator, input };
-    const auto run = [&](int64_t n, size_t prefix, bool overlap, bool paired, const char * capture,
+    const auto run = [&](const Shape & shape, int64_t n, size_t prefix, bool overlap, bool paired, const char * capture,
                          Precision precision = Precision::automatic) {
         std::array<ggml_tensor, 3> tensors{};
-        const std::array columns{INT64_C(5120), INT64_C(5120), INT64_C(17408)};
-        const std::array rows{INT64_C(17408), n, n};
+        const std::array columns{shape.k, shape.k, shape.m};
+        const std::array rows{shape.m, n, n};
         std::array<ggml_backend_buffer, 3> allocations{};
         std::vector<ggml_backend_webgpu_buffer_context> backing;
         backing.reserve(tensors.size());
@@ -195,7 +200,7 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
         const auto & slot = ctx->bind_group_cache.slots.front();
         const auto & pipeline = *slot.pipeline.Get();
         BICORE_CHECK(pipeline.id == dispatch.pipeline && pipeline.name.ends_with("_half_pairs_m8") == paired);
-        const uint32_t groups = paired ? 1088 : 2176;
+        const uint32_t groups = paired ? shape.paired_grid : shape.scalar_grid;
         BICORE_CHECK(dispatch.x <= limits.maxComputeWorkgroupsPerDimension && dispatch.z == 1);
         BICORE_CHECK(limits.maxComputeWorkgroupsPerDimension < groups ? dispatch.y > 1
                                                                       : dispatch.x == groups && dispatch.y == 1);
@@ -204,9 +209,11 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
         std::array<uint32_t, 16> params{};
         std::memcpy(params.data(), commands.writes.front().bytes.data(), sizeof(params));
         if (!overlap) {
+            const size_t blocks_per_row = shape.k / 64;
+            const size_t weight_bytes = prefix + shape.m * blocks_per_row * 18;
             BICORE_CHECK(slot.bindings.size() == 4 && slot.bindings[0].offset == 0 &&
-                         slot.bindings[0].size == ROUNDUP_POW2(prefix + 17408 * 80 * 18, 4));
-            BICORE_CHECK(params[0] == prefix / 18 && params[6] == 80);
+                         slot.bindings[0].size == ROUNDUP_POW2(weight_bytes, 4));
+            BICORE_CHECK(params[0] == prefix / 18 && params[6] == blocks_per_row);
         }
         const auto command = ctx->active_command_encoder.Finish();
         ctx->global_ctx->queue.Submit(1, &command);
@@ -220,27 +227,38 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
         return pipeline.id;
     };
 
-    const auto wide = run(128, 0, false, true, "q2-dense-wide");
+    const auto wide = run(gate, 128, 0, false, true, "q2-dense-wide");
     // The extra block puts the final four packed bytes across the last two
     // aligned words. The binding includes exactly two bytes of terminal pad.
-    BICORE_CHECK(run(128, 18, false, true, nullptr) == wide);
+    BICORE_CHECK(run(gate, 128, 18, false, true, nullptr) == wide);
     --limits.maxComputeWorkgroupSizeX;
-    const auto scalar = run(128, 0, false, false, "q2-dense-stock");
+    const auto scalar = run(gate, 128, 0, false, false, "q2-dense-stock");
     ++limits.maxComputeWorkgroupSizeX;
     --limits.maxComputeInvocationsPerWorkgroup;
-    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(gate, 128, 0, false, false, nullptr) == scalar);
     ++limits.maxComputeInvocationsPerWorkgroup;
     --limits.maxComputeWorkgroupStorageSize;
-    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(gate, 128, 0, false, false, nullptr) == scalar);
     ++limits.maxComputeWorkgroupStorageSize;
     limits.maxComputeWorkgroupsPerDimension = 1087;
-    BICORE_CHECK(run(128, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(gate, 128, 0, false, false, nullptr) == scalar);
     limits.maxComputeWorkgroupsPerDimension = 65535;
-    BICORE_CHECK(run(127, 0, false, false, nullptr) == scalar);
-    BICORE_CHECK(run(128, 0, true, false, nullptr) != wide);
-    BICORE_CHECK(run(128, 0, false, false, nullptr, Precision::accumulator) == scalar);
-    BICORE_CHECK(run(128, 0, false, false, nullptr, Precision::input) == scalar);
-    BICORE_CHECK(scalar != wide && run(128, 0, false, true, nullptr) == wide);
+    BICORE_CHECK(run(gate, 127, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(gate, 128, 0, true, false, nullptr) != wide);
+    BICORE_CHECK(run(gate, 128, 0, false, false, nullptr, Precision::accumulator) == scalar);
+    BICORE_CHECK(run(gate, 128, 0, false, false, nullptr, Precision::input) == scalar);
+    BICORE_CHECK(scalar != wide && run(gate, 128, 0, false, true, nullptr) == wide);
+
+    const auto check_shape = [&](const Shape & shape, const char * wide_capture, const char * scalar_capture) {
+        BICORE_CHECK(run(shape, 128, 0, false, true, wide_capture) == wide);
+        --limits.maxComputeWorkgroupStorageSize;
+        BICORE_CHECK(run(shape, 128, 0, false, false, scalar_capture) == scalar);
+        ++limits.maxComputeWorkgroupStorageSize;
+    };
+    check_shape({17408, 5120, 640, 320}, "q2-dense-down-wide", "q2-dense-down-stock");
+    check_shape({6144, 5120, 640, 320}, "q2-dense-out-wide", "q2-dense-out-stock");
+    check_shape({5120, 10240, 1280, 640}, "q2-dense-qkv-wide", "q2-dense-qkv-stock");
+    BICORE_CHECK(run({6144, 10240, 1280, 0}, 128, 0, false, false, nullptr) == scalar);
 }
 
 static void all(const std::filesystem::path & output) {

@@ -25,13 +25,15 @@
      bool        indexed_split_weights = false;
      bool        indexed_src0_aligned = false;
      bool        prefer_narrow_indexed_k = false;
-@@ -3299,7 +3300,16 @@
+@@ -3299,7 +3300,18 @@
          // Keep 40 workgroups on this long-K shape while using paired shared loads.
          const bool q8_c4 = key.src0_type == GGML_TYPE_Q8_0 && k == 10240 && m == 320 && n == 128 &&
                             context.dst->ne[2] == 1 && context.dst->ne[3] == 1;
 -        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4) &&
 +        const bool q2_c8 = key.src0_type == GGML_TYPE_Q2_0 && context.supports_q2_paired_prefill &&
-+                           k == 5120 && m == 17408 && n == 128 &&
++                           n == 128 &&
++                           ((k == 5120 && (m == 17408 || m == 10240)) ||
++                            (m == 5120 && (k == 17408 || k == 6144))) &&
 +                           context.src0->ne[2] == 1 && context.src0->ne[3] == 1 &&
 +                           context.src1->ne[2] == 1 && context.src1->ne[3] == 1 &&
 +                           context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
