@@ -55,9 +55,57 @@ static void sparse_matrix(const std::filesystem::path & output) {
     }
 }
 
+static void indexed_wide_k(const std::filesystem::path & output) {
+    auto ctx = recording_context();
+    for (const auto type : {GGML_TYPE_IQ4_NL, GGML_TYPE_NVFP4}) {
+        ggml_tensor a{}, x{}, dst{};
+        a.type = type;
+        x.type = dst.type = GGML_TYPE_F32;
+        dst.op = GGML_OP_MUL_MAT_ID;
+        a.ne[2] = 128;
+        auto c = ggml_webgpu_shader_lib_context{};
+        c.src0 = &a;
+        c.src1 = &x;
+        c.dst = &dst;
+        const auto precision = type == GGML_TYPE_NVFP4 ? GGML_PREC_F32 : GGML_PREC_UNDEFINED;
+        BICORE_CHECK(ggml_prec_set_acc(&dst, precision));
+        const auto select = [&](int64_t k, int64_t m, int64_t tokens, uint32_t shared, uint32_t expected) {
+            a.ne[0] = x.ne[0] = k;
+            a.ne[1] = dst.ne[0] = m;
+            x.ne[2] = dst.ne[2] = tokens;
+            c.wg_mem_limit_bytes = shared;
+            const auto pipeline = ctx->shader_lib->get_mul_mat_id_pipeline(c, false);
+            const auto & d = *static_cast<const ggml_webgpu_mul_mat_shader_decisions *>(pipeline.context.get());
+            BICORE_CHECK(d.tile_k == expected && d.wg_size == 64);
+            BICORE_CHECK((pipeline.name.find("_tk64") != std::string::npos) == (expected == 64));
+            return pipeline;
+        };
+        const auto narrow = select(2304, 2304, 12, 8447, 32);
+        const auto wide = select(2304, 2304, 12, 8448, 64);
+        BICORE_CHECK(narrow.pipeline.Get() != wide.pipeline.Get());
+        BICORE_CHECK(select(2304, 2304, 11, 32768, 32).pipeline.Get() == narrow.pipeline.Get());
+        BICORE_CHECK(select(2304, 2303, 128, 32768, 32).pipeline.Get() == narrow.pipeline.Get());
+        BICORE_CHECK(select(2304, 512, 128, 32768, 64).pipeline.Get() == wide.pipeline.Get());
+        BICORE_CHECK(select(1152, 2304, 19, 32768, 64).pipeline.Get() == wide.pipeline.Get());
+        x.type = GGML_TYPE_F16;
+        select(2304, 2304, 128, 32768, 32);
+        x.type = GGML_TYPE_F32;
+        if (type == GGML_TYPE_NVFP4) {
+            BICORE_CHECK(ggml_prec_set_acc(&dst, GGML_PREC_UNDEFINED));
+            BICORE_CHECK(select(2304, 2304, 128, 32768, 32).pipeline.Get() != narrow.pipeline.Get());
+            BICORE_CHECK(ggml_prec_set_acc(&dst, GGML_PREC_BF16));
+            BICORE_CHECK(select(2304, 2304, 128, 32768, 64).pipeline.Get() == wide.pipeline.Get());
+        }
+        std::ofstream shader(output / (wide.name + ".wgsl"));
+        shader << wide.pipeline.Get()->code;
+        BICORE_CHECK(bool(shader));
+    }
+}
+
 static void all(const std::filesystem::path & output) {
     nvfp4_accumulator();
     sparse_matrix(output);
+    indexed_wide_k(output);
     auto ctx = recording_context();
     std::ofstream cases(output / "cases.json");
     cases << "[\n";

@@ -366,6 +366,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-wide-k.patch',
+    target: 'llama-webgpu',
+    reason: 'use a wider K tile for selected indexed prefill shapes',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-direct-mapped-read.patch',
     target: 'llama-webgpu',
     reason: 'direct mapped read',

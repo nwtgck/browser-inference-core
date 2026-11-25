@@ -809,6 +809,14 @@ not establish target-device speed.
 - **Validation and limits:** actual normal/profile factory/cache/grid/source equivalence, ownership and pinned-header syntax are source/native gates. Finite authored software checks are separate from full runtime/model/hardware validation. Small-K and small-grid speed, cold compilation cost, physical peak and Windows/macOS improvements remain unmeasured; no additional K threshold is inferred from untested cases.
 - **Removal:** retire this stage and its build/provenance/tests when upstream provides equivalent generic selection or the owner drops it. Recheck geometry, memory limits, per-row arithmetic, pair ownership and key/grid coupling on updates.
 
+## Wider K tiles for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-wide-k.patch`.
+- **Scope:** Use K64 for indexed IQ4_NL with its existing F16 accumulation and for indexed NVFP4 with F32 accumulation. Require F32 input and output, at least 12 input tokens, and at least 8,448 bytes of workgroup storage. The K/M pairs are 1152/2304, 2304/2304, and 2304/512. The existing matrix-vector selection and the K32 route for unsupported quantization, shapes and limits still apply.
+- **Contract:** Keep gather, workgroup grid, activation packing, K summation order, and accumulated precision. Include tile width in the actual pipeline cache key and distinguish it in profile labels. The sparse IQ4_NL column path remains active inside either tile width.
+- **Validation:** Test the shape, token, storage and precision boundaries in both provider modes. Compare actual shader output, including sparse and dense column counts, using deterministic inputs and local samples of packed model weights. Software WebGPU timing covers the isolated tile, with model timing on physical adapters pending.
+- **Removal:** Remove when upstream supports equivalently fast indexed prefill for these layouts without changing precision or fallback behavior.
+
 ## Wider-M paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.
