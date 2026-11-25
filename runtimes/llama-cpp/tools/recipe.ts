@@ -989,6 +989,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-f32-packed-prefill.patch',
+    target: 'llama-webgpu',
+    reason: 'stage groups of four half values and amortize barriers for long-K F32 register tiles',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

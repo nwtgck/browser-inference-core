@@ -9,6 +9,8 @@ struct Case {
     std::optional<unsigned> expected_mode = std::nullopt;
     uint32_t expected_grid_x = 0;
     std::optional<unsigned> expected_small_m = std::nullopt;
+    uint32_t shared_bytes = 0;
+    bool packed_f32 = false;
 };
 static unsigned mode(const Case & c) {
     if (c.expected_mode)
@@ -30,7 +32,8 @@ static unsigned mode(const Case & c) {
 
 static void exercise(const std::vector<Case> & inputs, const std::filesystem::path & output) {
     auto ctx = recording_context();
-    std::map<std::tuple<ggml_type, ggml_type, bool, bool, bool, unsigned, uint32_t, uint32_t, uint32_t>, unsigned>
+    std::map<std::tuple<ggml_type, ggml_type, bool, bool, bool, unsigned, uint32_t, uint32_t, uint32_t, uint32_t>,
+             unsigned>
         cache;
     for (const auto & input : inputs) {
         ggml_tensor a{}, b{}, dst{};
@@ -48,6 +51,7 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
         c.src1 = &b;
         c.dst = &dst;
         c.max_wg_size = 256;
+        c.wg_mem_limit_bytes = input.shared_bytes;
         c.supports_subgroup_matrix = input.subgroup;
         c.min_subgroup_size = c.max_subgroup_size = 16;
         c.sg_mat_m = c.sg_mat_n = c.sg_mat_k = 8;
@@ -59,6 +63,10 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
         BICORE_CHECK((pipeline.name.find("_half_pairs") != std::string::npos) == (selected != 0));
         BICORE_CHECK((pipeline.name.find("_half_pairs_m8") != std::string::npos) == (selected == 2));
         BICORE_CHECK(d.use_subgroup_matrix == input.subgroup);
+        BICORE_CHECK(pipeline.name.ends_with("_packed_k64") == input.packed_f32);
+        if (input.packed_f32) {
+            BICORE_CHECK(d.tile_m == 4 && d.tile_n == 4 && d.tile_k == 64 && d.wg_size == 64);
+        }
         if (selected) {
             BICORE_CHECK(d.tile_m == (selected == 2 ? 8u : 4u) && d.tile_n == 4 && d.tile_k == 32 && d.wg_size == 64);
             BICORE_CHECK(pipeline.pipeline.Get()->code.find(
@@ -78,7 +86,7 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
         const bool vectorized =
             input.k % 4 == 0 && input.m % 4 == 0 && (input.left == GGML_TYPE_F32 || input.left == GGML_TYPE_F16);
         const auto key = std::tuple{input.left, input.right, vectorized, input.subgroup, input.overlap,
-                                    selected,   d.tile_m,    d.tile_n,   d.wg_size};
+                                    selected,   d.tile_m,    d.tile_n,   d.tile_k,       d.wg_size};
         const auto [position, inserted] = cache.emplace(key, pipeline.pipeline.Get()->id);
         BICORE_CHECK(inserted || position->second == pipeline.pipeline.Get()->id);
         for (const auto & item : cache)
@@ -87,7 +95,8 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
                                   input.n >= 5 && input.batch2 > 0 && input.batch3 > 0;
         if (input.expected_grid_x) {
             BICORE_CHECK(valid_layout && !input.subgroup);
-            const bool verify_pipeline = input.expected_small_m.has_value() || input.expected_mode.has_value();
+            const bool verify_pipeline =
+                input.expected_small_m.has_value() || input.expected_mode.has_value() || input.shared_bytes != 0;
             const auto expected_matvec = verify_pipeline ? std::optional{false} : std::nullopt;
             BICORE_CHECK((production_dispatch(c, 65535, input.overlap, expected_matvec) ==
                           std::array<uint32_t, 2>{input.expected_grid_x, 1}));
@@ -408,6 +417,33 @@ static void all(const std::filesystem::path & output) {
     bf16_fallback.right = GGML_TYPE_F32;
     bf16_fallback.output = GGML_TYPE_F16;
     cases.push_back(bf16_fallback);
+    const auto f32 = [](int64_t k, int64_t m, int64_t n, uint32_t shared, bool packed) {
+        Case test{GGML_TYPE_F32, GGML_TYPE_F32, GGML_TYPE_F32, k, m, n};
+        test.shared_bytes = shared;
+        test.packed_f32 = packed;
+        test.expected_grid_x = uint32_t((m + 31) / 32 * ((n + 31) / 32));
+        return test;
+    };
+    cases.push_back(f32(4608, 64, 19, 8191, false));
+    cases.push_back(f32(4608, 64, 19, 8192, true));
+    cases.push_back(f32(4608, 64, 16, 8192, true));
+    cases.push_back(f32(4608, 64, 33, 8192, true));
+    cases.push_back(f32(4608, 64, 128, 8192, true));
+    cases.push_back(f32(4608, 64, 15, 8192, false));
+    cases.push_back(f32(4608, 64, 129, 8192, false));
+    cases.push_back(f32(4604, 64, 64, 8192, false));
+    cases.push_back(f32(4608, 68, 64, 8192, false));
+    auto packed_fallback = f32(4608, 64, 64, 8192, false);
+    packed_fallback.overlap = true;
+    cases.push_back(packed_fallback);
+    packed_fallback.overlap = false;
+    packed_fallback.batch2 = 2;
+    packed_fallback.expected_grid_x = 8;
+    cases.push_back(packed_fallback);
+    packed_fallback.batch2 = 1;
+    packed_fallback.expected_grid_x = 0;
+    packed_fallback.subgroup = true;
+    cases.push_back(packed_fallback);
     for (const auto & transition : std::vector<Case>{{GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 64, 31},
                                                      {GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 64, 32},
                                                      {GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 65, 32},

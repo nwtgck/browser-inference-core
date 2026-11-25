@@ -8,6 +8,7 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
     auto ctx = recording_context();
     auto & capabilities = ctx->global_ctx->capabilities;
     capabilities.limits.maxComputeInvocationsPerWorkgroup = input.max_wg_size;
+    capabilities.limits.maxComputeWorkgroupStorageSize = uint32_t(input.wg_mem_limit_bytes);
     capabilities.limits.maxComputeWorkgroupsPerDimension = dimension;
     capabilities.limits.minStorageBufferOffsetAlignment = 256;
     capabilities.supports_subgroups = input.supports_subgroups;
