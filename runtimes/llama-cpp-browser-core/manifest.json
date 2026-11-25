@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "llama-cpp",
   "abiVersion": 3,
-  "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+  "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
   "schemaSha256": "fb2718d8afaff23770233905acd37b332190adec1f9e8614a1097a211bb4ba80",
   "llamaCommit": "c212d25ad34ff1fdf775793cda07e009560cf66b",
   "licenseRoots": [
@@ -1692,8 +1692,8 @@
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.mjs"
     },
     {
-      "bytes": 18038256,
-      "sha256": "718b8562ec40491eb9b85dca0eb1e958b8bdca86ee2d5c2276f612c85dff85ef",
+      "bytes": 18038756,
+      "sha256": "ccfa27961ba53f5c06e413cab2a4442b048b51ed4edc186c2c52be19fc2e2282",
       "path": "profiles/webgpu-wasm32-asyncify/browser/core.wasm"
     },
     {
@@ -1727,8 +1727,8 @@
       "path": "profiles/webgpu-wasm32-asyncify/test/core.mjs"
     },
     {
-      "bytes": 18292505,
-      "sha256": "105bd37c6a0ce4564397e4c8cbd64e009dcf98bfe6eef301fe5a0bed477a0ff0",
+      "bytes": 18293011,
+      "sha256": "51c92136b54c12e66fa9f0b135318c73950f3afcb2587a9f48a7e7bcf6a81702",
       "path": "profiles/webgpu-wasm32-asyncify/test/core.wasm"
     },
     {
@@ -1762,8 +1762,8 @@
       "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs"
     },
     {
-      "bytes": 10158885,
-      "sha256": "f722dd1cd0f7611eb88456d41cc821e79e3693860a06e464f657ec8668d3cebf",
+      "bytes": 10159275,
+      "sha256": "ac0ea6a68d1f7c0252f6a716f8f8da7e365bc31ca1844c0c005885cc58af464c",
       "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm"
     },
     {
@@ -1797,8 +1797,8 @@
       "path": "profiles/webgpu-wasm32-jspi/test/core.mjs"
     },
     {
-      "bytes": 10346815,
-      "sha256": "7a62a001259211aa975468d5b0fb37b0a4a5e4038d566c48bd3ca61f181da48a",
+      "bytes": 10347205,
+      "sha256": "6f4556eaa6e7e2ec71fe99d0118cfb425077bfe51ea449fd59f87a4d75ed1176",
       "path": "profiles/webgpu-wasm32-jspi/test/core.wasm"
     },
     {
@@ -1832,8 +1832,8 @@
       "path": "profiles/webgpu-wasm64-jspi/browser/core.mjs"
     },
     {
-      "bytes": 10524122,
-      "sha256": "99807a6914727d46fdb8c5d523421c8f56e63639091323d42a7b5fde6b46e98d",
+      "bytes": 10524533,
+      "sha256": "781df6266ed21072d0c9b4499a54ee58aaecb851929ebe92f300582c1fdef3b4",
       "path": "profiles/webgpu-wasm64-jspi/browser/core.wasm"
     },
     {
@@ -1867,8 +1867,8 @@
       "path": "profiles/webgpu-wasm64-jspi/test/core.mjs"
     },
     {
-      "bytes": 10716924,
-      "sha256": "9f758bfb6fbd712b953169283d379c58bc260e699cfc342ca50fad9ecbb5329f",
+      "bytes": 10717318,
+      "sha256": "36b059e206c6b6f92cf862b512bbce94fe8f204e92d4d3fc4dc2194cfaf6d12d",
       "path": "profiles/webgpu-wasm64-jspi/test/core.wasm"
     },
     {
@@ -1902,8 +1902,8 @@
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.mjs"
     },
     {
-      "bytes": 10569399,
-      "sha256": "61d852cb2a2e61db3b5093ab671418ada7f8317a85f5dd45c15603b45c1c27f2",
+      "bytes": 10569752,
+      "sha256": "6bed20230b7ecad3b2238e125f7a8942559f651fada2b82f5c90127ea75ca695",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/browser/core.wasm"
     },
     {
@@ -1947,8 +1947,8 @@
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.mjs"
     },
     {
-      "bytes": 10760845,
-      "sha256": "4df3bb013dc9ce666c124963313397aec66c2a9f98459b0b45d7ee61bc730333",
+      "bytes": 10761223,
+      "sha256": "c095cd8a0a7d1ec38d054b1b353652887f81019cef7c6f2cb410c15ae2552d95",
       "path": "profiles/webgpu-wasm64-jspi-gpu-profile/test/core.wasm"
     },
     {
@@ -1984,7 +1984,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "browser",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -2023,7 +2023,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -2146,8 +2146,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -2380,6 +2380,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -41726,7 +41730,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1795618049,
+          "builtAtUnix": 1795619041,
           "buildCache": {
             "identity": "fea48c6b70b45b32c5e03f7889413f8f",
             "compilerWrapper": "ccache"
@@ -41785,7 +41789,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "test",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -41824,7 +41828,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -41947,8 +41951,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -42181,6 +42185,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -81527,7 +81535,7 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1795618047,
+          "builtAtUnix": 1795619103,
           "buildCache": {
             "identity": "75776ccbd7c980c150012b3710e8e518",
             "compilerWrapper": "ccache"
@@ -81579,7 +81587,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -81618,7 +81626,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -81741,8 +81749,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -81975,6 +81983,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -102024,6 +102036,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -102298,8 +102334,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -111291,8 +111327,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -111319,8 +111355,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -111351,8 +111387,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -111519,8 +111555,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -121163,8 +121199,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2620,
@@ -121876,12 +121912,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -123622,7 +123658,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618207,
+          "builtAtUnix": 1795619172,
           "buildCache": {
             "identity": "55d6dfc55931f93841f52deddbd12409",
             "compilerWrapper": "ccache"
@@ -123669,7 +123705,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -123708,7 +123744,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -123831,8 +123867,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -124065,6 +124101,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -144114,6 +144154,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -144388,8 +144452,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -153381,8 +153445,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -153409,8 +153473,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -153441,8 +153505,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -153609,8 +153673,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -163253,8 +163317,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2587,
@@ -163966,12 +164030,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -165712,7 +165776,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618137,
+          "builtAtUnix": 1795619161,
           "buildCache": {
             "identity": "fc13389a0bee2787c9426a171de0bfca",
             "compilerWrapper": "ccache"
@@ -165752,7 +165816,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -165791,7 +165855,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -165914,8 +165978,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -166148,6 +166212,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -186197,6 +186265,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -186471,8 +186563,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -195464,8 +195556,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -195492,8 +195584,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -195524,8 +195616,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -195692,8 +195784,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -205336,8 +205428,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2576,
@@ -206049,12 +206141,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -207795,7 +207887,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618053,
+          "builtAtUnix": 1795619059,
           "buildCache": {
             "identity": "3b457edb36cff69886332f71a7c0adb9",
             "compilerWrapper": "ccache"
@@ -207842,7 +207934,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -207881,7 +207973,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -208004,8 +208096,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -208238,6 +208330,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -228287,6 +228383,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -228561,8 +228681,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -237554,8 +237674,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -237582,8 +237702,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -237614,8 +237734,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -237782,8 +237902,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -247426,8 +247546,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2543,
@@ -248139,12 +248259,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -249885,7 +250005,7 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618124,
+          "builtAtUnix": 1795619121,
           "buildCache": {
             "identity": "a1b9ad070dbf91ec51b7cf7e853dc5d0",
             "compilerWrapper": "ccache"
@@ -249925,7 +250045,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -249964,7 +250084,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -250087,8 +250207,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -250321,6 +250441,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -270370,6 +270494,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -270673,8 +270821,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -279666,8 +279814,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -279694,8 +279842,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -279726,8 +279874,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -279894,8 +280042,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -289546,8 +289694,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2576,
@@ -290259,12 +290407,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -292005,7 +292153,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618058,
+          "builtAtUnix": 1795619061,
           "buildCache": {
             "identity": "ddd57d8ae96a988043a2e997d64287a4",
             "compilerWrapper": "ccache"
@@ -292052,7 +292200,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -292091,7 +292239,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -292214,8 +292362,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -292448,6 +292596,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -312497,6 +312649,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292",
+                    "afterSha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8",
+                    "afterSha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -312800,8 +312976,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -321793,8 +321969,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -321821,8 +321997,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 217602,
-                "sha256": "721197e469ae4a339e75f04e9c613a9fd2920ad32c1e40401283af8a391a4dc8"
+                "bytes": 218406,
+                "sha256": "bcb7dfdc5031f64de1a4f07fa65f6a3b6902bc524979bf6c63f7a238513c7974"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -321853,8 +322029,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -322021,8 +322197,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -331673,8 +331849,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 387640,
-                "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                "bytes": 388204,
+                "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2543,
@@ -332386,12 +332562,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 387640,
-                  "sha256": "c342254bb9273dfa2c5984c08c35a8eadff287668da325722001b573719d1292"
+                  "bytes": 388204,
+                  "sha256": "b7e6dd864e5895bbc26a1f3ea2cadb13ee8de9bcac4f3a71ddbae6553760a091"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -334132,7 +334308,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618059,
+          "builtAtUnix": 1795619132,
           "buildCache": {
             "identity": "f04cbc0b68c0e2366f16f948e140ead0",
             "compilerWrapper": "ccache"
@@ -334172,7 +334348,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "browser",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -334212,7 +334388,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -334335,8 +334511,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -334569,6 +334745,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -354637,6 +354817,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e",
+                    "afterSha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "de411013ce00f743f3351ed84aaa2cc88678e46c88526d3055ee2c9b034e14d1",
+                    "afterSha256": "199e53468aebfa0895f0215d9f9bb85b78738d66295508c1c4b580f7b0a47a0e"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -354940,8 +355144,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -363941,8 +364145,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -363969,8 +364173,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 220904,
-                "sha256": "de411013ce00f743f3351ed84aaa2cc88678e46c88526d3055ee2c9b034e14d1"
+                "bytes": 221708,
+                "sha256": "199e53468aebfa0895f0215d9f9bb85b78738d66295508c1c4b580f7b0a47a0e"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -364001,8 +364205,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 401644,
-                "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                "bytes": 402208,
+                "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -364169,8 +364373,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -373825,8 +374029,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 401644,
-                "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                "bytes": 402208,
+                "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2708,
@@ -374542,12 +374746,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 401644,
-                  "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                  "bytes": 402208,
+                  "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -376288,7 +376492,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618058,
+          "builtAtUnix": 1795619293,
           "buildCache": {
             "identity": "8cadb18b59cbb5520fa9fbd654881bb4",
             "compilerWrapper": "ccache"
@@ -376335,7 +376539,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "test",
-          "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+          "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -376375,7 +376579,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "21426cb9b5ff7e439cbeb376fd5b126503122d01",
+            "sourceCommit": "6953dbecd447d2eddfd0987cefab5639f26b2706",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14858,
@@ -376498,8 +376702,8 @@
                 "sha256": "35d968e1a192d1abc5d2a133c805acb639142f0540ef337d59c66af67dccb3b5"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md": {
-                "bytes": 139672,
-                "sha256": "7421c891bec0a649aaff4ab19f9afc6d90d09819999ce7e77dec126c39e4ab0f"
+                "bytes": 141071,
+                "sha256": "d988a92938aaad8201a1268ce6d57c57bc6368c344f649a8bb99cb9d952d89e6"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/common-chat-independent-vocabulary.patch": {
                 "bytes": 5182,
@@ -376732,6 +376936,10 @@
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-profile-query-budget.patch": {
                 "bytes": 1397,
                 "sha256": "a182e420364f363c47c6c10aedf825f0e5a55613437bddc17cfcafa06cd546a6"
+              },
+              "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q2-prefill-wide-m.patch": {
+                "bytes": 3743,
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb"
               },
               "runtimes/llama-cpp/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/ggml-webgpu-q4-short-workgroup.patch": {
                 "bytes": 3835,
@@ -396800,6 +397008,30 @@
                 ]
               },
               {
+                "file": "ggml-webgpu-q2-prefill-wide-m.patch",
+                "target": "llama-webgpu",
+                "reason": "use 64-row paired-half tiles in matching dense Q2_0 prefill",
+                "mode": "apply",
+                "sha256": "e6cbb5b42bc0d583c17727bba8dbe5906a4a9fc591db48f0e69153e52c7b76cb",
+                "files": [
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu.cpp",
+                    "beforeSha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e",
+                    "afterSha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp",
+                    "beforeSha256": "de411013ce00f743f3351ed84aaa2cc88678e46c88526d3055ee2c9b034e14d1",
+                    "afterSha256": "199e53468aebfa0895f0215d9f9bb85b78738d66295508c1c4b580f7b0a47a0e"
+                  },
+                  {
+                    "path": "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl",
+                    "beforeSha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb",
+                    "afterSha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
+                  }
+                ]
+              },
+              {
                 "file": "inkling-packed-row-views.patch",
                 "target": "llama",
                 "reason": "Read packed loop messages and attention inputs through row views.",
@@ -397103,8 +397335,8 @@
                   "sha256": "c85c7847bab5f80ff10e7b79bd6ac558ba8ab82f0b4d0d2670b17cfae9a63c46"
                 },
                 "mul_mat_half_pairs_decls.tmpl": {
-                  "bytes": 48460,
-                  "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                  "bytes": 48569,
+                  "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
                 },
                 "mul_mat_reg_tile_half_pairs.wgsl": {
                   "bytes": 5493,
@@ -406104,8 +406336,8 @@
                 "sha256": "feb42607669860c4893b706ac4eeb0edfb838d55852cb539d20f4986781ad355"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-quant-half-pairs-shaders.hpp": {
-                "bytes": 130682,
-                "sha256": "c7a21921988b83a3de59d004df818f57f530cda93344163dc41d9d65fc73bf9f"
+                "bytes": 130791,
+                "sha256": "ba84f1e742a9f7e1adc486abd8acf2bb16ed213248691675b9c057699ea87d35"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-shaders.hpp": {
                 "bytes": 3937,
@@ -406132,8 +406364,8 @@
                 "sha256": "663850dc11a0c10786908028302b34728341073bd36a9f454295255e358101dc"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp": {
-                "bytes": 220904,
-                "sha256": "de411013ce00f743f3351ed84aaa2cc88678e46c88526d3055ee2c9b034e14d1"
+                "bytes": 221708,
+                "sha256": "199e53468aebfa0895f0215d9f9bb85b78738d66295508c1c4b580f7b0a47a0e"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual-shaders.hpp": {
                 "bytes": 3074,
@@ -406164,8 +406396,8 @@
                 "sha256": "77e6b32f98cf6d8f646ca31b4aeca3187f70c0c169021ce4fe602421a4000c71"
               },
               "ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 401644,
-                "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                "bytes": 402208,
+                "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
               },
               "ggml/src/ggml-webgpu/pre_wgsl.hpp": {
                 "bytes": 26460,
@@ -406332,8 +406564,8 @@
                 "sha256": "e172e474a51dce79126648f21a1fa346ada1be516063d315157b0f290dee4405"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl": {
-                "bytes": 48460,
-                "sha256": "63ff0144fd3423528e72e459f434f1a4fe37f05b54e4349845dc476861e38dfb"
+                "bytes": 48569,
+                "sha256": "f130bc5b54b590d040ff5c48f850c69493b1076957d763552e1bd6ce64549db8"
               },
               "ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id.wgsl": {
                 "bytes": 6515,
@@ -415988,8 +416220,8 @@
                 "sha256": "3495de6808f67be3aba178788399c142cfc18e8f15822038dae1c54044bd58e2"
               },
               "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                "bytes": 401644,
-                "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                "bytes": 402208,
+                "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
               },
               "build/llama/src/CMakeFiles/llama.dir/Unity/unity_11_cxx.cxx": {
                 "bytes": 2675,
@@ -416705,12 +416937,12 @@
               },
               "ggml-webgpu": {
                 "prepared/ggml/src/ggml-webgpu/ggml-webgpu.cpp": {
-                  "bytes": 401644,
-                  "sha256": "dac63908aa02a724e277481a37f136348f476f369ff75ed25b36a1ba7658df5e"
+                  "bytes": 402208,
+                  "sha256": "a769ae13d348f2d1d43744de40fbb353f4d880f69268d6d9b206cf4a7be2e3cc"
                 },
                 "build/llama/ggml/src/ggml-webgpu/generated/ggml-wgsl-shaders.hpp": {
-                  "bytes": 2285681,
-                  "sha256": "378a35bc686eb474ec68aa4d664b485c0cdc3e1caf4fea8a02cb551da53a61d0"
+                  "bytes": 2285790,
+                  "sha256": "7619626ceeee09fcc7c551c4190bb0d3eeb9baa7495434cc3e735f1981809b13"
                 },
                 "prepared/ggml/include/ggml-webgpu.h": {
                   "bytes": 328,
@@ -418451,7 +418683,7 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795618332,
+          "builtAtUnix": 1795619276,
           "buildCache": {
             "identity": "4c940407a8e0704db53d4cc03a911029",
             "compilerWrapper": "ccache"
