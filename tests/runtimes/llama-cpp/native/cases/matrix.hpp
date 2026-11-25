@@ -10,7 +10,7 @@ struct Case {
     uint32_t expected_grid_x = 0;
     std::optional<unsigned> expected_small_m = std::nullopt;
     uint32_t shared_bytes = 0;
-    bool packed_f32 = false;
+    bool packed_half = false;
 };
 static unsigned mode(const Case & c) {
     if (c.expected_mode)
@@ -63,8 +63,8 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
         BICORE_CHECK((pipeline.name.find("_half_pairs") != std::string::npos) == (selected != 0));
         BICORE_CHECK((pipeline.name.find("_half_pairs_m8") != std::string::npos) == (selected == 2));
         BICORE_CHECK(d.use_subgroup_matrix == input.subgroup);
-        BICORE_CHECK(pipeline.name.ends_with("_packed_k64") == input.packed_f32);
-        if (input.packed_f32) {
+        BICORE_CHECK(pipeline.name.ends_with("_packed_k64") == input.packed_half);
+        if (input.packed_half) {
             const bool one_column = input.expected_small_m == 4;
             BICORE_CHECK(d.tile_m == 4 && d.tile_n == (one_column ? 1u : 4u) && d.tile_k == 64 &&
                          d.wg_size == (one_column ? 32u : 64u));
@@ -79,15 +79,15 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
             BICORE_CHECK((pipeline.name.find("_small_m") != std::string::npos) == (expected != 0));
             if (expected) {
                 BICORE_CHECK(pipeline.name.ends_with("_small_m" + std::to_string(expected) +
-                                                     (input.packed_f32 ? "_packed_k64" : "")));
-                BICORE_CHECK(d.tile_m == expected && d.tile_n == 1 && d.tile_k == (input.packed_f32 ? 64u : 8u));
+                                                     (input.packed_half ? "_packed_k64" : "")));
+                BICORE_CHECK(d.tile_m == expected && d.tile_n == 1 && d.tile_k == (input.packed_half ? 64u : 8u));
                 BICORE_CHECK(d.wg_size_m == 1 && d.wg_size_n == 32 && d.wg_size == 32);
             } else if (input.n == 4) {
                 BICORE_CHECK((production_dispatch(c, 65535, input.overlap, true) == std::array<uint32_t, 2>{1, 1}));
             }
         }
-        const bool vectorized =
-            input.k % 4 == 0 && input.m % 4 == 0 && (input.left == GGML_TYPE_F32 || input.left == GGML_TYPE_F16);
+        const bool vectorized = input.packed_half || (input.k % 4 == 0 && input.m % 4 == 0 &&
+                                                      (input.left == GGML_TYPE_F32 || input.left == GGML_TYPE_F16));
         const auto key = std::tuple{input.left, input.right, vectorized, input.subgroup, input.overlap,
                                     selected,   d.tile_m,    d.tile_n,   d.tile_k,       d.wg_size};
         const auto [position, inserted] = cache.emplace(key, pipeline.pipeline.Get()->id);
@@ -423,7 +423,7 @@ static void all(const std::filesystem::path & output) {
     const auto f32 = [](int64_t k, int64_t m, int64_t n, uint32_t shared, bool packed) {
         Case test{GGML_TYPE_F32, GGML_TYPE_F32, GGML_TYPE_F32, k, m, n};
         test.shared_bytes = shared;
-        test.packed_f32 = packed;
+        test.packed_half = packed;
         test.expected_grid_x = uint32_t((m + 31) / 32 * ((n + 31) / 32));
         return test;
     };
@@ -452,6 +452,21 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(four_rows(10240, 128, 4608, true));
     cases.push_back(four_rows(10240, 129, 4608, false));
     cases.push_back(four_rows(10236, 128, 4608, false));
+    const auto bf16_half = [&](int64_t k, int64_t m, int64_t n, uint32_t shared, bool packed) {
+        auto test = m == 4 ? four_rows(k, n, shared, packed) : f32(k, m, n, shared, packed);
+        test.left = GGML_TYPE_BF16;
+        return test;
+    };
+    cases.push_back(bf16_half(10240, 4, 19, 4607, false));
+    cases.push_back(bf16_half(10240, 4, 19, 4608, true));
+    cases.push_back(bf16_half(10240, 4, 128, 4608, true));
+    cases.push_back(bf16_half(10240, 4, 15, 4608, false));
+    cases.push_back(bf16_half(10240, 320, 128, 8191, false));
+    cases.push_back(bf16_half(10240, 320, 128, 8192, true));
+    cases.push_back(bf16_half(10240, 316, 128, 8192, false));
+    cases.push_back(bf16_half(2560, 128, 64, 8192, true));
+    cases.push_back(bf16_half(2560, 48, 64, 8192, true));
+    cases.push_back(bf16_half(2560, 512, 128, 8192, true));
     auto packed_fallback = f32(4608, 64, 64, 8192, false);
     packed_fallback.overlap = true;
     cases.push_back(packed_fallback);

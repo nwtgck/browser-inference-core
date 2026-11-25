@@ -921,23 +921,25 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 - **Patch** `ggml-webgpu-f32-packed-prefill.patch` against llama.cpp
   `c212d25ad`.
-- **Scope** Use a K64 tile for aligned, non-overlapping F32 matrices with
-  16 to 128 columns and a single batch. Use the existing four-row tile
-  at K10240/M4 with 4,608 B of workgroup storage. Use the existing standard
-  tile at K4608/M64, K2304/M128, K2048/M256, K2560/M48, K2560/M512, and
-  K5120/M48 with 8 KiB of workgroup storage. The matvec and subgroup-matrix
-  paths keep their own selection.
+- **Scope** Use a K64 tile with aligned, non-overlapping weights and F32
+  activations, 16 to 128 columns, and a single batch. The four-row tile at
+  K10240/M4 supports F32 and BF16 weights with 4,608 B of workgroup storage.
+  The standard tile requires 8 KiB. The F32 weight shapes are K4608/M64,
+  K2304/M128, K2048/M256, K2560/M48, K2560/M512, and K5120/M48.
+  The BF16 shapes are K10240/M320 and K2560 with M48, M128, or M512.
+  The matvec and subgroup-matrix paths keep their own selection.
 - **Contract** Stage four adjacent half values together and accumulate the
   four output rows as a vector in ascending K order. Keep the existing
   rounding to F16, F32 accumulation, workgroup grid, bindings, and output
-  layout. The extra storage is per-workgroup. No extra device buffer is
-  required. Cache the selected packed variant separately.
+  layout. For BF16, one aligned pair of u32 words supplies four weights
+  before rounding. The extra storage is per-workgroup. No extra device
+  buffer is required. Cache the selected packed variant separately.
 - **Validation** Check production dispatch and cache selection with both
   provider configurations, shapes on the dispatch boundaries, and workgroup
-  storage limits. Replay packed and stock shaders with real F32 projection
+  storage limits. Replay packed and stock shaders with real F32 and BF16
   weights, compare the output bits and an independent rounded-input inner
-  product, and exercise the normal Wasm64 ABI. Physical-device speed is
-  workload-dependent.
+  product, and exercise the normal Wasm64 ABI with aligned and unaligned
+  views. Physical-device speed is workload-dependent.
 - **Alternative and removal** Use the K8 register tile. Remove the patch when
   the upstream register-tile implementation provides equivalent packing or
   a faster path with the same rounding and layout behavior.
