@@ -1055,3 +1055,28 @@ not establish target-device speed.
 - **Removal:** retire when upstream fuses this graph with equivalent admission,
   device limits and numerical behavior. Review graph order, RMS and matvec
   reductions and storage binding rules when updating the upstream revision.
+
+## Indexed Q2_0 GPU-resident weights
+
+- **Purpose:** execute indexed Q2_0 expert operations on WebGPU when model
+  loading has explicitly placed the weights there. A contiguous tensor can be
+  larger than a storage binding even when it fits in a single device buffer.
+- **Scope:** admit resident Q2_0 weights for the checked vector and matrix
+  paths. The loader's metadata probe continues to select its existing buffer
+  types. An explicit tensor-buffer override uses the existing model parameters.
+- **Contract:** bind one range when it fits, otherwise split it into two aligned,
+  disjoint ranges on the same buffer. Route aligned word loads by the split
+  offset. Validate limits, sizes, backing device, overlap, and matrix scratch.
+  K640/M2560 matvecs can use a shorter workgroup; pipeline keys distinguish
+  width, split mode and matrix tile geometry.
+- **Integration:** apply the host, shader-library and WGSL stages in both WebGPU
+  preparations at llama.cpp `c212d25ad`. Use the existing shader generator and
+  argument buffer. The public ABI and CPU profiles are unchanged.
+- **Validation and limits:** native contracts exercise placement rejection and
+  real encoder ranges, including foreign allocations. Software WebGPU compares
+  decode and prefill output with CPU references. Total GPU memory availability
+  and browser model throughput require measurement on the target device.
+- **No-patch alternative:** keep indexed Q2_0 on the CPU through default loading.
+- **Removal:** retire the stages when upstream can admit and bind these weights
+  with equivalent layout and device checks. Review Q2_0 packing, matrix scratch,
+  view ownership and indexed cache keys when updating upstream.

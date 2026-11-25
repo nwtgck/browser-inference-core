@@ -633,6 +633,38 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-q2-split-shaders.patch',
+    target: 'llama-webgpu',
+    reason: 'route indexed Q2_0 loads through two binding ranges',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-indexed-q2-split-word-load.patch',
+    target: 'word-template',
+    reason: 'select the Q2_0 binding for each aligned word load',
+    files: ['ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl'],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-indexed-q2-split-host.patch',
+    target: 'llama-webgpu',
+    reason: 'admit resident indexed Q2_0 weights with checked binding ranges',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-indexed-q2-short-workgroup.patch',
+    target: 'llama-webgpu',
+    reason: 'reduce indexed Q2_0 decode workgroup width at K640 and M2560',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

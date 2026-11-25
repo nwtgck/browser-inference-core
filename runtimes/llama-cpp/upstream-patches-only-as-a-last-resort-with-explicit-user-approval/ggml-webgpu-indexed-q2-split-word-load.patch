@@ -1,0 +1,59 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
+@@ -48,8 +48,20 @@
+ #endif // DECLARE_BYTE_LOADERS_SRC
+ 
+ #ifdef DECLARE_BYTE_LOADERS_SRC0
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++fn indexed_src0_word(index: u32) -> u32 {
++    if (index < params.split_word) {
++        return SRC0[index];
++    }
++    return src0_high[index - params.split_word];
++}
++#endif
+ fn load_u16_at_src0(byte_offset: u32) -> u32 {
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    let word = indexed_src0_word(byte_offset / 4u);
++#else
+     let word = SRC0[byte_offset / 4u];
++#endif
+     let shift = (byte_offset & 0x2u) * 8u;
+     return (word >> shift) & 0xFFFFu;
+ }
+@@ -58,14 +70,23 @@
+ // Caller extracts the 16-bit half it needs via & 0xFFFFu or >> 16u.
+ // this is used in k-quants for better performance
+ fn load_u32_at_src0_aligned(byte_offset: u32) -> u32 {
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    return indexed_src0_word((byte_offset & ~3u) / 4u);
++#else
+     return SRC0[(byte_offset & ~3u) / 4u];
++#endif
+ }
+ 
+ fn load_u32_at_src0(byte_offset: u32) -> u32 {
+     let word_idx = byte_offset / 4u;
+     let shift = (byte_offset & 0x3u) * 8u;
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    let lo = indexed_src0_word(word_idx);
++    let hi = indexed_src0_word(word_idx + select(0u, 1u, shift != 0u));
++#else
+     let lo = SRC0[word_idx];
+     let hi = SRC0[word_idx + select(0u, 1u, shift != 0u)];
++#endif
+     return (lo >> shift) | (hi << ((32u - shift) & 31u));
+ }
+ 
+@@ -75,7 +96,11 @@
+ }
+ 
+ fn load_f16_as_f32_at_src0(byte_offset: u32) -> f32 {
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    let word = indexed_src0_word(byte_offset / 4u);
++#else
+     let word = SRC0[byte_offset / 4u];
++#endif
+     let shift = (byte_offset & 0x2u) * 8u;
+     let d_bits = (word >> shift) & 0xFFFFu;
+     return unpack2x16float(d_bits)[0];
