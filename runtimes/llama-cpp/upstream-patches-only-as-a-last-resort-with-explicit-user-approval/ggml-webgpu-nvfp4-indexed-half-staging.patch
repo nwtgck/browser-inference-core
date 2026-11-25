@@ -1,0 +1,86 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3748,6 +3748,10 @@
+             variant += "_acc_f32";
+         }
+ 
++        if (key.src0_type == GGML_TYPE_NVFP4 && key.src1_type == GGML_TYPE_F32 && key.f32_accumulator) {
++            defines.push_back("BICORE_NVFP4_STAGE_HALF_VEC");
++        }
++
+         if (!key.vectorized && key.src1_type == GGML_TYPE_F32 &&
+             (key.src0_type == GGML_TYPE_IQ3_S || key.src0_type == GGML_TYPE_IQ4_NL)) {
+             defines.push_back("BICORE_SPARSE_EXPERT_COLUMNS");
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -333,6 +333,34 @@
+ const BYTES_PER_THREAD = 8u;
+ const BYTES_PER_INNER_LOOP = 4u;
+ 
++#ifdef BICORE_NVFP4_STAGE_HALF_VEC
++fn nvfp4_stage_scale(raw_scale: u32) -> f16 {
++    let exponent = (raw_scale >> 3u) & 15u;
++    let mantissa = raw_scale & 7u;
++    // 0x7f is the only nonzero exceptional byte. The raw high bit is
++    // ignored by the normal decoder but does not turn 0xff into 0x7f.
++    let normal = bitcast<vec2<f16>>(((exponent + 7u) << 10u) | (mantissa << 7u)).x;
++    let tiny = f16(mantissa) * 0.0009765625h;
++    return select(select(normal, tiny, exponent == 0u), 0.0h, raw_scale == 127u);
++}
++
++fn nvfp4_stage_half_vec(code: vec4<u32>, scale: f16) -> vec4<f16> {
++    // Integer magnitudes are twice E2M1. Both zero codes follow the stock
++    // table's positive zero. Assemble the sign after multiplication so the
++    // negative nonzero codes retain a negative zero at a zero scale.
++    let shift = (code & vec4<u32>(7u)) << vec4<u32>(2u);
++    let magnitudes = (vec4<u32>(0xc8643210u) >> shift) & vec4<u32>(15u);
++    let products = vec4<f16>(magnitudes) * vec4<f16>(scale);
++    let sign = select(vec4<u32>(0u), vec4<u32>(0x8000u), code > vec4<u32>(8u));
++    let masks = vec2<u32>(sign.x | (sign.y << 16u), sign.z | (sign.w << 16u));
++    return bitcast<vec4<f16>>(bitcast<vec2<u32>>(products) | masks);
++}
++
++fn nvfp4_stage_unpack(packed: u32) -> vec4<u32> {
++    return vec4<u32>(packed) >> vec4<u32>(0u, 8u, 16u, 24u);
++}
++#endif
++
+ fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
+     for (var i = thread_id * NQ; i < TILE_SRC0_SHMEM; i += TOTAL_WORKGROUP_SIZE * NQ) {
+         let tile_m = i / TILE_K;
+@@ -352,6 +380,25 @@
+         let d_byte_base     = block_byte_base;
+         let qs_byte_base    = block_byte_base + 4u;
+ 
++#ifdef BICORE_NVFP4_STAGE_HALF_VEC
++        let scale_byte = get_byte(load_u32_at_src0_aligned(d_byte_base), sub_block);
++        let d = nvfp4_stage_scale(scale_byte);
++        for (var j = 0u; j < BYTES_PER_THREAD / BYTES_PER_INNER_LOOP; j++) {
++            let q_packed = load_u32_at_src0_aligned(qs_byte_base + sub_block * 8u + j * 4u);
++            let codes = nvfp4_stage_unpack(q_packed);
++            let lo = nvfp4_stage_half_vec(codes & vec4<u32>(15u), d);
++            let hi = nvfp4_stage_half_vec((codes >> vec4<u32>(4u)) & vec4<u32>(15u), d);
++            let dst = i + j * BYTES_PER_INNER_LOOP;
++            shmem[dst] = lo.x;
++            shmem[dst + 1u] = lo.y;
++            shmem[dst + 2u] = lo.z;
++            shmem[dst + 3u] = lo.w;
++            shmem[dst + 8u] = hi.x;
++            shmem[dst + 9u] = hi.y;
++            shmem[dst + 10u] = hi.z;
++            shmem[dst + 11u] = hi.w;
++        }
++#else
+         let d = ue4m3_to_fp32(get_byte(load_u32_at_src0_aligned(d_byte_base), sub_block)) * 0.5;
+ 
+         for (var j = 0u; j < BYTES_PER_THREAD / BYTES_PER_INNER_LOOP; j++) {
+@@ -362,6 +409,7 @@
+                 shmem[i + j * BYTES_PER_INNER_LOOP + k + 8u] = f16(f32(kvalues_mxfp4[(q_byte >> 4) & 0xF]) * d);
+             }
+         }
++#endif
+     }
+ }
+ #endif // INIT_SRC0_SHMEM_NVFP4

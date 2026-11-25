@@ -1448,3 +1448,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Replay the emitted original and fused shaders in the same arena with causal
   masks and rounding boundaries. Remove when upstream provides the equivalent
   packed fusion with the same lifetime and conversion guarantees.
+
+## WebGPU indexed NVFP4 half-vector staging
+
+- **Patch** `ggml-webgpu-nvfp4-indexed-half-staging.patch` against llama.cpp `c212d25ad`.
+- **Scope** In the grouped expert matrix shader, stage NVFP4 weights in
+  half vectors when the activations and accumulator are F32. Retain the
+  existing K and M tiles, bindings, shared storage, and F32 accumulation.
+  Other input and precision combinations keep their existing staging.
+- **Contract** Preserve every decoded half bit for all 256 scale bytes and
+  16 codes, including signed zero and the exceptional scale byte 127.
+  The normal and profiling builds use the same derived shader and
+  pipeline key. Omitting this patch restores the scalar decode.
+- **Validation and removal** Check indexed selection and fallbacks in both
+  complete providers. Compare the emitted shaders and exhaustively check
+  their scale and code combinations on a software adapter. Replay real
+  expert gate and down weight slices against scalar staging and check all
+  output bits. The replay measures kernel time on the software adapter.
+  Remove this patch when upstream provides equivalent indexed staging.

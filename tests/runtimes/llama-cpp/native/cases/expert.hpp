@@ -31,6 +31,18 @@ static void nvfp4_accumulator() {
     BICORE_CHECK(wide.Get()->code.find("f32(src0_tile[tm]) * f32(src1_val)") != std::string::npos);
     BICORE_CHECK(select(GGML_PREC_F32).Get() == wide.Get());
     BICORE_CHECK(select(GGML_PREC_UNDEFINED).Get() == narrow.Get());
+
+    constexpr auto half_staging = "fn nvfp4_stage_half_vec(";
+    BICORE_CHECK(wide.Get()->code.find(half_staging) != std::string::npos);
+    BICORE_CHECK(narrow.Get()->code.find(half_staging) == std::string::npos);
+    input.type = GGML_TYPE_F16;
+    const auto half_input = select(GGML_PREC_F32);
+    BICORE_CHECK(half_input.Get() != wide.Get());
+    BICORE_CHECK(half_input.Get()->code.find("f32(src0_tile[tm]) * f32(src1_val)") != std::string::npos);
+    BICORE_CHECK(half_input.Get()->code.find(half_staging) == std::string::npos);
+    BICORE_CHECK(select(GGML_PREC_BF16).Get() == half_input.Get());
+    input.type = GGML_TYPE_F32;
+    BICORE_CHECK(select(GGML_PREC_F32).Get() == wide.Get());
 }
 
 static void sparse_matrix(const std::filesystem::path & output) {

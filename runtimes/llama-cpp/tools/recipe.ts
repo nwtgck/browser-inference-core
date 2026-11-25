@@ -887,6 +887,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp', 'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-nvfp4-indexed-half-staging.patch',
+    target: 'llama-webgpu',
+    reason: 'stage F32-accumulated NVFP4 expert weights with half vectors',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
