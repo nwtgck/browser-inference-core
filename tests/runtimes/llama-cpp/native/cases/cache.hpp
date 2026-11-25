@@ -1,5 +1,7 @@
 #pragma once
 
+#include "support/transfer-backend.hpp"
+
 namespace cache_cases {
 static void key_only_ownership() {
     auto ctx = recording_context();
@@ -239,10 +241,57 @@ static void actual_graphs() {
     BICORE_CHECK(commands.executed == 392 && commands.queue_waits == 0);
     BICORE_CHECK(resources.groups_alive == 0);
 }
+static void unary_parameters() {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
+    BICORE_CHECK(memory);
+    auto * input = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 16, 16);
+    ggml_set_input(input);
+    constexpr std::array values{-2.25f, -3.5f, 0.125f, 0.375f};
+    const std::array outputs{
+        ggml_clamp(memory.get(), input, values[0], 1.25f),  ggml_clamp(memory.get(), input, values[1], 1.25f),
+        ggml_fill(memory.get(), input, values[2]),          ggml_fill(memory.get(), input, values[3]),
+        ggml_tri(memory.get(), input, GGML_TRI_TYPE_LOWER), ggml_tri(memory.get(), input, GGML_TRI_TYPE_UPPER),
+    };
+    auto * graph = ggml_new_graph_custom(memory.get(), 32, false);
+    for (auto * output : outputs) {
+        ggml_set_output(output);
+        ggml_build_forward_expand(graph, output);
+    }
+    const auto allocator =
+        std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>(ggml_gallocr_new(&gpu.type), ggml_gallocr_free);
+    BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
+    commands = {};
+    readback = {};
+    size_t next_dispatch = 0;
+    commands.on_direct_dispatch = [&](const WGPUBindGroupImpl & group) {
+        const auto index = next_dispatch++;
+        if (index >= values.size()) {
+            return;
+        }
+        const auto & uniform = group.bindings.back();
+        constexpr size_t scalar_offset = 10 * sizeof(uint32_t);
+        BICORE_CHECK(uniform.buffer && uniform.size >= scalar_offset + sizeof(float) &&
+                     uniform.offset + scalar_offset + sizeof(float) <= uniform.buffer->bytes.size());
+        float actual = 0.0f;
+        std::memcpy(&actual, uniform.buffer->bytes.data() + uniform.offset + scalar_offset, sizeof(actual));
+        BICORE_CHECK(actual == values[index]);
+    };
+    BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+    ggml_backend_synchronize(&gpu.backend);
+    commands.on_direct_dispatch = {};
+    const auto & dispatches = commands.dispatches;
+    BICORE_CHECK(next_dispatch == outputs.size() && dispatches.size() == outputs.size());
+    BICORE_CHECK(dispatches[0].pipeline == dispatches[1].pipeline);
+    BICORE_CHECK(dispatches[2].pipeline == dispatches[3].pipeline);
+    BICORE_CHECK(dispatches[4].pipeline != dispatches[5].pipeline);
+}
+
 static void all() {
     key_only_ownership();
     bounds_and_free();
     queued_ownership();
     actual_graphs();
+    unary_parameters();
 }
 } // namespace cache_cases

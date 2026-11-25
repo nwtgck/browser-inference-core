@@ -1,0 +1,29 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3946,13 +3946,16 @@
+ 
+     webgpu_pipeline get_unary_pipeline(const ggml_webgpu_shader_lib_context & context) {
+         const bool                     is_unary = context.dst->op == GGML_OP_UNARY;
++        const bool                     is_tri   = context.dst->op == GGML_OP_TRI;
+         const int                      op       = is_unary ? (int) ggml_get_unary_op(context.dst) : context.dst->op;
+         ggml_webgpu_unary_pipeline_key key      = {};
+         key.type                                = context.dst->type;
+         key.op                                  = op;
+         key.is_unary                            = is_unary;
+         key.inplace = ggml_webgpu_tensor_equal(context.src0, context.dst) || context.dst->op == GGML_OP_FILL;
+-        key.ttype   = (ggml_tri_type) ggml_get_op_params_i32(context.dst, 0);
++        if (is_tri) {
++            key.ttype = (ggml_tri_type) ggml_get_op_params_i32(context.dst, 0);
++        }
+ 
+         auto it = unary_pipelines.find(key);
+         if (it != unary_pipelines.end()) {
+@@ -3982,7 +3985,7 @@
+             variant += "_inplace";
+         }
+ 
+-        if (op == GGML_OP_TRI) {
++        if (is_tri) {
+             switch (key.ttype) {
+                 case GGML_TRI_TYPE_LOWER:
+                     defines.push_back("TRI_TYPE_LOWER");

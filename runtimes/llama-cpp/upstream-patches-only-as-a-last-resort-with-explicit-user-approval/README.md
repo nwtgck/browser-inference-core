@@ -719,6 +719,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation and limits:** focused source-bound native tests cover the ABI, cache, shader identity, dispatch, lifetime and guarded fallback; these do not establish real-device speed or model quality. Only the existing profiler supplies GPU timestamps.
 - **Removal:** when upstream provides an equivalent optional diagnostic or the owner withdraws it, remove its profile stage, bridge, schema generator, build/provenance wiring and tests together.
 
+## Unary pipeline cache reuse
+
+- **Patch:** `ggml-webgpu-unary-parameter-cache.patch`.
+- **Scope:** Read the triangular mode from `op_params[0]` only for `GGML_OP_TRI`, whose WGSL depends on that mode. Clamp bounds and fill values remain uniforms and can reuse their existing pipelines.
+- **Integration:** Apply the shader-library stage in the normal and GPU-profile recipes. Binding layout and shader arithmetic are unchanged.
+- **Validation:** Native provider cases verify reuse for different clamp and fill values, distinct upper and lower triangular shaders, and uploads of each value. These cases establish cache behavior.
+- **Removal:** Remove the stage and its tests when upstream keys unary shaders by their compile-time variants.
+
 ## Synchronous host dispatch assembly
 
 - **Patch:** `ggml-webgpu-host-encode-assembly.patch`.

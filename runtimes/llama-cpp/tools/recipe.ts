@@ -873,6 +873,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-unary-parameter-cache.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse unary pipelines across changes to uniform parameters',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
