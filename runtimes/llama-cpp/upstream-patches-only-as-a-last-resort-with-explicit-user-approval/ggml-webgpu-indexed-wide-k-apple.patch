@@ -1,0 +1,33 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2317,6 +2317,7 @@
+ 
+     shader_lib_ctx.wg_mem_limit_bytes =
+         ctx->global_ctx->capabilities.limits.maxComputeWorkgroupStorageSize;
++    shader_lib_ctx.prefer_narrow_indexed_k = ctx->global_ctx->vendor == "apple";
+     const auto q2_split = ggml_webgpu_q2_split_for_encoding(src0, ctx->global_ctx->capabilities.limits);
+     shader_lib_ctx.indexed_split_weights = q2_split.has_value();
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -112,6 +112,7 @@
+     uint64_t    max_storage_binding_bytes = 0;
+     bool        indexed_split_weights = false;
+     bool        indexed_src0_aligned = false;
++    bool        prefer_narrow_indexed_k = false;
+     // Actual aligned bindings, ordered as weights, input, IDs, output.
+     uint64_t    indexed_prefix_bytes[4] = {};
+     uint64_t    indexed_binding_bytes[4] = {};
+@@ -3472,7 +3473,9 @@
+         const bool measured_shape = (m == 2304 && (k == 1152 || k == 2304)) || (m == 512 && k == 2304);
+         const bool paired_q4_k_shape = key.src0_type == GGML_TYPE_Q4_K &&
+                                        ((k == 512 && m == 2048) || (k == 2048 && m == 512));
+-        if (((eligible_type && measured_shape) || paired_q4_k_shape) && key.src1_type == GGML_TYPE_F32 &&
++        // Prefer K32 for the layouts with a recorded K64 slowdown on Apple Metal.
++        const bool wide_k_shape = eligible_type && measured_shape && !context.prefer_narrow_indexed_k;
++        if ((wide_k_shape || paired_q4_k_shape) && key.src1_type == GGML_TYPE_F32 &&
+             context.dst && context.dst->type == GGML_TYPE_F32 && context.dst->ne[2] >= 12 &&
+             context.wg_mem_limit_bytes >= shared_bytes) {
+             key.tile_k = wide_tile_k;

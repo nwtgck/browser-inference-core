@@ -93,6 +93,10 @@ static void indexed_wide_k(const std::filesystem::path & output) {
         const auto narrow = select(base_k, base_m, 12, 8447, 32);
         const auto wide = select(base_k, base_m, 12, 8448, 64);
         BICORE_CHECK(narrow.pipeline.Get() != wide.pipeline.Get());
+        c.prefer_narrow_indexed_k = true;
+        const auto apple = select(base_k, base_m, 128, 32768, paired ? 64 : 32);
+        BICORE_CHECK(apple.pipeline.Get() == (paired ? wide : narrow).pipeline.Get());
+        c.prefer_narrow_indexed_k = false;
         BICORE_CHECK(select(base_k, base_m, 11, 32768, 32).pipeline.Get() == narrow.pipeline.Get());
         BICORE_CHECK(select(base_k, base_m - 1, 128, 32768, 32).pipeline.Get() == narrow.pipeline.Get());
         if (paired) {
@@ -119,10 +123,92 @@ static void indexed_wide_k(const std::filesystem::path & output) {
     }
 }
 
+static void indexed_k_adapter_selection() {
+    for (const auto type : {GGML_TYPE_IQ4_NL, GGML_TYPE_NVFP4}) {
+        auto ctx = recording_context();
+        auto & limits = ctx->global_ctx->capabilities.limits;
+        limits.maxBufferSize = 1024 * 1024 * 1024;
+        limits.maxStorageBufferBindingSize = limits.maxBufferSize;
+        limits.minStorageBufferOffsetAlignment = 256;
+        limits.maxStorageBuffersPerShaderStage = 8;
+        limits.maxComputeWorkgroupSizeX = limits.maxComputeInvocationsPerWorkgroup = 1024;
+        limits.maxComputeWorkgroupsPerDimension = 65535;
+        limits.maxComputeWorkgroupStorageSize = 32768;
+
+        const auto graph = std::unique_ptr<ggml_context, decltype(&ggml_free)>(
+            ggml_init({ggml_tensor_overhead() * 6, nullptr, true}), &ggml_free);
+        auto * weights = ggml_new_tensor_3d(graph.get(), type, 2304, 2304, 128);
+        auto * input = ggml_new_tensor_3d(graph.get(), GGML_TYPE_F32, 2304, 1, 128);
+        auto * ids = ggml_new_tensor_2d(graph.get(), GGML_TYPE_I32, 8, 128);
+        auto * dst = ggml_mul_mat_id(graph.get(), weights, input, ids);
+        const auto precision = type == GGML_TYPE_NVFP4 ? GGML_PREC_F32 : GGML_PREC_UNDEFINED;
+        BICORE_CHECK(ggml_prec_set_acc(dst, precision));
+
+        ggml_backend_webgpu_device_context device_context{};
+        device_context.webgpu_global_ctx = ctx->global_ctx;
+        ggml_backend_device device{};
+        device.context = &device_context;
+        ggml_backend_buffer_type buffer_type{};
+        buffer_type.device = &device;
+        const std::array operands{weights, input, ids, dst};
+        std::array<ggml_backend_buffer, operands.size()> buffers{};
+        std::vector<ggml_backend_webgpu_buffer_context> backing;
+        backing.reserve(operands.size());
+        for (size_t i = 0; i < operands.size(); ++i) {
+            backing.emplace_back(wgpu::Buffer::Acquire(new WGPUBufferImpl), "metadata-only binding", ctx->global_ctx);
+            buffers[i].context = &backing.back();
+            buffers[i].size = ggml_backend_webgpu_buffer_type_get_alloc_size(&buffer_type, operands[i]);
+            operands[i]->data = webgpu_ptr_base;
+            operands[i]->buffer = &buffers[i];
+        }
+
+        const auto record = [&](const char * vendor, uint32_t graph_index) {
+            ctx->global_ctx->vendor = vendor;
+            commands = {};
+            ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+            ctx->bind_group_cache.begin_graph(graph_index);
+#ifndef GGML_WEBGPU_GPU_PROFILE
+            ctx->batch_compute_passes = true;
+            ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
+#endif
+            const auto encoded = ggml_webgpu_mul_mat_id(ctx, weights, input, ids, dst);
+#ifndef GGML_WEBGPU_GPU_PROFILE
+            ctx->active_compute_pass.End();
+            ctx->active_compute_pass = nullptr;
+#endif
+            ctx->bind_group_cache.end_graph();
+            ctx->param_arena.flush(ctx->global_ctx->queue);
+            BICORE_CHECK(encoded.num_kernels == 2 && commands.dispatches.size() == 2);
+            const auto dispatch = commands.dispatches.back();
+            BICORE_CHECK(dispatch.x == 11232 && dispatch.y == 1 && dispatch.z == 1);
+            const auto encoded_commands = ctx->active_command_encoder.Finish();
+            ctx->global_ctx->queue.Submit(1, &encoded_commands);
+            drain_queue(ctx->global_ctx->queue.Get());
+            ctx->param_arena.reset();
+            return dispatch.pipeline;
+        };
+
+        ggml_webgpu_shader_lib_context selection{};
+        selection.src0 = weights;
+        selection.src1 = input;
+        selection.src2 = ids;
+        selection.dst = dst;
+        selection.wg_mem_limit_bytes = limits.maxComputeWorkgroupStorageSize;
+        const auto wide = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
+        selection.prefer_narrow_indexed_k = true;
+        const auto narrow = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
+        BICORE_CHECK(wide.pipeline.Get() != narrow.pipeline.Get());
+        BICORE_CHECK(record("intel", 0) == wide.pipeline.Get()->id);
+        BICORE_CHECK(record("apple", 1) == narrow.pipeline.Get()->id);
+        BICORE_CHECK(record("", 2) == wide.pipeline.Get()->id);
+    }
+}
+
 static void all(const std::filesystem::path & output) {
     nvfp4_accumulator();
     sparse_matrix(output);
     indexed_wide_k(output);
+    indexed_k_adapter_selection();
     indexed_wide_m(output);
     indexed_q4_0_paired(output);
     auto ctx = recording_context();

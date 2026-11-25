@@ -846,10 +846,12 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 ## Wider K tiles for indexed prefill
 
 - **Patch:** `ggml-webgpu-indexed-wide-k.patch`.
-- **Scope:** Use K64 for indexed IQ4_NL with its existing F16 accumulation and for indexed NVFP4 with F32 accumulation. Require F32 input and output, at least 12 input tokens, and at least 8,448 bytes of workgroup storage. The K/M pairs are 1152/2304, 2304/2304, and 2304/512. The existing matrix-vector selection and the K32 route for unsupported quantization, shapes and limits still apply.
+- **Scope:** Allow K64 for indexed IQ4_NL with its existing F16 accumulation and for indexed NVFP4 with F32 accumulation. Require F32 input and output, at least 12 input tokens, and at least 8,448 bytes of workgroup storage. The K/M pairs are 1152/2304, 2304/2304, and 2304/512. Keep the original matrix-vector selection. Use K32 for this matrix path when the adapter reports vendor `apple` or the K64 requirements are unmet.
 - **Contract:** Keep gather, workgroup grid, activation packing, K summation order, and accumulated precision. Include tile width in the actual pipeline cache key and distinguish it in profile labels. The sparse IQ4_NL column path remains active inside either tile width.
-- **Validation:** Test the shape, token, storage and precision boundaries in both provider modes. Compare actual shader output, including sparse and dense column counts, using deterministic inputs and local samples of packed model weights. Software WebGPU timing covers the isolated tile, with model timing on physical adapters pending.
+- **Validation:** Test adapter selection and the shape, token, storage and precision boundaries in both provider modes. Compare actual shader output, including sparse and dense column counts, using deterministic inputs and local samples of packed model weights. Software WebGPU timing covers the isolated tile. An isolated K32/K64 comparison on a physical adapter is pending.
 - **Removal:** Remove when upstream supports equivalently fast indexed prefill for these layouts without changing precision or fallback behavior.
+
+`ggml-webgpu-indexed-wide-k-apple.patch` applies the Apple rule after indexed tiling is configured in the ordinary and profiling recipes. In a long-prompt comparison between runtime versions on an Apple `metal-3` adapter, the K64 shader took more GPU time at matching dispatch grids. K32 lowers workgroup storage from 8,448 to 4,352 bytes for these tiles. The paired Q4_K and Q4_0 selections keep their own rules. Revisit the Apple rule when an isolated physical-adapter comparison supports a faster tile.
 
 ## Paired Q4_K loads for indexed prefill
 
