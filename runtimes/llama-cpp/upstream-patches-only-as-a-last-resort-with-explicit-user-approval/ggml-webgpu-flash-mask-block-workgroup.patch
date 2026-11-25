@@ -1,0 +1,49 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1414,14 +1414,16 @@
+ 
+ struct ggml_webgpu_flash_attn_blk_pipeline_key {
+     uint32_t kv_tile;
+-
+-    bool operator==(const ggml_webgpu_flash_attn_blk_pipeline_key & other) const { return kv_tile == other.kv_tile; }
++    uint32_t workgroup_size;
++
++    bool operator==(const ggml_webgpu_flash_attn_blk_pipeline_key &) const = default;
+ };
+ 
+ struct ggml_webgpu_flash_attn_blk_pipeline_key_hash {
+     size_t operator()(const ggml_webgpu_flash_attn_blk_pipeline_key & key) const {
+         size_t seed = 0;
+         ggml_webgpu_hash_combine(seed, key.kv_tile);
++        ggml_webgpu_hash_combine(seed, key.workgroup_size);
+         return seed;
+     }
+ };
+@@ -4287,8 +4289,10 @@
+     }
+ 
+     webgpu_pipeline get_flash_attn_blk_pipeline(const ggml_webgpu_shader_lib_context & context, uint32_t kv_tile) {
+-        ggml_webgpu_flash_attn_blk_pipeline_key key = {};
+-        key.kv_tile                                 = kv_tile;
++        // Each mask tile has at most 32 values on the usual vector path.
++        // Extra invocations would only contribute neutral values to the reducer.
++        const uint32_t width_limit = kv_tile <= 32u ? std::min(context.max_wg_size, 32u) : context.max_wg_size;
++        const ggml_webgpu_flash_attn_blk_pipeline_key key{kv_tile, std::max(1u, std::bit_floor(width_limit))};
+         auto it                                     = flash_attn_blk_pipelines.find(key);
+         if (it != flash_attn_blk_pipelines.end()) {
+             return it->second;
+@@ -4300,12 +4304,8 @@
+         defines.push_back(std::string("KV_TILE=") + std::to_string(key.kv_tile));
+         variant += std::string("_kvt") + std::to_string(key.kv_tile);
+ 
+-        uint32_t wg_size = 1;
+-        while ((wg_size << 1) <= context.max_wg_size) {
+-            wg_size <<= 1;
+-        }
+-        defines.push_back(std::string("WG_SIZE=") + std::to_string(wg_size));
+-        variant += std::string("_wg") + std::to_string(wg_size);
++        defines.push_back(std::string("WG_SIZE=") + std::to_string(key.workgroup_size));
++        variant += std::string("_wg") + std::to_string(key.workgroup_size);
+ 
+         webgpu_pipeline pipeline =
+             ggml_webgpu_create_pipeline(device, preprocessor.preprocess(wgsl_flash_attn_vec_blk, defines), variant);

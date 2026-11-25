@@ -1306,3 +1306,19 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   padded network. Use the pinned upstream sort when the overlay is omitted.
   Remove this patch when upstream prunes equivalent padding and loads merge
   pipelines on demand.
+
+## Vector Flash Attention mask workgroups
+
+- **Patch** `ggml-webgpu-flash-mask-block-workgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** Cap the mask classifier workgroup at 32 invocations for vector
+  attention tiles of up to 32 keys. Smaller device limits still apply. The
+  cache distinguishes the mask tile and workgroup widths.
+- **Contract** Use the existing shader and one workgroup per mask tile. The
+  extra invocations on wider workgroups contributed only neutral reduction
+  values. Preserve the three mask states, grid, uniform words, storage
+  bindings, scratch region and the consuming attention pipeline.
+- **Validation and removal** Check real mask dispatch selection in both
+  providers and replay emitted kernels with complete tiles, tails, padding,
+  separate heads and batches, and F16 special values. Use upstream's original
+  width in the absence of the overlay. Remove the patch when upstream bounds
+  classifier work by the tile width with equivalent outputs.

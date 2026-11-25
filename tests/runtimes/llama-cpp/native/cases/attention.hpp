@@ -49,7 +49,97 @@ static uint32_t kv_tile(const webgpu_pipeline & pipeline) {
     return static_cast<const ggml_webgpu_flash_attn_decisions *>(pipeline.context.get())->kv_tile;
 }
 
-static void all() {
+static void vector_mask_dispatch(const std::filesystem::path & output) {
+    auto ctx = recording_context();
+    auto & capabilities = ctx->global_ctx->capabilities;
+    auto & limits = capabilities.limits;
+    capabilities.supports_subgroups = true;
+    capabilities.min_subgroup_size = capabilities.max_subgroup_size = 32;
+    limits.maxComputeInvocationsPerWorkgroup = limits.maxComputeWorkgroupSizeX = 1024;
+    limits.maxComputeWorkgroupsPerDimension = 65535;
+    limits.maxComputeWorkgroupStorageSize = 32768;
+    limits.minStorageBufferOffsetAlignment = 256;
+    limits.maxStorageBufferBindingSize = limits.maxBufferSize = 1024 * 1024 * 1024;
+    ctx->param_arena.cleanup();
+    ctx->param_arena.init(ctx->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES, 8,
+                          limits.minStorageBufferOffsetAlignment);
+
+    ggml_webgpu_shader_lib_context block{};
+    block.max_wg_size = limits.maxComputeInvocationsPerWorkgroup;
+    const auto chosen = ctx->shader_lib->get_flash_attn_blk_pipeline(block, 32);
+    BICORE_CHECK(chosen.name == "flash_attn_vec_blk_kvt32_wg32");
+    const auto partial = ctx->shader_lib->get_flash_attn_blk_pipeline(block, 19);
+    BICORE_CHECK(partial.name == "flash_attn_vec_blk_kvt19_wg32" && partial.pipeline.Get() != chosen.pipeline.Get());
+    block.max_wg_size = 16;
+    const auto lower = ctx->shader_lib->get_flash_attn_blk_pipeline(block, 32);
+    BICORE_CHECK(lower.name == "flash_attn_vec_blk_kvt32_wg16" && lower.pipeline.Get() != chosen.pipeline.Get());
+    block.max_wg_size = 256;
+    BICORE_CHECK(ctx->shader_lib->get_flash_attn_blk_pipeline(block, 32).pipeline.Get() == chosen.pipeline.Get());
+
+    ggml_backend_webgpu_device_context bridge{};
+    bridge.webgpu_global_ctx = ctx->global_ctx;
+    ggml_backend_device device{};
+    device.context = &bridge;
+    ggml_backend_buffer_type buffer_type{};
+    buffer_type.device = &device;
+    for (const bool masked : {true, false}) {
+        std::unique_ptr<ggml_context, decltype(&ggml_free)> metadata(ggml_init({32768, nullptr, true}), ggml_free);
+        auto * q = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F32, 128, 1, 24, 1);
+        auto * k = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, 256, 8, 1);
+        auto * v = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, 256, 8, 1);
+        auto * mask = masked ? ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 256, 1, 24, 1) : nullptr;
+        auto * dst = ggml_flash_attn_ext(metadata.get(), q, k, v, mask, 1.0f, 0.0f, 0.0f);
+        const auto operands = std::array{q, k, v, mask, dst};
+        std::array<ggml_backend_buffer, operands.size()> buffers{};
+        std::vector<ggml_backend_webgpu_buffer_context> backing;
+        backing.reserve(operands.size());
+        for (size_t i = 0; i < operands.size(); ++i) {
+            if (!operands[i])
+                continue;
+            backing.emplace_back(wgpu::Buffer::Acquire(new WGPUBufferImpl), "attention test", ctx->global_ctx);
+            buffers[i].context = &backing.back();
+            buffers[i].size = ggml_backend_webgpu_buffer_type_get_alloc_size(&buffer_type, operands[i]);
+            operands[i]->data = webgpu_ptr_base;
+            operands[i]->buffer = &buffers[i];
+        }
+        ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
+        commands = {};
+#ifndef GGML_WEBGPU_GPU_PROFILE
+        ctx->batch_compute_passes = true;
+        ctx->active_compute_pass = ctx->active_command_encoder.BeginComputePass();
+#endif
+        const auto encoded = ggml_webgpu_flash_attn(ctx, q, k, v, mask, nullptr, dst);
+#ifndef GGML_WEBGPU_GPU_PROFILE
+        ctx->active_compute_pass.End();
+        ctx->active_compute_pass = nullptr;
+#endif
+        BICORE_CHECK(encoded.num_kernels == (masked ? 3u : 2u) && commands.dispatches.size() == encoded.num_kernels);
+        ctx->param_arena.flush(ctx->global_ctx->queue);
+        if (masked) {
+            const auto & dispatch = commands.dispatches[0];
+            BICORE_CHECK(dispatch.pipeline == chosen.pipeline.Get()->id && dispatch.x == 8 && dispatch.y == 24);
+            BICORE_CHECK(commands.writes.size() == 1 && commands.writes[0].bytes.size() >= 32);
+            std::array<uint32_t, 8> params{};
+            std::memcpy(params.data(), commands.writes[0].bytes.data(), sizeof(params));
+            BICORE_CHECK((params == std::array<uint32_t, 8>{0, 1, 256, 6144, 256, 24, 8, 1}));
+        } else {
+            BICORE_CHECK(commands.dispatches[0].pipeline != chosen.pipeline.Get()->id);
+        }
+        const auto finished = ctx->active_command_encoder.Finish();
+        ctx->global_ctx->queue.Submit(1, &finished);
+        drain_queue(ctx->global_ctx->queue.Get());
+        BICORE_CHECK(commands.executed == encoded.num_kernels);
+        ctx->param_arena.reset();
+    }
+    for (const auto & pipeline : {chosen, partial}) {
+        std::ofstream shader(output / (pipeline.name + ".wgsl"));
+        shader << pipeline.pipeline.Get()->code;
+        BICORE_CHECK(bool(shader));
+    }
+}
+
+static void all(const std::filesystem::path & output) {
+    vector_mask_dispatch(output);
     auto context = recording_context();
     const auto short_kv = select(context, {.keys = 767});
     const auto long_kv = select(context, {.keys = 768});

@@ -811,6 +811,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-flash-mask-block-workgroup.patch',
+    target: 'llama-webgpu',
+    reason: 'use a compact workgroup for vector Flash Attention mask classification',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

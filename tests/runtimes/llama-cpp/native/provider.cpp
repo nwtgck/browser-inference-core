@@ -282,7 +282,7 @@ int main(int argc, char ** argv) {
     argsort_cases::all(argv[1]);
     cache_cases::all();
     expert_cases::all(argv[1]);
-    attention_cases::all();
+    attention_cases::all(argv[1]);
 #ifdef GGML_WEBGPU_GPU_PROFILE
     profile_query_cases::all();
 #endif
