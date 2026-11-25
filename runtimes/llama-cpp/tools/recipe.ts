@@ -917,6 +917,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q2-dense-subgroup-matvec.patch',
+    target: 'llama-webgpu',
+    reason: 'reduce selected dense Q2_0 matvecs within independent subgroups',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

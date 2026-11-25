@@ -991,6 +991,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation:** Exercise selection, dispatch, cache reuse and the existing fallback boundaries in both provider modes. Local software WebGPU replay checks output bounds and paired timing using complete rows sampled from the corresponding packed weights. Physical GPU generation speed requires model measurements.
 - **Removal:** Drop the stage when upstream selects a comparably fast implementation with equivalent numerical and layout behavior.
 
+## Dense Q2_0 independent subgroup matvecs
+
+- **Patch:** `ggml-webgpu-q2-dense-subgroup-matvec.patch`, against llama.cpp `c212d25`.
+- **Scope:** Use fixed subgroups of 16 or 32 lanes for contiguous single-batch Q2_0 × F32 → F32 matvecs with one input column and K/M pairs 5120/17408, 17408/5120, or 6144/5120. Require 128 workgroup invocations and exclude merged source bindings, indexed operations, epilogues, and MMVQ.
+- **Contract:** Reuse the existing independent subgroup shader and its handling of partial subgroups. The Q2_0 accumulator, sixteen uniform words, and original packed storage layout stay the same. Reduction order can differ. The provider derives the smaller grid from the existing pipeline decisions.
+- **Validation:** Native provider tests exercise dispatch, cache reuse, and fallback in both provider modes. Isolated software WebGPU replay checks all outputs and output bounds with sampled real rows at the full dispatch dimensions, including a control with all four codes and a shifted binding start. Full-model generation and physical GPU speed require separate measurement.
+- **Removal:** Drop the stage when upstream provides equivalent Q2_0 matvec selection and layout coverage.
+
 ## Independently owned model vocabulary and chat metadata
 
 - **Scope:** reuse native vocabulary and chat metadata for a host-owned graph.
