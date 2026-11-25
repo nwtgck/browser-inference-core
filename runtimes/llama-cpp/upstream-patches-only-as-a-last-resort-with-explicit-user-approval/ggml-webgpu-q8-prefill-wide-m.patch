@@ -8,12 +8,12 @@
 +        const int64_t m = context.dst->ne[0];
 +        const int64_t n = context.dst->ne[1];
 +        constexpr int64_t q8_min_groups = 640;
-+        // Keep the wide Q8 tile on long-K, full tiles with a large per-matrix grid.
++        const bool q8_c8_short_shape = k == 2304 && n == 128 && (m == 1024 || m == 3072);
 +        // Divide the minimum group count by the column tiles rather than multiplying extents.
-+        const bool q8_c8 = key.src0_type == GGML_TYPE_Q8_0 && k >= 5120 && k % 32 == 0 &&
++        const bool q8_c8 = key.src0_type == GGML_TYPE_Q8_0 && k % 32 == 0 &&
 +                           m >= 64 && m % 64 == 0 && n >= 128 && n % 32 == 0 &&
 +                           context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
-+                           m / 64 >= 1 + (q8_min_groups - 1) / (n / 32);
++                           (q8_c8_short_shape || (k >= 5120 && m / 64 >= 1 + (q8_min_groups - 1) / (n / 32)));
 +        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8) && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
              context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
              !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&

@@ -176,6 +176,15 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(q8(5120, 16384, 96, 0, 1536));
     cases.push_back(q8(5120, 10240, 4, 0));
     cases.push_back(q8(5120, 48, 128, 0, 8));
+    cases.push_back(q8(2304, 1024, 128, 2, 64));
+    cases.push_back(q8(2304, 3072, 128, 2, 192));
+    cases.push_back(q8(2304, 1088, 128, 0, 136));
+    cases.push_back(q8(2336, 3072, 128, 0, 384));
+    cases.push_back(q8(2304, 3072, 129, 0, 480));
+    cases.push_back(q8(2304, 3072, 64, 0, 192));
+    auto short_batched = q8(2304, 3072, 128, 0, 768);
+    short_batched.batch2 = 2;
+    cases.push_back(short_batched);
     auto excluded = q8(5120, 10240, 128, 0);
     excluded.batch2 = 2;
     cases.push_back(excluded);
