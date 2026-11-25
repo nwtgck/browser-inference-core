@@ -25,17 +25,17 @@
          return seed;
      }
  };
-@@ -3404,6 +3406,43 @@
+@@ -3404,6 +3406,42 @@
              key.tile_k = wide_tile_k;
          }
  
-+        // Keep the 32-slot gather descriptors and K32 staging while grouping 64 output rows.
++        // Keep the 32-slot gather descriptors and selected K tile while grouping 64 output rows.
 +        key.tile_m = WEBGPU_MUL_MAT_TILE_M;
 +        constexpr uint32_t wide_tile_m = 8;
 +        constexpr uint32_t wide_rows = wide_tile_m * WEBGPU_MUL_MAT_WG_SIZE_M;
 +        constexpr uint32_t grouped_threads = WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_WG_SIZE_N;
-+        constexpr uint32_t wide_m_shared_bytes =
-+            sizeof(ggml_fp16_t) * WEBGPU_MUL_MAT_REG_TILE_K_QUANT * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
++        const uint32_t wide_m_shared_bytes =
++            sizeof(ggml_fp16_t) * key.tile_k * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
 +        const bool wide_gate_up = k == 2560 && m == 640 &&
 +                                  (key.src0_type == GGML_TYPE_IQ2_S || key.src0_type == GGML_TYPE_IQ3_XXS ||
 +                                   key.src0_type == GGML_TYPE_IQ3_S || key.src0_type == GGML_TYPE_IQ4_XS ||
@@ -43,12 +43,11 @@
 +        const bool wide_down = k == 640 && m == 2560 &&
 +                               (key.src0_type == GGML_TYPE_IQ4_NL || key.src0_type == GGML_TYPE_Q5_1);
 +        const ggml_tensor * ids = context.src2;
-+        const bool wide_iq4_gate = key.src0_type == GGML_TYPE_IQ4_NL && k == 2304;
-+        const bool wide_nvfp4_down = key.src0_type == GGML_TYPE_NVFP4 && key.f32_accumulator && k == 1152;
-+        if ((wide_iq4_gate || wide_nvfp4_down) && m == 2304 && key.n_experts == 128 &&
-+            key.src1_type == GGML_TYPE_F32 && !key.vectorized && key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT &&
-+            context.src0->ne[3] == 1 && context.src1->ne[0] == k &&
-+            context.src1->ne[1] == (wide_iq4_gate ? 1 : 8) && context.src1->ne[2] == 128 &&
++        const bool wide_broadcast = k == 2304 && context.src1->ne[1] == 1;
++        const bool wide_per_slot = k == 1152 && context.src1->ne[1] == 8;
++        if (eligible_type && (wide_broadcast || wide_per_slot) && m == 2304 && key.n_experts == 128 &&
++            key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
++            context.src0->ne[3] == 1 && context.src1->ne[0] == k && context.src1->ne[2] == 128 &&
 +            context.src1->ne[3] == 1 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 8 &&
 +            ids->ne[1] == 128 && ids->ne[2] == 1 && ids->ne[3] == 1 && context.dst &&
 +            context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
@@ -69,7 +68,7 @@
          auto it = mul_mat_id_pipelines.find(key);
          if (it != mul_mat_id_pipelines.end()) {
              return it->second;
-@@ -3500,7 +3539,7 @@
+@@ -3500,7 +3538,7 @@
          const uint32_t tile_k = key.tile_k;
  
          // Tiles
@@ -78,7 +77,7 @@
          defines.push_back("TILE_N=" + std::to_string(WEBGPU_MUL_MAT_TILE_N) + "u");
          defines.push_back("TILE_K=" + std::to_string(tile_k) + "u");
  
-@@ -3529,11 +3568,14 @@
+@@ -3529,11 +3567,14 @@
                  variant += "_paired";
              }
          }

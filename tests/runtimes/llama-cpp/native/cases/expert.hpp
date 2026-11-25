@@ -195,13 +195,13 @@ static void indexed_k_adapter_selection() {
         selection.dst = dst;
         selection.max_wg_size = std::min(limits.maxComputeInvocationsPerWorkgroup, limits.maxComputeWorkgroupSizeX);
         selection.wg_mem_limit_bytes = limits.maxComputeWorkgroupStorageSize;
-        const auto wide = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
+        const auto k64 = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
         selection.prefer_narrow_indexed_k = true;
-        const auto narrow = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
-        BICORE_CHECK(wide.pipeline.Get() != narrow.pipeline.Get());
-        BICORE_CHECK(record("intel", 0, 11232) == wide.pipeline.Get()->id);
-        BICORE_CHECK(record("apple", 1, type == GGML_TYPE_IQ4_NL ? 5616 : 11232) == narrow.pipeline.Get()->id);
-        BICORE_CHECK(record("", 2, 11232) == wide.pipeline.Get()->id);
+        const auto k32 = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
+        BICORE_CHECK(k64.pipeline.Get() != k32.pipeline.Get());
+        BICORE_CHECK(record("intel", 0, 5616) == k64.pipeline.Get()->id);
+        BICORE_CHECK(record("apple", 1, 5616) == k32.pipeline.Get()->id);
+        BICORE_CHECK(record("", 2, 5616) == k64.pipeline.Get()->id);
     }
 }
 
