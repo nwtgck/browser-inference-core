@@ -13,11 +13,11 @@ schema_version: 1
 kind: browser_inference_core_artifact_integrity
 source:
   repository: https://github.com/nwtgck/browser-inference-core
-  commit: 66a5cf65bb8f0355914c0e8658141ebe91f7d50f
+  commit: 15847708426e22f54bc7ff7e97cba4caafd23a70
   tree_fingerprint:
     algorithm: sha256
     scheme: git-committed-tree-sha256-v1
-    value: f14a499ea41a0df5b25e90c9193978d75c9f2dd7b75237bc699c51be6c632ae2
+    value: 95c8ac2946bc538ab5e62c2e8ec574bafbd68ed565e61f6bedca08d88b9a43c6
     reproduce: |
       # Run with Bash from the repository root after initializing recursive submodules.
       # Hashes committed objects only; changed and untracked worktree files are excluded.
@@ -64,11 +64,11 @@ source:
 manifest:
   path: manifest.json
   size: 1520
-  sha256: 2713d9a7a488802e8e154e3323f2ff1f450252c4c271276fe81a649390d7ec52
+  sha256: 6d9dcc4e840dd19b136fec1d2f82523f38b8f0998d8d5cde5b51daafaaf40f4b
   contents: |
     {
       "formatVersion": 6,
-      "sourceCommit": "66a5cf65bb8f0355914c0e8658141ebe91f7d50f",
+      "sourceCommit": "15847708426e22f54bc7ff7e97cba4caafd23a70",
       "runtimes": {
         "llama-cpp": {
           "manifest": "runtimes/llama-cpp-browser-core/manifest.json",
@@ -101,18 +101,18 @@ manifest:
         },
         {
           "path": "runtimes/llama-cpp-browser-core/manifest.json",
-          "bytes": 21456549,
-          "sha256": "5e6edfdc3f3ceec4f5791b84cba317ef1d57b789f4a0e5202f35d67d1beab079"
+          "bytes": 21470585,
+          "sha256": "71085dd8d40daf4bb1500c160da02ef100e542c9cea700a4ad34373aa88ac57e"
         },
         {
           "path": "runtimes/speech-cpp-browser-core/manifest.json",
           "bytes": 246344,
-          "sha256": "fa6f2c02d14948b3bab6ca38d8c688881ceda05e13656e1e6b5d38d7b9518f47"
+          "sha256": "62c592dafc20195a17bacfe3fed51937db4f85b41c4da3e731c64a2e29e76a9f"
         },
         {
           "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
           "bytes": 1172295,
-          "sha256": "9aec7a129113aaea04782b48a9e06a037d5039bafead7e2c44655036fe32a9de"
+          "sha256": "6df2ea8e935fb55d0eb70881264a104bf0a3b8bec9482d43a86afb16efdd6b09"
         }
       ]
     }
