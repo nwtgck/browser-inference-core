@@ -832,6 +832,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-q8-q5-subgroup.patch',
+    target: 'llama-webgpu',
+    reason: 'use independent subgroups for matching Q8_0 and Q5_K expert projections',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp', 'ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

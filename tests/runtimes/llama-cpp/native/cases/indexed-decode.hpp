@@ -47,7 +47,7 @@ static void check_bounds(ggml_webgpu_shader_lib_context candidate) {
 static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint32_t sg_min, uint32_t sg_max,
                            bool independent) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
-    constexpr auto max_buffer = 64u * 1024 * 1024;
+    constexpr auto max_buffer = 128u * 1024 * 1024;
     auto & caps = gpu.context->global_ctx->capabilities;
     caps.supports_subgroups = true;
     caps.min_subgroup_size = sg_min;
@@ -113,8 +113,11 @@ static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint3
 }
 
 static void all() {
-    for (const auto quant : {GGML_TYPE_IQ4_NL, GGML_TYPE_NVFP4}) {
+    for (const auto quant : {GGML_TYPE_IQ4_NL, GGML_TYPE_NVFP4, GGML_TYPE_Q8_0, GGML_TYPE_Q5_K}) {
         for (const int64_t k : {1152, 2304}) {
+            if (quant == GGML_TYPE_Q5_K && k == 1152) {
+                continue;
+            }
             const int64_t input_rows = k == 1152 ? 8 : 1;
             check_provider(quant, k, input_rows, 16, 16, true);
             check_provider(quant, k, input_rows, 32, 32, true);

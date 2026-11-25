@@ -1347,3 +1347,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   original dispatches. Keep the original dispatches for unsupported graphs
   or limits. Remove this patch when upstream supports an equivalent
   epilogue with the same lifetime, layout, and subgroup guarantees.
+
+## Fixed-subgroup indexed Q8_0 and Q5_K decode
+
+- **Patch** `ggml-webgpu-indexed-q8-q5-subgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** Extend the fixed-subgroup indexed matvec to Q8_0 at K1152 or
+  K2304 and Q5_K at K2304. Require M2304, eight selected experts, one input
+  token, F32 activations and outputs, and fixed subgroup width 16 or 32.
+- **Contract** Use the existing quantization loaders, packed weight layout,
+  and physical binding checks. Select the 128-wide workgroup only when it
+  fits the X dimension. The independent shader writes the same output
+  layout and zeroes skipped expert slots. F32 reduction order changes.
+- **Validation and removal** Check selection and fallbacks in both providers.
+  Replay the emitted kernels with bounded slices of representative GGUF
+  weights and check every selected output against an independent reference,
+  including duplicate and skipped experts. Other shapes and capabilities use
+  the existing backend selection and cooperative dispatch when supported.
+  Remove this patch when upstream supplies equivalent selection for these
+  packed formats.
