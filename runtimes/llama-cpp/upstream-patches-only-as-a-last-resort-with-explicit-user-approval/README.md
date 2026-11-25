@@ -651,6 +651,27 @@ not establish target-device speed.
   setting for this layout. Remove the patch when upstream ships equivalent
   vectorized normalization and numerical behavior.
 
+## Paired RMS normalization and concatenation
+
+- **Patch** `ggml-webgpu-rms-concat.patch` against llama.cpp `c212d25ad`.
+  It reuses the vector RMS shader and follows `ggml-webgpu-rms-norm-vec4.patch`.
+- **Scope** Fuse two F32 RMS results with their column-wise concat when
+  the rows have equal widths, both intermediate values are private, and
+  the two source ranges and output are disjoint on WebGPU. A metadata-only
+  row view may precede the second RMS. Other graphs select their individual
+  operators.
+- **Contract** Each workgroup normalizes one half of a row with the existing
+  RMS reduction order and writes to its region of the concat output. The
+  two epsilons are independent. Use the graph allocation for all bindings.
+- **Validation** The recorder covers graph allocations, source views, a
+  two-dimensional grid, alignment, exposed and viewed intermediates, and
+  shared source ranges. Software WebGPU compares output and timings, and
+  the small Inkling fixture compares logits, tokens and saved state through
+  Wasm64. Physical-device throughput depends on the workload.
+- **Alternative** Keep the three existing operators. Upstream exposes no
+  fused variant for this graph. Remove the patch when upstream provides an
+  equivalent fusion with the same numerical behavior.
+
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
 - Patch: `ggml-webgpu-expert-short-workgroup.patch`.

@@ -292,7 +292,104 @@ static void rms_vec4() {
     }
 }
 
+static void rms_concat() {
+    enum class Input { direct, view, unaligned_view, alias, computed };
+    enum class Use { ordinary, output, raw_view, different_axis };
+    struct Case {
+        Input input;
+        Use use;
+        int64_t rows;
+        bool use_graph_allocator, fused;
+    };
+    for (const auto & test : {
+             Case{Input::direct, Use::ordinary, 1, false, true},
+             Case{Input::view, Use::ordinary, 1, true, true},
+             Case{Input::view, Use::ordinary, 24, true, true},
+             Case{Input::unaligned_view, Use::ordinary, 1, true, false},
+             Case{Input::alias, Use::ordinary, 1, false, false},
+             Case{Input::computed, Use::ordinary, 1, false, false},
+             Case{Input::direct, Use::different_axis, 1, false, false},
+             Case{Input::direct, Use::output, 1, true, false},
+             Case{Input::direct, Use::raw_view, 1, true, false},
+         }) {
+        transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+        auto & limits = gpu.context->global_ctx->capabilities.limits;
+        limits.maxComputeWorkgroupsPerDimension = test.rows == 24 ? 7 : 64;
+        const transfer_cases::Memory memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
+        auto * ctx = memory.get();
+        constexpr int64_t width = 2304;
+        auto * left = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, width, test.rows);
+        ggml_set_input(left);
+        auto * root = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, width + 16, test.rows);
+        ggml_set_input(root);
+        ggml_tensor * right = left;
+        if (test.input != Input::alias) {
+            const size_t offset = test.input == Input::unaligned_view ? 4u : 16u;
+            right = test.input == Input::view || test.input == Input::unaligned_view
+                        ? ggml_view_2d(ctx, root, width, test.rows, root->nb[1], offset)
+                        : ggml_dup_tensor(ctx, left);
+            if (test.input == Input::computed) {
+                right = ggml_scale(ctx, left, 3.25f);
+            } else if (!right->view_src) {
+                ggml_set_input(right);
+            }
+        }
+        // Keep both original inputs live across the concat in the allocator cases.
+        if (test.use_graph_allocator) {
+            ggml_set_output(left);
+            ggml_set_output(right->view_src ? root : right);
+        }
+        auto * a = ggml_rms_norm(ctx, left, 1e-6f);
+        auto * b = ggml_rms_norm(ctx, right, 1e-4f);
+        auto * concat = ggml_concat(ctx, a, b, test.use == Use::different_axis ? 1 : 0);
+        ggml_set_output(concat);
+        if (test.use == Use::output) {
+            ggml_set_output(a);
+        }
+        auto * graph = ggml_new_graph_custom(ctx, 32, false);
+        ggml_build_forward_expand(graph, concat);
+        if (test.input == Input::view) {
+            BICORE_CHECK(ggml_graph_n_nodes(graph) == 4 && ggml_graph_node(graph, 1) == right);
+        }
+        if (test.use == Use::raw_view) {
+            auto * observer = ggml_dup(ctx, ggml_view_tensor(ctx, a));
+            ggml_set_output(observer);
+            ggml_build_forward_expand(graph, observer);
+        }
+        const auto allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>(
+            test.use_graph_allocator ? ggml_gallocr_new(&gpu.type) : nullptr, ggml_gallocr_free);
+        const transfer_cases::Buffer buffer(
+            test.use_graph_allocator ? nullptr : ggml_backend_alloc_ctx_tensors_from_buft(ctx, &gpu.type),
+            ggml_backend_buffer_free);
+        BICORE_CHECK(test.use_graph_allocator ? allocator && ggml_gallocr_alloc_graph(allocator.get(), graph)
+                                              : bool(buffer));
+        commands = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        const auto & slots = gpu.context->bind_group_cache.slots;
+        const auto fused = std::count_if(slots.begin(), slots.end(), [](const auto & slot) {
+            return slot.pipeline.Get()->name == "rms_norm_concat_f32_vec4";
+        });
+        const auto extra = unsigned(test.use == Use::raw_view) + unsigned(test.input == Input::computed);
+        BICORE_CHECK(fused == test.fused && commands.executed == (test.fused ? 1u : 3u + extra));
+        if (test.fused) {
+            BICORE_CHECK(slots[0].bindings.size() == 4u);
+            if (test.rows == 24) {
+                BICORE_CHECK(commands.dispatches[0].x == 7 && commands.dispatches[0].y == 7);
+            } else {
+                BICORE_CHECK(commands.dispatches[0].x == 2 * test.rows && commands.dispatches[0].y == 1);
+            }
+            const auto & binding = slots[0].bindings.back();
+            std::array<uint32_t, 10> words;
+            std::memcpy(words.data(), binding.buffer.Get()->bytes.data() + binding.offset, sizeof(words));
+            BICORE_CHECK(words[6] == width && words[7] == test.rows);
+            BICORE_CHECK(words[8] == std::bit_cast<uint32_t>(1e-6f) && words[9] == std::bit_cast<uint32_t>(1e-4f));
+        }
+    }
+}
+
 static void all() {
+    rms_concat();
     rms_vec4();
     for (const auto family : {Family::scale_unary, Family::rms_scale})
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})

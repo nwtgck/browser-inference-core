@@ -1,0 +1,254 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4587,6 +4587,89 @@
+     if (!size || size > ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize || size / 4 > UINT32_MAX) { return false; }
+     binding = { buffer_ctx->buffer, aligned_offset, size, offset, uint32_t(prefix / 4) };
+     return true;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_rms_concat(
++        webgpu_context & ctx, const ggml_cgraph & graph, int first,
++        webgpu_fusion_view_sources & views, int & num_encoded_ops) {
++    // The second input may be a row view visited between its two producers.
++    int second = first + 1;
++    while (second < graph.n_nodes && graph.nodes[second]->op == GGML_OP_VIEW) {
++        ++second;
++    }
++    if (second >= graph.n_nodes - 1 || graph.nodes[second]->op != GGML_OP_RMS_NORM) {
++        return std::nullopt;
++    }
++    const int last = second + 1;
++    auto * out = graph.nodes[last];
++    const auto * a = out->src[0];
++    const auto * b = out->src[1];
++    if (out->op != GGML_OP_CONCAT || ggml_get_op_params_i32(out, 0) != 0 || out->view_src ||
++        !((a == graph.nodes[first] && b == graph.nodes[second]) ||
++          (b == graph.nodes[first] && a == graph.nodes[second]))) {
++        return std::nullopt;
++    }
++    constexpr ggml_op ops[] = {GGML_OP_RMS_NORM, GGML_OP_RMS_NORM, GGML_OP_CONCAT};
++    const int indices[] = {first, second, last};
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices, 3, ops, &last, 1) ||
++        a->type != GGML_TYPE_F32 || b->type != GGML_TYPE_F32 ||
++        a->view_src || b->view_src || views.contains(a) || views.contains(b)) {
++        return std::nullopt;
++    }
++    const auto * left = a->src[0];
++    const auto * right = b->src[0];
++    if (!left || !right || !ggml_are_same_shape(left, a) || !ggml_are_same_shape(right, b) ||
++        !ggml_are_same_shape(left, right) || left->ne[2] != 1 || left->ne[3] != 1 ||
++        left->ne[0] % 4 || left->ne[0] > UINT32_MAX / 2u ||
++        out->ne[0] != 2 * left->ne[0] || out->ne[1] != left->ne[1] || out->ne[2] != 1 || out->ne[3] != 1) {
++        return std::nullopt;
++    }
++
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < 128u || limits.maxComputeWorkgroupSizeX < 128u ||
++        limits.maxComputeWorkgroupStorageSize < 128u * 2u * sizeof(float) ||
++        limits.maxStorageBuffersPerShaderStage < 3u || limits.maxBindingsPerBindGroup < 4u ||
++        !limits.maxUniformBuffersPerShaderStage || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) {
++        return std::nullopt;
++    }
++
++    const std::array tensors = {left, right, static_cast<const ggml_tensor *>(out)};
++    std::array<webgpu_rms_scale_binding, tensors.size()> bindings;
++    uint32_t rows = 0;
++    for (size_t i = 0; i < tensors.size(); ++i) {
++        uint64_t bytes;
++        uint32_t elements;
++        if (!rms_scale_layout(tensors[i], i == 2, bytes, elements, rows) ||
++            tensors[i]->nb[1] % (4 * sizeof(float)) ||
++            !ggml_webgpu_rms_scale_binding(ctx, tensors[i], bytes, bindings[i]) ||
++            bindings[i].element_offset % 4u) {
++            return std::nullopt;
++        }
++        for (size_t j = 0; j < i; ++j) {
++            if (bindings[i].buffer.Get() == bindings[j].buffer.Get() &&
++                !rms_scale_disjoint(bindings[i].offset, bindings[i].size, bindings[j].offset, bindings[j].size)) {
++                return std::nullopt;
++            }
++        }
++    }
++    uint32_t x, y;
++    if (!rms_scale_grid(2u * uint64_t(rows), limits.maxComputeWorkgroupsPerDimension, x, y)) {
++        return std::nullopt;
++    }
++    std::vector<uint32_t> params = {
++        bindings[0].element_offset / 4u, bindings[1].element_offset / 4u, bindings[2].element_offset / 4u,
++        uint32_t(left->nb[1] / (4 * sizeof(float))), uint32_t(right->nb[1] / (4 * sizeof(float))),
++        uint32_t(out->nb[1] / (4 * sizeof(float))), uint32_t(left->ne[0]), rows,
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(a, 0)), ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(b, 0)),
++    };
++    std::vector<wgpu::BindGroupEntry> entries;
++    entries.reserve(bindings.size());
++    for (uint32_t i = 0; i < bindings.size(); ++i) {
++        const auto & binding = bindings[i];
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, binding.buffer, binding.offset, binding.size));
++    }
++    num_encoded_ops = last - first + 1;
++    return ggml_backend_webgpu_build(ctx, ctx->shader_lib->get_rms_concat_pipeline(), params, entries, x, y);
+ }
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_rms_scale(webgpu_context & ctx,
+@@ -5550,6 +5633,7 @@
+         case GGML_OP_GROUP_NORM:
+             return ggml_webgpu_group_norm(ctx, src0, node);
+         case GGML_OP_RMS_NORM:
++            if (auto fused = ggml_webgpu_rms_concat(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (ggml_webgpu_can_fuse_rms_norm_mul(cgraph, node_idx, fusion_views)) {
+                 num_encoded_ops        = 2;
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1910,6 +1910,7 @@
+     webgpu_pipeline loop_controller_pipelines[2][2];
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     webgpu_pipeline rms_vec4_pipelines[4];
++    webgpu_pipeline rms_concat_pipeline;
+     webgpu_pipeline l2_clip_pipelines[2];
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+@@ -2764,6 +2765,14 @@
+         return pipeline;
+     }
+ 
++    webgpu_pipeline get_rms_concat_pipeline() {
++        if (!rms_concat_pipeline.pipeline) {
++            const auto code = preprocessor.preprocess(wgsl_row_norm, {"RMS_VEC4", "RMS_CONCAT", "WG_SIZE=32"});
++            rms_concat_pipeline = ggml_webgpu_create_pipeline(device, code, "rms_norm_concat_f32_vec4");
++        }
++        return rms_concat_pipeline;
++    }
++
+     webgpu_pipeline get_rms_vec4_pipeline(bool inplace, bool post_scale) {
+         auto & pipeline = rms_vec4_pipelines[unsigned(inplace) + 2u * unsigned(post_scale)];
+         if (!pipeline.pipeline) {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -18,6 +18,32 @@
+ #define DST_TYPE f32
+ #endif
+ 
++#ifdef RMS_CONCAT
++struct Params {
++    left_offset: u32,  // vec4 elements
++    right_offset: u32,
++    dst_offset: u32,
++    left_stride: u32,
++    right_stride: u32,
++    dst_stride: u32,
++    ne0: u32,
++    rows: u32,
++    left_eps: f32,
++    right_eps: f32,
++};
++
++@group(0) @binding(0) var<storage, read_write> left: array<vec4<f32>>;
++@group(0) @binding(1) var<storage, read_write> right: array<vec4<f32>>;
++@group(0) @binding(2) var<storage, read_write> dst: array<vec4<f32>>;
++@group(0) @binding(3) var<uniform> params: Params;
++
++fn rms_concat_load(use_right: bool, index: u32) -> vec4<f32> {
++    if (use_right) {
++        return right[index];
++    }
++    return left[index];
++}
++#else
+ struct Params {
+     offset_src: u32, // in elements
+     offset_dst: u32, // in elements
+@@ -58,12 +84,63 @@
+ var<uniform> params: Params;
+ #endif
+ 
++#endif
++
+ #ifdef RMS_VEC4
+ var<workgroup> scratch: array<vec4<f32>, WG_SIZE>;
++
++fn rms_vec4_square_sum(lane: u32, sum: vec4<f32>) -> f32 {
++    scratch[lane] = sum;
++    workgroupBarrier();
++    for (var offset = WG_SIZE / 2u; offset >= 8u; offset /= 2u) {
++        if (lane < offset) {
++            scratch[lane] += scratch[lane + offset];
++        }
++        workgroupBarrier();
++    }
++    if (lane == 0u) {
++        let a = (scratch[0] + scratch[4]) + (scratch[2] + scratch[6]);
++        let b = (scratch[1] + scratch[5]) + (scratch[3] + scratch[7]);
++        let v = a + b;
++        scratch[0].x = (v.x + v.z) + (v.y + v.w);
++    }
++    workgroupBarrier();
++    return scratch[0].x;
++}
+ #else
+ var<workgroup> scratch: array<f32, WG_SIZE * 2u>;
+ #endif
+ 
++#ifdef RMS_CONCAT
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) wid: vec3<u32>,
++        @builtin(num_workgroups) grid: vec3<u32>,
++        @builtin(local_invocation_id) lid: vec3<u32>) {
++    // Separate workgroups write the two nonoverlapping halves of each row.
++    let part = wid.x + wid.y * grid.x;
++    let row = part / 2u;
++    if (row >= params.rows) {
++        return;
++    }
++    let use_right = (part & 1u) != 0u;
++    let src_row = select(params.left_offset + row * params.left_stride,
++                         params.right_offset + row * params.right_stride, use_right);
++    let columns = params.ne0 / 4u;
++    let dst_row = params.dst_offset + row * params.dst_stride + (part & 1u) * columns;
++    let eps = select(params.left_eps, params.right_eps, use_right);
++    let zero = vec4<f32>(0.0);
++    var sum = zero;
++    for (var col = lid.x; col < columns; col += WG_SIZE) {
++        let value = rms_concat_load(use_right, src_row + col);
++        sum += value * value;
++    }
++    let square_sum = rms_vec4_square_sum(lid.x, sum);
++    let scale = 1.0 / sqrt(square_sum / f32(params.ne0) + eps);
++    for (var col = lid.x; col < columns; col += WG_SIZE) {
++        dst[dst_row + col] = scale * (rms_concat_load(use_right, src_row + col) - zero);
++    }
++}
++#else
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+         @builtin(num_workgroups) num_wg: vec3<u32>,
+@@ -94,22 +171,8 @@
+         sum += v * v;
+     }
+ 
+-    scratch[lid.x] = sum;
+-    workgroupBarrier();
+-    for (var offset = WG_SIZE / 2u; offset >= 8u; offset /= 2u) {
+-        if (lid.x < offset) {
+-            scratch[lid.x] += scratch[lid.x + offset];
+-        }
+-        workgroupBarrier();
+-    }
+-    if (lid.x == 0u) {
+-        let a = (scratch[0] + scratch[4]) + (scratch[2] + scratch[6]);
+-        let b = (scratch[1] + scratch[5]) + (scratch[3] + scratch[7]);
+-        let v = a + b;
+-        scratch[0].x = (v.x + v.z) + (v.y + v.w);
+-    }
+-    workgroupBarrier();
+-    let scale = 1.0 / sqrt(scratch[0].x / f32(params.ne0) + params.eps);
++    let square_sum = rms_vec4_square_sum(lid.x, sum);
++    let scale = 1.0 / sqrt(square_sum / f32(params.ne0) + params.eps);
+ 
+     for (var col = lid.x; col < columns; col += WG_SIZE) {
+         let normalized = scale * (src[src_row + col] - zero);
+@@ -219,3 +282,4 @@
+     }
+ #endif
+ }
++#endif
