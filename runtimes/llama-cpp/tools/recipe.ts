@@ -473,6 +473,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-long-k-matvec.patch',
+    target: 'llama-webgpu',
+    reason: 'select independent subgroup reduction for long-K matvecs',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-buffer-size-limit.patch',
     target: 'llama-webgpu',
     reason: 'Respect native and browser buffer limits.',

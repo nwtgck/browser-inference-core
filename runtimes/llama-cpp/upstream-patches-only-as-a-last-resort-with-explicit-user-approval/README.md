@@ -885,6 +885,14 @@ not establish target-device speed.
 - **Validation and limits:** finite authored numerical bounds, source/factory/cache/grid and physical-range checks are separate gates. Floating-point partition and reduction may differ, so cross-path bit identity is diagnostic. Direct software hot evidence covers a down projection, two bounded heads and one larger resident test, not full vocabulary, all intermediate shapes, actual model quality or Windows/macOS speed. No new preload, dequantization copy, probe, clock or GPU wait is introduced.
 - **Removal:** retire this stage and its build/provenance/tests when upstream supplies equivalent selection or the owner drops it. Re-review lane stride, partial-subgroup ownership, shape/u32 checks, typed keys, current-context fallback and device feature/limit contracts on updates.
 
+## Long-K fixed-subgroup Q4_K and Q6_K matvecs
+
+- **Patch:** `ggml-webgpu-long-k-matvec.patch`.
+- **Scope:** Extend the existing independent Q4_K and Q6_K ordinary matvec paths to the complete K19968/M6656/N1 shape with F32 input and output, singleton batches and an advertised fixed subgroup width of 32. Keep the existing bounds for fixed SG16 and requested subgroup widths. The original layout, overlap, epilogue, indexed and MMVQ exclusions also apply.
+- **Contract:** Reuse each type's existing shader, cache key and bindings. The fixed SG32 kernel produces 16 rows per 128-lane workgroup and dispatches 416 workgroups for this shape. Its reduction order can differ from the cooperative kernel.
+- **Validation:** Exercise selection, dispatch, cache reuse and the existing fallback boundaries in both provider modes. Local software WebGPU replay checks output bounds and paired timing using complete rows sampled from the corresponding packed weights. Physical GPU generation speed requires model measurements.
+- **Removal:** Drop the stage when upstream selects a comparably fast implementation with equivalent numerical and layout behavior.
+
 ## Independently owned model vocabulary and chat metadata
 
 - **Scope:** reuse native vocabulary and chat metadata for a host-owned graph.

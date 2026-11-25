@@ -465,6 +465,49 @@ size_t run(wgpu::Device device, wgpu::Instance instance, const std::filesystem::
 }
 
 } // namespace q6_current
+
+static void check_long_k_matvecs(ggml_webgpu_shader_lib & library, const std::filesystem::path & output) {
+    for (const auto type : {GGML_TYPE_Q4_K, GGML_TYPE_Q6_K}) {
+        q4_current::Fixture f(type, 19968, 6656);
+        f.min_sg = f.max_sg = 32;
+        auto c = f.context<ggml_webgpu_shader_lib_context>();
+        const auto fixed = [type](const ggml_webgpu_shader_lib_context & context, bool overlap = false) {
+            return type == GGML_TYPE_Q4_K ? ggml_webgpu_q4_matvec_subgroup_size(context, false, overlap)
+                                          : ggml_webgpu_q6_matvec_subgroup_size(context, false, overlap);
+        };
+        BICORE_CHECK(fixed(c) == 32 && fixed(c, true) == 0);
+        const auto pipeline = library.get_mul_mat_vec_pipeline(c, false, false);
+        const auto & decisions = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+        BICORE_CHECK(decisions.wg_size == 128 && decisions.outputs_per_wg == 16);
+        BICORE_CHECK((production_dispatch(c, 65535, false) == std::array<uint32_t, 2>{416, 1}));
+        BICORE_CHECK(pipeline.name.find("_independent_sg32_wg128") != std::string::npos);
+        std::ofstream shader(output / (std::string(ggml_type_name(type)) + "-long-k-sg32.wgsl"));
+        shader << pipeline.pipeline.Get()->code;
+        BICORE_CHECK(bool(shader));
+
+        c.min_subgroup_size = c.max_subgroup_size = 16;
+        BICORE_CHECK(fixed(c) == 0);
+        c.max_subgroup_size = 32;
+        c.subgroup_size_control_enabled = true;
+        BICORE_CHECK(fixed(c) == 0);
+        BICORE_CHECK(ggml_webgpu_q4_requested_subgroup_size(c, false, false) == 0);
+        BICORE_CHECK(ggml_webgpu_q6_requested_subgroup_size(c, false, false) == 0);
+        c.min_subgroup_size = 32;
+        f.a.ne[1] = f.dst.ne[0] = 6655;
+        BICORE_CHECK(fixed(c) == 0);
+        f.a.ne[1] = f.dst.ne[0] = 6656;
+        f.a.ne[0] = f.x.ne[0] = 19712;
+        BICORE_CHECK(fixed(c) == 0);
+        f.a.ne[0] = f.x.ne[0] = 19968;
+        f.x.ne[2] = f.dst.ne[2] = 2;
+        BICORE_CHECK(fixed(c) == 0);
+        f.x.ne[2] = f.dst.ne[2] = 1;
+        f.a.ne[0] = f.x.ne[0] = 2048;
+        f.a.ne[1] = f.dst.ne[0] = 4096;
+        BICORE_CHECK(library.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == pipeline.pipeline.Get());
+    }
+}
+
 static int run_quant_matvec_cases(int argc, char ** argv) {
     try {
         if (argc != 2)
@@ -478,6 +521,7 @@ static int run_quant_matvec_cases(int argc, char ** argv) {
                                       std::make_shared<ggml_webgpu_optional::DeviceGeneration>());
         const size_t q4_checks = q4_current::run(library, scalar, argv[1]);
         const size_t q6_checks = q6_current::run(device, instance, argv[1]);
+        check_long_k_matvecs(library, argv[1]);
         BICORE_CHECK(q4_checks + q6_checks > 9000 && created > 100);
         std::cout << "{\"status\":\"passed\",\"checks\":" << q4_checks + q6_checks << ",\"pipelines\":" << created
                   << "}\n";

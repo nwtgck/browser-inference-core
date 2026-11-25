@@ -1,0 +1,73 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -359,10 +359,20 @@
+     return y <= maximum && width <= maximum ? sg : 0;
+ }
+ 
++inline bool ggml_webgpu_matvec_long_down_shape(const ggml_webgpu_shader_lib_context & context) {
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    return a->ne[0] == 19968 && a->ne[1] == 6656 &&
++           a->ne[2] == 1 && x->ne[2] == 1 && dst->ne[2] == 1 &&
++           a->ne[3] == 1 && x->ne[3] == 1 && dst->ne[3] == 1;
++}
++
+ // Tensor-shape admission is independent of the subgroup-width policy.
+ // A later explicit-width caller must establish the same capability contract.
+ inline bool ggml_webgpu_q4_matvec_subgroup_eligible(const ggml_webgpu_shader_lib_context & context,
+-                                                  bool use_mmvq, bool src_overlap) {
++                                                  bool use_mmvq, bool src_overlap,
++                                                   bool allow_long_down_shape = false) {
+     const auto * a = context.src0;
+     const auto * x = context.src1;
+     const auto * dst = context.dst;
+@@ -370,7 +380,9 @@
+         context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
+         (a->type != GGML_TYPE_Q4_0 && a->type != GGML_TYPE_Q4_K) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
+-        a->ne[0] < 1024 || a->ne[0] > 17408 ||
++        a->ne[0] < 1024 ||
++        (a->ne[0] > 17408 && !(allow_long_down_shape && a->type == GGML_TYPE_Q4_K &&
++                              ggml_webgpu_matvec_long_down_shape(context))) ||
+         a->ne[0] % (a->type == GGML_TYPE_Q4_0 ? 32 : 256) != 0 ||
+         a->ne[1] > UINT32_MAX - 127u ||
+         x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
+@@ -409,7 +421,7 @@
+     if (!context.supports_subgroups || sg != context.max_subgroup_size || (sg != 16 && sg != 32)) {
+         return 0;
+     }
+-    return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
++    return ggml_webgpu_q4_matvec_subgroup_eligible(context, use_mmvq, src_overlap, sg == 32) ? sg : 0;
+ }
+ 
+ // Keep the existing Q4 shape/layout admission and request a real logical width.
+@@ -424,14 +436,17 @@
+ 
+ // Keep tensor-shape admission independent of fixed or requested width policy.
+ inline bool ggml_webgpu_q6_matvec_subgroup_eligible(const ggml_webgpu_shader_lib_context & context,
+-                                                   bool use_mmvq, bool src_overlap) {
++                                                   bool use_mmvq, bool src_overlap,
++                                                   bool allow_long_down_shape = false) {
+     const auto * a = context.src0;
+     const auto * x = context.src1;
+     const auto * dst = context.dst;
+     if (!a || !x || !dst || context.src2 || use_mmvq || src_overlap || context.max_wg_size < 128 ||
+         context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
+         a->type != GGML_TYPE_Q6_K || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
+-        a->ne[0] < 1536 || a->ne[0] > 10752 || a->ne[0] % 256 != 0 ||
++        a->ne[0] < 1536 ||
++        (a->ne[0] > 10752 && !(allow_long_down_shape && ggml_webgpu_matvec_long_down_shape(context))) ||
++        a->ne[0] % 256 != 0 ||
+         a->ne[1] < 2048 || a->ne[1] > UINT32_MAX - 127u ||
+         x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
+         return false;
+@@ -455,7 +470,7 @@
+     if (!context.supports_subgroups || sg != context.max_subgroup_size || (sg != 16 && sg != 32)) {
+         return 0;
+     }
+-    return ggml_webgpu_q6_matvec_subgroup_eligible(context, use_mmvq, src_overlap) ? sg : 0;
++    return ggml_webgpu_q6_matvec_subgroup_eligible(context, use_mmvq, src_overlap, sg == 32) ? sg : 0;
+ }
+ 
+ inline uint32_t ggml_webgpu_q6_requested_subgroup_size(const ggml_webgpu_shader_lib_context & context,
