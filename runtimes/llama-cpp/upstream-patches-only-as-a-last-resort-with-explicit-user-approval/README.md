@@ -1287,3 +1287,22 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   checks view-only uses of discarded storage across scheduler splits. Review
   visited-set ownership, aliases and which outputs the fused shaders write when
   updating upstream.
+
+## Compact workgroups for a single argsort tile
+
+- **Patch** `ggml-webgpu-argsort-compact-workgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** For 128, 256 or 512 source values that fit into a larger single tile,
+  use one invocation per source value. Use the same rule for argsort and top-k.
+  Bound the original network width by compute invocations, the X dimension and
+  workgroup storage. Build the merge pipeline only if the dispatch needs it.
+- **Contract** Compare the same live pairs in the same order, including later
+  stages that can affect NaN and equal-value ordering. In those stages the
+  omitted upper blocks contain only sentinels. The cache distinguishes the
+  network width, the physical workgroup width, and the sort order. Preserve
+  the existing global buffers, bindings, tile count, and multi-tile merge path.
+- **Validation and removal** Exercise production selection, uniform layout,
+  cache reuse and multi-tile fallback in both providers. Compare the emitted
+  kernels against the original GPU output and a CPU implementation of the
+  padded network. Use the pinned upstream sort when the overlay is omitted.
+  Remove this patch when upstream prunes equivalent padding and loads merge
+  pipelines on demand.

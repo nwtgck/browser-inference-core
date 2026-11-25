@@ -1,0 +1,136 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -3821,13 +3821,12 @@
+     shader_lib_ctx.src0                           = src;
+     shader_lib_ctx.src1                           = nullptr;
+     shader_lib_ctx.dst                            = dst;
+-    shader_lib_ctx.max_wg_size        = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    shader_lib_ctx.max_wg_size = std::min(limits.maxComputeInvocationsPerWorkgroup, limits.maxComputeWorkgroupSizeX);
+     shader_lib_ctx.wg_mem_limit_bytes = ctx->global_ctx->capabilities.limits.maxComputeWorkgroupStorageSize;
+ 
+     webgpu_pipeline argsort_pipeline = ctx->shader_lib->get_argsort_pipeline(shader_lib_ctx);
+     auto * argsort_decisions = static_cast<ggml_webgpu_generic_shader_decisions *>(argsort_pipeline.context.get());
+-
+-    webgpu_pipeline argsort_merge_pipeline = ctx->shader_lib->get_argsort_merge_pipeline(shader_lib_ctx);
+ 
+     const uint32_t src_ne0 = (uint32_t) src->ne[0];
+     const uint32_t nrows   = (uint32_t) ggml_nrows(src);
+@@ -3902,6 +3901,7 @@
+         return ggml_backend_webgpu_build_multi(ctx, dispatches);
+     }
+ 
++    webgpu_pipeline argsort_merge_pipeline = ctx->shader_lib->get_argsort_merge_pipeline(shader_lib_ctx);
+     bool     in_is_tmp = start_in_tmp;
+     uint32_t len       = block_size;
+     while (len < out_ne0) {
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -27,6 +27,7 @@
+ #include <webgpu/webgpu_cpp.h>
+ 
+ #include <algorithm>
++#include <bit>
+ #include <chrono>
+ #include <memory>
+ #include <string>
+@@ -606,10 +607,22 @@
+ 
+ /** Argsort **/
+ 
+-struct ggml_webgpu_argsort_shader_lib_context {
+-    uint32_t max_wg_size;
+-    size_t   wg_mem_limit_bytes;
++struct ggml_webgpu_argsort_pipeline_key {
++    uint32_t workgroup_size;
++    uint32_t network_size;
+     int32_t  order;
++
++    bool operator==(const ggml_webgpu_argsort_pipeline_key &) const = default;
++};
++
++struct ggml_webgpu_argsort_pipeline_key_hash {
++    size_t operator()(const ggml_webgpu_argsort_pipeline_key & key) const {
++        size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, key.workgroup_size);
++        ggml_webgpu_hash_combine(seed, key.network_size);
++        ggml_webgpu_hash_combine(seed, key.order);
++        return seed;
++    }
+ };
+ 
+ /** Set Rows **/
+@@ -1844,7 +1857,8 @@
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+     std::unordered_map<int, webgpu_pipeline> sum_rows_pipelines;            // key is whether to compute the mean
+     std::unordered_map<int, webgpu_pipeline> argmax_pipelines;              // key is vec4
+-    std::unordered_map<int, webgpu_pipeline> argsort_pipelines;             // key is order
++    std::unordered_map<ggml_webgpu_argsort_pipeline_key, webgpu_pipeline,
++                       ggml_webgpu_argsort_pipeline_key_hash> argsort_pipelines;
+     std::unordered_map<int, webgpu_pipeline> argsort_merge_pipelines;       // key is order
+     std::unordered_map<int, webgpu_pipeline> cumsum_pipelines;              // key is fixed, no variants yet
+     std::unordered_map<int, webgpu_pipeline> col2im_1d_pipelines;           // key is fixed, no variants yet
+@@ -2245,7 +2259,15 @@
+         const int32_t order =
+             is_top_k ? (int32_t) GGML_SORT_ORDER_DESC : (int32_t) ggml_get_op_params_i32(context.dst, 0);
+ 
+-        auto it = argsort_pipelines.find(order);
++        const size_t max_lanes = std::min<size_t>(context.max_wg_size,
++                                                  context.wg_mem_limit_bytes / GGML_WEBGPU_I32_SIZE_BYTES);
++        const uint32_t network_size = std::max(1u, static_cast<uint32_t>(std::bit_floor(max_lanes)));
++        const int64_t elements = context.src0->ne[0];
++        const bool compact = elements >= 128 && elements <= 512 && elements < network_size &&
++                             std::has_single_bit(static_cast<uint32_t>(elements));
++        const uint32_t workgroup_size = compact ? static_cast<uint32_t>(elements) : network_size;
++        const ggml_webgpu_argsort_pipeline_key key{workgroup_size, network_size, order};
++        auto it = argsort_pipelines.find(key);
+         if (it != argsort_pipelines.end()) {
+             return it->second;
+         }
+@@ -2254,18 +2276,20 @@
+         std::string              variant = "argsort";
+         defines.push_back(std::string("ORDER=") + std::to_string(order));
+         variant += std::string("_order") + std::to_string(order);
+-        uint32_t wg_size = 1;
+-        while (wg_size * 2 <= context.max_wg_size &&
+-               wg_size * GGML_WEBGPU_I32_SIZE_BYTES <= context.wg_mem_limit_bytes / 2) {
+-            wg_size *= 2;
+-        }
+-        defines.push_back(std::string("WG_SIZE=") + std::to_string(wg_size));
++        defines.push_back(std::string("WG_SIZE=") + std::to_string(workgroup_size));
++        if (compact) {
++            // In a single, full tile the upper blocks contain only sentinels.
++            // Keep each later stage's live comparisons, including for NaNs.
++            defines.push_back(std::string("NETWORK_SIZE=") + std::to_string(network_size));
++            variant += "_wg" + std::to_string(workgroup_size);
++        }
+         auto processed                   = preprocessor.preprocess(wgsl_argsort, defines);
+         auto decisions                   = std::make_shared<ggml_webgpu_generic_shader_decisions>();
+-        decisions->wg_size               = wg_size;
+-        argsort_pipelines[order]         = ggml_webgpu_create_pipeline(device, processed, variant);
+-        argsort_pipelines[order].context = decisions;
+-        return argsort_pipelines[order];
++        decisions->wg_size               = workgroup_size;
++        auto pipeline = ggml_webgpu_create_pipeline(device, processed, variant);
++        pipeline.context = decisions;
++        argsort_pipelines.emplace(key, pipeline);
++        return pipeline;
+     }
+ 
+     webgpu_pipeline get_argsort_merge_pipeline(const ggml_webgpu_shader_lib_context & context) {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/argsort.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/argsort.wgsl
+@@ -68,8 +68,13 @@
+     workgroupBarrier();
+ 
+     var k = 2u;
++#ifdef NETWORK_SIZE
++    while (k <= NETWORK_SIZE) {
++        var j = min(k >> 1, WG_SIZE >> 1);
++#else
+     while (k <= WG_SIZE) {
+         var j = k >> 1;
++#endif
+         while (j > 0) {
+             let ixj = lid.x ^ j;
+             if (ixj > lid.x) {

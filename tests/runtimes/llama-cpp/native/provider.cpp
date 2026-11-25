@@ -262,6 +262,7 @@ static void encoding_and_upload() {
 #include "cases/profile-query.hpp"
 #include "cases/subgroup.hpp"
 #include "cases/matrix.hpp"
+#include "cases/argsort.hpp"
 #include "cases/cache.hpp"
 #include "cases/expert.hpp"
 #include "cases/attention.hpp"
@@ -278,6 +279,7 @@ int main(int argc, char ** argv) {
     copy_cases::all();
     subgroup_cases::all(argv[1]);
     matrix_cases::all(argv[1]);
+    argsort_cases::all(argv[1]);
     cache_cases::all();
     expert_cases::all(argv[1]);
     attention_cases::all();

@@ -119,11 +119,12 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   canonical['common_decls.tmpl'] = join(words, shaderBase, 'common_decls.tmpl');
   canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
   canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
+  canonical['argsort.wgsl'] = join(source, shaderBase, 'argsort.wgsl');
   headers['ggml-webgpu-aligned-word-load-shaders.hpp'] = canonical;
   const shaders: Record<string, Record<string, FileIdentity>> = {};
   const generator = join(original, shaderBase, 'embed_wgsl.py');
   // Each dedicated header is emitted once by the unmodified upstream generator.
-  // Use the explicit word-template, tile-attention, and indexed-matvec inputs with the other upstream shaders.
+  // The canonical header combines the explicit patched inputs above with the remaining upstream shaders.
   // Dedicated variants such as the fused RMS shader keep their separate headers.
   for (const [header, files] of Object.entries(headers)) {
     const shaderRoot = join(scratch, 'shaders', header.slice(0, -4));
