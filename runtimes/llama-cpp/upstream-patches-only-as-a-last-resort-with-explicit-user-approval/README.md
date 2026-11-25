@@ -672,22 +672,25 @@ not establish target-device speed.
   fused variant for this graph. Remove the patch when upstream provides an
   equivalent fusion with the same numerical behavior.
 
-## Shared packed words in independent Q8_0 matvecs
+## Shared packed words in subgroup and indexed Q8_0 matvecs
 
 - **Patch** `ggml-webgpu-q8-decode-paired-words.patch` against llama.cpp
-  `c212d25ad`. Source preparation uses the patched accumulator in the
-  independent subgroup shader.
+  `c212d25ad`. The Q8 subgroup shader and both indexed matvec shaders
+  enable the paired accumulator. Source preparation applies the indexed
+  accumulator patches after preparing the shared accumulator.
 - **Scope** Load the two neighboring packed integers together for each four-lane
   Q8_0 block. A pair starting on a half-word boundary uses three underlying
   words with one shared middle word. An aligned pair reads within its two
   words. Both use the existing half scale and eight F32 products per lane.
 - **Contract** The shader uses the existing quantized weight layout, bindings,
   lane mapping and reductions. The variant also covers the existing fused Q8
-  gate where that factory selects the independent kernel.
+  gate where that factory selects the independent kernel. Non-indexed
+  cooperative matvecs continue using the per-integer loads.
 - **Validation** Software WebGPU compares output bits and a Float64 reference
   for the main shapes and for odd block counts, a row tail and longer vectors.
-  The normal Wasm64 ABI exercises views and broadcast batches. Whole-model
-  throughput depends on the physical adapter and the workload.
+  Indexed cases exercise broadcast and per-slot inputs with repeated and
+  skipped experts. The normal Wasm64 ABI exercises views and broadcast
+  batches. Whole-model throughput depends on the adapter and workload.
 - **Alternative** Use the canonical per-integer unaligned loads. Re-audit the
   patch when upstream changes Q8_0 block size or divides the block differently
   across lanes. Remove it when upstream provides equivalent loading.

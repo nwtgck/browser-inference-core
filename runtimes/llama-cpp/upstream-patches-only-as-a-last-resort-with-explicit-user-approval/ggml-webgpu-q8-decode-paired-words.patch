@@ -35,3 +35,23 @@
  #include "mul_mat_vec_acc.tmpl"
  
  struct MulMatParams {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
+@@ -6,6 +6,7 @@
+ #define DECLARE_BYTE_LOADERS_SRC0
+ #include "common_decls.tmpl"
+ 
++#define Q8_DECODE_PAIRED_WORDS
+ #include "mul_mat_vec_acc.tmpl"
+ 
+ struct MulMatIdVecParams {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
+@@ -6,6 +6,7 @@
+ #define DECLARE_BYTE_LOADERS_SRC0
+ #include "common_decls.tmpl"
+ 
++#define Q8_DECODE_PAIRED_WORDS
+ #include "mul_mat_vec_acc.tmpl"
+ 
+ struct MulMatIdVecParams {

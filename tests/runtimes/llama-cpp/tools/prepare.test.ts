@@ -49,14 +49,23 @@ test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout
     ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
     ['indexed_vec_mask_block.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
     ['mul_mat_vec_acc.tmpl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],
+    ['mul_mat_id_vec.wgsl', 'ggml-webgpu-aligned-word-load-shaders.hpp'],
+    ['iq3s_id_subgroup.wgsl', 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp'],
   ] as const) {
     const prepared = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
     assert.ok(prepared);
     assert.deepEqual(receipt.shaders[header]?.[name], prepared);
   }
   const accumulator = 'mul_mat_vec_acc.tmpl';
+  const accumulatorPath = `ggml/src/ggml-webgpu/wgsl-shaders/${accumulator}`;
+  const indexedPatches = receipt.patches.filter(entry => entry.target === 'iq3s');
   assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[accumulator],
-    receipt.inputs[`ggml/src/ggml-webgpu/wgsl-shaders/${accumulator}`]);
+    receipt.outputs[accumulatorPath]);
+  assert.equal(indexedPatches[0]?.files.find(entry => entry.path === accumulatorPath)?.beforeSha256,
+    receipt.outputs[accumulatorPath]?.sha256);
+  assert.equal(indexedPatches.at(-1)?.files.find(entry => entry.path === accumulatorPath)?.afterSha256,
+    receipt.shaders['ggml-webgpu-iq3s-id-subgroup-shaders.hpp']?.[accumulator]?.sha256);
+  assert.deepEqual(receipt.shaders['ggml-webgpu-f32-matvec-epilogue-shaders.hpp']?.[accumulator], receipt.inputs[accumulatorPath]);
 });
 
 test('coherent source preparation preserves previous output and unchanged mtimes', { timeout: 120000 }, async () => {

@@ -104,12 +104,17 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   }
   const iq3s = join(scratch, 'iq3s');
   const words = join(scratch, 'word-template');
-  await copyInput({ source: join(original, shaderBase, 'mul_mat_vec_acc.tmpl'), destination: join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') });
   await copyInput({ source: join(original, shaderBase, 'common_decls.tmpl'), destination: join(words, shaderBase, 'common_decls.tmpl') });
   const patches: PatchReceipt[] = [];
-  for (const patch of webgpuPatches({ mode })) {
-    const sourceRoot = patch.target === 'iq3s' ? iq3s : patch.target === 'word-template' ? words : source;
+  const recipe = webgpuPatches({ mode });
+  for (const patch of recipe.filter(entry => entry.target !== 'iq3s')) {
+    const sourceRoot = patch.target === 'word-template' ? words : source;
     patches.push(await applyPatch({ sourceRoot, patchRoot, patch }));
+  }
+  // Apply indexed-only accumulator changes on top of the shared matvec source.
+  await copyInput({ source: join(source, shaderBase, 'mul_mat_vec_acc.tmpl'), destination: join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') });
+  for (const patch of recipe.filter(entry => entry.target === 'iq3s')) {
+    patches.push(await applyPatch({ sourceRoot: iq3s, patchRoot, patch }));
   }
   const headers = shaderInputs({ original, patched: source, iq3s, words });
   const canonical: Record<string, string> = {};
@@ -122,6 +127,7 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   canonical['flash_attn_decls.tmpl'] = join(source, shaderBase, 'flash_attn_decls.tmpl');
   canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
   canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
+  canonical['mul_mat_vec_acc.tmpl'] = join(source, shaderBase, 'mul_mat_vec_acc.tmpl');
   canonical['mul_mat_fwht_1024.wgsl'] = join(source, shaderBase, 'mul_mat_fwht_1024.wgsl');
   canonical['argsort.wgsl'] = join(source, shaderBase, 'argsort.wgsl');
   canonical['row_norm.wgsl'] = join(source, shaderBase, 'row_norm.wgsl');
