@@ -541,6 +541,15 @@ not establish target-device speed.
 - **No-patch alternative:** retain separate RMS and scale dispatches or wait for upstream fusion.
 - **Removal:** equivalent upstream fusion or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Fused WebGPU F32 L2 clipping
+
+- **Patch** `ggml-webgpu-l2-clip.patch`.
+- **Scope** Fuse an eligible square, row sum, square root, epsilon addition, threshold fill, division, clamp and multiplication into one dispatch. Admission requires dense F32 rows with tested shapes `128×24`, `128×8` or `16×24`, singleton trailing dimensions, the original vector as the final multiplication input, and the checked coefficients and clip bounds. Graph output, use-count and buffer checks preserve the separate dispatches when a skipped intermediate remains observable or binding ranges overlap without identical tensor offsets and layouts.
+- **Integration** Normal and GPU-profiling WebGPU builds embed the same canonical shader. The patch uses the existing RMS-scale layout and binding helpers and the upstream `SUM_ROWS` reduction order for the populated lanes. GPU-profiling builds record the fused dispatch through the existing timestamp path. CPU builds do not apply the patch. The initial pin is llama.cpp `c212d25ad`. Review the graph view, allocator, `SUM_ROWS` and shader embedding contracts when updating it.
+- **Validation and limits** Complete-provider tests exercise graph admission and actual dispatch encoding. Linked Wasm64 tests on software WebGPU cover all three shapes, an offset view, exact allocation alias, retained intermediate and unsupported shape. They compare output words with the separate operations, including authored exceptional values. These tests do not establish physical-device throughput or model quality.
+- **No-patch alternative** Keep the existing individual WebGPU dispatches until upstream provides equivalent fusion.
+- **Removal** Remove the patch, shader preparation, and focused provider checks when upstream provides equivalent behavior or the optimization is retired.
+
 ## Fixed-subgroup Q8_0 matvec
 
 - **Patch:** `ggml-webgpu-q8-subgroup-matvec.patch`.
