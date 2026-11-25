@@ -24,7 +24,7 @@ test('concrete normal/profile recipes preserve order and isolate dedicated templ
   assert.ok(profile.findIndex(patch => patch.file === 'ggml-webgpu-q8-diagnostic.patch') < profile.findIndex(patch => patch.file === 'ggml-webgpu-matmul-vec4-layout-profile.patch'));
 });
 
-test('WebGPU embeds use the prepared argsort, Hadamard, and F16 mask shaders', { timeout: 120000 }, async () => {
+test('WebGPU embeds use the prepared argsort, Hadamard, and Flash Attention shaders', { timeout: 120000 }, async () => {
   await using directory = {
     path: await mkdtemp(join(tmpdir(), 'llama-argsort-source-test-')),
     async [Symbol.asyncDispose]() {
@@ -37,16 +37,21 @@ test('WebGPU embeds use the prepared argsort, Hadamard, and F16 mask shaders', {
     options: { target: 'native', webgpu: true, gpuProfile: false, fileRows: false, qsa: false, mtmdMode: 'cpu' },
     python: 'python3',
   });
-  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl']) {
+  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_decls.tmpl']) {
     const shader = `ggml/src/ggml-webgpu/wgsl-shaders/${name}`;
     const prepared = receipt.outputs[shader];
     assert.ok(prepared);
     assert.notEqual(prepared.sha256, receipt.inputs[shader]?.sha256);
     assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[name], prepared);
   }
-  const mask = receipt.outputs['ggml/src/ggml-webgpu/wgsl-shaders/add_cast_f16.wgsl'];
-  assert.ok(mask);
-  assert.deepEqual(receipt.shaders['ggml-webgpu-add-cast-f16-shaders.hpp']?.['add_cast_f16.wgsl'], mask);
+  for (const [name, header] of [
+    ['add_cast_f16.wgsl', 'ggml-webgpu-add-cast-f16-shaders.hpp'],
+    ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
+  ] as const) {
+    const mask = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
+    assert.ok(mask);
+    assert.deepEqual(receipt.shaders[header]?.[name], mask);
+  }
 });
 
 test('coherent source preparation preserves previous output and unchanged mtimes', { timeout: 120000 }, async () => {

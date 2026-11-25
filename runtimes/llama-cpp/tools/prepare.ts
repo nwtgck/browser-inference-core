@@ -67,6 +67,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
   const edited = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(patched, shaderBase, name)]));
   const upstream = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(original, shaderBase, name)]));
   return {
+    'ggml-webgpu-indexed-vec-mask-shaders.hpp': edited({ names: ['indexed_vec_mask.wgsl'] }),
     'ggml-webgpu-add-cast-f16-shaders.hpp': edited({ names: ['add_cast_f16.wgsl'] }),
     'ggml-webgpu-hc-shaders.hpp': edited({ names: ['hc_pre.wgsl', 'hc_post.wgsl'] }),
     'ggml-webgpu-moe-sum-shaders.hpp': edited({ names: ['moe_expert_sum.wgsl'] }),
@@ -118,6 +119,7 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
     }
   }
   canonical['common_decls.tmpl'] = join(words, shaderBase, 'common_decls.tmpl');
+  canonical['flash_attn_decls.tmpl'] = join(source, shaderBase, 'flash_attn_decls.tmpl');
   canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
   canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
   canonical['mul_mat_fwht_1024.wgsl'] = join(source, shaderBase, 'mul_mat_fwht_1024.wgsl');
@@ -213,6 +215,8 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
         const result = await prepareWebgpu({ source: root, original: canonicalRoot, scratch: scratch.root, patchRoot, runtime: owned, mode: gpuProfile ? 'profile' : 'normal', python });
         patches.push(...result.patches);
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingRowViews }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.indexedHalfCpu }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingIndexedHalfFlash }));
         shaders = result.shaders;
         switch (target) {
         case 'native': {

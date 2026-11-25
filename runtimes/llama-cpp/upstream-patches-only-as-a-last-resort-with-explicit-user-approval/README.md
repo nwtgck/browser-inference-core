@@ -1466,3 +1466,30 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   expert gate and down weight slices against scalar staging and check all
   output bits. The replay measures kernel time on the software adapter.
   Remove this patch when upstream provides equivalent indexed staging.
+
+## Compact relative-position bias for Inkling Flash Attention
+
+- **Patches** `inkling-indexed-half-flash.patch`, `ggml-webgpu-indexed-half-flash.patch`,
+  and `ggml-cpu-indexed-half-flash.patch` against llama.cpp `c212d25ad`.
+- **Purpose** Keep Inkling's relative-position attention on WebGPU at large
+  context and batch sizes without creating a dense per-head mask for prefill.
+  Short queries still use the existing vector Flash path with a bounded F16
+  mask generated into its scratch allocation.
+- **Scope** The Inkling graph uses compact indexed bias for Flash Attention on
+  the Wasm WebGPU backend with resident K/V and supported tensor layout. The
+  stock graph remains the fallback for the automatic capability probe, disabled
+  Flash Attention, observer and training modes, and unavailable placement. The
+  WebGPU source applies in both normal and GPU-profile builds. Ordinary Flash
+  also checks the actual aligned F16 mask binding against both device limits.
+- **Contract** The indexed mode adds relative bias to the input mask in F32 and
+  rounds the combined sum to F16 before the head slope. The GPU scalar shader,
+  vector mask producer, and CPU fallback preserve this rounding. CPU-only
+  builds keep upstream behavior. The setup adds no public ABI controls.
+- **Upstream alternative** Use the upstream dense mask, or update to upstream
+  relative-position Flash Attention that meets the same rounding, allocation,
+  and vector-decode contracts. Review the Inkling graph, GGML Flash mode tag,
+  tensor alignment and scratch allocation when updating upstream.
+- **Validation and removal** Check ordinary mask bindings before and after
+  allocation, transferred CPU views, scalar and vector pipeline selection, and
+  numerical parity across prefill and generation. Remove the patches and
+  generated shader entry together when upstream covers these contracts.

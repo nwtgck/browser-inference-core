@@ -897,6 +897,19 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-half-flash.patch',
+    target: 'llama-webgpu',
+    reason: 'Compose rounded indexed attention masks using bounded GPU storage.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_decls.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
@@ -921,6 +934,18 @@ export const modelPatches = {
     target: 'llama',
     reason: 'Read packed loop messages and attention inputs through row views.',
     files: ['src/models/inkling2.cpp'],
+  },
+  indexedHalfCpu: {
+    file: 'ggml-cpu-indexed-half-flash.patch',
+    target: 'llama',
+    reason: 'Preserve half-mask rounding on CPU fallback.',
+    files: ['ggml/src/ggml-cpu/flash-attn-indexed-mask.h', 'ggml/src/ggml-cpu/ggml-cpu.cpp', 'ggml/src/ggml-cpu/ops.cpp'],
+  },
+  inklingIndexedHalfFlash: {
+    file: 'inkling-indexed-half-flash.patch',
+    target: 'llama',
+    reason: 'Keep the same compact relative-bias graph for prefill and generation.',
+    files: ['src/llama-graph.h', 'src/llama-graph.cpp', 'src/models/inkling2.cpp'],
   },
   chat: {
     file: 'common-chat-independent-vocabulary.patch',
