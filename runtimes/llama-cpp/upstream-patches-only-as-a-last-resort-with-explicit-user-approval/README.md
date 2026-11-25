@@ -853,6 +853,16 @@ not establish target-device speed.
 - **Validation:** Exercise both shape, token, storage and dtype boundaries through the normal and GPU-profile factories. Compare the emitted WGSL and deterministic packed-weight outputs. Isolated software WebGPU comparisons do not establish physical-adapter or model throughput.
 - **Removal:** Remove when upstream supplies equivalent indexed loads with the same precision and compatible fallback behavior.
 
+## Wider output-row tiles for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-wide-m.patch`.
+- **Scope:** Use 64 output rows per workgroup for the indexed F32-input and F32-output K32 matrix path with 512 stored experts, ten selected experts and 128 input tokens. Admit IQ3_S, Q4_K and IQ4_XS at K2560/M640 with broadcast input, and IQ4_NL at K640/M2560 with per-slot input. Require the matching I32 ID tensor, 64 compute invocations and at least 6,400 bytes of workgroup storage.
+- **Contract:** Reuse WG64, the 32-slot gather, the existing sparse and grouped column assignments, ascending K accumulation and the original uniform and storage bindings. Include the row tile in the pipeline cache key and derive the shader, `_tm8` label and dispatch geometry from it. The existing K64, narrow matrix and indexed matvec routes keep their selection.
+- **Integration:** Apply one shader-library header stage in the normal and GPU-profile recipes. Reuse the existing indexed shader embedding and context limits. Keep upstream source untouched.
+- **No-patch alternative:** Keep the existing 32-row indexed tile or wait for upstream tuning.
+- **Validation:** Complete-provider native tests exercise the cache, exact shape and limit boundaries, grid and uniform layout in both modes. Independent CPU references and authored software WebGPU inputs cover sparse and grouped routing. Warm software measurements are limited to isolated dispatches with a prefix of the expert weights. Physical-adapter and model first-token timing remain unmeasured.
+- **Removal:** Remove the patch, recipe entry and tests when upstream provides an equivalent indexed tile without changing the numerical or fallback contracts.
+
 ## Wider-M paired-half Q8 prefill tiles
 
 - **Patch:** `ggml-webgpu-q8-prefill-wide-m.patch`.

@@ -1,0 +1,81 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1623,6 +1623,7 @@
+     uint32_t  workgroup_size;
+     uint32_t  subgroup_size;
+     uint32_t  tile_k;
++    uint32_t  tile_m;
+     int       vectorized;
+     bool      f32_accumulator;
+ 
+@@ -1630,7 +1631,7 @@
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+-               f32_accumulator == other.f32_accumulator && tile_k == other.tile_k;
++               f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m;
+     }
+ };
+ 
+@@ -1646,6 +1647,7 @@
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         ggml_webgpu_hash_combine(seed, key.f32_accumulator);
+         ggml_webgpu_hash_combine(seed, key.tile_k);
++        ggml_webgpu_hash_combine(seed, key.tile_m);
+         return seed;
+     }
+ };
+@@ -3404,6 +3406,28 @@
+             key.tile_k = wide_tile_k;
+         }
+ 
++        // Keep the 32-slot gather descriptors and K32 staging while grouping 64 output rows.
++        key.tile_m = WEBGPU_MUL_MAT_TILE_M;
++        constexpr uint32_t wide_tile_m = 8;
++        constexpr uint32_t wide_rows = wide_tile_m * WEBGPU_MUL_MAT_WG_SIZE_M;
++        constexpr uint32_t grouped_threads = WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_WG_SIZE_N;
++        constexpr uint32_t wide_m_shared_bytes =
++            sizeof(ggml_fp16_t) * WEBGPU_MUL_MAT_REG_TILE_K_QUANT * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
++        const bool wide_gate_up = k == 2560 && m == 640 &&
++                                  (key.src0_type == GGML_TYPE_IQ3_S || key.src0_type == GGML_TYPE_Q4_K ||
++                                   key.src0_type == GGML_TYPE_IQ4_XS);
++        const bool wide_down = k == 640 && m == 2560 && key.src0_type == GGML_TYPE_IQ4_NL;
++        const ggml_tensor * ids = context.src2;
++        if ((wide_gate_up || wide_down) && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
++            !key.f32_accumulator && key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT && key.n_experts == 512 &&
++            context.src1->ne[0] == k && context.src1->ne[1] == (wide_gate_up ? 1 : 10) &&
++            context.src1->ne[2] == 128 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 10 &&
++            ids->ne[1] == 128 && context.dst && context.dst->type == GGML_TYPE_F32 &&
++            context.dst->ne[0] == m && context.dst->ne[1] == 10 && context.dst->ne[2] == 128 &&
++            context.max_wg_size >= grouped_threads && context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
++            key.tile_m = wide_tile_m;
++        }
++
+         auto it = mul_mat_id_pipelines.find(key);
+         if (it != mul_mat_id_pipelines.end()) {
+             return it->second;
+@@ -3500,7 +3524,7 @@
+         const uint32_t tile_k = key.tile_k;
+ 
+         // Tiles
+-        defines.push_back("TILE_M=" + std::to_string(WEBGPU_MUL_MAT_TILE_M) + "u");
++        defines.push_back("TILE_M=" + std::to_string(key.tile_m) + "u");
+         defines.push_back("TILE_N=" + std::to_string(WEBGPU_MUL_MAT_TILE_N) + "u");
+         defines.push_back("TILE_K=" + std::to_string(tile_k) + "u");
+ 
+@@ -3529,11 +3553,14 @@
+                 variant += "_paired";
+             }
+         }
++        if (key.tile_m == wide_tile_m) {
++            variant += "_tm8";
++        }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+         auto decisions       = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();
+         decisions->tile_k    = tile_k;
+-        decisions->tile_m    = WEBGPU_MUL_MAT_TILE_M;
++        decisions->tile_m    = key.tile_m;
+         decisions->tile_n    = WEBGPU_MUL_MAT_TILE_N;
+         decisions->wg_size_m = WEBGPU_MUL_MAT_WG_SIZE_M;
+         decisions->wg_size_n = WEBGPU_MUL_MAT_WG_SIZE_N;

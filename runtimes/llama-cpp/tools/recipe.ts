@@ -418,6 +418,15 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-wide-m.patch',
+    target: 'llama-webgpu',
+    reason: 'use 64 output rows in selected indexed prefill workgroups',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-q8-prefill-wide-m.patch',
     target: 'llama-webgpu',
     reason: 'wide paired-half Q8 prefill',

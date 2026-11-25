@@ -1,5 +1,7 @@
 #pragma once
 
+#include "indexed-wide-m.hpp"
+
 namespace expert_cases {
 static void nvfp4_accumulator() {
     auto ctx = recording_context();
@@ -120,6 +122,7 @@ static void all(const std::filesystem::path & output) {
     nvfp4_accumulator();
     sparse_matrix(output);
     indexed_wide_k(output);
+    indexed_wide_m(output);
     auto ctx = recording_context();
     std::ofstream cases(output / "cases.json");
     cases << "[\n";
