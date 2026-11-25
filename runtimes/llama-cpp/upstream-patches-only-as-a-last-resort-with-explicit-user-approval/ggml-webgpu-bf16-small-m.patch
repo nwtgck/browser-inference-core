@@ -1,0 +1,28 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1573,7 +1573,7 @@
+ struct ggml_webgpu_mul_mat_pipeline_key {
+     enum class quant_shared_mode : uint32_t { scalar, half_pairs, half_pairs_m8 };
+     quant_shared_mode shared_mode = quant_shared_mode::scalar;
+-    // 0: existing geometry, 1/4: F32 small-M register tiles.
++    // 0: existing geometry, 1/4: small-M register tiles.
+     uint32_t  small_m_tile;
+     ggml_type src0_type;
+     ggml_type src1_type;
+@@ -3155,9 +3155,14 @@
+         key.src_overlap         = src_overlap;
+         // N<=4 retains the existing host matvec route. Reuse the pinned TK8
+         // accumulator; only remove the unused M extent of register tiles.
++        const bool bf16_long_k_small_m = key.src0_type == GGML_TYPE_BF16 &&
++                                         context.src0->ne[0] == 10240 && context.dst->ne[0] == 4 &&
++                                         context.dst->ne[1] <= 128 &&
++                                         context.dst->ne[2] == 1 && context.dst->ne[3] == 1;
+         key.small_m_tile = !key.use_subgroup_matrix && !key.src_overlap &&
+-                           key.src0_type == GGML_TYPE_F32 && key.src1_type == GGML_TYPE_F32 &&
+-                           context.dst->type == GGML_TYPE_F32 && context.src0->ne[0] >= 128 &&
++                           (key.src0_type == GGML_TYPE_F32 || bf16_long_k_small_m) &&
++                           key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++                           context.src0->ne[0] >= 128 &&
+                            context.dst->ne[0] >= 1 && context.dst->ne[0] <= 4 && context.dst->ne[1] >= 5 ?
+                                (context.dst->ne[0] == 1 ? 1u : 4u) : 0u;
+ 

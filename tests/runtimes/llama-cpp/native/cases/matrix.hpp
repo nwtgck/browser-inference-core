@@ -8,6 +8,7 @@ struct Case {
     bool overlap = false, subgroup = false;
     std::optional<unsigned> expected_mode = std::nullopt;
     uint32_t expected_grid_x = 0;
+    std::optional<unsigned> expected_small_m = std::nullopt;
 };
 static unsigned mode(const Case & c) {
     if (c.expected_mode)
@@ -63,6 +64,17 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
             BICORE_CHECK(pipeline.pipeline.Get()->code.find(
                              "array<vec2<f16>, (TILE_SRC0_SHMEM + TILE_SRC1_SHMEM) / 2u>") != std::string::npos);
         }
+        if (input.expected_small_m) {
+            const auto expected = *input.expected_small_m;
+            BICORE_CHECK((pipeline.name.find("_small_m") != std::string::npos) == (expected != 0));
+            if (expected) {
+                BICORE_CHECK(pipeline.name.ends_with("_small_m" + std::to_string(expected)));
+                BICORE_CHECK(d.tile_m == expected && d.tile_n == 1 && d.tile_k == 8);
+                BICORE_CHECK(d.wg_size_m == 1 && d.wg_size_n == 32 && d.wg_size == 32);
+            } else if (input.n == 4) {
+                BICORE_CHECK((production_dispatch(c, 65535, input.overlap, true) == std::array<uint32_t, 2>{1, 1}));
+            }
+        }
         const bool vectorized =
             input.k % 4 == 0 && input.m % 4 == 0 && (input.left == GGML_TYPE_F32 || input.left == GGML_TYPE_F16);
         const auto key = std::tuple{input.left, input.right, vectorized, input.subgroup, input.overlap,
@@ -75,8 +87,9 @@ static void exercise(const std::vector<Case> & inputs, const std::filesystem::pa
                                   input.n >= 5 && input.batch2 > 0 && input.batch3 > 0;
         if (input.expected_grid_x) {
             BICORE_CHECK(valid_layout && !input.subgroup);
-            BICORE_CHECK(
-                (production_dispatch(c, 65535, input.overlap) == std::array<uint32_t, 2>{input.expected_grid_x, 1}));
+            const auto expected_matvec = input.expected_small_m.has_value() ? std::optional{false} : std::nullopt;
+            BICORE_CHECK((production_dispatch(c, 65535, input.overlap, expected_matvec) ==
+                          std::array<uint32_t, 2>{input.expected_grid_x, 1}));
         } else if (valid_layout && !input.subgroup && input.m < 1000 && input.n < 1000 && input.batch2 < 100 &&
                    input.batch3 < 100) {
             const uint64_t groups = ((input.m + d.tile_m * d.wg_size_m - 1) / (d.tile_m * d.wg_size_m)) *
@@ -220,6 +233,39 @@ static void all(const std::filesystem::path & output) {
             {GGML_TYPE_Q6_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, INT64_MAX - 63, INT64_MAX, INT64_MAX, batches});
     for (int64_t m : {1, 4, 64, 65})
         cases.push_back({GGML_TYPE_F32, GGML_TYPE_F32, GGML_TYPE_F32, 256, m, 32});
+    const auto bf16 = [](int64_t k, int64_t m, int64_t n, unsigned tile, uint32_t grid = 0) {
+        return Case{GGML_TYPE_BF16, GGML_TYPE_F32, GGML_TYPE_F32, k, m, n, 1, 1, false, false, 0, grid, tile};
+    };
+    cases.push_back(bf16(10240, 4, 4, 0));
+    cases.push_back(bf16(10240, 4, 5, 4, 1));
+    cases.push_back(bf16(10240, 4, 32, 4, 1));
+    cases.push_back(bf16(10240, 4, 96, 4, 3));
+    cases.push_back(bf16(10240, 4, 109, 4, 4));
+    cases.push_back(bf16(10240, 4, 128, 4, 4));
+    cases.push_back(bf16(10240, 4, 129, 0, 5));
+    cases.push_back(bf16(10240, 3, 128, 0, 4));
+    cases.push_back(bf16(10240, 5, 128, 0, 4));
+    cases.push_back(bf16(10239, 4, 128, 0, 4));
+    cases.push_back(bf16(10241, 4, 128, 0, 4));
+    cases.push_back(bf16(2560, 1, 128, 0, 4));
+    auto bf16_fallback = bf16(10240, 4, 128, 0);
+    bf16_fallback.batch2 = 2;
+    cases.push_back(bf16_fallback);
+    bf16_fallback.batch2 = 1;
+    bf16_fallback.batch3 = 2;
+    cases.push_back(bf16_fallback);
+    bf16_fallback.batch3 = 1;
+    bf16_fallback.overlap = true;
+    cases.push_back(bf16_fallback);
+    bf16_fallback.overlap = false;
+    bf16_fallback.subgroup = true;
+    cases.push_back(bf16_fallback);
+    bf16_fallback.subgroup = false;
+    bf16_fallback.right = GGML_TYPE_F16;
+    cases.push_back(bf16_fallback);
+    bf16_fallback.right = GGML_TYPE_F32;
+    bf16_fallback.output = GGML_TYPE_F16;
+    cases.push_back(bf16_fallback);
     for (const auto & transition : std::vector<Case>{{GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 64, 31},
                                                      {GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 64, 32},
                                                      {GGML_TYPE_Q4_K, GGML_TYPE_F32, GGML_TYPE_F32, 256, 65, 32},

@@ -1129,3 +1129,24 @@ not establish target-device speed.
 - **Removal:** retire the stages when upstream can admit and bind these weights
   with equivalent layout and device checks. Review Q2_0 packing, matrix scratch,
   view ownership and indexed cache keys when updating upstream.
+
+## BF16 small-M prefill register tiles
+
+- **Patch:** `ggml-webgpu-bf16-small-m.patch`, against llama.cpp `c212d25`.
+- **Scope:** ordinary BF16 × F32 → F32 matrix multiplication with K=10240,
+  M=4, N=5–128 and one batch. Source overlap and subgroup matrix paths retain
+  their existing tiles. The host continues to route N≤4 through matvec.
+- **Contract:** reuse the existing 4×32 output tile with a 32-invocation
+  workgroup and TK8. Keep packed BF16 storage, f16 staging, ascending K
+  accumulation in F32, binding layout, and dispatch dimensions. The existing
+  pipeline key and label distinguish the geometry. The kernel requires 576
+  bytes of workgroup storage and allocates no additional buffers.
+- **Integration:** apply this header-only selection in the ordinary and
+  profiling WebGPU recipes after the F32 small-M specialization.
+- **Validation and limits:** the complete-provider recorder verifies selection,
+  dispatch, cache isolation and fallback. The expanded software WebGPU
+  comparisons covered bitwise output and guard equality, including padded
+  strides and partial column tiles. Timing used N=32, 96 and 128. Physical-device
+  and full-model throughput remain unmeasured.
+- **Removal:** retire the extension when upstream supplies an equivalent BF16
+  geometry. Review its conversion, accumulation order and dispatch on pin changes.
