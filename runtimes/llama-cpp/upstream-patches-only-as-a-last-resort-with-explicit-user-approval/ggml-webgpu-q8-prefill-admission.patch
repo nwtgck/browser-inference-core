@@ -1,0 +1,27 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3463,5 +3463,14 @@
+                            ggml_is_contiguous(context.src0) && ggml_is_contiguous(context.src1) &&
+                            ggml_is_contiguous(context.dst);
+-        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4 || q2_c8) &&
++        const bool q8_extra_wide = (n >= 64 && n <= 128 && ((k == 320 && m == 10240) || (k == 640 && m == 2560))) ||
++                                   (n == 128 && ((k == 2560 && (m == 6144 || m == 10240 || m == 12288)) ||
++                                                 (k == 6144 && m == 2560) || (k == 5120 && m == 6144)));
++        const bool q8_extra_narrow = n >= 64 && n <= 128 &&
++                                     ((k == 10240 && m == 320) || (k == 2560 && m == 640));
++        const bool q8_extra_pairs = key.src0_type == GGML_TYPE_Q8_0 &&
++                                    context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
++                                    context.wg_mem_limit_bytes >= 4 * 1024 &&
++                                    (q8_extra_wide || q8_extra_narrow);
++        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4 || q2_c8 || q8_extra_pairs) &&
+             key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
+             context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
+@@ -3470,5 +3479,7 @@
+             WEBGPU_MUL_MAT_WG_SIZE_N == 8 && WEBGPU_MUL_MAT_REG_TILE_K_QUANT == 32) {
+             // Keep small column counts and partial row tiles on the existing geometry.
+-            key.shared_mode = !q8_c4 && context.dst->ne[0] >= 64 && context.dst->ne[0] % 64 == 0 &&
++            const bool q8_keep_tile_width = q8_c4 || (q8_extra_pairs &&
++                (q8_extra_narrow || context.wg_mem_limit_bytes < 6 * 1024));
++            key.shared_mode = !q8_keep_tile_width && context.dst->ne[0] >= 64 && context.dst->ne[0] % 64 == 0 &&
+                               context.dst->ne[1] >= 32 ? shared_mode::half_pairs_m8 : shared_mode::half_pairs;
+         }

@@ -1044,6 +1044,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q8-prefill-admission.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse paired-half Q8 prefill tiles for more projection shapes',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

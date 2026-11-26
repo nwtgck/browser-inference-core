@@ -400,6 +400,27 @@ static void all(const std::filesystem::path & output) {
     cases.push_back(q8(10208, 320, 128, 0, 40));
     cases.push_back(q8(10240, 384, 128, 0, 48));
     cases.push_back(q8(10240, 320, 127, 0, 40));
+    const auto q8_pairs = [&](int64_t k, int64_t m, int64_t n, unsigned mode, uint32_t grid, uint32_t shared_bytes) {
+        auto input = q8(k, m, n, mode, grid);
+        input.shared_bytes = shared_bytes;
+        cases.push_back(input);
+    };
+    for (const int64_t n : {64, 95, 128}) {
+        const uint32_t columns = (n + 31) / 32;
+        q8_pairs(320, 10240, n, 2, 160 * columns, 6144);
+        q8_pairs(640, 2560, n, 2, 40 * columns, 6144);
+        q8_pairs(10240, 320, n, 1, 10 * columns, 4096);
+        q8_pairs(2560, 640, n, 1, 20 * columns, 4096);
+    }
+    for (const auto [k, m, groups] :
+         {std::tuple{2560, 6144, 384}, {2560, 10240, 640}, {2560, 12288, 768}, {6144, 2560, 160}, {5120, 6144, 384}}) {
+        q8_pairs(k, m, 128, 2, groups, 6144);
+    }
+    q8_pairs(320, 10240, 95, 1, 960, 6143);
+    q8_pairs(320, 10240, 95, 0, 960, 4095);
+    q8_pairs(320, 10240, 63, 0, 640, 6144);
+    q8_pairs(320, 10240, 129, 0, 1600, 6144);
+    q8_pairs(320, 10241, 95, 0, 963, 6144);
     auto long_k_batched = q8(10240, 320, 128, 0, 80);
     long_k_batched.batch2 = 2;
     cases.push_back(long_k_batched);
