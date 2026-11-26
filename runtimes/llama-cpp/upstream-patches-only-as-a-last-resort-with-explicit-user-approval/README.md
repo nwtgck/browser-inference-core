@@ -684,8 +684,8 @@ not establish target-device speed.
   words. Both use the existing half scale and eight F32 products per lane.
 - **Contract** The shader uses the existing quantized weight layout, bindings,
   lane mapping and reductions. The variant also covers the existing fused Q8
-  gate where that factory selects the independent kernel. Non-indexed
-  cooperative matvecs continue using the per-integer loads.
+  gate where that factory selects the independent kernel. The short cooperative
+  variant also enables the paired loader.
 - **Validation** Software WebGPU compares output bits and a Float64 reference
   for the main shapes and for odd block counts, a row tail and longer vectors.
   Indexed cases exercise broadcast and per-slot inputs with repeated and
@@ -694,6 +694,21 @@ not establish target-device speed.
 - **Alternative** Use the canonical per-integer unaligned loads. Re-audit the
   patch when upstream changes Q8_0 block size or divides the block differently
   across lanes. Remove it when upstream provides equivalent loading.
+
+## Single-block lanes in cooperative Q8_0 matvecs
+
+- **Patch** `ggml-webgpu-q8-short-decode.patch` against llama.cpp `c212d25ad`.
+- **Scope** The reduced-workgroup Q8_0 × F32 single-column variant visits at
+  most one 32-value block per lane. Process it directly and use the paired
+  weight loader. Preserve the weight layout, workgroup geometry, arithmetic
+  and subgroup reduction. The variant has its own cache identity, so forced
+  profile workgroups and generic matvecs can still use the full block loop.
+- **Validation** Compare paired software WebGPU runs on Flash Next weight
+  slices and use the real provider factory to check cache identity and the
+  short-workgroup bound. Software timings cover the isolated matvec.
+- **Alternative and removal** Use the existing cooperative loop. Re-audit the
+  workgroup bound if upstream changes lane assignment, and remove the patch
+  when upstream specializes this case.
 
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
