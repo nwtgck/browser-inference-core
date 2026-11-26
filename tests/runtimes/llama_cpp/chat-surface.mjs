@@ -73,7 +73,18 @@ export async function checkChatSurface({ core, template }) {
     const messages = [{ role: 'user', content: 'Weather in Tokyo?' }];
     const inputs = own(new native.common_chat_templates_inputs());
     check(Number(own(inputs.messages).size()) === 0, 'Native empty message default changed');
-    check(inputs.tool_choice === native.common_chat_tool_choice.COMMON_CHAT_TOOL_CHOICE_AUTO, 'Native tool choice default changed');
+    const modes = native.common_chat_tool_choice;
+    check(inputs.tool_choice === modes.COMMON_CHAT_TOOL_CHOICE_AUTO, 'Native tool choice default changed');
+    for (const [name, mode] of [
+      ['none', modes.COMMON_CHAT_TOOL_CHOICE_NONE],
+      ['required', modes.COMMON_CHAT_TOOL_CHOICE_REQUIRED],
+      ['auto', modes.COMMON_CHAT_TOOL_CHOICE_AUTO],
+    ]) {
+      const parsedMode = native.common_chat_tool_choice_parse_oaicompat(name);
+      check(parsedMode === mode, `Unexpected tool choice mode for ${name}`);
+      inputs.tool_choice = parsedMode;
+      check(inputs.tool_choice === mode, `Tool choice did not round-trip for ${name}`);
+    }
     inputs.messages = own(native.common_chat_msgs_parse_oaicompat(json(messages)));
     inputs.tools = own(native.common_chat_tools_parse_oaicompat(json(tools)));
     inputs.enable_thinking = false;
