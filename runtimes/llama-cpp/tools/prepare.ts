@@ -209,6 +209,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       const patches: PatchReceipt[] = [];
       const selections: PreparationReceipt['selections'] = [];
       let shaders: Record<string, Record<string, FileIdentity>> = {};
+      patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingLoopMix }));
       if (webgpu) {
         const nativeContext = join(scratch.root, 'native-context.cpp');
         switch (target) {

@@ -1065,6 +1065,12 @@ export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
 }
 
 export const modelPatches = {
+  inklingLoopMix: {
+    file: 'inkling-loop-shared-mix-state.patch',
+    target: 'llama',
+    reason: 'Share the previous-pass state bank among Inkling loop layers.',
+    files: ['src/models/inkling2.cpp', 'src/models/inkling2-loop.cpp', 'src/models/models.h'],
+  },
   fileRows: {
     file: 'qwen4exp-file-backed-rows.patch',
     target: 'llama',

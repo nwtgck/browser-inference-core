@@ -1,13 +1,13 @@
 diff --git a/src/models/inkling2.cpp b/src/models/inkling2.cpp
-index d583471..341b019 100644
+index 9a45a5f..2d5d4a1 100644
 --- a/src/models/inkling2.cpp
 +++ b/src/models/inkling2.cpp
-@@ -202,7 +202,12 @@ ggml_tensor * llama_model_inkling2::graph::mix(const std::vector<ggml_tensor *>
-     ggml_tensor * scores = ggml_mul_mat(ctx0, states, queries);
+@@ -210,7 +210,12 @@ ggml_tensor * llama_model_inkling2::graph::mix(const mix_state & state, ggml_ten
+     ggml_tensor * scores = ggml_mul_mat(ctx0, state.keys, queries);
      scores = ggml_soft_max_ext(ctx0, scores, nullptr, 1.0f/sqrtf(n_embd), 0.0f);
  
--    return ggml_mul_mat(ctx0, scores, ggml_cont(ctx0, ggml_transpose(ctx0, states))); // [n_queries, n_embd, n_tokens]
-+    auto * mixed = ggml_mul_mat(ctx0, scores, ggml_cont(ctx0, ggml_transpose(ctx0, states))); // [n_queries, n_embd, n_tokens]
+-    return ggml_mul_mat(ctx0, scores, state.values); // [n_queries, n_embd, n_tokens]
++    auto * mixed = ggml_mul_mat(ctx0, scores, state.values); // [n_queries, n_embd, n_tokens]
 +    if (query->ne[1] == 1) {
 +        return ggml_reshape_3d(ctx0, mixed, n_embd, 1, n_tokens);
 +    }
@@ -16,7 +16,7 @@ index d583471..341b019 100644
  }
  
  // causal short convolution with a residual; dynamic adds input-dependent taps per head
-@@ -254,7 +259,10 @@ ggml_tensor * llama_model_inkling2::graph::convolve(
+@@ -262,7 +267,10 @@ ggml_tensor * llama_model_inkling2::graph::convolve(
  // mix a cross-pass message into a looped layer input: (1 - forget)*cur + gain*message, both gated on cur and message
  ggml_tensor * llama_model_inkling2::graph::control(ggml_tensor * cur, ggml_tensor * message, const loop_layer & loop, int ctrl) {
      // cur and message as two rows of one rms_norm, then side by side: [norm(cur); norm(message)]
@@ -28,7 +28,7 @@ index d583471..341b019 100644
      gate = ggml_reshape_2d(ctx0, ggml_rms_norm(ctx0, gate, 1e-6f), 2*n_embd, n_tokens);
      gate = build_lora_mm(loop.ctrl_down[ctrl], gate);
  
-@@ -298,9 +306,17 @@ ggml_tensor * llama_model_inkling2::graph::build_layer(int il, int ip, ggml_tens
+@@ -306,9 +314,17 @@ ggml_tensor * llama_model_inkling2::graph::build_layer(int il, int ip, ggml_tens
      const int64_t n_embd_head  = hparams.n_embd_head_k(il);
      const int64_t n_embd_k_gqa = n_embd_head*n_head_kv;
  
@@ -47,7 +47,7 @@ index d583471..341b019 100644
      };
  
      ggml_tensor * state   = recr->mctx->get_r_l(il);
-@@ -314,7 +330,7 @@ ggml_tensor * llama_model_inkling2::graph::build_layer(int il, int ip, ggml_tens
+@@ -322,7 +338,7 @@ ggml_tensor * llama_model_inkling2::graph::build_layer(int il, int ip, ggml_tens
      if (layer.attn_res_query) {
          ggml_tensor * mixed = mix(blocks, cur, layer.attn_res_query);
          for (int j = 0; j < 3; ++j) {

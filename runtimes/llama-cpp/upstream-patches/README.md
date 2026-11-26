@@ -1640,6 +1640,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove this patch when upstream supplies equivalent selection for these
   packed formats.
 
+## Shared message bank for Inkling loop passes
+
+- **Patch** `inkling-loop-shared-mix-state.patch` against llama.cpp `07ba74babd`.
+- **Scope** Share the normalized state bank's final concatenation and
+  contiguous transpose among the layers that read the same previous pass.
+  Keep upstream's normalized stack reuse and each layer's own query, scores,
+  softmax and weighted sum. The first pass has no previous bank.
+- **Integration** Apply before the WebGPU row-view patch. The row-view layout,
+  visit order and recurrent cache slots retain their existing definitions.
+- **Validation and removal** Check logits and saved state with a loaded loop
+  fixture across prefill and continued generation. Shared values are graph
+  dependencies and can live until the last reader. Recheck peak allocation
+  and transfer cost when changing the scheduler or model layout. Remove the
+  patch when upstream shares the same bank.
+
 ## Packed row views in the Inkling graph
 
 - **Patch** `inkling-packed-row-views.patch` against llama.cpp `07ba74babd`.

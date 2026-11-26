@@ -1,0 +1,85 @@
+diff --git a/src/models/inkling2-loop.cpp b/src/models/inkling2-loop.cpp
+index 1b9455b..5f7793a 100644
+--- a/src/models/inkling2-loop.cpp
++++ b/src/models/inkling2-loop.cpp
+@@ -94,11 +94,10 @@ llama_model_inkling2_loop::graph::graph(const llm_graph_params & params) : llama
+     const auto prelude_blocks = blocks;
+     for (uint32_t pass = 0; pass < m.n_passes; ++pass) {
+         // the bank of the previous pass: its blocks after the first core block, and its output
+-        std::vector<ggml_tensor *> bank;
+-        ggml_tensor * bank_out = nullptr;
++        mix_state bank_state{};
+         if (pass > 0) {
+-            bank.assign(blocks.begin() + prelude_blocks.size() + 1, blocks.end());
+-            bank_out = cur;
++            const std::vector<ggml_tensor *> bank(blocks.begin() + prelude_blocks.size() + 1, blocks.end());
++            bank_state = build_mix_state(bank, cur);
+             cur = prelude;
+             blocks = prelude_blocks;
+         }
+@@ -110,7 +109,7 @@ llama_model_inkling2_loop::graph::graph(const llm_graph_params & params) : llama
+                 continue;
+             }
+             const auto & loop = m.loop_layers[ip - start];
+-            cur = build_layer(il, ip, cur, blocks, mix(bank, bank_out, loop.msg_query), &loop);
++            cur = build_layer(il, ip, cur, blocks, mix(bank_state, loop.msg_query), &loop);
+         }
+     }
+ 
+diff --git a/src/models/inkling2.cpp b/src/models/inkling2.cpp
+index d583471..9a45a5f 100644
+--- a/src/models/inkling2.cpp
++++ b/src/models/inkling2.cpp
+@@ -187,22 +187,30 @@ ggml_tensor * llama_model_inkling2::graph::mix_stack(const std::vector<ggml_tens
+     return mix_stacks[list] = res;
+ }
+ 
+-// attention over the depth: mix the earlier block outputs and cur with learned queries
+-ggml_tensor * llama_model_inkling2::graph::mix(const std::vector<ggml_tensor *> & blocks, ggml_tensor * cur, ggml_tensor * query) {
++llama_model_inkling2::graph::mix_state llama_model_inkling2::graph::build_mix_state(
++        const std::vector<ggml_tensor *> & blocks, ggml_tensor * cur) {
+     // [norm(b_n-1), ..., norm(b_0), norm(cur)]
+     ggml_tensor * states = mix_stack({cur});
+     if (!blocks.empty()) {
+         states = ggml_concat(ctx0, mix_stack(blocks), states, 1);
+     }
++    return {states, ggml_cont(ctx0, ggml_transpose(ctx0, states))};
++}
++
++// attention over the depth: mix the earlier block outputs and cur with learned queries
++ggml_tensor * llama_model_inkling2::graph::mix(const std::vector<ggml_tensor *> & blocks, ggml_tensor * cur, ggml_tensor * query) {
++    return mix(build_mix_state(blocks, cur), query);
++}
+ 
++ggml_tensor * llama_model_inkling2::graph::mix(const mix_state & state, ggml_tensor * query) {
+     // one token needs no copy of the queries
+     ggml_tensor * queries = n_tokens == 1 ? query :
+         ggml_repeat(ctx0, query, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, query->ne[1], n_tokens));
+ 
+-    ggml_tensor * scores = ggml_mul_mat(ctx0, states, queries);
++    ggml_tensor * scores = ggml_mul_mat(ctx0, state.keys, queries);
+     scores = ggml_soft_max_ext(ctx0, scores, nullptr, 1.0f/sqrtf(n_embd), 0.0f);
+ 
+-    return ggml_mul_mat(ctx0, scores, ggml_cont(ctx0, ggml_transpose(ctx0, states))); // [n_queries, n_embd, n_tokens]
++    return ggml_mul_mat(ctx0, scores, state.values); // [n_queries, n_embd, n_tokens]
+ }
+ 
+ // causal short convolution with a residual; dynamic adds input-dependent taps per head
+diff --git a/src/models/models.h b/src/models/models.h
+index 85b97dd..97adf79 100644
+--- a/src/models/models.h
++++ b/src/models/models.h
+@@ -2674,6 +2674,13 @@ struct llama_model_inkling2 : public llama_model_base {
+         struct no_build {};
+         graph(const llm_graph_params & params, no_build) : llm_graph_context(params) {}
+ 
++        struct mix_state {
++            ggml_tensor * keys;
++            ggml_tensor * values;
++        };
++        mix_state build_mix_state(const std::vector<ggml_tensor *> & blocks, ggml_tensor * cur);
++        ggml_tensor * mix(const mix_state & state, ggml_tensor * query);
++
+         // the inputs and the token embeddings
+         ggml_tensor * build_inputs();
+         // cache slot il of physical layer ip; messages [LOOP_CTRL_COUNT, n_embd, n_tokens] are mixed into its inputs
