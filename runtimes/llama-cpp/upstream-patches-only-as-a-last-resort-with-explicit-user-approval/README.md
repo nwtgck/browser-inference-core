@@ -917,6 +917,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
 
+## Packed bytes for wide Q6_K decoding
+
+- **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use the existing independent Q6_K matvec path with aligned F32
+  activations, K1536 through K5120, and at least 8,192 output rows.
+- **Contract** Share the block's half-word offset across the quantized loads
+  and reconstruct four six-bit codes at a time. Read each four-element F32
+  activation group as a vector. Keep the original scalar parameter units,
+  bindings, arithmetic order, subgroup geometry, and tensor storage.
+- **Validation and removal** Check selection and cache reuse at the alignment
+  and shape boundaries. Compare real model weight slices against the original
+  shader and an independent Q6_K reference. Remove once upstream provides
+  equivalent field and activation loads.
+
 ## Wider indexed output tiles
 
 - **Patch** `ggml-webgpu-indexed-wide-row-tiles.patch` against llama.cpp

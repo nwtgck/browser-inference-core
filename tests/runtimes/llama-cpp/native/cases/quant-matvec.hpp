@@ -464,6 +464,40 @@ size_t run(wgpu::Device device, wgpu::Instance instance, const std::filesystem::
     return checks;
 }
 
+static void packed_vec4(const std::filesystem::path & output) {
+    for (const uint32_t subgroup : {16u, 32u}) {
+        auto ctx = recording_context();
+        const uint32_t rows = (128u / subgroup) * 4u;
+        const auto check = [&](int64_t k, int64_t m, bool aligned, bool packed) {
+            q4_current::Fixture fixture(GGML_TYPE_Q6_K, k, m);
+            fixture.min_sg = fixture.max_sg = subgroup;
+            const auto input = fixture.context<ggml_webgpu_shader_lib_context>();
+            const auto pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(input, false, aligned);
+            require((pipeline.name.find("_packed_vec4_") != std::string::npos) == packed);
+            const auto & shape = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+            require(shape.vec_size == 1 && shape.wg_size == 128 && shape.outputs_per_wg == rows);
+            require(ctx->shader_lib->get_mul_mat_vec_pipeline(input, false, aligned).pipeline.Get() ==
+                    pipeline.pipeline.Get());
+            if (aligned) {
+                require(production_dispatch(input, 65535, false, true) ==
+                        std::array<uint32_t, 2>{uint32_t(CEIL_DIV(m, rows)), 1});
+            }
+            if (!output.empty() && k == 2560 && m == 8193) {
+                std::ofstream shader(output / (pipeline.name + ".wgsl"));
+                shader << pipeline.pipeline.Get()->code;
+                require(bool(shader));
+            }
+            return pipeline.pipeline.Get();
+        };
+        require(check(2560, 8193, true, true) != check(2560, 8193, false, false));
+        check(1536, 8192, true, true);
+        check(5120, 8192, true, true);
+        check(5376, 8192, true, false);
+        check(2560, 8191, true, false);
+        check(2560, 8193, true, true);
+    }
+}
+
 } // namespace q6_current
 
 static void check_long_k_matvecs(ggml_webgpu_shader_lib & library, const std::filesystem::path & output) {
@@ -589,6 +623,7 @@ static int run_quant_matvec_cases(int argc, char ** argv) {
                                       std::make_shared<ggml_webgpu_optional::DeviceGeneration>());
         const size_t q4_checks = q4_current::run(library, scalar, argv[1]);
         const size_t q6_checks = q6_current::run(device, instance, argv[1]);
+        q6_current::packed_vec4(argv[1]);
         check_long_k_matvecs(library, argv[1]);
         check_dense_q2_matvecs(library, argv[1]);
         BICORE_CHECK(q4_checks + q6_checks > 9000 && created > 100);
