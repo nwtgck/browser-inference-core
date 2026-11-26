@@ -870,6 +870,20 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation** Complete native providers exercise the warm allocation bound, uniform uploads, indexed pipeline lifetime and existing direct/indirect routes in both modes. CPU recorder timing covers warm encoding only.
 - **Removal** Remove the stage and its tests when upstream provides equivalent call-site assembly and cached pipeline ownership.
 
+## Bounded storage for a single dispatch
+
+- **Patch** `ggml-webgpu-single-dispatch-storage.patch`.
+- **Scope** Use local storage for the bind group and parameter offset of one
+  dispatch. Keep up to 16 bindings on the stack, including the uniform slice.
+  Larger binding lists and multi-dispatch batches use dynamic storage.
+- **Contract** The cache reads each binding list synchronously and owns its
+  retained keys. Uniform placement, command order, direct and indirect launch,
+  and profile label ownership follow the same path as a batch.
+- **Validation and removal** The ordinary and GPU-profile recorder cases cover
+  cold and warm encoding through both single-dispatch entry points, including
+  15 storage entries, uniform packing, and separate and batched compute passes.
+  Retire the patch when upstream provides equivalent bounded staging storage.
+
 ## Profile query capacity with multi-dispatch operations
 
 - **Patch:** `ggml-webgpu-profile-query-budget.patch`.

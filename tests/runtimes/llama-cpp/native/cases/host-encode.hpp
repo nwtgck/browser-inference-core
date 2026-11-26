@@ -26,6 +26,7 @@ static void run(Mode mode, size_t parameter_count, size_t storage_count, bool lo
     descriptor.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
     auto data = ctx->global_ctx->device.CreateBuffer(&descriptor);
     const auto count = mode == Mode::multi0 ? 0u : mode == Mode::multi74 ? 74u : mode == Mode::multi2 ? 2u : 1u;
+    const bool cacheable = storage_count + 1 <= webgpu_bind_group_cache::max_buffer_entries;
     const std::string original_name = long_name ? "mul_mat_vec_q8_0_f32_independent_sg16_wg128_r4" : "test";
     webgpu_pipeline pipeline{wgpu::ComputePipeline::Acquire(new WGPUComputePipelineImpl{1, 42, "", "host"}),
                              original_name, nullptr};
@@ -85,37 +86,47 @@ static void run(Mode mode, size_t parameter_count, size_t storage_count, bool lo
         for (size_t index = 0; index < count; ++index)
             order += separate_pass ? "CPBDE" : "PBD";
         BICORE_CHECK(std::string(commands.order.begin(), commands.order.end()) == order);
-        BICORE_CHECK(ctx->bind_group_cache.slots.size() == count);
+        BICORE_CHECK(ctx->bind_group_cache.slots.size() == (cacheable ? count : 0));
         for (size_t index = 0; index < count; ++index) {
-            const auto & slot = ctx->bind_group_cache.slots[index];
-            BICORE_CHECK(slot.pipeline.Get() == pipeline.pipeline.Get() && slot.bindings.size() == storage_count + 1);
-            for (size_t binding = 0; binding < storage_count; ++binding) {
-                const auto & entry = slot.bindings[binding];
-                BICORE_CHECK(entry.binding_index == binding && entry.buffer.Get() == data.Get());
-                BICORE_CHECK(entry.offset == 4 * binding && entry.size == 4);
+            if (cacheable) {
+                const auto & slot = ctx->bind_group_cache.slots[index];
+                BICORE_CHECK(slot.pipeline.Get() == pipeline.pipeline.Get() &&
+                             slot.bindings.size() == storage_count + 1);
+                for (size_t binding = 0; binding < storage_count; ++binding) {
+                    const auto & entry = slot.bindings[binding];
+                    BICORE_CHECK(entry.binding_index == binding && entry.buffer.Get() == data.Get());
+                    BICORE_CHECK(entry.offset == 4 * binding && entry.size == 4);
+                }
+                const auto & uniform = slot.bindings.back();
+                BICORE_CHECK(uniform.binding_index == storage_count &&
+                             uniform.buffer.Get() == ctx->param_arena.buffer.Get());
+                BICORE_CHECK(uniform.offset == 256 * index && uniform.size == 128);
+                if (!repetition)
+                    keys[index] = key(slot);
+                BICORE_CHECK(keys[index] == key(slot));
             }
-            const auto & uniform = slot.bindings.back();
-            BICORE_CHECK(uniform.binding_index == storage_count &&
-                         uniform.buffer.Get() == ctx->param_arena.buffer.Get());
-            BICORE_CHECK(uniform.offset == 256 * index && uniform.size == 128);
             for (size_t word = 0; word < 64; ++word) {
                 uint32_t value = 0;
                 std::memcpy(&value, ctx->param_arena.upload_data.data() + 256 * index + 4 * word, 4);
                 BICORE_CHECK(value == (word < parameter_count ? seed + uint32_t(word + 100 * index) : 0));
             }
-            if (!repetition)
-                keys[index] = key(slot);
-            BICORE_CHECK(keys[index] == key(slot));
             const auto & dispatch = commands.dispatches[index];
             BICORE_CHECK(dispatch.x == 3 + index && dispatch.y == 2 && dispatch.z == 1);
         }
         if (repetition) {
-            BICORE_CHECK(resources.groups_created == groups && resources.layouts_created == layouts);
-            // At most two batch arrays and one binding list (including the
-            // uniform slice) per dispatch. Caller params/names need no copies.
-            size_t call_budget = count ? 2 + count : 0;
-            size_t byte_budget =
-                count * (sizeof(wgpu::BindGroup) + sizeof(size_t) + (storage_count + 1) * sizeof(wgpu::BindGroupEntry));
+            const unsigned new_groups = cacheable ? 0 : count;
+            BICORE_CHECK(resources.groups_created == groups + new_groups &&
+                         resources.layouts_created == layouts + new_groups);
+            // Single dispatches fit their group, offset and entries on the stack.
+            // A batch retains its two arrays and one binding list per dispatch.
+            const bool batch = count > 1;
+            const size_t binding_lists = batch || !cacheable ? count : 0;
+            size_t call_budget = (batch ? 2 : 0) + binding_lists;
+            size_t byte_budget = (batch ? count * (sizeof(wgpu::BindGroup) + sizeof(size_t)) : 0) +
+                                 binding_lists * (storage_count + 1) * sizeof(wgpu::BindGroupEntry);
+            // The recorder allocates a small object for each uncached layout.
+            call_budget += new_groups;
+            byte_budget += new_groups * sizeof(WGPUBindGroupLayoutImpl);
 #ifdef GGML_WEBGPU_GPU_PROFILE
             // Profile labels are owned by the result. Geometric vector growth
             // stays below four string objects per output; a long label adds
@@ -139,8 +150,10 @@ static void run(Mode mode, size_t parameter_count, size_t storage_count, bool lo
         entries.clear();
         dispatches.clear();
         pipeline.name = "x";
-        for (size_t index = 0; index < count; ++index)
-            BICORE_CHECK(keys[index] == key(ctx->bind_group_cache.slots[index]));
+        if (cacheable) {
+            for (size_t index = 0; index < count; ++index)
+                BICORE_CHECK(keys[index] == key(ctx->bind_group_cache.slots[index]));
+        }
 #ifdef GGML_WEBGPU_GPU_PROFILE
         for (const auto & name : result.pipeline_names)
             BICORE_CHECK(name == original_name);
@@ -317,7 +330,11 @@ static void host_encoding_contracts() {
     ++cases;
     host_encoding::run(Mode::multi2, 8, 3, true, false);
     ++cases;
-    BICORE_CHECK(cases == 164);
+    host_encoding::run(Mode::lvalue, 8, 15, true, false);
+    ++cases;
+    host_encoding::run(Mode::multi1, 8, 16, false, false);
+    ++cases;
+    BICORE_CHECK(cases == 166);
     host_encoding::guards();
     host_encoding::matmul_callers(false);
     host_encoding::matmul_callers(true);

@@ -1,0 +1,117 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index 7ba1491..f88300f 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -32,6 +32,7 @@
+ 
+ #include <webgpu/webgpu_cpp.h>
+ 
++#include <array>
+ #include <atomic>
+ #include <cstdint>
+ #include <cstring>
+@@ -45,6 +46,7 @@
+ #include <mutex>
+ #include <numeric>
+ #include <optional>
++#include <span>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -254,7 +256,7 @@ struct webgpu_bind_group_cache {
+     static wgpu::BindGroup create(wgpu::Device & device,
+                                    const wgpu::ComputePipeline & pipeline,
+                                    uint32_t group_index,
+-                                   const std::vector<wgpu::BindGroupEntry> & entries,
++                                   std::span<const wgpu::BindGroupEntry> entries,
+                                    const char * label) {
+         wgpu::BindGroupDescriptor descriptor;
+         descriptor.layout = pipeline.GetBindGroupLayout(group_index);
+@@ -267,7 +269,7 @@ struct webgpu_bind_group_cache {
+     wgpu::BindGroup get(wgpu::Device & device,
+                          const wgpu::ComputePipeline & pipeline,
+                          uint32_t group_index,
+-                         const std::vector<wgpu::BindGroupEntry> & entries,
++                         std::span<const wgpu::BindGroupEntry> entries,
+                          const char * label,
+                          uint64_t current_generation) {
+         check_generation(current_generation);
+@@ -800,35 +802,61 @@ template<class Dispatch, class Launch = webgpu_dispatch_direct>
+ static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches,
+                                                         size_t dispatch_count, const Launch & launch = {}) {
+     ctx->shader_lib->require_healthy_device();
+-    webgpu_encoded_op            result = {};
+-    std::vector<wgpu::BindGroup> bind_groups;
+-    std::vector<size_t>          param_offsets;
++    webgpu_encoded_op result = {};
++    const bool single = dispatch_count == 1;
++    wgpu::BindGroup single_group;
++    size_t single_offset = 0;
++    std::vector<wgpu::BindGroup> batch_groups;
++    std::vector<size_t> batch_offsets;
+     result.num_kernels = dispatch_count;
+     // Invalid oversized batches still fail at the existing arena guard without
+     // reserving unbounded scratch storage first.
+     const size_t reserve_count = dispatch_count < ctx->param_arena.slot_count ? dispatch_count : ctx->param_arena.slot_count;
+-    bind_groups.reserve(reserve_count);
+-    param_offsets.reserve(reserve_count);
++    if (!single) {
++        batch_groups.reserve(reserve_count);
++        batch_offsets.reserve(reserve_count);
++    }
+ 
+     for (size_t i = 0; i < dispatch_count; i++) {
+         const auto & dispatch = dispatches[i];
+         const size_t                 param_size   = dispatch.params.size() * sizeof(uint32_t);
+         const size_t                 param_offset = ctx->param_arena.alloc_slot(param_size);
+ 
+-        std::vector<wgpu::BindGroupEntry> entries;
+-        entries.reserve(dispatch.bind_group_entries.size() + 1);
+-        entries.insert(entries.end(), dispatch.bind_group_entries.begin(), dispatch.bind_group_entries.end());
+-        uint32_t                          params_binding_num = entries.size();
+-        entries.push_back(ggml_webgpu_make_bind_group_entry(params_binding_num, ctx->param_arena.buffer, param_offset,
+-                                                            ctx->param_arena.slot_size));
+-
+-        bind_groups.push_back(ctx->bind_group_cache.get(ctx->global_ctx->device, dispatch.pipeline.pipeline, 0,
+-                                                        entries, dispatch.pipeline.name.c_str(),
+-                                                        ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed)));
+-        param_offsets.push_back(param_offset);
++        const auto & storage = dispatch.bind_group_entries;
++        auto uniform = ggml_webgpu_make_bind_group_entry(storage.size(), ctx->param_arena.buffer, param_offset,
++                                                         ctx->param_arena.slot_size);
++        const auto get_group = [&](std::span<const wgpu::BindGroupEntry> entries) {
++            return ctx->bind_group_cache.get(ctx->global_ctx->device, dispatch.pipeline.pipeline, 0, entries,
++                                             dispatch.pipeline.name.c_str(),
++                                             ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed));
++        };
++        if (single && storage.size() < webgpu_bind_group_cache::max_buffer_entries) {
++            std::array<wgpu::BindGroupEntry, webgpu_bind_group_cache::max_buffer_entries> entries;
++            std::copy(storage.begin(), storage.end(), entries.begin());
++            entries[storage.size()] = std::move(uniform);
++            single_group = get_group({entries.data(), storage.size() + 1});
++        } else {
++            std::vector<wgpu::BindGroupEntry> entries;
++            entries.reserve(storage.size() + 1);
++            entries.insert(entries.end(), storage.begin(), storage.end());
++            entries.push_back(std::move(uniform));
++            auto group = get_group(entries);
++            if (single) {
++                single_group = std::move(group);
++            } else {
++                batch_groups.push_back(std::move(group));
++            }
++        }
++        if (single) {
++            single_offset = param_offset;
++        } else {
++            batch_offsets.push_back(param_offset);
++        }
+     }
+ 
+-    for (size_t i = 0; i < param_offsets.size(); i++) {
++    const auto * bind_groups = single ? &single_group : batch_groups.data();
++    const auto * param_offsets = single ? &single_offset : batch_offsets.data();
++    for (size_t i = 0; i < dispatch_count; i++) {
+ #ifdef GGML_WEBGPU_BATCH_PARAM_UPLOADS
+         ctx->param_arena.stage(param_offsets[i], dispatches[i].params.data(),
+                                dispatches[i].params.size() * sizeof(uint32_t));
