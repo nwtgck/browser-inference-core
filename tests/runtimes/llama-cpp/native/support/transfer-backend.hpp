@@ -64,6 +64,12 @@ struct Backend {
         device.iface.get_name = kind == BackendKind::webgpu ? +[](ggml_backend_dev_t) { return "recorded-webgpu"; }
                                                             : +[](ggml_backend_dev_t) { return "controlled-host"; };
         device.iface.get_description = device.iface.get_name;
+        device.iface.get_props = [](ggml_backend_dev_t value, ggml_backend_dev_props * props) {
+            *props = {};
+            props->name = value->iface.get_name(value);
+            props->description = value->iface.get_description(value);
+            props->type = value->iface.get_type(value);
+        };
         device.iface.get_buffer_type = [](ggml_backend_dev_t value) { return &owner(value).type; };
         device.iface.supports_buft = [](ggml_backend_dev_t value, ggml_backend_buffer_type_t requested) {
             return requested->device == value;

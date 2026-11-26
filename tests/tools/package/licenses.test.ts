@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
-import { embeddedComments, makeLicenseIndex, writeLicenseIndex, validateLicenseIndex, noticeOwner, collectNotices } from '#tools/package/licenses';
+import { checkNoticeSource, embeddedComments, makeLicenseIndex, writeLicenseIndex, validateLicenseIndex, noticeOwner, collectNotices } from '#tools/package/licenses';
 import type { PackageMetadata } from '#dto/shared';
 import { write } from './fixtures.test-support.js';
 
@@ -52,6 +52,7 @@ test('llama.cpp UI notices retain their original bytes under each upstream packa
     ['ui/apps/chat/alias/LICENSE', 'llama-chat'],
     ['ui/apps/chat/src/lib/vendors/big-integer/LICENSE', 'big-integer'],
     ['ui/apps/chat/src/lib/vendors/nerdamer-prime/LICENSE', 'nerdamer-prime'],
+    ['ui/lib/harness/LICENSE', '@ggml-org/llama-harness'],
     ['ui/lib/ui/LICENSE', '@ggml-org/llama-ui'],
     ['ui/lib/voice/LICENSE', '@ggml-org/llama-voice'],
   ] as const;
@@ -68,6 +69,16 @@ test('llama.cpp UI notices retain their original bytes under each upstream packa
     assert.deepEqual(await readFile(join(directory, path)), await readFile(join(source, relative)));
   }
   await validateLicenseIndex({ ...options, index });
+});
+
+test('source preflight reports a newly added unclassified notice before package assembly', async () => {
+  await using temporary = await temporaryDirectory();
+  const source = join(temporary.root, 'llama.cpp');
+  await write({ path: join(source, 'LICENSE'), data: 'Upstream license' });
+  await write({ path: join(source, 'ui/lib/harness/LICENSE'), data: 'Harness license' });
+  assert.equal(await checkNoticeSource({ source }), 2);
+  await write({ path: join(source, 'ui/lib/new-library/LICENSE'), data: 'New library license' });
+  await assert.rejects(checkNoticeSource({ source }), /Unclassified native notice: llama\.cpp\/ui\/lib\/new-library\/LICENSE/u);
 });
 
 test('license validation rejects missing, duplicated, reassigned, extracted and unindexed documents', async () => {

@@ -114,7 +114,7 @@ const command=path.basename(process.argv[1]);
 fs.appendFileSync(process.env.CALLS,JSON.stringify({command,args,environment:{cwd:process.cwd()}})+'\\n');
 if(command==='git') process.stdout.write(process.env.LCB_SOURCE_COMMIT+'\\n');
 if(command==='ccache') process.stdout.write('ccache fixture\\n');
-if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
+if(command==='node'&&args[1]==='cache-plan'){
   const output=args[args.indexOf('--output')+1];
   fs.mkdirSync(path.dirname(output),{recursive:true});
   fs.writeFileSync(output,JSON.stringify({dawnKey:'dawn',emKey:'em',emRestorePrefix:'em-prefix',ccKey:'cc',ccRestorePrefix:'prefix',emStagingPath:'em',ccStagingPath:'cc',environment:{EM_CACHE:'fixture'}}));
@@ -136,11 +136,16 @@ if(command==='node'&&args[0]!=='node_modules/typescript/bin/tsc'){
     const npm = calls.filter(call => call.command === 'npm');
     assert.ok(npm.every(call => call.environment?.cwd === root));
     const compiler = calls.filter(call => call.command === 'node' && call.args[0] === 'node_modules/typescript/bin/tsc');
+    const noticeChecks = calls.filter(call => call.command === 'node' && call.args[1] === 'check-notices');
+    assert.deepEqual(noticeChecks.map(call => call.args), name === 'compile' ? [['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root]] : []);
     if (compile) {
       assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund']]);
       assert.deepEqual(compiler.map(call => call.args), [['node_modules/typescript/bin/tsc', '--project', `tsconfig.${runtime}.json`]]);
       const cache = calls.find(call => call.command === 'node' && call.args[1] === 'cache-plan');
       assert.ok(cache);
+      for (const check of noticeChecks) {
+        assert.ok(calls.indexOf(check) < calls.indexOf(cache));
+      }
       const args = [...cache.args];
       args[args.indexOf('--checkout-root') + 1] = checkoutRoot;
       await runProcess({ command: process.execPath, args, cwd: checkoutRoot, env: { kind: 'inherit', removePrefixes: [], overrides: { BIC_METRICS_MODE: 'off' } } });
@@ -329,7 +334,7 @@ if(command==='node'&&args.includes('tests/runtimes/speech-cpp/node-core-contract
   ]);
 });
 
-test('the existing host phase runs the four retained independent Python modules once', async () => {
+test('the host phase checks upstream notices first and runs the four retained independent Python modules once', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
   const recorder = `\
@@ -344,7 +349,9 @@ fs.appendFileSync(process.env.CALLS,JSON.stringify({command:path.basename(proces
   assert.equal(step.if, undefined);
   assert.equal(step['continue-on-error'], undefined);
   await executeShell({ root, script: offlineScript({ step }), environment: { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, CALLS: join(root, 'calls.jsonl') } });
-  const python = (await readCalls({ root })).filter(call => call.command === 'python3');
+  const calls = await readCalls({ root });
+  assert.deepEqual(calls[0], { command: 'node', args: ['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root], environment: {} });
+  const python = calls.filter(call => call.command === 'python3');
   assert.deepEqual(python.map(call => call.args), [[
     '-m', 'unittest',
     'tests.runtimes.llama_cpp.source.test_native_quantization',

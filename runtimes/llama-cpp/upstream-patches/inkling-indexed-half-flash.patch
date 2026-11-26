@@ -1,0 +1,153 @@
+diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
+index a96577f..3139c4b 100644
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -3137,6 +3137,31 @@ ggml_tensor * llm_graph_context::build_pos_bias(ggml_tensor * pos_bucket, ggml_t
+     return pos_bias;
+ }
+ 
++static bool relative_attention_cache_on_device(const ggml_tensor * cache, ggml_backend_dev_t device) {
++    const auto * root = cache->view_src ? cache->view_src : cache;
++    if (!root->buffer) {
++        return false;
++    }
++    const auto buffer_type = ggml_backend_buffer_get_type(root->buffer);
++    return ggml_backend_buft_get_device(buffer_type) == device &&
++           ggml_backend_dev_supports_buft(device, buffer_type);
++}
++
++static bool relative_attention_bias_matches(
++        const ggml_tensor * q, const ggml_tensor * k, const ggml_tensor * raw,
++        const ggml_tensor * table, const ggml_tensor * buckets) {
++    if (!raw || raw->type != GGML_TYPE_F16 || !ggml_is_contiguous(raw) ||
++        q->ne[1] < 1 || q->ne[3] < 1 || q->ne[1] > INT64_MAX / q->ne[3]) {
++        return false;
++    }
++    const auto flat_queries = q->ne[1] * q->ne[3];
++    return raw->ne[0] == k->ne[1] && raw->ne[1] == q->ne[1] && raw->ne[2] == 1 && raw->ne[3] == q->ne[3] &&
++           table && table->type == GGML_TYPE_F32 && ggml_is_contiguous(table) &&
++           table->ne[0] > 0 && table->ne[1] == q->ne[2] && table->ne[2] == flat_queries && table->ne[3] == 1 &&
++           buckets && buckets->type == GGML_TYPE_I32 && ggml_is_contiguous(buckets) && ggml_is_matrix(buckets) &&
++           buckets->ne[0] == raw->ne[0] && buckets->ne[1] == flat_queries;
++}
++
+ ggml_tensor * llm_graph_context::build_attn_mha(
+          ggml_tensor * q,
+          ggml_tensor * k,
+@@ -3150,7 +3175,8 @@ ggml_tensor * llm_graph_context::build_attn_mha(
+                float   kq_scale,
+                  int   il,
+          ggml_tensor * bias_table,
+-         ggml_tensor * bias_indices) const {
++         ggml_tensor * bias_indices,
++         const relative_half_mask * half_mask) const {
+     const bool v_trans = v->nb[1] > v->nb[2];
+ 
+     // split the batch into streams if needed
+@@ -3192,6 +3218,11 @@ ggml_tensor * llm_graph_context::build_attn_mha(
+             v = ggml_transpose(ctx0, v);
+         }
+ 
++        // Check the actual cache placement before any K/V casts hide it.
++        const auto device = half_mask && half_mask->backend ? ggml_backend_get_device(half_mask->backend) : nullptr;
++        const bool kv_resident = device && relative_attention_cache_on_device(k, device) &&
++                                           relative_attention_cache_on_device(v, device);
++
+         // this can happen when KV cache is not used (e.g. an embedding model with non-causal attn)
+         if (k->type == GGML_TYPE_F32) {
+             k = ggml_cast(ctx0, k, GGML_TYPE_F16);
+@@ -3215,7 +3246,22 @@ ggml_tensor * llm_graph_context::build_attn_mha(
+         ggml_flash_attn_ext_set_n_kv_max(cur, static_cast<int32_t>(n_kv_max));
+         ggml_prec_set_acc(cur, GGML_PREC_F32);
+ 
+-        if (bias_table) {
++        if (bias_table && half_mask) {
++            bool supported = false;
++            if (kv_resident && !kv_rows && !v_mla &&
++                relative_attention_bias_matches(q, k, kq_mask, bias_table, bias_indices)) {
++                ggml_flash_attn_ext_add_indexed_bias(cur, bias_table, bias_indices);
++                // Preserve rounding after F32(raw) + bias and before the head slope.
++                cur->op_params[5] = 2;
++                supported = ggml_backend_dev_supports_op(device, cur);
++            }
++            if (supported) {
++                ggml_backend_sched_set_tensor_backend(sched, cur, half_mask->backend);
++            } else {
++                ggml_flash_attn_ext_add_indexed_bias(cur, nullptr, nullptr);
++                cur->src[3] = dense_bias_mask();
++            }
++        } else if (bias_table) {
+             ggml_flash_attn_ext_add_indexed_bias(cur, bias_table, bias_indices);
+             auto * dev = model.dev_layer(il);
+             if ((!cparams.offload_kqv && ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) || !ggml_backend_dev_supports_op(dev, cur)) {
+@@ -3758,7 +3804,8 @@ static ggml_tensor * build_attn_iswa_impl(
+             float     kq_scale,
+             int       il,
+         ggml_tensor * bias_table = nullptr,
+-        ggml_tensor * bias_indices = nullptr) {
++        ggml_tensor * bias_indices = nullptr,
++        const llm_graph_context::relative_half_mask * half_mask = nullptr) {
+     ggml_context * ctx0 = gctx.ctx0;
+     ggml_cgraph  * gf   = gctx.gf;
+ 
+@@ -3824,7 +3871,7 @@ static ggml_tensor * build_attn_iswa_impl(
+     ggml_tensor * k = use_kv_cur ? k_cur : mctx_cur->get_k(ctx0, il);
+     ggml_tensor * v = use_kv_cur ? v_cur : mctx_cur->get_v(ctx0, il);
+ 
+-    ggml_tensor * cur = gctx.build_attn_mha(q, k, v, kq_b, kq_mask, kv_rows, sinks, v_mla, 0, kq_scale, il, bias_table, bias_indices);
++    ggml_tensor * cur = gctx.build_attn_mha(q, k, v, kq_b, kq_mask, kv_rows, sinks, v_mla, 0, kq_scale, il, bias_table, bias_indices, half_mask);
+     cur = build_attn_scale_kv_output(ctx0, mctx_cur, cur, il);
+     gctx.cb(cur, "kqv_out", il);
+ 
+@@ -4500,8 +4547,25 @@ ggml_tensor * llm_graph_context::build_attn(
+     GGML_ASSERT(attn_mask.rows == nullptr);
+     ggml_tensor * indices = is_swa ? inp->self_rel_pos_swa : inp->self_rel_pos;
+ 
++    relative_half_mask half_mask{nullptr};
++#if defined(__EMSCRIPTEN__) || defined(LLAMA_TEST_INDEXED_RELATIVE_BIAS_BROWSER)
++    if (sched && cparams.flash_attn && !cparams.auto_fa && cparams.offload_kqv && !cparams.training && !cparams.cb_eval &&
++        attn_mask.raw->type == GGML_TYPE_F16 && ggml_get_no_alloc(ctx0)) {
++        const auto device = model.dev_layer(il);
++        const auto webgpu = ggml_backend_reg_by_name("WebGPU");
++        if (device && webgpu && ggml_backend_dev_backend_reg(device) == webgpu) {
++            for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); ++i) {
++                const auto current = ggml_backend_sched_get_backend(sched, i);
++                if (ggml_backend_get_device(current) == device) {
++                    half_mask.backend = current;
++                    break;
++                }
++            }
++        }
++    }
++#endif
+     return build_attn_iswa_impl(*this, inp_attn, wo, wo_b, wo_s, q_cur, k_cur, v_cur, nullptr, attn_mask.raw, nullptr,
+-            sinks, nullptr, kq_scale, il, bias_table, indices);
++            sinks, nullptr, kq_scale, il, bias_table, indices, half_mask.backend ? &half_mask : nullptr);
+ }
+ 
+ void llm_graph_context::build_dense_out(
+diff --git a/src/llama-graph.h b/src/llama-graph.h
+index 508d055..49c5082 100644
+--- a/src/llama-graph.h
++++ b/src/llama-graph.h
+@@ -1099,6 +1099,10 @@ struct llm_graph_amax_src1 {
+ };
+ 
+ struct llm_graph_context {
++    struct relative_half_mask {
++        ggml_backend_t backend;
++    };
++
+     const llama_model & model;
+ 
+     const llama_hparams & hparams;
+@@ -1351,7 +1355,8 @@ struct llm_graph_context {
+                   float   kq_scale,
+                     int   il,
+             ggml_tensor * bias_table = nullptr,   // [n_bins, n_head_q, n_tokens]
+-            ggml_tensor * bias_indices = nullptr) const;
++            ggml_tensor * bias_indices = nullptr,
++            const relative_half_mask * half_mask = nullptr) const;
+ 
+     llm_graph_input_attn_no_cache * build_attn_inp_no_cache() const;
+ 

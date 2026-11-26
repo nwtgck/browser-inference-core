@@ -46,6 +46,8 @@
 +           indices->type == GGML_TYPE_I32 && ggml_is_contiguous(indices) && ggml_is_matrix(indices) &&
 +           indices->ne[0] == nc && indices->ne[1] == nq;
 +}
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
+index b7e35d1..42e8e1f 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.cpp
 +++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
 @@ -4,6 +4,7 @@
@@ -56,15 +58,17 @@
  #include "amx/amx.h"
  
  #include <cctype>
-@@ -422,7 +423,8 @@
+@@ -423,6 +424,11 @@ static ggml_backend_buffer_t ggml_backend_cpu_device_buffer_from_host_ptr(ggml_b
  }
  
  static bool ggml_backend_cpu_device_supports_op(ggml_backend_dev_t dev, const struct ggml_tensor * op) {
--    if (ggml_flash_attn_ext_has_indexed_bias(op)) {
-+    if (ggml_flash_attn_ext_has_indexed_bias(op) &&
-+            (!ggml_cpu_fattn_round_indexed_mask(op) || !ggml_cpu_fattn_indexed_mask_supported(op))) {
-         return false;
-     }
++    if (ggml_flash_attn_ext_has_indexed_bias(op) && ggml_cpu_fattn_round_indexed_mask(op) &&
++            !ggml_cpu_fattn_indexed_mask_supported(op)) {
++        return false;
++    }
++
+     const struct ggml_tensor * src0 = op->src[0];
+     const struct ggml_tensor * src1 = op->src[1];
  
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp

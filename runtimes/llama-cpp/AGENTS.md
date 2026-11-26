@@ -13,7 +13,7 @@ that feature or performance gain justifies the continuing maintenance cost.
 
 Before proposing, adding, expanding, or repairing an upstream/toolchain
 workaround, read
-`upstream-patches-only-as-a-last-resort-with-explicit-user-approval/AGENTS.md`
+`upstream-patches/AGENTS.md`
 and its `README.md` exception register. This requirement applies throughout the
 repository, including shared and runtime tools, CMake code, native code, generated bindings, copied
 source files, and build-time transformations. It is not limited to `.patch` files.

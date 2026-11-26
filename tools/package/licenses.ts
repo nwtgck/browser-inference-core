@@ -1,5 +1,5 @@
 import { readdir, lstat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { RuntimeName, LicenseIndex, LicenseComponent, LicenseNotice, PackageMetadata } from '#dto/shared';
 import { regularFile, relativePath, directory as directoryPath, optionalStat } from '#tools/shared/files';
 import { assertSame, copyRegular, readRegularBytes } from './files.js';
@@ -130,6 +130,7 @@ const llamaNoticeOwners = new Map<string, readonly [string, string]>([
   ['ui/apps/chat/alias/LICENSE', ['llama-chat', 'llama-chat']],
   ['ui/apps/chat/src/lib/vendors/big-integer/LICENSE', ['big-integer', 'big-integer']],
   ['ui/apps/chat/src/lib/vendors/nerdamer-prime/LICENSE', ['nerdamer-prime', 'nerdamer-prime']],
+  ['ui/lib/harness/LICENSE', ['@ggml-org/llama-harness', '@ggml-org/llama-harness']],
   ['ui/lib/ui/LICENSE', ['@ggml-org/llama-ui', '@ggml-org/llama-ui']],
   ['ui/lib/voice/LICENSE', ['@ggml-org/llama-voice', '@ggml-org/llama-voice']],
 ]);
@@ -324,7 +325,7 @@ export async function validateLicenseIndex({ directory, runtime, licenseRoots, m
   }
 }
 
-export async function collectNotices({ source, destination, required }: { source: string; destination: string; required: boolean }): Promise<number> {
+async function visitSourceNotices({ source, required, visit }: { source: string; required: boolean; visit: ({ path, relative }: { path: string; relative: string }) => void | Promise<void> }): Promise<number> {
   await directoryPath({ path: source });
   let count = 0;
   async function collect({ root, prefix }: { root: string; prefix: string }): Promise<void> {
@@ -345,7 +346,7 @@ export async function collectNotices({ source, destination, required }: { source
         await collect({ root: path, prefix: prefix + name + '/' });
       } else if (mode.isFile() && notice) {
         await noticeBytes({ path });
-        await copyRegular({ source: path, destination: join(destination, prefix + name) });
+        await visit({ path, relative: prefix + name });
         count++;
       }
     }
@@ -355,4 +356,20 @@ export async function collectNotices({ source, destination, required }: { source
     throw new Error(`No license notices: ${source}`);
   }
   return count;
+}
+
+export function collectNotices({ source, destination, required }: { source: string; destination: string; required: boolean }): Promise<number> {
+  return visitSourceNotices({ source, required, visit: async ({ path, relative }) => copyRegular({ source: path, destination: join(destination, relative) }) });
+}
+
+/** Check the same source files and ownership rules used to assemble the license index. */
+export function checkNoticeSource({ source }: { source: string }): Promise<number> {
+  const root = basename(source);
+  return visitSourceNotices({
+    source,
+    required: true,
+    visit: ({ relative }) => {
+      noticeOwner({ root, relative });
+    },
+  });
 }

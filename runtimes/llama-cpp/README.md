@@ -5,7 +5,7 @@
 Keep this core close to upstream. Downstream patches are a last resort and require
 explicit user approval for each new or expanded scope; a feature request alone
 is not that approval. See [the repository instructions](AGENTS.md) and the
-[exception policy and register](upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md).
+[exception policy and register](upstream-patches/README.md).
 The retained vision and single-thread audio fixes are independent. Optional
 waveform-tail optimization and automatic-language extensions are not carried.
 

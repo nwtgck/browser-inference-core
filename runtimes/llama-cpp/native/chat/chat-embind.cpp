@@ -60,7 +60,7 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
 
     enum_<common_chat_role>("common_chat_role") VALUE(COMMON_CHAT_ROLE_UNKNOWN) VALUE(COMMON_CHAT_ROLE_SYSTEM)
         VALUE(COMMON_CHAT_ROLE_ASSISTANT) VALUE(COMMON_CHAT_ROLE_USER) VALUE(COMMON_CHAT_ROLE_TOOL);
-    enum_<common_chat_tool_choice>("common_chat_tool_choice") VALUE(COMMON_CHAT_TOOL_CHOICE_AUTO)
+    enum_<common_chat_tool_choice_mode>("common_chat_tool_choice") VALUE(COMMON_CHAT_TOOL_CHOICE_AUTO)
         VALUE(COMMON_CHAT_TOOL_CHOICE_REQUIRED) VALUE(COMMON_CHAT_TOOL_CHOICE_NONE);
     enum_<common_chat_format>("common_chat_format") VALUE(COMMON_CHAT_FORMAT_CONTENT_ONLY)
         VALUE(COMMON_CHAT_FORMAT_PEG_SIMPLE) VALUE(COMMON_CHAT_FORMAT_PEG_NATIVE) VALUE(COMMON_CHAT_FORMAT_PEG_GEMMA4)
@@ -182,20 +182,29 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
         .function("split",
                   select_overload<common_chat_msg_spans(const llama_tokens &, const std::map<size_t, size_t> &) const,
                                   common_chat_msg_delimiters>(&common_chat_msg_delimiters::split));
-    class_<common_chat_templates_inputs>("common_chat_templates_inputs")
-        .constructor<>() FIELD(common_chat_templates_inputs, messages) FIELD(common_chat_templates_inputs, grammar)
-            FIELD(common_chat_templates_inputs, json_schema) FIELD(common_chat_templates_inputs, add_generation_prompt)
-                FIELD(common_chat_templates_inputs, continue_final_message)
-                    FIELD(common_chat_templates_inputs, use_jinja) FIELD(common_chat_templates_inputs, tools)
-                        FIELD(common_chat_templates_inputs, tool_choice)
-                            FIELD(common_chat_templates_inputs, parallel_tool_calls)
-                                FIELD(common_chat_templates_inputs, reasoning_format)
-                                    FIELD(common_chat_templates_inputs, enable_thinking)
-                                        FIELD(common_chat_templates_inputs, now)
-                                            FIELD(common_chat_templates_inputs, chat_template_kwargs)
-                                                FIELD(common_chat_templates_inputs, add_bos)
-                                                    FIELD(common_chat_templates_inputs, add_eos)
-                                                        FIELD(common_chat_templates_inputs, force_pure_content);
+    class_<common_chat_templates_inputs> template_inputs("common_chat_templates_inputs");
+    template_inputs.constructor<>();
+    template_inputs.property("messages", &common_chat_templates_inputs::messages);
+    template_inputs.property("grammar", &common_chat_templates_inputs::grammar);
+    template_inputs.property("json_schema", &common_chat_templates_inputs::json_schema);
+    template_inputs.property("add_generation_prompt", &common_chat_templates_inputs::add_generation_prompt);
+    template_inputs.property("continue_final_message", &common_chat_templates_inputs::continue_final_message);
+    template_inputs.property("use_jinja", &common_chat_templates_inputs::use_jinja);
+    template_inputs.property("tools", &common_chat_templates_inputs::tools);
+    // Expose the mode at the existing property; upstream also stores an allowlist.
+    template_inputs.property(
+        "tool_choice", +[](const common_chat_templates_inputs & inputs) { return inputs.tool_choice.mode; },
+        +[](common_chat_templates_inputs & inputs, common_chat_tool_choice_mode mode) {
+            inputs.tool_choice = common_chat_tool_choice(mode);
+        });
+    template_inputs.property("parallel_tool_calls", &common_chat_templates_inputs::parallel_tool_calls);
+    template_inputs.property("reasoning_format", &common_chat_templates_inputs::reasoning_format);
+    template_inputs.property("enable_thinking", &common_chat_templates_inputs::enable_thinking);
+    template_inputs.property("now", &common_chat_templates_inputs::now);
+    template_inputs.property("chat_template_kwargs", &common_chat_templates_inputs::chat_template_kwargs);
+    template_inputs.property("add_bos", &common_chat_templates_inputs::add_bos);
+    template_inputs.property("add_eos", &common_chat_templates_inputs::add_eos);
+    template_inputs.property("force_pure_content", &common_chat_templates_inputs::force_pure_content);
     // Keep template/input segments and byte-aligned token identity. Flattening
     // these values at the boundary would undo upstream's special-token handling.
     class_<common_chat_prompt_part>("common_chat_prompt_part")
@@ -353,8 +362,13 @@ EMSCRIPTEN_BINDINGS(llama_common_chat) {
              select_overload<common_json(const std::vector<common_chat_tool> &)>(&common_chat_tools_to_json_oaicompat));
     function("common_chat_continuation_parse",
              select_overload<common_chat_continuation(const common_json &)>(&common_chat_continuation_parse));
-    function("common_chat_tool_choice_parse_oaicompat",
-             select_overload<common_chat_tool_choice(const std::string &)>(&common_chat_tool_choice_parse_oaicompat));
+    function(
+        "common_chat_tool_choice_parse_oaicompat", +[](const std::string & choice) {
+            if (choice != "auto" && choice != "required" && choice != "none") {
+                throw std::invalid_argument("Invalid tool_choice: " + choice);
+            }
+            return common_chat_tool_choice_parse_oaicompat(common_json(choice), std::vector<common_chat_tool>{}).mode;
+        });
     function("common_chat_role_from_string",
              select_overload<common_chat_role(const std::string &)>(&common_chat_role_from_string));
     function(

@@ -226,4 +226,4 @@ capability query or waveform-tail optimization. Manual language selection and th
 upstream model default remain available through the existing input contract;
 features in another reference implementation do not imply llama.cpp support.
 The single-thread reference-audio preprocessing workaround is a separate retained
-compatibility exception. See the [exception register](../upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md).
+compatibility exception. See the [exception register](../upstream-patches/README.md).
