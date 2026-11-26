@@ -212,9 +212,9 @@ static void indexed_k_adapter_selection() {
         selection.prefer_narrow_indexed_k = true;
         const auto k32 = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
         BICORE_CHECK(k64.pipeline.Get() != k32.pipeline.Get());
-        BICORE_CHECK(record("intel", 0, 5616) == k64.pipeline.Get()->id);
+        BICORE_CHECK(record("intel", 0, 2808) == k64.pipeline.Get()->id);
         BICORE_CHECK(record("apple", 1, 2808) == k32.pipeline.Get()->id);
-        BICORE_CHECK(record("", 2, 5616) == k64.pipeline.Get()->id);
+        BICORE_CHECK(record("", 2, 2808) == k64.pipeline.Get()->id);
     }
 }
 

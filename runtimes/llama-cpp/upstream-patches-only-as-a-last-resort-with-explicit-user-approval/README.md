@@ -917,20 +917,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
 
-## Wider K32 indexed output tiles
+## Wider indexed output tiles
 
-- **Patch** `ggml-webgpu-indexed-k32-double-row-tile.patch` against llama.cpp
+- **Patch** `ggml-webgpu-indexed-wide-row-tiles.patch` against llama.cpp
   `c212d25ad`.
-- **Scope** For the existing K32, 64-row IQ4_NL and F32-accumulated NVFP4
-  prefill shapes, admit a 128-row tile with aligned contiguous weights and
-  at least 10,496 B of workgroup storage.
-- **Contract** Keep 64 lanes, the 32-slot gather descriptors, the accumulation
-  precision and order, and all bindings. The direct and indirect grids both
-  use 18 groups per descriptor for 2,304 output rows. The shared storage
-  increases from 6,400 B to 10,496 B. No persistent buffers are added.
+- **Scope** Expand the existing 64-row IQ4_NL and F32-accumulated NVFP4
+  prefill paths when the weights are aligned and contiguous. Choose 128
+  rows at 10,496 B for K32. For K64 choose 80, 96, or 128 rows at
+  14,592, 16,640, or 20,736 B of workgroup storage, respectively.
+- **Contract** Keep 64 lanes, the 32-slot gather descriptors, the K tile and
+  accumulation order, and the buffer layout. The direct and indirect grids
+  use the chosen row tile, including a partial tile for 2,304 rows at 80
+  rows per group. No persistent buffers are added.
 - **Validation and removal** Compare whole outputs and independent references
   with real quantized weights and several routing distributions. Verify the
-  memory threshold, cache entries, and indirect arguments on the complete
+  storage thresholds, cache entries, and indirect arguments on the complete
   provider. Remove once upstream reuses activation tiles across equivalent
   row groups for this path.
 

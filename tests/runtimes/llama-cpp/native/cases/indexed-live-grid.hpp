@@ -157,9 +157,10 @@ static void deliver_scope() {
     callback.mapped().complete();
 }
 
-static void check_activation(const Matrix & matrix, std::string_view vendor = {}) {
+static void check_activation(const Matrix & matrix, std::string_view vendor = {}, uint32_t shared_bytes = 32768) {
     Graph fixture(matrix, vendor);
     auto & limits = fixture.gpu.context->global_ctx->capabilities.limits;
+    limits.maxComputeWorkgroupStorageSize = shared_bytes;
     const unsigned prior_pushes = pushes;
     limits.maxComputeWorkgroupsPerDimension = fixture.full_grid - 1;
     const auto capped = fixture.run(Grid::capped);
@@ -217,9 +218,16 @@ static void all() {
         auto double_rows = matrix;
         double_rows.row_tile = 128;
         check_activation(double_rows, "apple");
-        check_activation(matrix, "nvidia");
+        check_activation(double_rows, "nvidia", 20736);
+        auto limited_rows = matrix;
+        limited_rows.row_tile = 96;
+        check_activation(limited_rows, "nvidia", 16640);
+        limited_rows.row_tile = 80;
+        check_activation(limited_rows, "nvidia", 16384);
+        check_activation(matrix, "nvidia", 12544);
     }
     Matrix f32 = nvfp4_per_slot;
+    f32.row_tile = 128;
     f32.accumulator = GGML_PREC_F32;
     check_activation(f32, "nvidia");
     Matrix half = nvfp4_per_slot;

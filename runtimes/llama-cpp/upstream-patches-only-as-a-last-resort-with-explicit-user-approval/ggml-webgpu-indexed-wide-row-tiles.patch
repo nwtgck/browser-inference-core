@@ -1,0 +1,50 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3711,4 +3711,5 @@
+         key.tile_m = WEBGPU_MUL_MAT_TILE_M;
+         constexpr uint32_t wide_tile_m = 8;
++        constexpr uint32_t double_row_tile_m = 2 * wide_tile_m;
+         constexpr uint32_t wide_rows = wide_tile_m * WEBGPU_MUL_MAT_WG_SIZE_M;
+         constexpr uint32_t grouped_threads = WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_WG_SIZE_N;
+@@ -3733,4 +3734,22 @@
+             context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
+             key.tile_m = wide_tile_m;
++            if (!key.split_weights && context.indexed_src0_aligned &&
++                !context.src0->view_src && ggml_is_contiguous(context.src0)) {
++                const uint32_t bytes_per_row = sizeof(ggml_fp16_t) * key.tile_k;
++                const auto fits = [&](uint32_t tile_m) {
++                    const uint32_t extra_rows = (tile_m - wide_tile_m) * WEBGPU_MUL_MAT_WG_SIZE_M;
++                    return wide_m_shared_bytes + bytes_per_row * extra_rows <= context.wg_mem_limit_bytes;
++                };
++                if (fits(double_row_tile_m)) {
++                    key.tile_m = double_row_tile_m;
++                } else if (key.tile_k == wide_tile_k) {
++                    for (const uint32_t tile_m : {12u, 10u}) {
++                        if (fits(tile_m)) {
++                            key.tile_m = tile_m;
++                            break;
++                        }
++                    }
++                }
++            }
+         }
+         if ((wide_gate_up || wide_down) && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
+@@ -3889,6 +3908,6 @@
+             }
+         }
+-        if (key.tile_m == wide_tile_m) {
+-            variant += "_tm8";
++        if (key.tile_m != WEBGPU_MUL_MAT_TILE_M) {
++            variant += "_tm" + std::to_string(key.tile_m);
+         }
+         if (key.split_weights) {
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2478,5 +2478,6 @@
+                                weights->ne[1] == 2304 && weights->ne[2] == 128 &&
+                                (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+-                               row_tile == 64 && (main.tile_k == 32 || main.tile_k == 64);
++                               (((row_tile == 64 || row_tile == 128) && (main.tile_k == 32 || main.tile_k == 64)) ||
++                                ((row_tile == 80 || row_tile == 96) && main.tile_k == 64));
+     if (!q2 && !q4 && !grouped_quant) {
+         return false;
