@@ -36,8 +36,8 @@
      ggml_backend_buffer_type_t bufts[GGML_SCHED_MAX_BACKENDS];
      ggml_gallocr_t galloc;
  
-@@ -2110,6 +2112,20 @@
-         }
+@@ -2181,6 +2183,20 @@
+         return true;
      }
  
 +    // Only an explicit opt-in can consume host bytes immediately while ordering
@@ -51,16 +51,16 @@
 +        sched->hv_tensor_requires_copy[hash_id(split->inputs[0])] && snapshot && sched->n_copies == 1 &&
 +        sched->events[split_backend_id][sched->cur_copy] == NULL &&
 +        !ggml_backend_sched_is_host_weight(input) && snapshot(input_backend, split_backend, input, input_cpy)) {
-+        return;
++        return false;
 +    }
 +
      if (input->flags & GGML_TENSOR_FLAG_INPUT) {
          // inputs from the user must be copied immediately to prevent the user overwriting the data before the copy is done
          if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
-@@ -2348,6 +2364,15 @@
-         sched->backends[b] = backends[b];
-         sched->bufts[b] = bufts ? bufts[b] : ggml_backend_get_default_buffer_type(backends[b]);
-         GGML_ASSERT(ggml_backend_supports_buft(backends[b], sched->bufts[b]));
+@@ -2435,6 +2451,15 @@
+         struct ggml_backend_dev_props props;
+         ggml_backend_dev_get_props(ggml_backend_get_device(backends[b]), &props);
+         sched->fast_async_host_input[b] = props.caps.fast_async_host_input && backends[b]->iface.set_tensor_async != NULL && !ggml_backend_is_meta(backends[b]);
 +
 +        if (sched->n_copies == 1) {
 +            ggml_backend_dev_t device = ggml_backend_get_device(backends[b]);

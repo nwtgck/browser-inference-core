@@ -118,6 +118,7 @@ static inline constexpr int32_t lcb_mtmd_review_projector(projector_type type) {
     case PROJECTOR_TYPE_SENSENOVA_U1:
     case PROJECTOR_TYPE_COHERE2V:
     case PROJECTOR_TYPE_INKLING2V:
+    case PROJECTOR_TYPE_HY_V4_FLASH:
         return MTMD_VISION_BF16_CANDIDATE_UNREVIEWED;
     case PROJECTOR_TYPE_QWEN25O:
         // Ambiguous without modality; metadata normalization below selects the

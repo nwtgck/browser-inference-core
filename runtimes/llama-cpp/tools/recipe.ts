@@ -1086,7 +1086,7 @@ export const modelPatches = {
     file: 'inkling-indexed-half-flash.patch',
     target: 'llama',
     reason: 'Keep the same compact relative-bias graph for prefill and generation.',
-    files: ['src/llama-graph.h', 'src/llama-graph.cpp', 'src/models/inkling2.cpp'],
+    files: ['src/llama-graph.h', 'src/llama-graph.cpp'],
   },
   chat: {
     file: 'common-chat-independent-vocabulary.patch',
