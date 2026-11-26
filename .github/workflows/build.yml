@@ -130,6 +130,7 @@ jobs:
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
+            node build/tooling/runtimes/llama-cpp/tools/cli.js check-notices --checkout-root "$GITHUB_WORKSPACE"
             node build/tooling/tools/cli.js toolchain prepare \
               --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
             export LCB_TEST_DAWN_PACKAGE="$GITHUB_WORKSPACE/.tools/emdawnwebgpu_pkg"
@@ -360,6 +361,7 @@ jobs:
             mkdir -p "$HOME"
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
             node node_modules/typescript/bin/tsc --project tsconfig.llama-cpp.json
+            node build/tooling/runtimes/llama-cpp/tools/cli.js check-notices --checkout-root "$GITHUB_WORKSPACE"
             node build/tooling/runtimes/llama-cpp/tools/cli.js cache-plan \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
               --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \

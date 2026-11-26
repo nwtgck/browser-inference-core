@@ -2,9 +2,10 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import yargs from 'yargs';
 import { createMetrics } from '#tools/ci/metrics';
+import { checkNoticeSource } from '#tools/package/licenses';
 import type { SourceMode } from '#tools/source/capture';
 import { cachePlanOptions, runCachePlan, writeCachePlan } from '#tools/toolchain/cli-options';
-import { loadConfiguration, selectConfiguration } from '#runtimes/llama-cpp/tools/config';
+import { loadConfiguration, selectConfiguration, upstreamPath } from '#runtimes/llama-cpp/tools/config';
 import { buildRuntime } from '#runtimes/llama-cpp/tools/build';
 import { prepareSources } from '#runtimes/llama-cpp/tools/prepare';
 
@@ -29,6 +30,11 @@ export async function main({ argv }: { argv: readonly string[] }): Promise<void>
     .showHelpOnFail(false)
     .fail((message, error) => {
       throw error ?? new Error(message);
+    })
+    .command('check-notices', 'Check ownership and readability of upstream license notices', parser => parser
+      .option('checkout-root', { type: 'string', demandOption: true }), async args => {
+      const count = await checkNoticeSource({ source: resolve(args['checkout-root'], upstreamPath) });
+      process.stdout.write(`Checked ${count} upstream llama.cpp license notices.\n`);
     })
     .command('cache-plan', 'Plan caches for this runtime', parser => parser.options(cachePlanOptions), async args => {
       const checkoutRoot = resolve(args['checkout-root']);
