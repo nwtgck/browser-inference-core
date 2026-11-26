@@ -13,7 +13,7 @@ schema_version: 1
 kind: browser_inference_core_artifact_integrity
 source:
   repository: https://github.com/nwtgck/browser-inference-core
-  commit: 93866ee4aeb85c29885f5a9e16cc80f2c5588e2c
+  commit: f83cc02b2087a16be8cba02384a1a83d9ddfe474
   tree_fingerprint:
     algorithm: sha256
     scheme: git-committed-tree-sha256-v1
@@ -64,11 +64,11 @@ source:
 manifest:
   path: manifest.json
   size: 1520
-  sha256: 4321e665f566ef27475a17ad3f351081e7407805bea30583a236a8b3a764043f
+  sha256: 6b37ff2e18129f20c59e42c729b8e590e1245ea41a16f89a40a0d1c41efb9bd4
   contents: |
     {
       "formatVersion": 6,
-      "sourceCommit": "93866ee4aeb85c29885f5a9e16cc80f2c5588e2c",
+      "sourceCommit": "f83cc02b2087a16be8cba02384a1a83d9ddfe474",
       "runtimes": {
         "llama-cpp": {
           "manifest": "runtimes/llama-cpp-browser-core/manifest.json",
@@ -102,17 +102,17 @@ manifest:
         {
           "path": "runtimes/llama-cpp-browser-core/manifest.json",
           "bytes": 21841731,
-          "sha256": "148c7e697648b5afa6909fdb163e0ef5fb07526ac1216afe3240a7046de8d8d9"
+          "sha256": "785ba19bc3e867c843b7e2516f42fdcc9f9becc9a85cbbbe8d124af3fa2fe029"
         },
         {
           "path": "runtimes/speech-cpp-browser-core/manifest.json",
           "bytes": 246344,
-          "sha256": "785640d1143ba7550b2c655e5a580d320c75e57b8b0ca126ce51f7f4c8cbfede"
+          "sha256": "6af99b8ab35ae6e9160c4b07c0a13bf113890c0a9b3b7e8dd05eadbf7e806e33"
         },
         {
           "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
           "bytes": 1172295,
-          "sha256": "2270633dc2e2569c7ccac2ed1c70359bbbbd8d6ddb4994f0c475bafbb02945f4"
+          "sha256": "dc6a766ab813f04270e54c61b8c032869f4cae027cbf04e3f397f674204f5e16"
         }
       ]
     }
