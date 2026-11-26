@@ -57,10 +57,29 @@
          if (!fwht_1024_pipeline.pipeline) {
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/ggml-webgpu-add-cast-f16.hpp
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,122 @@
 +#pragma once
 +
 +namespace webgpu_add_cast_f16 {
++
++static bool payloads_overlap(const webgpu_checked_tensor_binding::binding & a, uint64_t a_unit,
++                             const webgpu_checked_tensor_binding::binding & b, uint64_t b_unit) {
++    const uint64_t a_start = a.offset + uint64_t(a.element_offset) * a_unit;
++    const uint64_t b_start = b.offset + uint64_t(b.element_offset) * b_unit;
++    return a.buffer.Get() == b.buffer.Get() && a_start < b.offset + b.size && b_start < a.offset + a.size;
++}
++
++static bool has_other_readers(const ggml_cgraph & graph, webgpu_fusion_view_sources & views,
++                              const ggml_tensor * input) {
++    // The allocator can reuse the storage of a private, single-use producer.
++    // Keep explicit views and caller-owned inputs/outputs observable.
++    if (input->view_src || (input->flags & (GGML_TENSOR_FLAG_INPUT | GGML_TENSOR_FLAG_OUTPUT)) || views.contains(input)) {
++        return true;
++    }
++    const auto & visited = graph.visited_hash_set;
++    const size_t slot = ggml_hash_find(&visited, input);
++    return !graph.use_counts || slot >= visited.size || !ggml_bitset_get(visited.used, slot) || graph.use_counts[slot] != 1;
++}
 +
 +static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, const ggml_cgraph & graph, int node_idx,
 +                                               bool input_cast, webgpu_fusion_view_sources & views, int & num_encoded_ops) {
@@ -102,12 +121,30 @@
 +        return std::nullopt;
 +    }
 +
-+    std::array<buffer_facts, 3> facts{};
-+    binding bias, mask, result;
++    std::array<buffer_facts, 5> facts{};
++    binding bias, mask, result, sum;
 +    if (!get_binding(ctx, a, facts, bias) || !get_binding(ctx, b, facts, mask) || !get_binding(ctx, dst, facts, result) ||
 +        bindings_overlap(bias, mask) || bindings_overlap(bias, result) || bindings_overlap(mask, result) ||
-+        result.element_offset % 2 || views.contains(add) || (input_cast && views.contains(graph.nodes[node_idx]))) {
++        result.element_offset % 2 || views.contains(add) || (input_cast && views.contains(graph.nodes[node_idx])) ||
++        !get_binding(ctx, add, facts, sum) || ggml_backend_buffer_get_usage(add->buffer) != GGML_BACKEND_BUFFER_USAGE_COMPUTE) {
 +        return std::nullopt;
++    }
++    const uint32_t b_unit = ggml_type_size(b->type);
++    if ((payloads_overlap(sum, sizeof(float), bias, sizeof(float)) && has_other_readers(graph, views, a)) ||
++        (payloads_overlap(sum, sizeof(float), mask, b_unit) && has_other_readers(graph, views, b))) {
++        return std::nullopt;
++    }
++    if (input_cast) {
++        // The omitted write can change another input even when it is a different
++        // tensor root. Compare the payloads, excluding binding alignment padding.
++        binding converted;
++        const auto * cast = graph.nodes[node_idx];
++        if (!get_binding(ctx, cast, facts, converted) ||
++            ggml_backend_buffer_get_usage(cast->buffer) != GGML_BACKEND_BUFFER_USAGE_COMPUTE ||
++            payloads_overlap(converted, sizeof(float), bias, sizeof(float)) ||
++            payloads_overlap(converted, sizeof(float), mask, b_unit)) {
++            return std::nullopt;
++        }
 +    }
 +
 +    const uint32_t count = uint32_t(ggml_nelements(dst));
@@ -121,7 +158,6 @@
 +    if (!pipeline.pipeline) {
 +        return std::nullopt;
 +    }
-+    const uint32_t b_unit = ggml_type_size(b->type);
 +    const std::vector<uint32_t> params = {
 +        count, bias.element_offset, mask.element_offset, result.element_offset / 2,
 +        uint32_t(a->nb[0] / sizeof(float)), uint32_t(a->nb[1] / sizeof(float)),

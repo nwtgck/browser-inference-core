@@ -4,7 +4,7 @@
 
 namespace add_cast_f16_cases {
 
-enum class Guard { none, add_view, input_cast_view, input_cast_output };
+enum class Guard { none, add_view, input_cast_view, input_cast_output, bias_reader };
 
 struct Fixture {
     transfer_cases::Backend gpu{transfer_cases::BackendKind::webgpu};
@@ -68,6 +68,11 @@ struct Fixture {
             ggml_build_forward_expand(graph, reader);
             BICORE_CHECK(ggml_hash_contains(&graph->visited_hash_set, raw));
         }
+        if (guard == Guard::bias_reader) {
+            auto * reader = ggml_dup(ctx, bias);
+            ggml_set_output(reader);
+            ggml_build_forward_expand(graph, reader);
+        }
         allocator.reset(ggml_gallocr_new(&gpu.type));
         BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
         for (int i = 0; i < graph->n_nodes; ++i) {
@@ -127,7 +132,38 @@ static void all() {
         alias.output->data = alias.bias->data;
         alias.compute(alias.begin, alias.end);
         BICORE_CHECK(commands.dispatches.size() > 1);
+
+        Fixture live_bias(256, 3, half, Guard::bias_reader);
+        live_bias.add->buffer = live_bias.bias->buffer;
+        live_bias.add->data = live_bias.bias->data;
+        live_bias.compute(live_bias.begin, live_bias.end);
+        BICORE_CHECK(commands.dispatches.size() == (half ? 3 : 2));
+        BICORE_CHECK(live_bias.packet(commands.dispatches.back()).pipeline.Get()->name == "cpy_f32_f16");
+
+        Fixture reused_bias(256, 3, half);
+        reused_bias.add->buffer = reused_bias.bias->buffer;
+        reused_bias.add->data = reused_bias.bias->data;
+        reused_bias.compute(reused_bias.begin, reused_bias.end);
+        BICORE_CHECK(commands.dispatches.size() == 1);
     }
+    Fixture cast_overwrites_bias(256, 3, true, Guard::bias_reader);
+    BICORE_CHECK(cast_overwrites_bias.add->data != cast_overwrites_bias.bias->data);
+    cast_overwrites_bias.cast->buffer = cast_overwrites_bias.bias->buffer;
+    cast_overwrites_bias.cast->data = cast_overwrites_bias.bias->data;
+    cast_overwrites_bias.compute(cast_overwrites_bias.begin, cast_overwrites_bias.end);
+    BICORE_CHECK(commands.dispatches.size() == 3);
+    BICORE_CHECK(cast_overwrites_bias.packet(commands.dispatches.front()).pipeline.Get()->name == "cpy_f16_f32");
+
+    Fixture reuse_cast_for_output(256, 3, true);
+    reuse_cast_for_output.cast->buffer = reuse_cast_for_output.output->buffer;
+    reuse_cast_for_output.cast->data = reuse_cast_for_output.output->data;
+    reuse_cast_for_output.compute(reuse_cast_for_output.begin, reuse_cast_for_output.end);
+    BICORE_CHECK(commands.dispatches.size() == 1);
+    BICORE_CHECK(reuse_cast_for_output.packet(commands.dispatches.front()).pipeline.Get()->name ==
+                 "add_cast_f16_mask_f16");
+    ggml_backend_buffer_set_usage(reuse_cast_for_output.add->buffer, GGML_BACKEND_BUFFER_USAGE_ANY);
+    reuse_cast_for_output.compute(reuse_cast_for_output.begin, reuse_cast_for_output.end);
+    BICORE_CHECK(commands.dispatches.size() == 3);
     for (const auto guard : {Guard::add_view, Guard::input_cast_view, Guard::input_cast_output}) {
         Fixture escape(256, 3, true, guard);
         escape.compute(escape.begin, escape.end);
