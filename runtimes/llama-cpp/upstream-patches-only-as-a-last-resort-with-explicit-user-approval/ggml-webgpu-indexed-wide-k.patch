@@ -1,0 +1,84 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2201,6 +2201,9 @@
+     shader_lib_ctx.src2                           = src2;
+     shader_lib_ctx.dst                            = dst;
+     shader_lib_ctx.max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
++
++    shader_lib_ctx.wg_mem_limit_bytes =
++        ctx->global_ctx->capabilities.limits.maxComputeWorkgroupStorageSize;
+ 
+     // Get or create pipeline
+     webgpu_pipeline gather_pipeline;
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1519,6 +1519,7 @@
+     uint32_t  num_cols;
+     uint32_t  workgroup_size;
+     uint32_t  subgroup_size;
++    uint32_t  tile_k;
+     int       vectorized;
+     bool      f32_accumulator;
+ 
+@@ -1526,7 +1527,7 @@
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+-               f32_accumulator == other.f32_accumulator;
++               f32_accumulator == other.f32_accumulator && tile_k == other.tile_k;
+     }
+ };
+ 
+@@ -1541,6 +1542,7 @@
+         ggml_webgpu_hash_combine(seed, key.subgroup_size);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         ggml_webgpu_hash_combine(seed, key.f32_accumulator);
++        ggml_webgpu_hash_combine(seed, key.tile_k);
+         return seed;
+     }
+ };
+@@ -3240,6 +3242,24 @@
+                              1 :
+                              0;
+ 
++        key.tile_k = ggml_is_quantized(key.src0_type) ? WEBGPU_MUL_MAT_REG_TILE_K_QUANT :
++                                                       WEBGPU_MUL_MAT_REG_TILE_K_FLOAT;
++        constexpr uint32_t wide_tile_k = 64;
++        constexpr uint32_t rows = WEBGPU_MUL_MAT_TILE_M * WEBGPU_MUL_MAT_WG_SIZE_M;
++        constexpr uint32_t cols = WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N;
++        constexpr uint32_t shared_bytes =
++            sizeof(ggml_fp16_t) * wide_tile_k * (rows + cols) + 2 * sizeof(uint32_t) * cols;
++        const bool eligible_type = key.src0_type == GGML_TYPE_IQ4_NL ||
++                                   (key.src0_type == GGML_TYPE_NVFP4 && key.f32_accumulator);
++        const int64_t k = context.src0->ne[0];
++        const int64_t m = context.src0->ne[1];
++        const bool measured_shape = (m == 2304 && (k == 1152 || k == 2304)) || (m == 512 && k == 2304);
++        if (eligible_type && key.src1_type == GGML_TYPE_F32 && context.dst &&
++            context.dst->type == GGML_TYPE_F32 && measured_shape && context.dst->ne[2] >= 12 &&
++            context.wg_mem_limit_bytes >= shared_bytes) {
++            key.tile_k = wide_tile_k;
++        }
++
+         auto it = mul_mat_id_pipelines.find(key);
+         if (it != mul_mat_id_pipelines.end()) {
+             return it->second;
+@@ -3333,8 +3353,7 @@
+         defines.push_back(key.vectorized ? "VEC" : "SCALAR");
+ 
+         // mul_mat_id is register-tile only.
+-        const uint32_t tile_k =
+-            ggml_is_quantized(context.src0->type) ? WEBGPU_MUL_MAT_REG_TILE_K_QUANT : WEBGPU_MUL_MAT_REG_TILE_K_FLOAT;
++        const uint32_t tile_k = key.tile_k;
+ 
+         // Tiles
+         defines.push_back("TILE_M=" + std::to_string(WEBGPU_MUL_MAT_TILE_M) + "u");
+@@ -3359,6 +3378,9 @@
+             defines.push_back("BICORE_SPARSE_EXPERT_COLUMNS");
+         }
+ 
++        if (tile_k == wide_tile_k) {
++            variant += "_tk64";
++        }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+         auto decisions       = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();

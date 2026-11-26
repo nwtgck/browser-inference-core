@@ -1,0 +1,273 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1627,11 +1627,13 @@
+     int       vectorized;
+     int       use_subgroup_matrix;
+     bool      src_overlap;
++    bool      packed_half;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && vectorized == other.vectorized &&
+                use_subgroup_matrix == other.use_subgroup_matrix && src_overlap == other.src_overlap &&
+-               small_m_tile == other.small_m_tile && shared_mode == other.shared_mode;
++               small_m_tile == other.small_m_tile && shared_mode == other.shared_mode &&
++               packed_half == other.packed_half;
+     }
+ };
+ 
+@@ -1640,6 +1642,7 @@
+         size_t seed = 0;
+         ggml_webgpu_hash_combine(seed, static_cast<uint32_t>(key.shared_mode));
+         ggml_webgpu_hash_combine(seed, key.small_m_tile);
++        ggml_webgpu_hash_combine(seed, key.packed_half);
+         ggml_webgpu_hash_combine(seed, key.src0_type);
+         ggml_webgpu_hash_combine(seed, key.src1_type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+@@ -3375,6 +3378,26 @@
+         }
+         const int64_t m = context.dst->ne[0];
+         const int64_t n = context.dst->ne[1];
++        constexpr uint32_t packed_tile_k = 64;
++        const bool packed_small_shape = key.small_m_tile == 4 && k == 10240;
++        const bool packed_standard_shape = (k == 4608 && m == 64) || (k == 2304 && m == 128) ||
++            (k == 2048 && m == 256) || (k == 2560 && (m == 48 || m == 512)) || (k == 5120 && m == 48);
++        constexpr uint32_t packed_standard_rows =
++            WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_TILE_M + WEBGPU_MUL_MAT_WG_SIZE_N * WEBGPU_MUL_MAT_TILE_N;
++        const size_t packed_shared_bytes = packed_tile_k * GGML_WEBGPU_F16_SIZE_BYTES *
++            (packed_small_shape ? key.small_m_tile + 32u : packed_standard_rows);
++        const bool packed_bf16_shape = (k == 10240 && m == 320) ||
++            (k == 2560 && (m == 48 || m == 128 || m == 512));
++        const bool packed_shape = (key.src0_type == GGML_TYPE_F32 && (packed_small_shape || packed_standard_shape)) ||
++                                  (key.src0_type == GGML_TYPE_BF16 && (packed_small_shape || packed_bf16_shape));
++        // Complete K tiles and full vec4 output rows keep the packed loop inside its input and output ranges.
++        key.packed_half = vec4_aligned && !key.use_subgroup_matrix && !key.src_overlap &&
++                          key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++                          packed_shape && n >= 16 && n <= 128 &&
++                          context.dst->ne[2] == 1 && context.dst->ne[3] == 1 &&
++                          WEBGPU_MUL_MAT_TILE_M == 4 && WEBGPU_MUL_MAT_TILE_N == 4 &&
++                          context.wg_mem_limit_bytes >= packed_shared_bytes;
++        key.vectorized = key.vectorized || key.packed_half;
+         constexpr int64_t q8_min_groups = 640;
+         const bool q8_c8_short_shape = n == 128 &&
+                                        ((k == 2304 && (m == 1024 || m == 3072)) ||
+@@ -3516,6 +3539,12 @@
+         uint32_t tile_k;
+         if (key.use_subgroup_matrix) {
+             tile_k = is_quant ? WEBGPU_MUL_MAT_SUBGROUP_TILE_K_QUANT : WEBGPU_MUL_MAT_SUBGROUP_TILE_K_FLOAT;
++        } else if (key.packed_half) {
++            tile_k = packed_tile_k;
++            defines.push_back("PACKED_F32_REG_TILE");
++            if (key.small_m_tile) {
++                defines.push_back("PACKED_F32_ONE_COLUMN");
++            }
+         } else {
+             tile_k = is_quant ? WEBGPU_MUL_MAT_REG_TILE_K_QUANT : WEBGPU_MUL_MAT_REG_TILE_K_FLOAT;
+         }
+@@ -3556,6 +3585,9 @@
+ 
+         if (key.small_m_tile) {
+             variant += "_small_m" + std::to_string(key.small_m_tile);
++        }
++        if (key.packed_half) {
++            variant += "_packed_k64";
+         }
+ 
+         if (key.shared_mode != shared_mode::scalar) {
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -1967,4 +1967,5 @@
+ // Test the actual wire offset (including merged bindings), not view_offs alone.
+-static bool ggml_webgpu_mul_mat_vec4_aligned(const ggml_tensor * tensor, uint32_t offset) {
+-    if ((tensor->type != GGML_TYPE_F32 && tensor->type != GGML_TYPE_F16) || offset % 4 != 0) {
++static bool ggml_webgpu_mul_mat_vec4_aligned(const ggml_tensor * tensor, uint32_t offset, bool allow_bf16 = false) {
++    if ((tensor->type != GGML_TYPE_F32 && tensor->type != GGML_TYPE_F16 &&
++         !(allow_bf16 && tensor->type == GGML_TYPE_BF16)) || offset % 4 != 0) {
+         return false;
+@@ -2043,3 +2044,3 @@
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
+-    const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0) &&
++    const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0, !use_mat_vec) &&
+                               ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1);
+@@ -2052,2 +2053,3 @@
+     } else {
++        shader_lib_ctx.wg_mem_limit_bytes = ctx->global_ctx->capabilities.limits.maxComputeWorkgroupStorageSize;
+         if (src0->type == GGML_TYPE_Q2_0) {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
+@@ -9,14 +9,22 @@
+ #define VEC_SIZE 4
+ #define SHMEM_TYPE vec4<f16>
+ #define DST_TYPE vec4<f32>
++#if defined(TYPE_BF16) && defined(PACKED_F32_REG_TILE)
++#define SRC0_TYPE vec2<u32>
++#else
+ #define SRC0_TYPE vec4<SRC0_INNER_TYPE>
++#endif
+ #define SRC1_TYPE vec4<SRC1_INNER_TYPE>
+ 
+ fn store_shmem(val: vec4<f16>, idx: u32) {
++#ifdef PACKED_F32_REG_TILE
++    shmem[idx / 4u] = val;
++#else
+     shmem[idx] = val.x;
+     shmem[idx + 1] = val.y;
+     shmem[idx + 2] = val.z;
+     shmem[idx + 3] = val.w;
++#endif
+ }
+ #endif // VEC
+ 
+@@ -44,6 +52,12 @@
+         let global_m = offset_m + tile_m;
+         let global_k = k_outer + tile_k;
+         let src0_idx = batch_offset + global_m * params.stride_01 + global_k;
++#if defined(TYPE_BF16) && defined(PACKED_F32_REG_TILE)
++        let packed = SRC0[src0_idx / 4u];
++        let wide = bitcast<vec4<f32>>(vec4<u32>(
++            packed.x << 16u, packed.x & 0xffff0000u, packed.y << 16u, packed.y & 0xffff0000u));
++        let src0_val = select(vec4<f32>(0.0), wide, global_m < params.m && global_k < params.k);
++#else
+         let src0_val = select( // taking a slight performance hit to avoid oob
+ #if defined(TYPE_F16) || defined(TYPE_F32)
+             SRC0_TYPE(0.0),
+@@ -54,6 +68,7 @@
+             bf16_word_to_f32(SRC0[src0_idx / 2u], src0_idx & 1u),
+ #endif
+             global_m < params.m && global_k < params.k);
++#endif
+         store_shmem(SHMEM_TYPE(src0_val), elem_idx);
+     }
+ }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_reg_tile.wgsl
+@@ -9,7 +9,7 @@
+ #include "common_decls.tmpl"
+ #include "mul_mat_decls.tmpl"
+ 
+-#ifdef VEC
++#if defined(VEC) && !defined(PACKED_F32_REG_TILE)
+ fn store_val(acc: array<array<f32, TILE_N>, TILE_M>, tn: u32, tm: u32) -> vec4<f32> {
+     return vec4<f32>(acc[tm][tn], acc[tm + 1][tn], acc[tm + 2][tn], acc[tm + 3][tn]);
+ }
+@@ -63,7 +63,11 @@
+ const TILE_SRC0_SHMEM = TILE_K * WORKGROUP_SIZE_M * TILE_M;
+ const TILE_SRC1_SHMEM = TILE_K * WORKGROUP_SIZE_N * TILE_N;
+ 
++#ifdef PACKED_F32_REG_TILE
++var<workgroup> shmem: array<vec4<f16>, (TILE_SRC0_SHMEM + TILE_SRC1_SHMEM) / 4u>;
++#else
+ var<workgroup> shmem: array<f16, TILE_SRC0_SHMEM + TILE_SRC1_SHMEM>;
++#endif
+ 
+ @compute @workgroup_size(TOTAL_WORKGROUP_SIZE)
+ fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
+@@ -110,7 +114,16 @@
+     let offset_m = wg_m * WORKGROUP_SIZE_M * TILE_M;
+     let offset_n = wg_n * WORKGROUP_SIZE_N * TILE_N;
+ 
++#ifdef PACKED_F32_REG_TILE
++    var acc0: vec4<f32>;
++#ifndef PACKED_F32_ONE_COLUMN
++    var acc1: vec4<f32>;
++    var acc2: vec4<f32>;
++    var acc3: vec4<f32>;
++#endif
++#else
+     var acc: array<array<f32, TILE_N>, TILE_M>;
++#endif
+ 
+     for (var k_outer = 0u; k_outer < params.k; k_outer += TILE_K) {
+ 
+@@ -122,6 +135,52 @@
+ 
+         let k_end = min(TILE_K, params.k - k_outer);
+ 
++#ifdef PACKED_F32_REG_TILE
++        // Each load retrieves four consecutive K elements. Update each accumulator in K order.
++        const k_vecs = TILE_K / 4u;
++        for (var k_inner = 0u; k_inner < k_end / 4u; k_inner++) {
++            let a_idx = local_m * TILE_M * k_vecs + k_inner;
++            let b_idx = TILE_SRC0_SHMEM / 4u + local_n * TILE_N * k_vecs + k_inner;
++            let a0 = vec4<f32>(shmem[a_idx]);
++            let a1 = vec4<f32>(shmem[a_idx + k_vecs]);
++            let a2 = vec4<f32>(shmem[a_idx + 2u * k_vecs]);
++            let a3 = vec4<f32>(shmem[a_idx + 3u * k_vecs]);
++            let b0 = vec4<f32>(shmem[b_idx]);
++#ifndef PACKED_F32_ONE_COLUMN
++            let b1 = vec4<f32>(shmem[b_idx + k_vecs]);
++            let b2 = vec4<f32>(shmem[b_idx + 2u * k_vecs]);
++            let b3 = vec4<f32>(shmem[b_idx + 3u * k_vecs]);
++#endif
++            let a_x = vec4<f32>(a0.x, a1.x, a2.x, a3.x);
++            acc0 += a_x * b0.x;
++#ifndef PACKED_F32_ONE_COLUMN
++            acc1 += a_x * b1.x;
++            acc2 += a_x * b2.x;
++            acc3 += a_x * b3.x;
++#endif
++            let a_y = vec4<f32>(a0.y, a1.y, a2.y, a3.y);
++            acc0 += a_y * b0.y;
++#ifndef PACKED_F32_ONE_COLUMN
++            acc1 += a_y * b1.y;
++            acc2 += a_y * b2.y;
++            acc3 += a_y * b3.y;
++#endif
++            let a_z = vec4<f32>(a0.z, a1.z, a2.z, a3.z);
++            acc0 += a_z * b0.z;
++#ifndef PACKED_F32_ONE_COLUMN
++            acc1 += a_z * b1.z;
++            acc2 += a_z * b2.z;
++            acc3 += a_z * b3.z;
++#endif
++            let a_w = vec4<f32>(a0.w, a1.w, a2.w, a3.w);
++            acc0 += a_w * b0.w;
++#ifndef PACKED_F32_ONE_COLUMN
++            acc1 += a_w * b1.w;
++            acc2 += a_w * b2.w;
++            acc3 += a_w * b3.w;
++#endif
++        }
++#else
+         for (var k_inner = 0u; k_inner < k_end; k_inner++) {
+             var src0_tile: array<f16, TILE_M>;
+             for (var tm = 0u; tm < TILE_M; tm++) {
+@@ -138,12 +197,32 @@
+                 }
+             }
+         }
++#endif
+ 
+         workgroupBarrier();
+     }
+ 
+     let dst_batch_offset = params.offset_dst + dst3_idx * dst3_stride + dst2_idx * dst2_stride;
+ 
++#ifdef PACKED_F32_REG_TILE
++    if (output_row_base < params.m) {
++        let dst_offset = dst_batch_offset + output_col_base * params.m + output_row_base;
++        if (output_col_base < params.n) {
++            dst[dst_offset / 4u] = acc0;
++        }
++#ifndef PACKED_F32_ONE_COLUMN
++        if (output_col_base + 1u < params.n) {
++            dst[(dst_offset + params.m) / 4u] = acc1;
++        }
++        if (output_col_base + 2u < params.n) {
++            dst[(dst_offset + 2u * params.m) / 4u] = acc2;
++        }
++        if (output_col_base + 3u < params.n) {
++            dst[(dst_offset + 3u * params.m) / 4u] = acc3;
++        }
++#endif
++    }
++#else
+     for (var tn = 0u; tn < TILE_N; tn++) {
+         let global_col = output_col_base + tn;
+         if (global_col < params.n) {
+@@ -156,4 +235,5 @@
+             }
+         }
+     }
+-}
++#endif
++}

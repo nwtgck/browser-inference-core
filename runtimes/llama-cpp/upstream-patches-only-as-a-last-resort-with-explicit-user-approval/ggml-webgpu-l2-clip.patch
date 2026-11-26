@@ -1,0 +1,295 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5,6 +5,7 @@
+ 
+ #include "ggml-webgpu.h"
+ #include "ggml-webgpu-hc.hpp"
++#include "ggml-webgpu-l2-clip.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
+ #include "ggml-webgpu-scale-unary.hpp"
+ #include "ggml-webgpu-f32-matvec-epilogue.hpp"
+@@ -3981,6 +3982,54 @@
+     if (!inplace) { entries.push_back(ggml_webgpu_make_bind_group_entry(1, destination.buffer, destination.offset, destination.size)); }
+     auto encoded = ggml_backend_webgpu_build(ctx, pipeline, std::move(params), std::move(entries), x, y);
+     num_encoded_ops = 2;
++    return encoded;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_l2_clip(webgpu_context & ctx, const ggml_cgraph * graph,
++                                                          int index, webgpu_fusion_view_sources & views, int & encoded_ops) {
++    l2_clip_plan plan;
++    if (!plan_l2_clip(graph, index, views, plan)) {
++        return std::nullopt;
++    }
++    constexpr uint32_t workgroup = ggml_webgpu_l2_clip_workgroup_size;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    // Matching the stock power-of-two SUM_ROWS tree only requires discarding its leading zero-only levels.
++    const auto sum_workgroup = limits.maxComputeInvocationsPerWorkgroup;
++    if (sum_workgroup < workgroup || (sum_workgroup & (sum_workgroup - 1)) ||
++        limits.maxComputeWorkgroupSizeX < workgroup || limits.maxComputeWorkgroupStorageSize < workgroup * sizeof(float) ||
++        limits.maxComputeWorkgroupsPerDimension < plan.rows || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) {
++        return std::nullopt;
++    }
++    webgpu_rms_scale_binding input, output;
++    if (!ggml_webgpu_rms_scale_binding(ctx, plan.input, plan.input_bytes, input) ||
++        !ggml_webgpu_rms_scale_binding(ctx, plan.output, plan.output_bytes, output)) {
++        return std::nullopt;
++    }
++    const bool same_buffer = input.buffer.Get() == output.buffer.Get();
++    const bool inplace = same_buffer && input.tensor_offset == output.tensor_offset &&
++                         rms_scale_same_mapping(plan.input, plan.output);
++    if (same_buffer && !inplace &&
++        (!rms_scale_disjoint(input.tensor_offset, plan.input_bytes, output.tensor_offset, plan.output_bytes) ||
++         !rms_scale_disjoint(input.offset, input.size, output.offset, output.size))) {
++        return std::nullopt;
++    }
++    const uint32_t storage_bindings = inplace ? 1 : 2;
++    if (limits.maxStorageBuffersPerShaderStage < storage_bindings || limits.maxBindingsPerBindGroup < storage_bindings + 1) {
++        return std::nullopt;
++    }
++    auto pipeline = ctx->shader_lib->get_l2_clip_pipeline(inplace);
++    const std::vector<uint32_t> params = {
++        input.element_offset, output.element_offset, plan.width, ggml_webgpu_u32_from_f32(plan.threshold),
++    };
++    std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, input.buffer, input.offset, input.size),
++    };
++    if (!inplace) {
++        entries.push_back(ggml_webgpu_make_bind_group_entry(1, output.buffer, output.offset, output.size));
++    }
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, plan.rows);
++    encoded_ops = l2_clip_node_count;
+     return encoded;
+ }
+ 
+@@ -4457,12 +4506,16 @@
+         case GGML_OP_CLAMP:
+         case GGML_OP_FILL:
+         case GGML_OP_LOG:
+-        case GGML_OP_SQR:
+         case GGML_OP_SQRT:
+         case GGML_OP_SIN:
+         case GGML_OP_COS:
+         case GGML_OP_DIAG:
+         case GGML_OP_TRI:
++            return ggml_webgpu_unary_op(ctx, src0, node);
++        case GGML_OP_SQR:
++            if (auto fused = ggml_webgpu_l2_clip(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) {
++                return fused;
++            }
+             return ggml_webgpu_unary_op(ctx, src0, node);
+         case GGML_OP_SOLVE_TRI:
+             return ggml_webgpu_solve_tri(ctx, src0, src1, node);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3,6 +3,7 @@
+ 
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-aligned-word-load-shaders.hpp"
++#include "ggml-webgpu-l2-clip-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
+ #include "ggml-webgpu-moe-sum-shaders.hpp"
+ #include "ggml-webgpu-scale-unary-shaders.hpp"
+@@ -42,6 +43,8 @@
+ 
+ #define GGML_WEBGPU_ARGSORT_MERGE_MAX_WG_SIZE 512u
+ #define GGML_WEBGPU_COUNT_EQUAL_WG_SIZE       256u
++
++inline constexpr uint32_t ggml_webgpu_l2_clip_workgroup_size = 128;
+ 
+ // Matrix multiplication parameters
+ 
+@@ -1688,6 +1691,7 @@
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
++    webgpu_pipeline l2_clip_pipelines[2];
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+     std::unordered_map<int, webgpu_pipeline> hc_pipelines;
+@@ -2477,6 +2481,19 @@
+         return pipeline;
+     }
+ 
++    webgpu_pipeline get_l2_clip_pipeline(bool inplace) {
++        auto & pipeline = l2_clip_pipelines[inplace];
++        if (!pipeline.pipeline) {
++            std::vector<std::string> defines { "WG_SIZE=" + std::to_string(ggml_webgpu_l2_clip_workgroup_size) + "u" };
++            if (inplace) {
++                defines.push_back("INPLACE");
++            }
++            auto code = preprocessor.preprocess(wgsl_l2_clip, defines);
++            pipeline = ggml_webgpu_create_pipeline(device, code, inplace ? "l2_clip_f32_inplace" : "l2_clip_f32");
++        }
++        return pipeline;
++    }
++
+     webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
+         const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
+         auto it = scale_unary_pipelines.find(key);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-l2-clip.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-l2-clip.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-l2-clip.hpp
+@@ -0,0 +1,109 @@
++#pragma once
++
++#include "ggml-impl.h"
++#include "ggml-webgpu-rms-scale.hpp"
++#include "ggml-webgpu-fusion-view-sources.hpp"
++
++#include <cmath>
++#include <initializer_list>
++
++struct l2_clip_plan {
++    const ggml_tensor * input = nullptr;
++    const ggml_tensor * output = nullptr;
++    uint64_t input_bytes = 0;
++    uint64_t output_bytes = 0;
++    uint32_t width = 0;
++    uint32_t rows = 0;
++    float threshold = 0;
++};
++
++inline constexpr ggml_op l2_clip_ops[] = {
++    GGML_OP_SQR, GGML_OP_SUM_ROWS, GGML_OP_SQRT, GGML_OP_SCALE,
++    GGML_OP_FILL, GGML_OP_DIV, GGML_OP_CLAMP, GGML_OP_MUL,
++};
++
++inline constexpr int l2_clip_node_count = sizeof(l2_clip_ops) / sizeof(l2_clip_ops[0]);
++
++inline bool plan_l2_clip(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views, l2_clip_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index > graph->n_nodes - l2_clip_node_count) {
++        return false;
++    }
++    const auto * square = graph->nodes[index];
++    const auto width = square->ne[0];
++    const auto rows = square->ne[1];
++    if (square->op != GGML_OP_SQR || graph->nodes[index + 1]->op != GGML_OP_SUM_ROWS ||
++        square->ne[2] < 1 || square->ne[2] > 128 || square->ne[3] != 1 ||
++        !((width == 128 && (rows == 8 || rows == 24)) || (width == 16 && rows == 24))) {
++        return false;
++    }
++
++    int indices[l2_clip_node_count];
++    for (int i = 0; i < l2_clip_node_count; ++i) {
++        indices[i] = index + i;
++        const auto * node = graph->nodes[indices[i]];
++        if (node->op != l2_clip_ops[i] || node->type != GGML_TYPE_F32 || node->view_src ||
++            !ggml_is_contiguous(node)) {
++            return false;
++        }
++        const int operand_count = (node->op == GGML_OP_DIV || node->op == GGML_OP_MUL) ? 2 : 1;
++        for (int s = operand_count; s < GGML_MAX_SRC; ++s) {
++            if (node->src[s]) {
++                return false;
++            }
++        }
++    }
++
++    const auto * sum = graph->nodes[index + 1];
++    const auto * norm = graph->nodes[index + 2];
++    const auto * denom = graph->nodes[index + 3];
++    const auto * fill = graph->nodes[index + 4];
++    const auto * divide = graph->nodes[index + 5];
++    const auto * clamp = graph->nodes[index + 6];
++    const auto * output = graph->nodes[index + 7];
++    const auto * input = square->src[0];
++    if (!input || !ggml_are_same_shape(input, square) || !ggml_are_same_shape(input, output)) {
++        return false;
++    }
++    if (input->view_src && (input->view_src == input || input->view_src->view_src ||
++                            input->view_src->type != GGML_TYPE_F32)) {
++        return false;
++    }
++    if (sum->src[0] != square || norm->src[0] != sum || denom->src[0] != norm ||
++        fill->src[0] != denom || divide->src[0] != fill || divide->src[1] != denom ||
++        clamp->src[0] != divide || output->src[0] != input || output->src[1] != clamp) {
++        return false;
++    }
++    for (const auto * row_tensor : {sum, norm, denom, fill, divide, clamp}) {
++        if (row_tensor->ne[0] != 1 || row_tensor->ne[1] != rows ||
++            row_tensor->ne[2] != square->ne[2] || row_tensor->ne[3] != 1) {
++            return false;
++        }
++    }
++    const auto threshold = ggml_get_op_params_f32(fill, 0);
++    if (!std::isfinite(threshold) || threshold <= 0 ||
++        ggml_get_op_params_f32(denom, 0) != 1.0f || ggml_get_op_params_f32(denom, 1) != 1e-6f ||
++        ggml_get_op_params_i32(clamp, 0) != 0 || ggml_get_op_params_f32(clamp, 1) != 1.0f) {
++        return false;
++    }
++
++    const int output_index = index + l2_clip_node_count - 1;
++    if (!ggml_can_fuse_subgraph_ext(graph, indices, l2_clip_node_count, l2_clip_ops, &output_index, 1)) {
++        return false;
++    }
++
++    for (int i = 0; i < l2_clip_node_count - 1; ++i) {
++        if (views.contains(graph->nodes[indices[i]])) {
++            return false;
++        }
++    }
++
++    uint64_t input_bytes, output_bytes;
++    uint32_t elements, layout_rows;
++    if (!rms_scale_layout(input, true, input_bytes, elements, layout_rows) ||
++        !rms_scale_layout(output, true, output_bytes, elements, layout_rows)) {
++        return false;
++    }
++    plan = {input, output, input_bytes, output_bytes, uint32_t(width), layout_rows, threshold};
++    return true;
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/l2_clip.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/l2_clip.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/l2_clip.wgsl
+@@ -0,0 +1,44 @@
++struct Params {
++    input_offset: u32,
++    output_offset: u32,
++    width: u32,
++    threshold: f32,
++};
++
++@group(0) @binding(0) var<storage, read_write> input_values: array<f32>;
++#ifdef INPLACE
++@group(0) @binding(1) var<uniform> params: Params;
++#define OUTPUT_VALUES input_values
++#else
++@group(0) @binding(1) var<storage, read_write> output_values: array<f32>;
++@group(0) @binding(2) var<uniform> params: Params;
++#define OUTPUT_VALUES output_values
++#endif
++
++var<workgroup> squares: array<f32, WG_SIZE>;
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) lane: vec3<u32>) {
++    let index = group.x * params.width + lane.x;
++    var value = 0.0;
++    if (lane.x < params.width) {
++        value = input_values[params.input_offset + index];
++    }
++    squares[lane.x] = 0.0 + (value * value);
++    workgroupBarrier();
++
++    var step = WG_SIZE >> 1u;
++    while (step > 0u) {
++        if (lane.x < step) {
++            squares[lane.x] += squares[lane.x + step];
++        }
++        workgroupBarrier();
++        step >>= 1u;
++    }
++
++    if (lane.x < params.width) {
++        let denom = sqrt(squares[0]) * 1.0 + 1e-6;
++        let factor = clamp(params.threshold / denom, 0.0, 1.0);
++        OUTPUT_VALUES[params.output_offset + index] = value * factor;
++    }
++}

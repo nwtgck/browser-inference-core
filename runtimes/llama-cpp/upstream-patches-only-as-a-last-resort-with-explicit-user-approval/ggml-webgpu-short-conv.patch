@@ -1,0 +1,408 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -14,6 +14,8 @@
+ #include "ggml-webgpu-router-tail.hpp"
+ 
+ #include "ggml-backend-impl.h"
++#include "ggml-webgpu-short-conv-residual.hpp"
++#include "ggml-webgpu-short-conv-state.hpp"
+ #include "ggml-backend-host-snapshot.h"
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-shader-lib.hpp"
+@@ -4132,6 +4134,105 @@
+     return encoded;
+ }
+ 
++static std::optional<webgpu_encoded_op> ggml_webgpu_short_conv_residual(webgpu_context & ctx, ggml_cgraph * graph,
++                                                                        int index, int & consumed) {
++    short_conv_residual_plan plan{};
++    if (!plan_short_conv_residual(graph, index, plan)) {
++        return std::nullopt;
++    }
++    constexpr uint32_t wg = 128;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint32_t count = static_cast<uint32_t>(plan.output->ne[0]);
++    const uint32_t groups = CEIL_DIV(count, wg);
++    if (limits.maxComputeInvocationsPerWorkgroup < wg || limits.maxComputeWorkgroupSizeX < wg ||
++        groups > limits.maxComputeWorkgroupsPerDimension || limits.maxUniformBuffersPerShaderStage == 0 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) {
++        return std::nullopt;
++    }
++
++    webgpu_rms_scale_binding bindings[4];
++    const ggml_tensor * const tensors[] = {plan.history, plan.weights, plan.residual, plan.output};
++    for (int i = 0; i < 4; ++i) {
++        if (!ggml_webgpu_rms_scale_binding(ctx, tensors[i], ggml_nbytes(tensors[i]), bindings[i])) {
++            return std::nullopt;
++        }
++    }
++    const bool inplace = bindings[2].buffer.Get() == bindings[3].buffer.Get() &&
++                         bindings[2].tensor_offset == bindings[3].tensor_offset;
++    const uint32_t count_bindings = inplace ? 3u : 4u;
++    if (limits.maxStorageBuffersPerShaderStage < count_bindings || limits.maxBindingsPerBindGroup < count_bindings + 1) {
++        return std::nullopt;
++    }
++    for (uint32_t i = 0; i < count_bindings; ++i) {
++        for (uint32_t j = i + 1; j < count_bindings; ++j) {
++            if (bindings[i].buffer.Get() == bindings[j].buffer.Get() &&
++                !router_tail_disjoint(bindings[i].offset, bindings[i].size, bindings[j].offset, bindings[j].size)) {
++                return std::nullopt;
++            }
++        }
++    }
++
++    const bool padded = plan.history->nb[1] != 4 * sizeof(float) || plan.weights->nb[1] != 4 * sizeof(float);
++    if (padded) {
++        return std::nullopt;
++    }
++    std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset, bindings[3].element_offset,
++        count, 4, 4, ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 1))
++    };
++    std::vector<wgpu::BindGroupEntry> entries;
++    for (uint32_t i = 0; i < count_bindings; ++i) {
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
++    }
++    auto pipeline = ctx->shader_lib->get_short_conv_residual_pipeline(inplace);
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, groups, 1);
++    consumed = 4;
++    return encoded;
++}
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_short_conv_state(webgpu_context & ctx, ggml_cgraph * graph,
++                                                                     int index, int & consumed) {
++    short_conv_state_plan plan{};
++    if (!plan_short_conv_state(graph, index, plan)) {
++        return std::nullopt;
++    }
++    constexpr uint32_t wg = 128;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint32_t count = static_cast<uint32_t>(plan.history->ne[1]);
++    const uint32_t groups = CEIL_DIV(count, wg);
++    if (limits.maxComputeInvocationsPerWorkgroup < wg || limits.maxComputeWorkgroupSizeX < wg ||
++        groups > limits.maxComputeWorkgroupsPerDimension || limits.maxStorageBuffersPerShaderStage < 4 ||
++        limits.maxBindingsPerBindGroup < 5 || limits.maxUniformBuffersPerShaderStage == 0 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) {
++        return std::nullopt;
++    }
++    webgpu_rms_scale_binding bindings[4];
++    const ggml_tensor * const tensors[] = {plan.past, plan.current, plan.history, plan.state};
++    for (int i = 0; i < 4; ++i) {
++        if (!ggml_webgpu_rms_scale_binding(ctx, tensors[i], ggml_nbytes(tensors[i]), bindings[i])) {
++            return std::nullopt;
++        }
++        for (int j = 0; j < i; ++j) {
++            if (bindings[i].buffer.Get() == bindings[j].buffer.Get() &&
++                !router_tail_disjoint(bindings[i].offset, bindings[i].size, bindings[j].offset, bindings[j].size)) {
++                return std::nullopt;
++            }
++        }
++    }
++    std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset, bindings[3].element_offset, count
++    };
++    std::vector<wgpu::BindGroupEntry> entries;
++    for (uint32_t i = 0; i < 4; ++i) {
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
++    }
++    auto pipeline = ctx->shader_lib->get_short_conv_state_pipeline();
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, groups, 1);
++    consumed = 4;
++    return encoded;
++}
++
+ struct webgpu_ssm_conv_silu_binding {
+     wgpu::Buffer buffer;
+     uint64_t offset = 0, size = 0, tensor_offset = 0, tensor_size = 0;
+@@ -4475,6 +4576,7 @@
+         case GGML_OP_ADD_ID:
+             return ggml_webgpu_add_id(ctx, src0, src1, src2, node);
+         case GGML_OP_CONCAT:
++            if (auto fused = ggml_webgpu_short_conv_state(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_concat(ctx, src0, src1, node);
+         case GGML_OP_REPEAT:
+             return ggml_webgpu_repeat(ctx, src0, node);
+@@ -4520,6 +4622,7 @@
+             return ggml_webgpu_solve_tri(ctx, src0, src1, node);
+         case GGML_OP_SSM_CONV:
+             if (auto fused = ggml_webgpu_ssm_conv_silu(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_short_conv_residual(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_ssm_conv(ctx, src0, src1, node);
+         case GGML_OP_SSM_SCAN:
+             return ggml_webgpu_ssm_scan(ctx, src0, src1, src2, node->src[3], node->src[4], node->src[5], node->src[6],
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -13,6 +13,7 @@
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
++#include "ggml-webgpu-short-conv-residual-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp"
+ #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+@@ -1791,6 +1792,8 @@
+     pre_wgsl::Preprocessor preprocessor;
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
++    std::unordered_map<bool, webgpu_pipeline> short_conv_residual_pipelines;
++    webgpu_pipeline short_conv_state_pipeline;
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     webgpu_pipeline l2_clip_pipelines[2];
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+@@ -2558,6 +2561,28 @@
+         return ssm_scan_pipelines[key];
+     }
+ 
++    webgpu_pipeline get_short_conv_residual_pipeline(bool inplace) {
++        auto found = short_conv_residual_pipelines.find(inplace);
++        if (found != short_conv_residual_pipelines.end()) {
++            return found->second;
++        }
++        std::vector<std::string> defines = { "WG_SIZE=128" };
++        if (inplace) {
++            defines.push_back("INPLACE_RESIDUAL");
++        }
++        auto code = preprocessor.preprocess(wgsl_short_conv_residual, defines);
++        auto pipeline = ggml_webgpu_create_pipeline(device, code, inplace ? "short_conv_residual_f32_inplace" : "short_conv_residual_f32");
++        short_conv_residual_pipelines[inplace] = pipeline;
++        return pipeline;
++    }
++
++    webgpu_pipeline get_short_conv_state_pipeline() {
++        if (!short_conv_state_pipeline.pipeline) {
++            short_conv_state_pipeline = ggml_webgpu_create_pipeline(device, wgsl_short_conv_concat_state, "short_conv_concat_state_f32");
++        }
++        return short_conv_state_pipeline;
++    }
++
+     webgpu_pipeline get_router_tail_pipeline(uint32_t wg_size, bool merged, bool epsilon) {
+         const uint64_t key = (uint64_t(wg_size) << 2) | (uint64_t(epsilon) << 1) | uint64_t(merged);
+         auto it = router_tail_pipelines.find(key);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-residual.hpp
+@@ -0,0 +1,61 @@
++#pragma once
++
++#include "ggml-impl.h"
++
++struct short_conv_residual_plan {
++    const ggml_tensor * history;
++    const ggml_tensor * weights;
++    const ggml_tensor * residual;
++    const ggml_tensor * output;
++};
++
++// Binding validation is separate. A logical match cannot authorize overlap between
++// different channels or a mutable input and the output. One exact same-range
++// residual/output mapping is safe because each invocation uses its own channel.
++inline bool plan_short_conv_residual(const ggml_cgraph * graph, int index, short_conv_residual_plan & plan) {
++    constexpr ggml_op ops[] = {GGML_OP_SSM_CONV, GGML_OP_RESHAPE, GGML_OP_ADD, GGML_OP_SCALE};
++    if (!graph || index < 0 || index > graph->n_nodes - 4) {
++        return false;
++    }
++    const auto * conv = graph->nodes[index];
++    const auto * flat = graph->nodes[index + 1];
++    const auto * add = graph->nodes[index + 2];
++    const auto * output = graph->nodes[index + 3];
++    if (conv->op != ops[0] || flat->op != ops[1] || add->op != ops[2] || output->op != ops[3] ||
++        flat->src[0] != conv || flat->view_src != conv || flat->view_offs || add->src[1] != flat || output->src[0] != add) {
++        return false;
++    }
++    const auto * history = conv->src[0];
++    const auto * weights = conv->src[1];
++    const auto * residual = add->src[0];
++    if (!history || !weights || !residual || conv->view_src || add->view_src || output->view_src) {
++        return false;
++    }
++    const auto channels = conv->ne[0];
++    if (channels <= 0 || channels > UINT32_MAX / 4) {
++        return false;
++    }
++    if (history->ne[0] != 4 || weights->ne[0] != 4 || history->ne[1] != channels || weights->ne[1] != channels) {
++        return false;
++    }
++    for (const auto * tensor : {conv, flat, residual, add, output}) {
++        if (tensor->ne[0] != channels || tensor->ne[1] != 1) {
++            return false;
++        }
++    }
++    for (const auto * tensor : {history, weights, conv, flat, residual, add, output}) {
++        if (tensor->type != GGML_TYPE_F32 || tensor->ne[2] != 1 || tensor->ne[3] != 1 || !ggml_is_contiguous(tensor)) {
++            return false;
++        }
++    }
++    // The residual is a fully external operand, including its underlying view source.
++    if (residual == conv || residual == flat || residual->view_src == conv || residual->view_src == flat) {
++        return false;
++    }
++    const int outputs[] = {index + 3};
++    if (!ggml_can_fuse_subgraph(graph, index, 4, ops, outputs, 1)) {
++        return false;
++    }
++    plan = {history, weights, residual, output};
++    return true;
++}
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp
+@@ -0,0 +1,60 @@
++#pragma once
++
++#include "ggml-impl.h"
++
++struct short_conv_state_plan {
++    const ggml_tensor * past;
++    const ggml_tensor * current;
++    const ggml_tensor * history;
++    const ggml_tensor * state;
++};
++
++// Single-token normal state store. Copying the tail preserves its original
++// side effect and the complete concat tensor remains available to every user.
++inline bool plan_short_conv_state(const ggml_cgraph * graph, int index, short_conv_state_plan & plan) {
++    constexpr ggml_op ops[] = {GGML_OP_CONCAT, GGML_OP_VIEW, GGML_OP_VIEW, GGML_OP_CPY};
++    if (!graph || index < 0 || index > graph->n_nodes - 4) {
++        return false;
++    }
++    const auto * concat = graph->nodes[index];
++    const auto * tail = graph->nodes[index + 1];
++    const auto * cell = graph->nodes[index + 2];
++    const auto * copy = graph->nodes[index + 3];
++    if (concat->op != ops[0] || tail->op != ops[1] || cell->op != ops[2] || copy->op != ops[3] ||
++        ggml_get_op_params_i32(concat, 0) != 0 || !concat->src[0] || !concat->src[1] ||
++        tail->src[0] != concat || tail->view_src != concat || tail->view_offs != sizeof(float) ||
++        copy->src[0] != tail || copy->src[1] != cell || !cell->view_src || copy->view_src != cell->view_src ||
++        copy->view_offs != cell->view_offs) {
++        return false;
++    }
++    const auto * past = concat->src[0];
++    const auto * current = concat->src[1];
++    const auto * current_root = current->view_src;
++    const int64_t channels = concat->ne[1];
++    if (channels <= 0 || channels > UINT32_MAX / 4 || !current_root || current->view_offs || current_root->view_src) {
++        return false;
++    }
++    for (const auto * tensor : {past, current, concat, tail, cell, copy, current_root}) {
++        if (tensor->type != GGML_TYPE_F32 || tensor->ne[2] != 1 || tensor->ne[3] != 1) {
++            return false;
++        }
++    }
++    if (past->ne[0] != 3 || past->ne[1] != channels || past->nb[0] != 4 || past->nb[1] != 12 ||
++        current->ne[0] != 1 || current->ne[1] != channels || current->nb[1] != 4 ||
++        current_root->ne[0] != channels || current_root->ne[1] != 1 || current_root->nb[0] != 4 ||
++        concat->ne[0] != 4 || concat->nb[0] != 4 || concat->nb[1] != 16 || concat->view_src ||
++        tail->ne[0] != 3 || tail->ne[1] != channels || tail->nb[0] != 4 || tail->nb[1] != 16 ||
++        cell->ne[0] != 3 * channels || cell->ne[1] != 1 || cell->nb[0] != 4 ||
++        !ggml_are_same_shape(cell, copy) || !ggml_are_same_stride(cell, copy)) {
++        return false;
++    }
++
++    // The destination view and copy refer to persistent state. They stay
++    // explicit outputs in the closure check, alongside the materialized concat.
++    const int outputs[] = {index, index + 2, index + 3};
++    if (!ggml_can_fuse_subgraph(graph, index, 4, ops, outputs, 3)) {
++        return false;
++    }
++    plan = {past, current_root, concat, copy};
++    return true;
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_residual.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_residual.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_residual.wgsl
+@@ -0,0 +1,49 @@
++// Four-tap, single-decode-row kernel prototype.
++// The normal provider writes two F32 intermediates for this expression.
++// Compare this exact operator order with emitted SSM_CONV + ADD + SCALE.
++
++struct Params {
++    history_offset: u32,
++    weight_offset: u32,
++    residual_offset: u32,
++    output_offset: u32,
++    channels: u32,
++    history_stride: u32,
++    weight_stride: u32,
++    scale: f32,
++    bias: f32,
++};
++
++// All non-overlapping bindings can come from the same GGML backing buffer.
++// Use one WebGPU storage usage for that buffer throughout this dispatch.
++@group(0) @binding(0) var<storage, read_write> history: array<f32>;
++@group(0) @binding(1) var<storage, read_write> weights: array<f32>;
++#ifdef INPLACE_RESIDUAL
++@group(0) @binding(2) var<storage, read_write> residual: array<f32>;
++@group(0) @binding(3) var<uniform> params: Params;
++#else
++@group(0) @binding(2) var<storage, read_write> residual: array<f32>;
++@group(0) @binding(3) var<storage, read_write> output: array<f32>;
++@group(0) @binding(4) var<uniform> params: Params;
++#endif
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
++    let channel = gid.x;
++    if (channel >= params.channels) {
++        return;
++    }
++    let h = params.history_offset + channel * params.history_stride;
++    let w = params.weight_offset + channel * params.weight_stride;
++    let conv = history[h + 0u] * weights[w + 0u] +
++               history[h + 1u] * weights[w + 1u] +
++               history[h + 2u] * weights[w + 2u] +
++               history[h + 3u] * weights[w + 3u];
++    let combined = residual[params.residual_offset + channel] + conv;
++    let result = combined * params.scale + params.bias;
++#ifdef INPLACE_RESIDUAL
++    residual[params.output_offset + channel] = result;
++#else
++    output[params.output_offset + channel] = result;
++#endif
++}
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl
+@@ -0,0 +1,35 @@
++struct Params {
++    past_offset: u32,
++    current_offset: u32,
++    history_offset: u32,
++    state_offset: u32,
++    channels: u32,
++};
++
++@group(0) @binding(0) var<storage, read_write> past: array<u32>;
++@group(0) @binding(1) var<storage, read_write> current: array<u32>;
++@group(0) @binding(2) var<storage, read_write> history: array<u32>;
++@group(0) @binding(3) var<storage, read_write> state: array<u32>;
++@group(0) @binding(4) var<uniform> params: Params;
++
++@compute @workgroup_size(128)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
++    let channel = gid.x;
++    if (channel >= params.channels) {
++        return;
++    }
++    let p = params.past_offset + channel * 3u;
++    let h = params.history_offset + channel * 4u;
++    let s = params.state_offset + channel * 3u;
++    let p0 = past[p];
++    let p1 = past[p + 1u];
++    let p2 = past[p + 2u];
++    let cur = current[params.current_offset + channel];
++    history[h] = p0;
++    history[h + 1u] = p1;
++    history[h + 2u] = p2;
++    history[h + 3u] = cur;
++    state[s] = p1;
++    state[s + 1u] = p2;
++    state[s + 2u] = cur;
++}

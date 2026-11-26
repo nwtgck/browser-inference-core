@@ -1,0 +1,151 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1067,9 +1067,11 @@
+ struct ggml_webgpu_flash_attn_pipeline_key {
+     ggml_webgpu_flash_attn_common_pipeline_key common;
+     bool                                       use_sg_matrix;
++    bool                                       skip_masked_tiles;
+ 
+     bool operator==(const ggml_webgpu_flash_attn_pipeline_key & other) const {
+-        return common == other.common && use_sg_matrix == other.use_sg_matrix;
++        return common == other.common && use_sg_matrix == other.use_sg_matrix &&
++               skip_masked_tiles == other.skip_masked_tiles;
+     }
+ };
+ 
+@@ -1078,6 +1080,7 @@
+         size_t seed = 0;
+         ggml_webgpu_flash_attn_hash_common_pipeline_key(seed, key.common);
+         ggml_webgpu_hash_combine(seed, key.use_sg_matrix);
++        ggml_webgpu_hash_combine(seed, key.skip_masked_tiles);
+         return seed;
+     }
+ };
+@@ -1097,6 +1100,37 @@
+ inline constexpr uint32_t GGML_WEBGPU_FLASH_ATTN_TILE_KV_VEC_WIDTH = 4u;
+ inline constexpr uint32_t GGML_WEBGPU_FLASH_ATTN_TILE_Q_TILE       = 4u;
+ 
++inline size_t ggml_webgpu_flash_attn_scalar_tile_shared_bytes(
++        uint32_t q_tile, uint32_t kv_tile, uint32_t dim_qk, uint32_t dim_v, bool skip_masked_tiles) {
++    // WebGPU rounds each statically-used workgroup variable up to 16 bytes.
++    const auto rounded = [](size_t bytes) { return ((bytes + 15u) / 16u) * 16u; };
++    const size_t q_shared = rounded(size_t(q_tile) * dim_qk * sizeof(float));
++    const size_t kv_shared = rounded(size_t(kv_tile) * std::max(dim_qk, dim_v) * sizeof(uint16_t));
++    const size_t p_shared = rounded(size_t(q_tile) * kv_tile * sizeof(uint16_t));
++    const size_t votes = skip_masked_tiles ? rounded(size_t(q_tile) * sizeof(uint32_t)) + rounded(sizeof(uint32_t)) : 0;
++    return q_shared + kv_shared + p_shared + votes;
++}
++
++inline bool ggml_webgpu_flash_attn_skip_masked_tiles(
++        const ggml_webgpu_shader_lib_context & context,
++        const ggml_webgpu_flash_attn_decisions & decisions,
++        const ggml_webgpu_flash_attn_common_pipeline_key & key) {
++    const auto * mask = context.src3;
++    if (decisions.use_sg_matrix || !mask || key.q_type != GGML_TYPE_F32 || key.k_type != GGML_TYPE_F16 ||
++        key.v_type != GGML_TYPE_F16 || key.kv_overlap || ggml_get_op_params_f32(context.dst, 1) != 0.0f ||
++        context.src0->ne[1] < 32 || context.src1->ne[1] < 768) {
++        return false;
++    }
++    if (mask->type != GGML_TYPE_F16 || mask->ne[0] != context.src1->ne[1] || mask->ne[1] < context.src0->ne[1] ||
++        mask->nb[0] != sizeof(uint16_t) || mask->nb[1] != ggml_row_size(GGML_TYPE_F16, mask->ne[0]) ||
++        mask->nb[2] % sizeof(uint16_t) != 0 || mask->nb[3] % sizeof(uint16_t) != 0) {
++        return false;
++    }
++    return ggml_webgpu_flash_attn_scalar_tile_shared_bytes(
++                   decisions.q_tile, decisions.kv_tile, key.head_dim_qk, key.head_dim_v, true) <=
++           context.wg_mem_limit_bytes;
++}
++
+ inline size_t ggml_webgpu_flash_attn_tensor_offset(const ggml_tensor * tensor) {
+     constexpr uintptr_t ptr_base_addr = 0x1000u;
+     const ggml_tensor * base          = tensor->view_src != nullptr ? tensor->view_src : tensor;
+@@ -3913,6 +3947,7 @@
+             }
+         }
+ 
++        key.skip_masked_tiles = ggml_webgpu_flash_attn_skip_masked_tiles(context, decisions, key.common);
+         auto it = flash_attn_pipelines.find(key);
+         if (it != flash_attn_pipelines.end()) {
+             return it->second;
+@@ -3928,6 +3963,10 @@
+             defines.push_back("MAX_SUBGROUP_SIZE=" + std::to_string(context.max_subgroup_size) + "u");
+             variant += "_tile_sg" + std::to_string(context.min_subgroup_size) + "_" +
+                        std::to_string(context.max_subgroup_size);
++            if (key.skip_masked_tiles) {
++                defines.push_back("SKIP_MASKED_TILES");
++                variant += "_maskskip";
++            }
+         } else {
+             shader_src = wgsl_flash_attn;
+             defines.push_back(std::string("SG_MAT_M=") + std::to_string(context.sg_mat_m));
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
+@@ -28,6 +28,10 @@
+ 
+ var<workgroup> q_shmem: array<Q_TYPE, Q_TILE * HEAD_DIM_QK>;
+ var<workgroup> p_shmem: array<f16, Q_TILE * KV_TILE>;
++#ifdef SKIP_MASKED_TILES
++var<workgroup> mask_tile_rows: array<u32, Q_TILE>;
++var<workgroup> mask_tile_any: u32;
++#endif
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
+@@ -88,6 +92,13 @@
+             head_q_row < params.seq_len_q);
+     }
+ 
++#ifdef SKIP_MASKED_TILES
++    // A partial subgroup may not have an active lane 0. Default its vote to
++    // visible before the existing Q staging barrier.
++    if (local_id.x < Q_TILE) {
++        mask_tile_rows[local_id.x] = 1u;
++    }
++#endif
+     workgroupBarrier();
+ 
+     var row_max = FLOAT_MIN;
+@@ -100,10 +111,43 @@
+     let q_base = subgroup_id * HEAD_DIM_QK;
+     let subgroup_p_offset = subgroup_id * KV_TILE;
+ 
++#ifdef SKIP_MASKED_TILES
++    let full_subgroup = subgroupAdd(1u) == subgroup_size;
++#endif
+     for (var kv_tile = 0u; kv_tile < params.seq_len_kv; kv_tile += KV_TILE) {
+         let kv_count = min(KV_TILE, params.seq_len_kv - kv_tile);
+         let score_slots = min(SCORE_REGS_PER_LANE, (kv_count + subgroup_size - 1u) / subgroup_size);
+         let out_slots = min(OUT_REGS_PER_LANE, (V_CHUNKS + subgroup_size - 1u) / subgroup_size);
++#ifdef SKIP_MASKED_TILES
++        if (params.max_bias == 0.0 && params.seq_len_kv > KV_TILE) {
++            // Partial subgroups cannot vote on every score slot. Keep their tile.
++            var visible = !full_subgroup;
++            if (row_active && !visible) {
++                for (var slot = 0u; slot < score_slots; slot += 1u) {
++                    let kv_local = sg_inv_id + slot * subgroup_size;
++                    if (kv_local < kv_count) {
++                        let index = mask_global_offset + subgroup_id * params.seq_len_kv + kv_tile + kv_local;
++                        let raw = bitcast<u32>(vec2<f16>(mask[index], 0.0h));
++                        visible = visible || (raw & 0xffffu) != 0xfc00u;
++                    }
++                }
++            }
++            let row_visible = subgroupAny(visible);
++            if (sg_inv_id == 0u && subgroup_id < Q_TILE) {
++                mask_tile_rows[subgroup_id] = select(0u, 1u, row_visible);
++            }
++            workgroupBarrier();
++            if (local_id.x == 0u) {
++                mask_tile_any = 0u;
++                for (var row = 0u; row < Q_TILE; row += 1u) {
++                    mask_tile_any |= mask_tile_rows[row];
++                }
++            }
++            if (workgroupUniformLoad(&mask_tile_any) == 0u) {
++                continue;
++            }
++        }
++#endif
+         var local_scores: array<f32, SCORE_REGS_PER_LANE>;
+         for (var slot = 0u; slot < SCORE_REGS_PER_LANE; slot += 1u) {
+             local_scores[slot] = FLOAT_MIN;

@@ -1,0 +1,694 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -23,6 +23,7 @@
+ #include "ggml-backend-host-snapshot.h"
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-shader-lib.hpp"
++#include "ggml-webgpu-indexed-vec-mask-shaders.hpp"
+ #include "ggml.h"
+ 
+ #ifdef __EMSCRIPTEN__
+@@ -433,6 +434,8 @@
+     wgpu::Buffer depth_mix_values;
+     wgpu::Buffer depth_mix_probabilities;
+     std::array<std::array<webgpu_pipeline, 3>, depth_mix::max_depth - 1> depth_mix_pipelines;
++
++    webgpu_pipeline indexed_vec_mask;
+ 
+     webgpu_param_arena       param_arena;
+     webgpu_bind_group_cache  bind_group_cache;
+@@ -2670,13 +2673,238 @@
+            kv_vec_head_dims_aligned && k_float_vec4_aligned && v_float_vec4_aligned;
+ }
+ 
++struct ggml_webgpu_indexed_vec_layout {
++    uint64_t mask_offset;
++    uint64_t bytes;
++    uint32_t pairs;
++    uint32_t groups;
++};
++
++static void * ggml_backend_webgpu_buffer_get_base(ggml_backend_buffer_t buffer);
++static uint32_t ggml_webgpu_flash_attn_vec_nwg(uint32_t vec_nwg_cap, uint32_t kv_tile, uint32_t seq_len_kv);
++
++static bool ggml_webgpu_flash_mask_binding_fits(const webgpu_global_context & global, const ggml_tensor * mask) {
++    const auto & limits = global->capabilities.limits;
++    const size_t alignment = limits.minStorageBufferOffsetAlignment;
++    if (mask->type != GGML_TYPE_F16 || alignment < sizeof(ggml_fp16_t) || !std::has_single_bit(alignment)) {
++        return false;
++    }
++    const uint64_t limit = std::min(limits.maxStorageBufferBindingSize, limits.maxBufferSize) &
++                           ~uint64_t(WEBGPU_STORAGE_BUF_BINDING_MULT - 1);
++    const uint64_t bytes = ggml_nbytes(mask);
++    const auto * root = mask->view_src ? mask->view_src : mask;
++    size_t offset = mask->view_offs;
++    if (root->buffer) {
++        const auto * buffer = root->buffer->iface.get_base == ggml_backend_webgpu_buffer_get_base
++            ? static_cast<const ggml_backend_webgpu_buffer_context *>(root->buffer->context) : nullptr;
++        if (!buffer || buffer->global_ctx != global) {
++            // The scheduler copies a tensor from an incompatible buffer into a new aligned tensor.
++            offset = 0;
++        } else if (root->data) {
++            offset = ggml_webgpu_tensor_offset(mask);
++        }
++    }
++    const auto prefix = offset % alignment;
++    return offset % sizeof(ggml_fp16_t) == 0 && bytes <= limit && prefix <= limit - bytes;
++}
++
++// Includes the existing vec partial-output and mask-block surfaces plus the
++// materialized mask. Reserve for the largest vec batch even from a tile node.
++static std::optional<ggml_webgpu_indexed_vec_layout> ggml_webgpu_flash_indexed_vec_layout(
++        const webgpu_global_context & global, const ggml_tensor * node, uint64_t queries) {
++    const auto * q = node->src[0];
++    const auto * k = node->src[1];
++    const auto * v = node->src[2];
++    const auto & caps = global->capabilities;
++    const auto & limits = caps.limits;
++    const uint64_t alignment = limits.minStorageBufferOffsetAlignment;
++    const uint64_t cap = std::min<uint64_t>({limits.maxStorageBufferBindingSize, limits.maxBufferSize, UINT32_MAX});
++    const uint32_t wg_limit = limits.maxComputeInvocationsPerWorkgroup;
++    const uint32_t size_x = limits.maxComputeWorkgroupSizeX;
++    const uint32_t subgroup = caps.max_subgroup_size;
++    if (!queries || !caps.min_subgroup_size || subgroup < caps.min_subgroup_size || subgroup > size_x ||
++        subgroup > wg_limit || wg_limit < 128u || size_x < 128u || alignment < 4u ||
++        !std::has_single_bit(alignment) || node->view_src || node->view_offs) {
++        return std::nullopt;
++    }
++    const auto kv = uint32_t(k->ne[1]);
++    const auto d = uint32_t(q->ne[0]);
++    const auto dv = uint32_t(v->ne[0]);
++    const bool kd = ggml_webgpu_flash_attn_k_direct(q, k, GGML_WEBGPU_FLASH_ATTN_TILE_KV_VEC_WIDTH);
++    const bool vd = ggml_webgpu_flash_attn_v_direct(q, v, GGML_WEBGPU_FLASH_ATTN_TILE_KV_VEC_WIDTH);
++    if (!ggml_webgpu_flash_attn_max_kv_tile(limits.maxComputeWorkgroupStorageSize, 1u, 1u, d, dv, true, kd && vd)) {
++        return std::nullopt;
++    }
++    const uint32_t tile = ggml_webgpu_flash_attn_get_vec_kv_tile(limits.maxComputeWorkgroupStorageSize, d, dv, true, kd, vd);
++    const uint32_t nwg = ggml_webgpu_flash_attn_vec_nwg(caps.min_subgroup_size, tile, kv);
++    const uint32_t block_width = std::max(1u, std::bit_floor(tile <= 32u ? std::min(wg_limit, 32u) : wg_limit));
++    const uint64_t group_cap = limits.maxComputeWorkgroupsPerDimension;
++    const uint64_t blocks = (uint64_t(kv) + tile - 1u) / tile;
++    if (!kv || !nwg || !group_cap || blocks > group_cap || block_width > size_x ||
++        12u * uint64_t(block_width) > limits.maxComputeWorkgroupStorageSize ||
++        (nwg > 1u && std::min<uint64_t>(uint64_t(nwg) * subgroup, wg_limit) > size_x)) {
++        return std::nullopt;
++    }
++    const uint64_t row_cap = group_cap / nwg;
++    if (queries > row_cap / uint64_t(q->ne[2]) / uint64_t(q->ne[3])) {
++        return std::nullopt;
++    }
++    const uint64_t rows = queries * q->ne[2] * q->ne[3];
++    if (rows > cap / sizeof(uint32_t) / blocks || rows > cap / sizeof(uint16_t) / kv ||
++        (nwg > 1u && rows * nwg > cap / sizeof(float) / (uint64_t(dv) + 2u))) {
++        return std::nullopt;
++    }
++    const uint64_t mask_bytes = rows * kv * sizeof(uint16_t);
++    const uint64_t block_bytes = rows * blocks * sizeof(uint32_t);
++    const uint64_t tmp_bytes = nwg > 1u ? rows * nwg * (uint64_t(dv) + 2u) * sizeof(float) : WEBGPU_STORAGE_BUF_BINDING_MULT;
++    const uint64_t pairs = mask_bytes / 4u;
++    const uint64_t groups = (pairs + 127u) / 128u;
++    if (!groups || mask_bytes % 4u || groups > group_cap * group_cap) {
++        return std::nullopt;
++    }
++    const uint64_t tmp_offset = ROUNDUP_POW2(uint64_t(ggml_nbytes(node)), alignment);
++    const uint64_t blk_offset = ROUNDUP_POW2(tmp_offset + tmp_bytes, alignment);
++    const uint64_t mask_offset = ROUNDUP_POW2(blk_offset + block_bytes, alignment);
++    const uint64_t bytes = ROUNDUP_POW2(mask_offset + mask_bytes, alignment);
++    const uint64_t allocation_cap = sizeof(size_t) < sizeof(uint64_t) ?
++        std::min<uint64_t>(limits.maxBufferSize, SIZE_MAX / 2) : limits.maxBufferSize;
++    if (bytes > allocation_cap) {
++        return std::nullopt;
++    }
++    return ggml_webgpu_indexed_vec_layout{mask_offset, bytes, uint32_t(pairs), uint32_t(groups)};
++}
++
++static bool ggml_webgpu_flash_indexed_vec_resident(const webgpu_global_context & global, const ggml_tensor * node,
++                                                   const ggml_webgpu_indexed_vec_layout & layout) {
++    if (!node->buffer) {
++        return true;
++    }
++    const auto * buffer = node->buffer;
++    if (buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base || !buffer->context) {
++        return false;
++    }
++    const auto * backing = static_cast<const ggml_backend_webgpu_buffer_context *>(buffer->context);
++    if (backing->global_ctx != global || !backing->buffer ||
++        (backing->buffer.GetUsage() & wgpu::BufferUsage::Storage) == wgpu::BufferUsage::None) {
++        return false;
++    }
++    const uint64_t alignment = global->capabilities.limits.minStorageBufferOffsetAlignment;
++    const uint64_t offset = ggml_webgpu_tensor_offset(node);
++    const uint64_t maximum = std::min<uint64_t>(buffer->size, backing->buffer.GetSize());
++    if (offset % alignment || offset > maximum || layout.bytes > maximum - offset) {
++        return false;
++    }
++    // Scratch and the result are one allocation. Each dispatch binds only its
++    // individual ranges. Keep all of those ranges disjoint from live inputs.
++    for (const auto * src : node->src) {
++        if (!src || !src->buffer || src->buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base) {
++            continue;
++        }
++        const auto * input = static_cast<const ggml_backend_webgpu_buffer_context *>(src->buffer->context);
++        if (!input || input->global_ctx != global || !input->buffer) {
++            return false;
++        }
++        if (input->buffer.Get() != backing->buffer.Get()) {
++            continue;
++        }
++        const auto begin = ggml_webgpu_tensor_align_offset(src, alignment);
++        const auto size = ggml_webgpu_tensor_binding_size(src, alignment);
++        if (begin < offset + layout.bytes && offset < begin + size) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool ggml_webgpu_flash_supports_indexed_half_bias(const webgpu_global_context & global,
++                                                          const ggml_tensor * node) {
++    const auto * q = node->src[0];
++    const auto * k = node->src[1];
++    const auto * v = node->src[2];
++    const auto * mask = node->src[3];
++    const auto * sinks = node->src[4];
++    const auto * table = node->src[6];
++    const auto * ids = node->src[7];
++    if (!q || !k || !v || !mask || !table || !ids ||
++        q->type != GGML_TYPE_F32 || k->type != GGML_TYPE_F16 || v->type != GGML_TYPE_F16 ||
++        node->type != GGML_TYPE_F32 || mask->type != GGML_TYPE_F16 ||
++        table->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 || node->src[5] ||
++        q->ne[1] < 1 ||
++        q->ne[1] > UINT32_MAX || q->ne[2] < 1 || q->ne[2] > UINT32_MAX ||
++        q->ne[3] < 1 || q->ne[3] > UINT32_MAX || k->ne[1] < 1 || k->ne[1] > UINT32_MAX ||
++        q->ne[1] > UINT32_MAX / q->ne[3] || table->ne[0] < 1 || table->ne[0] > UINT32_MAX) {
++        return false;
++    }
++    const int64_t queries = q->ne[1] * q->ne[3];
++    if (mask->ne[0] != k->ne[1] || mask->ne[1] != q->ne[1] || mask->ne[2] != 1 || mask->ne[3] != q->ne[3] ||
++        table->ne[1] != q->ne[2] || table->ne[2] != queries || table->ne[3] != 1 ||
++        ids->ne[0] != k->ne[1] || ids->ne[1] != queries || !ggml_is_matrix(ids) ||
++        !ggml_is_contiguous(mask) || !ggml_is_contiguous(table) || !ggml_is_contiguous(ids) ||
++        (sinks && (sinks->type != GGML_TYPE_F32 || !ggml_is_contiguous(sinks) || ggml_nelements(sinks) != q->ne[2]))) {
++        return false;
++    }
++    const auto & caps = global->capabilities;
++    const auto & limits = caps.limits;
++    const uint64_t head_groups = 1 + (q->ne[1] - 1) / GGML_WEBGPU_FLASH_ATTN_TILE_Q_TILE;
++    const uint64_t count_per_stream = head_groups * uint64_t(q->ne[2]);
++    if (!caps.supports_subgroups || caps.min_subgroup_size == 0 ||
++        caps.max_subgroup_size < caps.min_subgroup_size ||
++        limits.maxStorageBuffersPerShaderStage < (sinks ? 8u : 7u) ||
++        limits.maxBindingsPerBindGroup < (sinks ? 9u : 8u) || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        limits.minStorageBufferOffsetAlignment < 4u ||
++        count_per_stream > limits.maxComputeWorkgroupsPerDimension / uint64_t(q->ne[3])) {
++        return false;
++    }
++    const auto wg = std::min<uint64_t>(limits.maxComputeInvocationsPerWorkgroup,
++        std::max<uint64_t>(GGML_WEBGPU_FLASH_ATTN_PREFERRED_WG_SIZE,
++                           GGML_WEBGPU_FLASH_ATTN_TILE_Q_TILE * uint64_t(caps.max_subgroup_size)));
++    if (wg > limits.maxComputeWorkgroupSizeX ||
++        wg < GGML_WEBGPU_FLASH_ATTN_TILE_Q_TILE * uint64_t(caps.max_subgroup_size)) {
++        return false;
++    }
++    for (const auto * t : {q, k, v, mask, sinks, node, ids, table}) {
++        if (!t) {
++            continue;
++        }
++        const uint64_t bytes = ggml_nbytes(t);
++        const uint64_t maximum = std::min<uint64_t>(UINT32_MAX,
++            std::min(limits.maxStorageBufferBindingSize, limits.maxBufferSize));
++        const uint64_t alignment = limits.minStorageBufferOffsetAlignment;
++        const uint64_t prefix = t->buffer ? ggml_webgpu_tensor_misalignment(t, alignment) : t->view_offs % alignment;
++        if (!bytes || bytes > maximum || prefix > maximum - bytes ||
++            ROUNDUP_POW2(bytes + prefix, WEBGPU_STORAGE_BUF_BINDING_MULT) > maximum) {
++            return false;
++        }
++    }
++    const auto reserve_queries = std::min<int64_t>(q->ne[1], GGML_WEBGPU_FLASH_ATTN_VEC_MAX_SEQ_LEN - 1);
++    if (ggml_webgpu_flash_attn_use_vec_path(global, q, k, v, reserve_queries)) {
++        const auto layout = ggml_webgpu_flash_indexed_vec_layout(global, node, reserve_queries);
++        if (!layout || !ggml_webgpu_flash_indexed_vec_resident(global, node, *layout)) {
++            return false;
++        }
++    }
++    // Before allocation roots have no physical regions. Once assigned, accept
++    // only the nonoverlapping storage regions produced by the normal allocator.
++    for (const auto * input : {mask, table, ids}) {
++        for (const auto * other : {q, k, v, sinks, node, mask, table, ids}) {
++            if (other && input != other && input->buffer && other->buffer &&
++                ggml_webgpu_tensor_binding_overlap(global, input, other)) {
++                return false;
++            }
++        }
++    }
++    return true;
++}
++
+ static ggml_webgpu_flash_attn_op ggml_webgpu_flash_attn_prepare(webgpu_context & ctx,
+                                                                 ggml_tensor *    Q,
+                                                                 ggml_tensor *    K,
+                                                                 ggml_tensor *    V,
+                                                                 ggml_tensor *    mask,
+                                                                 ggml_tensor *    sinks,
+-                                                                ggml_tensor *    dst) {
++                                                                ggml_tensor *    dst,
++                                                                bool compact_mask = true) {
+     float scale         = ggml_get_op_params_f32(dst, 0);
+     float max_bias      = ggml_get_op_params_f32(dst, 1);
+     float logit_softcap = ggml_get_op_params_f32(dst, 2);
+@@ -2767,6 +2995,15 @@
+         op.entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, binding_index++, sinks));
+     }
+     op.entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, binding_index++, dst));
++    if (compact_mask && ggml_webgpu_flash_indexed_half_bias(dst)) {
++        auto * ids = dst->src[7];
++        auto * table = dst->src[6];
++        op.params.push_back(ggml_webgpu_tensor_misalignment(ctx, table) / sizeof(float));
++        op.params.push_back(ggml_webgpu_tensor_misalignment(ctx, ids) / sizeof(int32_t));
++        op.params.push_back(table->ne[0]);
++        op.entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, binding_index++, ids));
++        op.entries.push_back(ggml_webgpu_make_tensor_bind_group_entry(ctx, binding_index++, table));
++    }
+ 
+     return op;
+ }
+@@ -2795,7 +3032,8 @@
+                                                     ggml_tensor *             mask,
+                                                     ggml_tensor *             sinks,
+                                                     ggml_tensor *             dst,
+-                                                    ggml_webgpu_flash_attn_op op) {
++                                                    ggml_webgpu_flash_attn_op op,
++                                                    std::optional<webgpu_dispatch_desc> producer = std::nullopt) {
+     webgpu_pipeline pipeline  = ctx->shader_lib->get_flash_attn_vec_pipeline(op.shader_lib_ctx, op.kv_overlap);
+     auto *          decisions = static_cast<ggml_webgpu_flash_attn_vec_decisions *>(pipeline.context.get());
+ 
+@@ -2956,6 +3194,12 @@
+     GGML_ASSERT(split_wg_total <= UINT32_MAX);
+ 
+     std::vector<webgpu_dispatch_desc> dispatches;
++    if (producer) {
++        // The same offsets must be used by reserve, the producer and vec.
++        GGML_ASSERT(ggml_webgpu_tensor_offset(mask) == scratch_offset);
++        dispatches.reserve(4);
++        dispatches.push_back(std::move(*producer));
++    }
+ 
+     if (op.has_mask) {
+         dispatches.push_back({
+@@ -2974,6 +3218,29 @@
+     return ggml_backend_webgpu_build_multi(ctx, dispatches);
+ }
+ 
++static webgpu_dispatch_desc ggml_webgpu_make_indexed_vec_mask(
++        webgpu_context & ctx, ggml_tensor * node, ggml_tensor * dense,
++        const ggml_webgpu_indexed_vec_layout & layout) {
++    auto * table = node->src[6];
++    auto * ids = node->src[7];
++    auto * raw = node->src[3];
++    if (!ctx->indexed_vec_mask.pipeline) {
++        ctx->indexed_vec_mask = ggml_webgpu_create_pipeline(ctx->global_ctx->device, wgsl_indexed_vec_mask,
++                                                           "indexed_vec_mask");
++    }
++    uint32_t x, y;
++    compute_2d_workgroups(layout.groups, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, x, y);
++    return {ctx->indexed_vec_mask,
++        {uint32_t(dense->ne[0]), uint32_t(dense->ne[1]), uint32_t(dense->ne[2]), uint32_t(table->ne[1]),
++         0, uint32_t(table->ne[0]), layout.pairs,
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, table) / sizeof(float)),
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, ids) / sizeof(int32_t)),
++         uint32_t(ggml_webgpu_tensor_misalignment(ctx, raw) / sizeof(uint16_t)), 0},
++        {ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, table), ggml_webgpu_make_tensor_bind_group_entry(ctx, 1, ids),
++         ggml_webgpu_make_tensor_bind_group_entry(ctx, 2, raw), ggml_webgpu_make_tensor_bind_group_entry(ctx, 3, dense)},
++        {x, y}};
++}
++
+ static webgpu_encoded_op ggml_webgpu_flash_attn(webgpu_context & ctx,
+                                                 ggml_tensor *    Q,
+                                                 ggml_tensor *    K,
+@@ -2981,11 +3248,32 @@
+                                                 ggml_tensor *    mask,
+                                                 ggml_tensor *    sinks,
+                                                 ggml_tensor *    dst) {
+-    ggml_webgpu_flash_attn_op op = ggml_webgpu_flash_attn_prepare(ctx, Q, K, V, mask, sinks, dst);
+-    if (ggml_webgpu_flash_attn_use_vec_path(ctx->global_ctx, Q, K, V, Q->ne[1])) {
+-        return ggml_webgpu_flash_attn_vec(ctx, Q, K, V, mask, sinks, dst, std::move(op));
+-    }
+-    return ggml_webgpu_flash_attn_direct(ctx, op);
++    if (!ggml_webgpu_flash_attn_use_vec_path(ctx->global_ctx, Q, K, V, Q->ne[1])) {
++        return ggml_webgpu_flash_attn_direct(ctx, ggml_webgpu_flash_attn_prepare(ctx, Q, K, V, mask, sinks, dst));
++    }
++    if (!ggml_webgpu_flash_indexed_half_bias(dst)) {
++        return ggml_webgpu_flash_attn_vec(ctx, Q, K, V, mask, sinks, dst,
++                                         ggml_webgpu_flash_attn_prepare(ctx, Q, K, V, mask, sinks, dst));
++    }
++    const auto layout = ggml_webgpu_flash_indexed_vec_layout(ctx->global_ctx, dst, Q->ne[1]);
++    GGML_ASSERT(layout && ggml_webgpu_flash_indexed_vec_resident(ctx->global_ctx, dst, *layout));
++    // Metadata only. The existing vec shader sees an ordinary packed mask at a
++    // distinct aligned offset of dst's allocation, and keeps its exact ABI.
++    ggml_tensor dense = {};
++    dense.type = GGML_TYPE_F16;
++    dense.buffer = dst->buffer;
++    dense.data = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(dst->data) + layout->mask_offset);
++    dense.ne[0] = mask->ne[0];
++    dense.ne[1] = Q->ne[1];
++    dense.ne[2] = Q->ne[2];
++    dense.ne[3] = Q->ne[3];
++    dense.nb[0] = sizeof(uint16_t);
++    for (int i = 1; i < GGML_MAX_DIMS; ++i) {
++        dense.nb[i] = dense.nb[i - 1] * dense.ne[i - 1];
++    }
++    return ggml_webgpu_flash_attn_vec(ctx, Q, K, V, &dense, sinks, dst,
++                                     ggml_webgpu_flash_attn_prepare(ctx, Q, K, V, &dense, sinks, dst, false),
++                                     ggml_webgpu_make_indexed_vec_mask(ctx, dst, &dense, *layout));
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_unary_op(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+@@ -6237,6 +6525,11 @@
+                 // longest vec batch and the size stays monotonic in the batch length
+                 const int64_t       n_q = std::min<int64_t>(Q->ne[1], GGML_WEBGPU_FLASH_ATTN_VEC_MAX_SEQ_LEN - 1);
+                 if (ggml_webgpu_flash_attn_use_vec_path(ctx->webgpu_global_ctx, Q, K, V, n_q)) {
++                    if (ggml_webgpu_flash_indexed_half_bias(tensor)) {
++                        const auto layout = ggml_webgpu_flash_indexed_vec_layout(ctx->webgpu_global_ctx, tensor, n_q);
++                        GGML_ASSERT(layout);
++                        return size_t(layout->bytes);
++                    }
+                     const uint32_t kv_tile = ggml_webgpu_flash_attn_get_vec_kv_tile(
+                         capabilities.limits.maxComputeWorkgroupStorageSize, (uint32_t) Q->ne[0], (uint32_t) V->ne[0],
+                         mask != nullptr,
+@@ -7071,7 +7364,16 @@
+                 // conservative support checks for whether the more resource-intensive shader paths
+                 // can be used, to avoid cases where flash_attn is assigned to the CPU later on
+                 // K/V row lists and indexed bias are not supported
+-                supports_op = op->src[5] == nullptr && !ggml_flash_attn_ext_has_indexed_bias(op) &&
++                const bool indexed_half = ggml_webgpu_flash_indexed_half_bias(op);
++                if (op->src[3] && !ggml_webgpu_flash_mask_binding_fits(ctx->webgpu_global_ctx, op->src[3])) {
++                    supports_op = false;
++                    break;
++                }
++                if (indexed_half && !ggml_webgpu_flash_supports_indexed_half_bias(ctx->webgpu_global_ctx, op)) {
++                    supports_op = false;
++                    break;
++                }
++                supports_op = op->src[5] == nullptr && (!ggml_flash_attn_ext_has_indexed_bias(op) || indexed_half) &&
+                               src0->type == GGML_TYPE_F32 &&
+                               (src1->type == GGML_TYPE_F32 || src1->type == GGML_TYPE_F16 ||
+                                src1->type == GGML_TYPE_Q4_0 || src1->type == GGML_TYPE_Q8_0) &&
+@@ -7090,7 +7392,7 @@
+                 const size_t storage_offset_alignment = capabilities.limits.minStorageBufferOffsetAlignment;
+ 
+                 // subgroup matrix path requirements
+-                const bool use_subgroup_matrix = ggml_webgpu_flash_attn_can_use_subgroup_matrix_path(
++                const bool use_subgroup_matrix = !indexed_half && ggml_webgpu_flash_attn_can_use_subgroup_matrix_path(
+                     capabilities.supports_subgroup_matrix, capabilities.sg_mat_k, capabilities.sg_mat_n, src0, src2);
+ 
+                 // tile path requirements
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1133,15 +1133,24 @@
+     }
+ };
+ 
++inline constexpr int32_t GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS = 2;
++
++inline bool ggml_webgpu_flash_indexed_half_bias(const ggml_tensor * node) {
++    return node->op == GGML_OP_FLASH_ATTN_EXT &&
++           ggml_get_op_params_i32(node, 5) == GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS;
++}
++
+ struct ggml_webgpu_flash_attn_pipeline_key {
+     ggml_webgpu_flash_attn_common_pipeline_key common;
+     bool                                       use_sg_matrix;
+     bool                                       skip_masked_tiles;
++    bool                                       indexed_half_bias;
+     uint32_t                                   kv_tile;
+ 
+     bool operator==(const ggml_webgpu_flash_attn_pipeline_key & other) const {
+         return common == other.common && use_sg_matrix == other.use_sg_matrix &&
+-               skip_masked_tiles == other.skip_masked_tiles && kv_tile == other.kv_tile;
++               skip_masked_tiles == other.skip_masked_tiles && indexed_half_bias == other.indexed_half_bias &&
++               kv_tile == other.kv_tile;
+     }
+ };
+ 
+@@ -1151,6 +1160,7 @@
+         ggml_webgpu_flash_attn_hash_common_pipeline_key(seed, key.common);
+         ggml_webgpu_hash_combine(seed, key.use_sg_matrix);
+         ggml_webgpu_hash_combine(seed, key.skip_masked_tiles);
++        ggml_webgpu_hash_combine(seed, key.indexed_half_bias);
+         ggml_webgpu_hash_combine(seed, key.kv_tile);
+         return seed;
+     }
+@@ -4243,7 +4253,8 @@
+     }
+ 
+     webgpu_pipeline get_flash_attn_pipeline(const ggml_webgpu_shader_lib_context & context, bool kv_overlap) {
+-        const bool can_use_subgroup_matrix = ggml_webgpu_flash_attn_can_use_subgroup_matrix_path(
++        const bool indexed_half = ggml_webgpu_flash_indexed_half_bias(context.dst);
++        const bool can_use_subgroup_matrix = !indexed_half && ggml_webgpu_flash_attn_can_use_subgroup_matrix_path(
+             context.supports_subgroup_matrix, context.sg_mat_k, context.sg_mat_n, context.src0, context.src2);
+         ggml_webgpu_flash_attn_decisions decisions = {};
+         decisions.use_sg_matrix                    = can_use_subgroup_matrix;
+@@ -4255,6 +4266,7 @@
+         key.common.k_direct &= decisions.use_sg_matrix && key.common.k_type == GGML_TYPE_F16;
+         key.common.v_direct &= decisions.use_sg_matrix && key.common.v_type == GGML_TYPE_F16;
+         key.use_sg_matrix = decisions.use_sg_matrix;
++        key.indexed_half_bias = indexed_half;
+ 
+         uint32_t max_kv_tile = ggml_webgpu_flash_attn_max_kv_tile(
+             context.wg_mem_limit_bytes, decisions.q_tile, decisions.use_sg_matrix ? context.sg_mat_n : 1u,
+@@ -4307,6 +4319,10 @@
+         const char *             shader_src = nullptr;
+         if (!key.use_sg_matrix) {
+             shader_src = wgsl_flash_attn_tile;
++            if (key.indexed_half_bias) {
++                defines.push_back("BICORE_INDEXED_HALF_BIAS");
++                variant += "_indexed_half";
++            }
+             defines.push_back("MIN_SUBGROUP_SIZE=" + std::to_string(context.min_subgroup_size) + "u");
+             defines.push_back("MAX_SUBGROUP_SIZE=" + std::to_string(context.max_subgroup_size) + "u");
+             variant += "_tile_sg" + std::to_string(context.min_subgroup_size) + "_" +
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
+@@ -31,6 +31,22 @@
+ #ifdef SKIP_MASKED_TILES
+ var<workgroup> mask_tile_rows: array<u32, Q_TILE>;
+ var<workgroup> mask_tile_any: u32;
++#endif
++
++#ifdef BICORE_INDEXED_HALF_BIAS
++#if defined(BICORE_INDEXED_HALF_BIAS) && defined(SKIP_MASKED_TILES)
++fn negative_inf(raw: f16) -> bool {
++    return (bitcast<u32>(vec2<f16>(raw, 0.0h)) & 0xffffu) == 0xfc00u;
++}
++#endif
++
++fn combined_mask(batch: u32, head: u32, q_row: u32, key: u32) -> f16 {
++    let q_index = batch * params.seq_len_q + q_row;
++    let cell = q_index * params.seq_len_kv + key;
++    let bias_index = (q_index * params.n_heads + head) * params.relative_buckets
++                        + u32(relative_ids[params.relative_ids_offset + cell]);
++    return f16(bias_table[params.bias_offset + bias_index] + f32(mask[params.offset_mask + cell]));
++}
+ #endif
+ 
+ @compute @workgroup_size(WG_SIZE)
+@@ -68,7 +84,7 @@
+     let global_q_row = q_row_start + subgroup_id;
+     let row_active = subgroup_id < Q_TILE && global_q_row < params.seq_len_q;
+ 
+-#ifdef MASK
++#if defined(MASK) && !defined(BICORE_INDEXED_HALF_BIAS)
+     let mask_global_offset = params.offset_mask + (batch_idx % params.mask_ne3) * params.stride_mask3 + (head_idx % params.mask_ne2) * params.stride_mask2 + q_row_start * params.seq_len_kv;
+ #endif
+ 
+@@ -95,9 +111,16 @@
+ #ifdef SKIP_MASKED_TILES
+     // A partial subgroup may not have an active lane 0. Default its vote to
+     // visible before the existing Q staging barrier.
++#ifdef BICORE_INDEXED_HALF_BIAS
++    let consider_prefix = params.max_bias == 0.0 && params.seq_len_kv / 2u > params.relative_buckets && params.seq_len_kv > KV_TILE;
++    if (local_id.x < Q_TILE) {
++        mask_tile_rows[local_id.x] = select(1u, 0u, consider_prefix);
++    }
++#else
+     if (local_id.x < Q_TILE) {
+         mask_tile_rows[local_id.x] = 1u;
+     }
++#endif
+ #endif
+     workgroupBarrier();
+ 
+@@ -114,10 +137,75 @@
+ #ifdef SKIP_MASKED_TILES
+     let full_subgroup = subgroupAdd(1u) == subgroup_size;
+ #endif
++#if defined(BICORE_INDEXED_HALF_BIAS) && defined(SKIP_MASKED_TILES)
++    var start = 0u;
++    if (consider_prefix) {
++        let flat_query = batch_idx * params.seq_len_q + global_q_row;
++        let mask_base = params.offset_mask + flat_query * params.seq_len_kv;
++        let bias_base = params.bias_offset + (flat_query * params.n_heads + head_idx) * params.relative_buckets;
++        var sample_masked = false;
++        if (row_active && sg_inv_id == 0u) {
++            sample_masked = negative_inf(mask[mask_base]) && negative_inf(mask[mask_base + (KV_TILE - 1u)]);
++        }
++        let sampled = subgroupAny(sample_masked);
++        var exceptional = false;
++        if (sampled && full_subgroup) {
++            for (var bucket = sg_inv_id; bucket < params.relative_buckets; bucket += subgroup_size) {
++                let bits = bitcast<u32>(bias_table[bias_base + bucket]);
++                exceptional = exceptional || (bits == 0x7f800000u || (bits & 0x7fffffffu) > 0x7f800000u);
++            }
++        }
++        let row_has_exception = subgroupAny(exceptional);
++        // An inactive but partial subgroup also votes visible in the ordinary tile loop.
++        var first_visible = select(0u, params.seq_len_kv, !row_active && full_subgroup);
++        if (sampled && full_subgroup && !row_has_exception) {
++            first_visible = params.seq_len_kv;
++            for (var key = sg_inv_id; key < params.seq_len_kv; key += subgroup_size) {
++                if (!negative_inf(mask[mask_base + key])) {
++                    first_visible = key;
++                    break;
++                }
++            }
++        }
++        let first_in_row = subgroupMin(first_visible);
++        if (sg_inv_id == 0u && subgroup_id < Q_TILE) {
++            mask_tile_rows[subgroup_id] = first_in_row;
++        }
++        workgroupBarrier();
++        if (local_id.x == 0u) {
++            var first_in_wg = params.seq_len_kv;
++            for (var row = 0u; row < Q_TILE; row += 1u) {
++                first_in_wg = min(first_in_wg, mask_tile_rows[row]);
++            }
++            mask_tile_any = first_in_wg;
++        }
++        let bound = workgroupUniformLoad(&mask_tile_any);
++        start = select((bound / KV_TILE) * KV_TILE, params.seq_len_kv, bound == params.seq_len_kv);
++        // A partial subgroup may lack an executing lane zero. Keep its
++        // vote visible on later tiles, as in the ordinary shader.
++        if (local_id.x < Q_TILE) {
++            mask_tile_rows[local_id.x] = 1u;
++        }
++        workgroupBarrier();
++    }
++    for (var kv_tile = start; kv_tile < params.seq_len_kv; kv_tile += KV_TILE) {
++#else
+     for (var kv_tile = 0u; kv_tile < params.seq_len_kv; kv_tile += KV_TILE) {
++#endif
+         let kv_count = min(KV_TILE, params.seq_len_kv - kv_tile);
+         let score_slots = min(SCORE_REGS_PER_LANE, (kv_count + subgroup_size - 1u) / subgroup_size);
+         let out_slots = min(OUT_REGS_PER_LANE, (V_CHUNKS + subgroup_size - 1u) / subgroup_size);
++#ifdef BICORE_INDEXED_HALF_BIAS
++        var mask_values: array<f16, SCORE_REGS_PER_LANE>;
++        if (row_active) {
++            for (var slot = 0u; slot < score_slots; slot += 1u) {
++                let kv_local = sg_inv_id + slot * subgroup_size;
++                if (kv_local < kv_count) {
++                    mask_values[slot] = combined_mask(batch_idx, head_idx, global_q_row, kv_tile + kv_local);
++                }
++            }
++        }
++#endif
+ #ifdef SKIP_MASKED_TILES
+         if (params.max_bias == 0.0 && params.seq_len_kv > KV_TILE) {
+             // Partial subgroups cannot vote on every score slot. Keep their tile.
+@@ -126,8 +214,12 @@
+                 for (var slot = 0u; slot < score_slots; slot += 1u) {
+                     let kv_local = sg_inv_id + slot * subgroup_size;
+                     if (kv_local < kv_count) {
++#ifdef BICORE_INDEXED_HALF_BIAS
++                        let raw = bitcast<u32>(vec2<f16>(mask_values[slot], 0.0h));
++#else
+                         let index = mask_global_offset + subgroup_id * params.seq_len_kv + kv_tile + kv_local;
+                         let raw = bitcast<u32>(vec2<f16>(mask[index], 0.0h));
++#endif
+                         visible = visible || (raw & 0xffffu) != 0xfc00u;
+                     }
+                 }
+@@ -190,8 +282,12 @@
+                 dot_val = params.logit_softcap * tanh(dot_val);
+ #endif
+ #ifdef MASK
++#ifdef BICORE_INDEXED_HALF_BIAS
++                dot_val += slope * f32(mask_values[slot]);
++#else
+                 let mask_idx = mask_global_offset + subgroup_id * params.seq_len_kv + global_k_row;
+                 dot_val += slope * f32(mask[mask_idx]);
++#endif
+ #endif
+                 local_scores[slot] = dot_val;
+                 local_max = max(local_max, dot_val);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_decls.tmpl
+@@ -79,6 +79,11 @@
+     n_head_log2: f32,
+     m0: f32,
+     m1: f32,
++#ifdef BICORE_INDEXED_HALF_BIAS
++    bias_offset: u32,
++    relative_ids_offset: u32,
++    relative_buckets: u32,
++#endif
+ 
+ #ifdef FLASH_ATTN_VEC_SPLIT
+ #ifdef BLK
+@@ -133,5 +138,11 @@
+ 
+ @group(0) @binding(DST_BINDING) var<storage, read_write> dst: array<vec4<DST_TYPE>>;
+ 
++#ifdef BICORE_INDEXED_HALF_BIAS
++@group(0) @binding(DST_BINDING + 1) var<storage, read_write> relative_ids: array<i32>;
++@group(0) @binding(DST_BINDING + 2) var<storage, read_write> bias_table: array<f32>;
++#define PARAMS_BINDING (DST_BINDING + 3)
++#else
+ #define PARAMS_BINDING (DST_BINDING + 1)
++#endif
+ @group(0) @binding(PARAMS_BINDING) var<uniform> params: Params;
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask.wgsl
+@@ -0,0 +1,42 @@
++enable f16;
++
++struct Params {
++    kv: u32,
++    queries: u32,
++    heads: u32,
++    table_heads: u32,
++    head_first: u32,
++    buckets: u32,
++    pairs: u32,
++    table_offset: u32,
++    ids_offset: u32,
++    raw_offset: u32,
++    out_offset: u32,
++}
++
++@group(0) @binding(0) var<storage, read_write> table: array<f32>;
++@group(0) @binding(1) var<storage, read_write> relative_ids: array<i32>;
++@group(0) @binding(2) var<storage, read_write> raw: array<f16>;
++@group(0) @binding(3) var<storage, read_write> out_mask: array<vec2<f16>>;
++@group(0) @binding(4) var<uniform> params: Params;
++
++fn combined(index: u32) -> f16 {
++    let row = index / params.kv;
++    let query = row % params.queries;
++    let head_stream = row / params.queries;
++    let head = params.head_first + head_stream % params.heads;
++    let stream = head_stream / params.heads;
++    let flat_query = stream * params.queries + query;
++    let cell = flat_query * params.kv + index % params.kv;
++    let bucket = u32(relative_ids[params.ids_offset + cell]);
++    let bias = table[params.table_offset + (flat_query * params.table_heads + head) * params.buckets + bucket];
++    return f16(bias + f32(raw[params.raw_offset + cell]));
++}
++
++@compute @workgroup_size(128)
++fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) grid: vec3<u32>) {
++    let pair = id.x + grid.x * 128u * id.y;
++    if (pair < params.pairs) {
++        out_mask[params.out_offset + pair] = vec2<f16>(combined(pair * 2u), combined(pair * 2u + 1u));
++    }
++}

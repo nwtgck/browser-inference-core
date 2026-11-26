@@ -1,0 +1,58 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -1947,24 +1947,11 @@
+     return true;
+ }
+ 
+-static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
+-                                             ggml_tensor *    src0,
+-                                             ggml_tensor *    src1,
+-                                             ggml_tensor *    dst,
+-                                             ggml_webgpu_shader_lib_context::matvec_post_op post_op = ggml_webgpu_shader_lib_context::matvec_post_op::none,
+-                                             const f32_matvec_epilogue_parameters * post_params = nullptr) {
+-    const bool post = post_op != ggml_webgpu_shader_lib_context::matvec_post_op::none;
+-    if (post && (post_op != ggml_webgpu_shader_lib_context::matvec_post_op::scale_sigmoid_scale || !post_params)) { return {}; }
+-    // Determine if this is a mat-vec operation
+-    bool use_mat_vec = (dst->ne[1] <= GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS);
+-
+-    // use MMVQ path for mat-vec
+-    bool use_mmvq = ggml_webgpu_can_use_mmvq(
+-        src0, src1, src1->ne[1], ctx->global_ctx->capabilities.supports_dot_product, ctx->global_ctx->vendor);
+-
++static ggml_webgpu_shader_lib_context ggml_webgpu_mat_context(webgpu_context & ctx,
++                                                               ggml_tensor * src0, ggml_tensor * src1,
++                                                               ggml_tensor * dst) {
+     ggml_webgpu_shader_lib_context shader_lib_ctx = {};
+ 
+-    shader_lib_ctx.matvec_epilogue           = post_op;
+     shader_lib_ctx.src0                     = src0;
+     shader_lib_ctx.src1                     = src1;
+     shader_lib_ctx.dst                      = dst;
+@@ -1979,6 +1966,27 @@
+     shader_lib_ctx.max_subgroup_size        = ctx->global_ctx->capabilities.max_subgroup_size;
+     shader_lib_ctx.supports_dot_product     = ctx->global_ctx->capabilities.supports_dot_product;
+     shader_lib_ctx.vendor                   = ctx->global_ctx->vendor;
++
++    return shader_lib_ctx;
++}
++
++static webgpu_encoded_op ggml_webgpu_mul_mat(webgpu_context & ctx,
++                                             ggml_tensor *    src0,
++                                             ggml_tensor *    src1,
++                                             ggml_tensor *    dst,
++                                             ggml_webgpu_shader_lib_context::matvec_post_op post_op = ggml_webgpu_shader_lib_context::matvec_post_op::none,
++                                             const f32_matvec_epilogue_parameters * post_params = nullptr) {
++    const bool post = post_op != ggml_webgpu_shader_lib_context::matvec_post_op::none;
++    if (post && (post_op != ggml_webgpu_shader_lib_context::matvec_post_op::scale_sigmoid_scale || !post_params)) { return {}; }
++    // Determine if this is a mat-vec operation
++    bool use_mat_vec = (dst->ne[1] <= GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS);
++
++    // use MMVQ path for mat-vec
++    bool use_mmvq = ggml_webgpu_can_use_mmvq(
++        src0, src1, src1->ne[1], ctx->global_ctx->capabilities.supports_dot_product, ctx->global_ctx->vendor);
++
++    auto shader_lib_ctx = ggml_webgpu_mat_context(ctx, src0, src1, dst);
++    shader_lib_ctx.matvec_epilogue = post_op;
+ 
+     if (post && !ggml_webgpu_matvec_post_supported(shader_lib_ctx, post_op, false)) { return {}; }
+ 

@@ -1,0 +1,232 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -16,5 +16,6 @@
+ #include "ggml-webgpu-router-tail.hpp"
++#include "ggml-webgpu-situ.hpp"
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-webgpu-short-conv-residual.hpp"
+ #include "ggml-webgpu-short-conv-state.hpp"
+@@ -4309,6 +4310,43 @@
+     binding = { buffer_ctx->buffer, aligned_offset, size, offset, bytes, uint32_t(prefix / 4) };
+     return true;
+ }
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_situ(webgpu_context & ctx, ggml_cgraph * graph, int index,
++                                                       webgpu_fusion_view_sources & views, int & consumed) {
++    webgpu_situ::plan plan;
++    if (!webgpu_situ::match(graph, index, views, plan)) { return std::nullopt; }
++    constexpr uint32_t groups = webgpu_situ::elements / webgpu_situ::workgroup;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < webgpu_situ::workgroup ||
++        limits.maxComputeWorkgroupSizeX < webgpu_situ::workgroup ||
++        limits.maxComputeWorkgroupsPerDimension < groups || limits.maxStorageBuffersPerShaderStage < 2 ||
++        limits.maxBindingsPerBindGroup < 3 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) { return std::nullopt; }
++
++    webgpu_router_tail_binding packed, output;
++    if (!ggml_webgpu_router_tail_binding(ctx, plan.packed, webgpu_situ::input_bytes, packed) ||
++        !ggml_webgpu_router_tail_binding(ctx, plan.output, webgpu_situ::output_bytes, output) ||
++        (packed.buffer.Get() == output.buffer.Get() &&
++         !router_tail_disjoint(packed.offset, packed.size, output.offset, output.size))) { return std::nullopt; }
++
++    std::vector<uint32_t> params;
++    params.reserve(10);
++    params.push_back(packed.element_offset);
++    params.push_back(output.element_offset);
++    for (const auto * scale : plan.scales) {
++        params.push_back(ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(scale, 0)));
++        params.push_back(ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(scale, 1)));
++    }
++    const std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, packed.buffer, packed.offset, packed.size),
++        ggml_webgpu_make_bind_group_entry(1, output.buffer, output.offset, output.size),
++    };
++    auto pipeline = ctx->shader_lib->get_situ_pipeline();
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, groups, 1);
++    consumed = plan.nodes;
++    return encoded;
++}
++
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_router_tail(webgpu_context & ctx,
+                                                                ggml_cgraph * graph, int index,
+@@ -4838,6 +4876,7 @@
+         case GGML_OP_GLU:
+             return ggml_webgpu_glu(ctx, src0, src1, node);
+         case GGML_OP_SCALE:
++            if (auto fused = ggml_webgpu_situ(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_scale_unary(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_scale(ctx, src0, node);
+         case GGML_OP_SOFT_MAX:
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -13,6 +13,7 @@
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
++#include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp"
+@@ -1824,6 +1825,7 @@
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+     std::unordered_map<bool, webgpu_pipeline> short_conv_residual_pipelines;
++    webgpu_pipeline situ_pipeline;
+     webgpu_pipeline short_conv_state_pipeline;
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     webgpu_pipeline l2_clip_pipelines[2];
+@@ -2607,6 +2609,14 @@
+         return pipeline;
+     }
+ 
++    webgpu_pipeline get_situ_pipeline() {
++        if (!situ_pipeline.pipeline) {
++            require_healthy_device();
++            situ_pipeline = ggml_webgpu_create_pipeline(device, wgsl_situ_packed, "situ_packed_f32");
++        }
++        return situ_pipeline;
++    }
++
+     webgpu_pipeline get_short_conv_state_pipeline() {
+         if (!short_conv_state_pipeline.pipeline) {
+             short_conv_state_pipeline = ggml_webgpu_create_pipeline(device, wgsl_short_conv_concat_state, "short_conv_concat_state_f32");
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp
+@@ -0,0 +1,87 @@
++#pragma once
++
++#include "ggml-webgpu-fusion-view-sources.hpp"
++#include "ggml-webgpu-scale-unary.hpp"
++
++namespace webgpu_situ {
++
++constexpr uint32_t width = 1152;
++constexpr uint32_t experts = 8;
++constexpr uint32_t workgroup = 128;
++constexpr uint32_t elements = width * experts;
++constexpr uint32_t output_bytes = elements * sizeof(float);
++constexpr uint32_t input_bytes = 2 * output_bytes;
++
++struct plan {
++    const ggml_tensor * packed;
++    ggml_tensor * output;
++    const ggml_tensor * scales[4];
++    int nodes;
++};
++
++inline bool shape(const ggml_tensor * tensor, int64_t columns) {
++    return tensor && tensor->type == GGML_TYPE_F32 && tensor->ne[0] == columns &&
++           tensor->ne[1] == experts && tensor->ne[2] == 1 && tensor->ne[3] == 1;
++}
++
++inline bool packed_view(const ggml_tensor * view, const ggml_tensor * packed, uint64_t offset) {
++    return shape(view, width) && view->op == GGML_OP_VIEW && view->src[0] == packed &&
++           view->view_src == packed && view->view_offs == offset &&
++           view->nb[0] == packed->nb[0] && view->nb[1] == packed->nb[1] &&
++           view->nb[2] == packed->nb[2] && view->nb[3] == packed->nb[3];
++}
++
++inline bool match(const ggml_cgraph * graph, int first, webgpu_fusion_view_sources & views, plan & result) {
++    if (!graph || first < 0 || graph->n_nodes - first < 9) { return false; }
++    const auto nodes = graph->nodes + first;
++    if (!shape(nodes[0], width) || nodes[0]->op != GGML_OP_SCALE) { return false; }
++    constexpr int operations = 9;
++    const ggml_op ops[operations] = {
++        GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_MUL,
++        GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE, GGML_OP_MUL,
++    };
++
++    // A left-first graph walk places the second view between the gate and up
++    // operations. Only the nine materialized operations take part in closure.
++    const int view_inside = nodes[5] && nodes[5]->op == GGML_OP_VIEW ? 1 : 0;
++    if (graph->n_nodes - first < operations + view_inside) { return false; }
++    int indices[operations];
++    ggml_tensor * operation[operations];
++    for (int i = 0; i < operations; ++i) {
++        indices[i] = first + i + (i >= 5 ? view_inside : 0);
++        operation[i] = graph->nodes[indices[i]];
++        if (!shape(operation[i], width) || operation[i]->op != ops[i] ||
++            !scale_unary_dense(operation[i])) { return false; }
++    }
++    const auto * gate = operation[0]->src[0];
++    const auto * up = operation[5]->src[0];
++    const auto * packed = gate ? gate->view_src : nullptr;
++    if (!shape(packed, 2 * width) || !scale_unary_dense(packed) ||
++        !packed_view(gate, packed, 0) || !packed_view(up, packed, width * sizeof(float)) ||
++        (view_inside && nodes[5] != up) ||
++        ggml_get_unary_op(operation[1]) != GGML_UNARY_OP_TANH ||
++        ggml_get_unary_op(operation[3]) != GGML_UNARY_OP_SIGMOID ||
++        ggml_get_unary_op(operation[6]) != GGML_UNARY_OP_TANH) { return false; }
++
++    const ggml_tensor * expected_left[operations] = {
++        gate, operation[0], operation[1], gate, operation[2],
++        up, operation[5], operation[6], operation[4],
++    };
++    for (int i = 0; i < operations; ++i) {
++        const auto * expected_right = i == 4 ? operation[3] : i == 8 ? operation[7] : nullptr;
++        if (operation[i]->src[0] != expected_left[i] || operation[i]->src[1] != expected_right) { return false; }
++        for (int slot = 2; slot < GGML_MAX_SRC; ++slot) {
++            if (operation[i]->src[slot]) { return false; }
++        }
++    }
++    if (!ggml_can_fuse_subgraph_ext(graph, indices, operations, ops, indices + operations - 1, 1)) { return false; }
++    for (int i = 0; i < operations - 1; ++i) {
++        if (views.contains(operation[i])) { return false; }
++    }
++
++    result = { packed, operation[8], { operation[0], operation[2], operation[5], operation[7] },
++               operations + view_inside };
++    return true;
++}
++
++} // namespace webgpu_situ
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/situ_packed.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/situ_packed.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/situ_packed.wgsl
+@@ -0,0 +1,39 @@
++struct Params {
++    src_offset: u32,
++    dst_offset: u32,
++    gate_scale: f32,
++    gate_bias: f32,
++    gate_output_scale: f32,
++    gate_output_bias: f32,
++    up_scale: f32,
++    up_bias: f32,
++    up_output_scale: f32,
++    up_output_bias: f32,
++};
++
++// The input and output can occupy disjoint ranges of one allocator buffer.
++@group(0) @binding(0) var<storage, read_write> packed: array<f32>;
++@group(0) @binding(1) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(2) var<uniform> params: Params;
++
++const width = 1152u;
++
++@compute @workgroup_size(128)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
++    let i = gid.x;
++    let row = i / width;
++    let offset = params.src_offset + row * (2u * width) + i % width;
++    let gate = packed[offset];
++    let up = packed[offset + width];
++
++    let gate_scaled = gate * params.gate_scale + params.gate_bias;
++    let gate_tanh = tanh(clamp(gate_scaled, -9.010913, 9.010913));
++    let gate_act = gate_tanh * params.gate_output_scale + params.gate_output_bias;
++    let sigmoid_gate = 1.0 / (1.0 + exp(-gate));
++    let activated_gate = gate_act * sigmoid_gate;
++
++    let up_scaled = up * params.up_scale + params.up_bias;
++    let up_tanh = tanh(clamp(up_scaled, -9.010913, 9.010913));
++    let activated_up = up_tanh * params.up_output_scale + params.up_output_bias;
++    dst[params.dst_offset + i] = activated_gate * activated_up;
++}

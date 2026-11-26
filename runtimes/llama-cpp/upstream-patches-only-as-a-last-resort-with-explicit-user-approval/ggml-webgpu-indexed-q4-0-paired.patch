@@ -1,0 +1,103 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2317,8 +2317,9 @@
+ 
+     std::vector<webgpu_dispatch_desc> dispatches;
+ 
+-    const uint32_t offset_src0 =
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type));
++    const size_t src0_misalignment = ggml_webgpu_tensor_misalignment(ctx, src0);
++    shader_lib_ctx.indexed_src0_aligned = src0_misalignment == 0;
++    const uint32_t offset_src0 = (uint32_t) (src0_misalignment / ggml_type_size(src0->type));
+     const uint32_t offset_src1 =
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type));
+     const uint32_t offset_dst =
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -109,6 +109,7 @@
+     uint32_t    max_workgroups_per_dim = 0;
+     uint64_t    max_storage_binding_bytes = 0;
+     bool        indexed_split_weights = false;
++    bool        indexed_src0_aligned = false;
+     // Actual aligned bindings, ordered as weights, input, IDs, output.
+     uint64_t    indexed_prefix_bytes[4] = {};
+     uint64_t    indexed_binding_bytes[4] = {};
+@@ -3476,6 +3477,22 @@
+             key.tile_m = wide_tile_m;
+         }
+ 
++        constexpr uint32_t paired_q4_0_shared_bytes =
++            sizeof(ggml_fp16_t) * wide_tile_k * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
++        if (key.src0_type == GGML_TYPE_Q4_0 && k == 2816 && m == 1408 &&
++            (key.n_experts == 48 || key.n_experts == 128) && key.src1_type == GGML_TYPE_F32 &&
++            !key.split_weights && context.indexed_src0_aligned && !context.src0->view_src &&
++            context.src0->ne[3] == 1 && ggml_is_contiguous(context.src0) &&
++            context.src1->ne[0] == k && context.src1->ne[1] == 1 && context.src1->ne[2] == 128 &&
++            context.src1->ne[3] == 1 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 8 &&
++            ids->ne[1] == 128 && ids->ne[2] == 1 && ids->ne[3] == 1 && context.dst &&
++            context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
++            context.dst->ne[2] == 128 && context.dst->ne[3] == 1 &&
++            context.max_wg_size >= grouped_threads && context.wg_mem_limit_bytes >= paired_q4_0_shared_bytes) {
++            key.tile_k = wide_tile_k;
++            key.tile_m = wide_tile_m;
++        }
++
+         auto it = mul_mat_id_pipelines.find(key);
+         if (it != mul_mat_id_pipelines.end()) {
+             return it->second;
+@@ -3607,6 +3624,10 @@
+         if (key.split_weights) {
+             defines.push_back("BICORE_INDEXED_SPLIT_WEIGHTS");
+             variant += "_split_weights";
++        }
++        if (key.src0_type == GGML_TYPE_Q4_0 && key.tile_m == wide_tile_m && tile_k == wide_tile_k) {
++            defines.push_back("BICORE_INDEXED_Q4_0_PAIRED_K64");
++            variant += "_pairs";
+         }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -147,6 +147,31 @@
+ #endif
+ const BYTES_PER_INNER_LOOP = 4u; // == sizeof(q_packed)
+ 
++#ifdef BICORE_INDEXED_Q4_0_PAIRED_K64
++fn load_q4_aligned_pair(word: u32) -> array<u32, 9> {
++    return array<u32, 9>(SRC0[word + 0u], SRC0[word + 1u], SRC0[word + 2u], SRC0[word + 3u], SRC0[word + 4u], SRC0[word + 5u], SRC0[word + 6u], SRC0[word + 7u], SRC0[word + 8u]);
++}
++
++fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
++    // This variant has one K64 pair per output row and one row per invocation.
++    let global_m = offset_m + thread_id;
++    if (global_m < params.m) {
++        let block = batch_offset + global_m * params.stride_01 + k_outer / 32u;
++        let words = load_q4_aligned_pair(block * 18u / 4u);
++        let d0 = unpack2x16float(words[0] & 0xffffu).x;
++        let d1 = unpack2x16float(words[4] >> 16u).x;
++        let dst_row = thread_id * 64u;
++        dequant_q4_0_packed_to_shmem((words[0] >> 16u) | (words[1] << 16u), d0, dst_row);
++        dequant_q4_0_packed_to_shmem((words[1] >> 16u) | (words[2] << 16u), d0, dst_row + 4u);
++        dequant_q4_0_packed_to_shmem((words[2] >> 16u) | (words[3] << 16u), d0, dst_row + 8u);
++        dequant_q4_0_packed_to_shmem((words[3] >> 16u) | (words[4] << 16u), d0, dst_row + 12u);
++        dequant_q4_0_packed_to_shmem(words[5], d1, dst_row + 32u);
++        dequant_q4_0_packed_to_shmem(words[6], d1, dst_row + 36u);
++        dequant_q4_0_packed_to_shmem(words[7], d1, dst_row + 40u);
++        dequant_q4_0_packed_to_shmem(words[8], d1, dst_row + 44u);
++    }
++}
++#else
+ fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
+     for (var i = thread_id * NQ; i < TILE_SRC0_SHMEM; i += TOTAL_WORKGROUP_SIZE * NQ) {
+         let block_idx = i / BLOCK_SIZE;
+@@ -297,6 +322,7 @@
+         }
+     }
+ }
++#endif // BICORE_INDEXED_Q4_0_PAIRED_K64
+ #endif // legacy-quants
+ 
+ #if defined(INIT_SRC0_SHMEM_NVFP4)

@@ -1,0 +1,176 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -2,13 +2,17 @@
+ enable f16;
+ #endif
+ 
+-#ifdef SRC_F16
++#ifdef RMS_VEC4
++#define SRC_TYPE vec4<f32>
++#elif defined(SRC_F16)
+ #define SRC_TYPE f16
+ #else
+ #define SRC_TYPE f32
+ #endif
+ 
+-#ifdef DST_F16
++#ifdef RMS_VEC4
++#define DST_TYPE vec4<f32>
++#elif defined(DST_F16)
+ #define DST_TYPE f16
+ #else
+ #define DST_TYPE f32
+@@ -54,7 +58,11 @@
+ var<uniform> params: Params;
+ #endif
+ 
++#ifdef RMS_VEC4
++var<workgroup> scratch: array<vec4<f32>, WG_SIZE>;
++#else
+ var<workgroup> scratch: array<f32, WG_SIZE * 2u>;
++#endif
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(@builtin(workgroup_id) wid: vec3<u32>,
+@@ -73,6 +81,50 @@
+     let i_src_row = params.offset_src + i3 * params.stride_src3 + i2 * params.stride_src2 + i1 * params.stride_src1;
+     let i_dst_row = params.offset_dst + i3 * params.stride_dst3 + i2 * params.stride_dst2 + i1 * params.stride_dst1;
+ 
++#ifdef RMS_VEC4
++    // Keep four consecutive virtual lanes of the scalar 128-lane reduction
++    // in each vector, preserving each lane's accumulation and tree order.
++    let src_row = i_src_row / 4u;
++    let dst_row = i_dst_row / 4u;
++    let zero = vec4<f32>(0.0);
++    let columns = params.ne0 / 4u;
++    var sum = zero;
++    for (var col = lid.x; col < columns; col += WG_SIZE) {
++        let v = src[src_row + col];
++        sum += v * v;
++    }
++
++    scratch[lid.x] = sum;
++    workgroupBarrier();
++    for (var offset = WG_SIZE / 2u; offset >= 8u; offset /= 2u) {
++        if (lid.x < offset) {
++            scratch[lid.x] += scratch[lid.x + offset];
++        }
++        workgroupBarrier();
++    }
++    if (lid.x == 0u) {
++        let a = (scratch[0] + scratch[4]) + (scratch[2] + scratch[6]);
++        let b = (scratch[1] + scratch[5]) + (scratch[3] + scratch[7]);
++        let v = a + b;
++        scratch[0].x = (v.x + v.z) + (v.y + v.w);
++    }
++    workgroupBarrier();
++    let scale = 1.0 / sqrt(scratch[0].x / f32(params.ne0) + params.eps);
++
++    for (var col = lid.x; col < columns; col += WG_SIZE) {
++        let normalized = scale * (src[src_row + col] - zero);
++#ifdef POST_SCALE
++        let result = normalized * params.post_scale + vec4<f32>(params.post_bias);
++#else
++        let result = normalized;
++#endif
++#ifdef INPLACE
++        src[dst_row + col] = result;
++#else
++        dst[dst_row + col] = result;
++#endif
++    }
++#else
+     let elems = (params.ne0 + WG_SIZE - 1) / WG_SIZE;
+ 
+     var sum = 0.0f;
+@@ -165,4 +217,5 @@
+ #endif
+         col += WG_SIZE;
+     }
++#endif
+ }
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1909,6 +1909,7 @@
+     webgpu_pipeline short_conv_state_pipeline;
+     webgpu_pipeline loop_controller_pipelines[2][2];
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
++    webgpu_pipeline rms_vec4_pipelines[4];
+     webgpu_pipeline l2_clip_pipelines[2];
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+     std::unordered_map<int, webgpu_pipeline> moe_sum_pipelines;
+@@ -2763,6 +2764,27 @@
+         return pipeline;
+     }
+ 
++    webgpu_pipeline get_rms_vec4_pipeline(bool inplace, bool post_scale) {
++        auto & pipeline = rms_vec4_pipelines[unsigned(inplace) + 2u * unsigned(post_scale)];
++        if (!pipeline.pipeline) {
++            std::vector<std::string> defines{"RMS_VEC4", "WG_SIZE=32"};
++            std::string label = post_scale ? "rms_norm_scale_f32_vec4" : "rms_norm_src_f32_dst_f32_vec4";
++            if (post_scale) {
++                defines.push_back("POST_SCALE");
++            }
++            if (inplace) {
++                defines.push_back("INPLACE");
++                label += "_inplace";
++            }
++            auto decisions = std::make_shared<ggml_webgpu_generic_shader_decisions>();
++            decisions->inplace = inplace;
++            decisions->wg_size = 32u;
++            pipeline = ggml_webgpu_create_pipeline(device, preprocessor.preprocess(wgsl_row_norm, defines), label);
++            pipeline.context = decisions;
++        }
++        return pipeline;
++    }
++
+     webgpu_pipeline get_rms_scale_pipeline(bool inplace) {
+         const int key = int(inplace);
+         auto it = rms_scale_pipelines.find(key);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -3749,6 +3749,20 @@
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
++static bool ggml_webgpu_can_use_rms_vec4(const wgpu::Limits & limits, const ggml_tensor * src,
++                                        const ggml_tensor * dst, uint32_t src_offset, uint32_t dst_offset) {
++    const auto aligned = [](const ggml_tensor * t, uint32_t offset) {
++        return t->type == GGML_TYPE_F32 && t->nb[0] == sizeof(float) && offset % 4u == 0 &&
++               (t->nb[1] | t->nb[2] | t->nb[3]) % (4 * sizeof(float)) == 0;
++    };
++    // Small single-row dispatches are dominated by launch and reduction
++    // latency. Use vector loads for batches and for long rows.
++    return (ggml_nrows(src) >= 8 || src->ne[0] >= 4096) && src->ne[0] % 4 == 0 &&
++           limits.maxComputeInvocationsPerWorkgroup >= 128u && limits.maxComputeWorkgroupSizeX >= 32u &&
++           limits.maxComputeWorkgroupStorageSize >= 128u * sizeof(float) &&
++           aligned(src, src_offset) && aligned(dst, dst_offset);
++}
++
+ static webgpu_encoded_op ggml_webgpu_row_norm(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
+     std::vector<uint32_t> params = {
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src) / ggml_type_size(src->type)),
+@@ -3771,7 +3785,10 @@
+     shader_lib_ctx.dst                            = dst;
+     shader_lib_ctx.max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+ 
+-    webgpu_pipeline pipeline  = ctx->shader_lib->get_row_norm_pipeline(shader_lib_ctx);
++    const bool vec4 = dst->op == GGML_OP_RMS_NORM &&
++                      ggml_webgpu_can_use_rms_vec4(ctx->global_ctx->capabilities.limits, src, dst, params[0], params[1]);
++    auto pipeline = vec4 ? ctx->shader_lib->get_rms_vec4_pipeline(ggml_webgpu_tensor_equal(src, dst), false) :
++                           ctx->shader_lib->get_row_norm_pipeline(shader_lib_ctx);
+     auto *          decisions = static_cast<ggml_webgpu_generic_shader_decisions *>(pipeline.context.get());
+ 
+     std::vector<wgpu::BindGroupEntry> entries = { ggml_webgpu_make_tensor_bind_group_entry(ctx, 0, src) };
+@@ -4601,7 +4618,10 @@
+     const uint32_t storage_bindings = inplace ? 1 : 2;
+     if (limits.maxStorageBuffersPerShaderStage < storage_bindings ||
+         limits.maxBindingsPerBindGroup < storage_bindings + 1) { return std::nullopt; }
+-    auto pipeline = ctx->shader_lib->get_rms_scale_pipeline(inplace);
++    const bool vec4 = ggml_webgpu_can_use_rms_vec4(limits, plan.source, plan.output,
++                                                  source.element_offset, destination.element_offset);
++    auto pipeline = vec4 ? ctx->shader_lib->get_rms_vec4_pipeline(inplace, true) :
++                           ctx->shader_lib->get_rms_scale_pipeline(inplace);
+     std::vector<uint32_t> params = {
+         source.element_offset, destination.element_offset,
+         uint32_t(plan.source->nb[1] / 4), uint32_t(plan.source->nb[2] / 4), uint32_t(plan.source->nb[3] / 4),

@@ -1,0 +1,333 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -6,6 +6,7 @@
+ #include "ggml-webgpu.h"
+ #include "ggml-webgpu-hc.hpp"
+ #include "ggml-webgpu-depth-mix.hpp"
++#include "ggml-webgpu-loop-controller.hpp"
+ #include "ggml-webgpu-depth-mix-shaders.hpp"
+ #include "ggml-webgpu-l2-clip.hpp"
+ #include "ggml-webgpu-moe-sum.hpp"
+@@ -4349,6 +4350,76 @@
+ }
+ 
+ 
++static std::optional<webgpu_encoded_op> ggml_webgpu_loop_controller(webgpu_context & ctx, const ggml_cgraph & graph,
++        int index, webgpu_fusion_view_sources & views, int & num_encoded_ops) {
++    using namespace webgpu_loop_controller;
++    const auto matched = match(graph, index, views);
++    if (!matched) { return std::nullopt; }
++    const auto & caps = ctx->global_ctx->capabilities;
++    const auto & limits = caps.limits;
++    // Each of the two workgroup arrays is already aligned to 16 bytes.
++    constexpr uint32_t shared_bytes = 2 * 4 * workgroup * sizeof(float);
++    if (limits.maxComputeInvocationsPerWorkgroup < workgroup || limits.maxComputeWorkgroupSizeX < workgroup ||
++        limits.maxComputeWorkgroupStorageSize < shared_bytes || limits.maxComputeWorkgroupsPerDimension < workgroups ||
++        limits.maxUniformBuffersPerShaderStage == 0 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) {
++        return std::nullopt;
++    }
++
++    const ggml_tensor * tensors[] = {matched->forget->src[0], matched->gain->src[0], matched->forget->src[1],
++        matched->cur, matched->message, matched->output};
++    constexpr int cur = 3;
++    constexpr int output = 5;
++    webgpu_rms_scale_binding bindings[6];
++    for (int i = 0; i < 6; ++i) {
++        if (!ggml_webgpu_rms_scale_binding(ctx, tensors[i], ggml_nbytes(tensors[i]), bindings[i])) { return std::nullopt; }
++        if (i < cur && (bindings[i].tensor_offset % 16 || bindings[i].size % 16 ||
++            !ggml_webgpu_mul_mat_vec4_aligned(tensors[i], bindings[i].element_offset))) { return std::nullopt; }
++    }
++    const bool inplace = bindings[cur].buffer.Get() == bindings[output].buffer.Get() &&
++        bindings[cur].tensor_offset == bindings[output].tensor_offset &&
++        bindings[cur].offset == bindings[output].offset && bindings[cur].size == bindings[output].size;
++    const uint32_t storage_count = inplace ? 5 : 6;
++    if (limits.maxStorageBuffersPerShaderStage < storage_count || limits.maxBindingsPerBindGroup < storage_count + 1) {
++        return std::nullopt;
++    }
++    for (uint32_t i = 0; i < storage_count; ++i) {
++        for (uint32_t j = 0; j < i; ++j) {
++            if (bindings[i].buffer.Get() == bindings[j].buffer.Get() &&
++                !rms_scale_disjoint(bindings[i].offset, bindings[i].size, bindings[j].offset, bindings[j].size)) {
++                return std::nullopt;
++            }
++        }
++    }
++
++    // Both original projections must select the canonical F32 variant and
++    // use the same workgroup geometry and reduction as the fused shader.
++    static_assert(WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG == 4);
++    auto stock = ggml_webgpu_mat_context(ctx, matched->forget->src[0], matched->forget->src[1], matched->forget);
++    for (auto * projection : { matched->forget, matched->gain }) {
++        stock.src0 = projection->src[0];
++        stock.dst = projection;
++        const auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(stock, false, true);
++        if (key.workgroup_size != workgroup || key.subgroup_size || key.requested_subgroup_size ||
++            key.use_mmvq || key.num_cols != 1 || !key.vectorized) { return std::nullopt; }
++    }
++
++    auto pipeline = ctx->shader_lib->get_loop_controller_pipeline(inplace, caps.supports_subgroups);
++    std::vector<uint32_t> params;
++    std::vector<wgpu::BindGroupEntry> entries;
++    params.reserve(6);
++    entries.reserve(storage_count);
++    for (uint32_t i = 0; i < 6; ++i) {
++        params.push_back(bindings[i].element_offset / (i < cur ? 4 : 1));
++        if (i < storage_count) {
++            entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
++        }
++    }
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, workgroups);
++    num_encoded_ops = operations;
++    return encoded;
++}
++
++
+ static std::optional<webgpu_encoded_op> ggml_webgpu_router_tail(webgpu_context & ctx,
+                                                                ggml_cgraph * graph, int index,
+                                                                int & num_encoded_ops) {
+@@ -4834,6 +4905,7 @@
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, num_encoded_ops)) { return fused; }
++            if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT_ID:
+             return ggml_webgpu_mul_mat_id(ctx, src0, src1, src2, node);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -13,6 +13,7 @@
+ #include "ggml-webgpu-rms-scale-shaders.hpp"
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
++#include "ggml-webgpu-loop-controller-shaders.hpp"
+ #include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+@@ -1828,6 +1829,7 @@
+     std::unordered_map<bool, webgpu_pipeline> short_conv_residual_pipelines;
+     webgpu_pipeline situ_pipeline;
+     webgpu_pipeline short_conv_state_pipeline;
++    webgpu_pipeline loop_controller_pipelines[2][2];
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+     webgpu_pipeline l2_clip_pipelines[2];
+     std::unordered_map<int, webgpu_pipeline> scale_unary_pipelines;
+@@ -2618,6 +2620,20 @@
+         return situ_pipeline;
+     }
+ 
++    webgpu_pipeline get_loop_controller_pipeline(bool inplace, bool subgroup) {
++        auto & pipeline = loop_controller_pipelines[subgroup][inplace];
++        if (!pipeline.pipeline) {
++            require_healthy_device();
++            std::vector<std::string> defines = {"CONTROLLER_WG=256"};
++            if (subgroup) { defines.push_back("SUBGROUP_REDUCTION"); }
++            if (inplace) { defines.push_back("INPLACE"); }
++            const auto source = preprocessor.preprocess(wgsl_loop_controller, defines);
++            const std::string suffix = subgroup ? "sg_wg256" : "wg_wg256";
++            pipeline = ggml_webgpu_create_pipeline(device, source, "loop_controller_f32_" + suffix + (inplace ? "_inplace" : ""));
++        }
++        return pipeline;
++    }
++
+     webgpu_pipeline get_short_conv_state_pipeline() {
+         if (!short_conv_state_pipeline.pipeline) {
+             short_conv_state_pipeline = ggml_webgpu_create_pipeline(device, wgsl_short_conv_concat_state, "short_conv_concat_state_f32");
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-loop-controller.hpp
+@@ -0,0 +1,79 @@
++#pragma once
++
++#include "ggml-webgpu-fusion-view-sources.hpp"
++
++#include <algorithm>
++#include <array>
++#include <optional>
++
++namespace webgpu_loop_controller {
++
++inline constexpr int gate_count = 64;
++inline constexpr int output_count = 2304;
++inline constexpr int operations = 8;
++inline constexpr uint32_t workgroup = 256;
++inline constexpr uint32_t workgroups = output_count / 4;
++
++struct plan {
++    ggml_tensor * forget;
++    ggml_tensor * gain;
++    const ggml_tensor * cur;
++    const ggml_tensor * message;
++    const ggml_tensor * output;
++};
++
++inline bool dense(const ggml_tensor * node, int64_t columns, int64_t rows = 1) {
++    return node && node->type == GGML_TYPE_F32 && node->ne[0] == columns && node->ne[1] == rows &&
++           node->ne[2] == 1 && node->ne[3] == 1 && node->nb[0] == sizeof(float) &&
++           (rows == 1 || node->nb[1] == columns * sizeof(float)) && ggml_is_contiguous(node);
++}
++
++inline std::optional<plan> match(const ggml_cgraph & graph, int first, webgpu_fusion_view_sources & views) {
++    if (first < 0 || first > graph.n_nodes - operations) { return std::nullopt; }
++    const auto nodes = graph.nodes + first;
++    constexpr std::array<ggml_op, operations> ops = { GGML_OP_MUL_MAT, GGML_OP_UNARY, GGML_OP_MUL, GGML_OP_SUB,
++        GGML_OP_MUL_MAT, GGML_OP_UNARY, GGML_OP_MUL, GGML_OP_ADD };
++    if (!nodes[0]->src[0] || nodes[0]->src[0]->ne[0] != gate_count || nodes[0]->ne[0] != output_count) {
++        return std::nullopt;
++    }
++    for (int i = 0; i < operations; ++i) {
++        const auto * node = nodes[i];
++        if (node->view_src || node->view_offs || node->op != ops[i] || !dense(node, output_count)) { return std::nullopt; }
++        const int arity = ops[i] == GGML_OP_UNARY ? 1 : 2;
++        for (int slot = 0; slot < GGML_MAX_SRC; ++slot) {
++            if ((node->src[slot] != nullptr) != (slot < arity)) { return std::nullopt; }
++        }
++    }
++    if (ggml_get_unary_op(nodes[1]) != GGML_UNARY_OP_TANH || ggml_get_unary_op(nodes[5]) != GGML_UNARY_OP_TANH) {
++        return std::nullopt;
++    }
++    const auto * gate = nodes[0]->src[1];
++    const auto * cur = nodes[3]->src[0];
++    const auto * message = nodes[6]->src[1];
++    if (nodes[4]->src[1] != gate || nodes[1]->src[0] != nodes[0] || nodes[2]->src[0] != nodes[1] ||
++        nodes[2]->src[1] != cur || nodes[3]->src[1] != nodes[2] || nodes[5]->src[0] != nodes[4] ||
++        nodes[6]->src[0] != nodes[5] || nodes[7]->src[0] != nodes[3] || nodes[7]->src[1] != nodes[6]) {
++        return std::nullopt;
++    }
++    if (!dense(nodes[0]->src[0], gate_count, output_count) || !dense(nodes[4]->src[0], gate_count, output_count) ||
++        !dense(gate, gate_count) || !dense(cur, output_count) || !dense(message, output_count)) {
++        return std::nullopt;
++    }
++    const auto end = nodes + operations;
++    const ggml_tensor * inputs[] = {nodes[0]->src[0], nodes[4]->src[0], gate, cur, message};
++    for (const auto * tensor : inputs) {
++        if (std::find(nodes, end, tensor) != end || (tensor->view_src &&
++            std::find(nodes, end, tensor->view_src) != end)) { return std::nullopt; }
++    }
++    std::array<int, operations> indices;
++    for (int i = 0; i < operations; ++i) { indices[i] = first + i; }
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices.data(), operations, ops.data(), &indices.back(), 1)) {
++        return std::nullopt;
++    }
++    for (int i = 0; i < operations - 1; ++i) {
++        if (views.contains(nodes[i])) { return std::nullopt; }
++    }
++    return plan{ nodes[0], nodes[4], cur, message, nodes[7] };
++}
++
++} // namespace webgpu_loop_controller
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/loop_controller.wgsl
+@@ -0,0 +1,114 @@
++#ifdef SUBGROUP_REDUCTION
++enable subgroups;
++#endif
++
++struct Params {
++    forget_weight: u32,
++    gain_weight: u32,
++    gate: u32,
++    cur: u32,
++    message: u32,
++    dst: u32,
++};
++
++@group(0) @binding(0) var<storage, read_write> forget_weight: array<vec4<f32>>;
++@group(0) @binding(1) var<storage, read_write> gain_weight: array<vec4<f32>>;
++@group(0) @binding(2) var<storage, read_write> gate: array<vec4<f32>>;
++@group(0) @binding(3) var<storage, read_write> cur: array<f32>;
++@group(0) @binding(4) var<storage, read_write> message: array<f32>;
++#ifdef INPLACE
++#define OUTPUT cur
++#define PARAM_BINDING 5
++#else
++@group(0) @binding(5) var<storage, read_write> dst: array<f32>;
++#define OUTPUT dst
++#define PARAM_BINDING 6
++#endif
++@group(0) @binding(PARAM_BINDING) var<uniform> params: Params;
++
++var<workgroup> forget_partial: array<f32, 4 * CONTROLLER_WG>;
++var<workgroup> gain_partial: array<f32, 4 * CONTROLLER_WG>;
++
++fn inner_dot(weight: vec4<f32>, input: vec4<f32>) -> f32 {
++    return f32(dot(vec4<f32>(weight), input));
++}
++
++fn partial_index(row: u32, thread: u32) -> u32 {
++    return row * CONTROLLER_WG + thread;
++}
++
++fn store_row(row: u32, forget_dot: f32, gain_dot: f32) {
++    let x = cur[params.cur + row];
++    let forget = tanh(clamp(forget_dot, -9.010913, 9.010913));
++    let gain = tanh(clamp(gain_dot, -9.010913, 9.010913));
++    let residual = x - forget * x;
++    let addition = gain * message[params.message + row];
++    OUTPUT[params.dst + row] = residual + addition;
++}
++
++@compute @workgroup_size(CONTROLLER_WG)
++fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
++        @builtin(local_invocation_id) local_id: vec3<u32>
++#ifdef SUBGROUP_REDUCTION
++      , @builtin(subgroup_id) subgroup_id: u32,
++        @builtin(subgroup_invocation_id) lane: u32,
++        @builtin(num_subgroups) subgroup_count: u32,
++        @builtin(subgroup_size) subgroup_size: u32
++#endif
++) {
++    let row_base = wg_id.x * 4u;
++    var forget_acc: array<f32, 4>;
++    var gain_acc: array<f32, 4>;
++    for (var k = local_id.x; k < 16u; k += CONTROLLER_WG) {
++        let input = gate[params.gate + k];
++        for (var r = 0u; r < 4u; r++) {
++            let weight_row = (row_base + r) * 16u + k;
++            forget_acc[r] += inner_dot(forget_weight[params.forget_weight + weight_row], input);
++            gain_acc[r] += inner_dot(gain_weight[params.gain_weight + weight_row], input);
++        }
++    }
++#ifdef SUBGROUP_REDUCTION
++    for (var r = 0u; r < 4u; r++) {
++        let forget_group = subgroupAdd(forget_acc[r]);
++        let gain_group = subgroupAdd(gain_acc[r]);
++        if (lane == 0u) {
++            forget_partial[partial_index(r, subgroup_id)] = forget_group;
++            gain_partial[partial_index(r, subgroup_id)] = gain_group;
++        }
++    }
++    workgroupBarrier();
++    for (var r = subgroup_id; r < 4u; r += subgroup_count) {
++        var forget_sum = 0.0;
++        var gain_sum = 0.0;
++        for (var i = lane; i < subgroup_count; i += subgroup_size) {
++            forget_sum += forget_partial[partial_index(r, i)];
++            gain_sum += gain_partial[partial_index(r, i)];
++        }
++        let forget_dot = subgroupAdd(forget_sum);
++        let gain_dot = subgroupAdd(gain_sum);
++        if (lane == 0u) {
++            store_row(row_base + r, forget_dot, gain_dot);
++        }
++    }
++#else
++    let thread = local_id.x;
++    for (var r = 0u; r < 4u; r++) {
++        forget_partial[partial_index(r, thread)] = forget_acc[r];
++        gain_partial[partial_index(r, thread)] = gain_acc[r];
++    }
++    workgroupBarrier();
++    for (var stride = CONTROLLER_WG / 2u; stride > 0u; stride /= 2u) {
++        if (thread < stride) {
++            for (var r = 0u; r < 4u; r++) {
++                forget_partial[partial_index(r, thread)] += forget_partial[partial_index(r, thread + stride)];
++                gain_partial[partial_index(r, thread)] += gain_partial[partial_index(r, thread + stride)];
++            }
++        }
++        workgroupBarrier();
++    }
++    if (thread < 4u) {
++        store_row(row_base + thread, forget_partial[partial_index(thread, 0u)], gain_partial[partial_index(thread, 0u)]);
++    }
++#endif
++    workgroupBarrier();
++}

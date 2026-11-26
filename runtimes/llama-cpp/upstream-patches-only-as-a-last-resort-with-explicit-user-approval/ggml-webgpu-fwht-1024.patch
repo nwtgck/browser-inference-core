@@ -1,0 +1,137 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5071,8 +5071,53 @@
+     return ggml_backend_webgpu_build(ctx, pipeline, params, entries, wg_x, wg_y);
+ }
+ 
++#include "ggml-webgpu-checked-tensor-binding.hpp"
+ #include "ggml-webgpu-dense-q4-swiglu.hpp"
+ #include "ggml-webgpu-q8-sigmoid-mul.hpp"
++
++static std::optional<webgpu_encoded_op> ggml_webgpu_fwht_1024(webgpu_context & ctx,
++                                                             const ggml_tensor * rotation,
++                                                             const ggml_tensor * input,
++                                                             const ggml_tensor * output) {
++    using namespace webgpu_checked_tensor_binding;
++    constexpr int64_t width = 1024;
++    constexpr uint32_t workgroup_size = 128;
++    const int64_t columns = output->ne[1];
++    const auto & caps = ctx->global_ctx->capabilities;
++    const auto & limits = caps.limits;
++
++    // Match the ordinary register-tiled matmul route whose inputs round to half.
++    if (columns <= GGML_WEBGPU_MUL_MAT_VEC_MAX_ROWS || caps.supports_subgroup_matrix ||
++        columns > limits.maxComputeWorkgroupsPerDimension ||
++        limits.maxComputeInvocationsPerWorkgroup < workgroup_size || limits.maxComputeWorkgroupSizeX < workgroup_size ||
++        limits.maxComputeWorkgroupStorageSize < width * sizeof(float) ||
++        limits.maxStorageBuffersPerShaderStage < 2 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxBindingsPerBindGroup < 3 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        ggml_prec_get_acc(output) != GGML_PREC_UNDEFINED || ggml_prec_get_src(output, 1) != GGML_PREC_UNDEFINED ||
++        !shape(rotation, GGML_TYPE_F32, width, width) ||
++        !shape(input, GGML_TYPE_F32, width, columns) || !shape(output, GGML_TYPE_F32, width, columns)) {
++        return std::nullopt;
++    }
++
++    std::array<buffer_facts, 2> facts{};
++    binding src, dst;
++    if (!get_binding(ctx, input, facts, src) || !get_binding(ctx, output, facts, dst) ||
++        bindings_overlap(src, dst)) {
++        return std::nullopt;
++    }
++
++    // The hint guarantees the normalized Sylvester coefficients. They need no binding.
++    auto & pipeline = ctx->shader_lib->get_fwht_1024_pipeline();
++    if (!pipeline.pipeline) {
++        return std::nullopt;
++    }
++    const std::vector<uint32_t> params = {src.element_offset, dst.element_offset};
++    const std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, src.buffer, src.offset, src.size),
++        ggml_webgpu_make_bind_group_entry(1, dst.buffer, dst.offset, dst.size),
++    };
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, uint32_t(columns));
++}
+ 
+ // Returns the encoded command, or std::nullopt if the operation is a no-op
+ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+@@ -5119,6 +5164,11 @@
+             if (auto fused = webgpu_q8_sigmoid_mul::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            if (ggml_get_op_params_i32(node, 1) == GGML_HINT_SRC0_IS_HADAMARD) {
++                if (auto transform = ggml_webgpu_fwht_1024(ctx, src0, src1, node)) {
++                    return transform;
++                }
++            }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT_ID:
+             return ggml_webgpu_mul_mat_id(ctx, src0, src1, src2, node);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1861,6 +1861,7 @@
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+     std::unordered_map<bool, webgpu_pipeline> short_conv_residual_pipelines;
+     webgpu_pipeline situ_pipeline;
++    webgpu_pipeline fwht_1024_pipeline;
+     webgpu_pipeline short_conv_state_pipeline;
+     webgpu_pipeline loop_controller_pipelines[2][2];
+     std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
+@@ -3231,6 +3232,14 @@
+         return mul_mat_vec_pipelines[key];
+     }
+ 
++    webgpu_pipeline & get_fwht_1024_pipeline() {
++        if (!fwht_1024_pipeline.pipeline) {
++            fwht_1024_pipeline = ggml_webgpu_create_pipeline(
++                device, wgsl_mul_mat_fwht_1024, "mul_mat_fwht_1024_f32_half_input_wg128");
++        }
++        return fwht_1024_pipeline;
++    }
++
+     webgpu_pipeline get_mul_mat_fast_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap, bool vec4_aligned) {
+         ggml_webgpu_mul_mat_pipeline_key key = {};
+         key.src0_type                        = context.src0->type;
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_fwht_1024.wgsl
+@@ -0,0 +1,41 @@
++const WIDTH = 1024u;
++const WG_SIZE = 128u;
++
++struct Parameters {
++    src_offset: u32,
++    dst_offset: u32,
++}
++
++// The two disjoint ranges may share one storage buffer.
++@group(0) @binding(0) var<storage, read_write> activation: array<f32>;
++@group(0) @binding(1) var<storage, read_write> result: array<f32>;
++@group(0) @binding(2) var<uniform> params: Parameters;
++
++var<workgroup> values: array<f32, WIDTH>;
++
++@compute @workgroup_size(WG_SIZE)
++fn main(@builtin(workgroup_id) group_id: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
++    let column = group_id.x * WIDTH;
++    for (var i = lane; i < WIDTH; i += WG_SIZE) {
++        // Retain the register-tile matmul's half-precision input rounding.
++        values[i] = quantizeToF16(activation[params.src_offset + column + i]) * 0.03125;
++    }
++    workgroupBarrier();
++
++    for (var span = 1u; span < WIDTH; span <<= 1u) {
++        for (var pair = lane; pair < WIDTH / 2u; pair += WG_SIZE) {
++            // Insert a zero bit at span; its paired index has that bit set.
++            let low = (pair & (span - 1u)) | ((pair & ~(span - 1u)) << 1u);
++            let high = low | span;
++            let x = values[low];
++            let y = values[high];
++            values[low] = x + y;
++            values[high] = x - y;
++        }
++        workgroupBarrier();
++    }
++
++    for (var i = lane; i < WIDTH; i += WG_SIZE) {
++        result[params.dst_offset + column + i] = values[i];
++    }
++}

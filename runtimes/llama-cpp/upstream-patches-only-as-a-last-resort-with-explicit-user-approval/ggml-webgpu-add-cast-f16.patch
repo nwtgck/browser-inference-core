@@ -1,0 +1,256 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5129,4 +5129,6 @@
+ }
+ 
++#include "ggml-webgpu-add-cast-f16.hpp"
++
+ // Returns the encoded command, or std::nullopt if the operation is a no-op
+ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+@@ -5158,6 +5160,8 @@
+         case GGML_OP_RESHAPE:
+             return std::nullopt;
++        case GGML_OP_CPY:
++            if (auto fused = webgpu_add_cast_f16::encode(ctx, *cgraph, node_idx, true, fusion_views, num_encoded_ops)) { return fused; }
++            return ggml_webgpu_cpy(ctx, src0, node);
+         case GGML_OP_DUP:
+-        case GGML_OP_CPY:
+         case GGML_OP_CONT:
+             return ggml_webgpu_cpy(ctx, src0, node);
+@@ -5188,4 +5192,5 @@
+                 return sum;
+             }
++            if (auto fused = webgpu_add_cast_f16::encode(ctx, *cgraph, node_idx, false, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_binary_op(ctx, src0, src1, node);
+         case GGML_OP_SUB:
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -4,4 +4,5 @@
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-aligned-word-load-shaders.hpp"
++#include "ggml-webgpu-add-cast-f16-shaders.hpp"
+ #include "ggml-webgpu-l2-clip-shaders.hpp"
+ #include "ggml-webgpu-hc-shaders.hpp"
+@@ -1867,4 +1868,5 @@
+     webgpu_pipeline situ_pipeline;
+     webgpu_pipeline fwht_1024_pipeline;
++    std::array<webgpu_pipeline, 2> add_cast_f16_pipelines;
+     webgpu_pipeline short_conv_state_pipeline;
+     webgpu_pipeline loop_controller_pipelines[2][2];
+@@ -3237,4 +3239,17 @@
+     }
+ 
++    webgpu_pipeline & get_add_cast_f16_pipeline(bool mask_f16) {
++        auto & pipeline = add_cast_f16_pipelines[mask_f16];
++        if (!pipeline.pipeline) {
++            std::vector<std::string> defines;
++            if (mask_f16) {
++                defines.push_back("MASK_F16");
++            }
++            const auto code = preprocessor.preprocess(wgsl_add_cast_f16, defines);
++            pipeline = ggml_webgpu_create_pipeline(device, code, mask_f16 ? "add_cast_f16_mask_f16" : "add_cast_f16");
++        }
++        return pipeline;
++    }
++
+     webgpu_pipeline & get_fwht_1024_pipeline() {
+         if (!fwht_1024_pipeline.pipeline) {
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-add-cast-f16.hpp
+@@ -0,0 +1,122 @@
++#pragma once
++
++namespace webgpu_add_cast_f16 {
++
++static bool payloads_overlap(const webgpu_checked_tensor_binding::binding & a, uint64_t a_unit,
++                             const webgpu_checked_tensor_binding::binding & b, uint64_t b_unit) {
++    const uint64_t a_start = a.offset + uint64_t(a.element_offset) * a_unit;
++    const uint64_t b_start = b.offset + uint64_t(b.element_offset) * b_unit;
++    return a.buffer.Get() == b.buffer.Get() && a_start < b.offset + b.size && b_start < a.offset + a.size;
++}
++
++static bool has_other_readers(const ggml_cgraph & graph, webgpu_fusion_view_sources & views,
++                              const ggml_tensor * input) {
++    // The allocator can reuse the storage of a private, single-use producer.
++    // Keep explicit views and caller-owned inputs/outputs observable.
++    if (input->view_src || (input->flags & (GGML_TENSOR_FLAG_INPUT | GGML_TENSOR_FLAG_OUTPUT)) || views.contains(input)) {
++        return true;
++    }
++    const auto & visited = graph.visited_hash_set;
++    const size_t slot = ggml_hash_find(&visited, input);
++    return !graph.use_counts || slot >= visited.size || !ggml_bitset_get(visited.used, slot) || graph.use_counts[slot] != 1;
++}
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, const ggml_cgraph & graph, int node_idx,
++                                               bool input_cast, webgpu_fusion_view_sources & views, int & num_encoded_ops) {
++    using namespace webgpu_checked_tensor_binding;
++    constexpr uint32_t workgroup_size = 256;
++    const int add_idx = node_idx + (input_cast ? 1 : 0);
++    if (graph.n_nodes - node_idx < (input_cast ? 3 : 2) ||
++        !ggml_can_fuse(&graph, add_idx, {GGML_OP_ADD, GGML_OP_CPY})) {
++        return std::nullopt;
++    }
++
++    const auto * add = graph.nodes[add_idx];
++    const auto * dst = graph.nodes[add_idx + 1];
++    const auto * a = add->src[0];
++    const auto * b = add->src[1];
++    if (!a || !b || add->type != GGML_TYPE_F32 || a->type != GGML_TYPE_F32 || b->type != GGML_TYPE_F32 ||
++        dst->type != GGML_TYPE_F16 || dst->src[0] != add || dst->src[1] != dst || dst->view_src ||
++        !ggml_are_same_shape(a, dst) || !ggml_can_repeat(b, a)) {
++        return std::nullopt;
++    }
++
++    if (input_cast) {
++        const auto * cast = graph.nodes[node_idx];
++        const auto * raw = cast->src[0];
++        if (cast != b || cast->op != GGML_OP_CPY || cast->src[1] != cast || cast->view_src ||
++            (cast->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 || (cast->flags & GGML_TENSOR_FLAG_OUTPUT) ||
++            !raw || raw->type != GGML_TYPE_F16 || !ggml_are_same_shape(raw, cast) ||
++            !ggml_node_has_n_uses(&graph, node_idx, 2)) {
++            return std::nullopt;
++        }
++        b = raw;
++    }
++
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < workgroup_size || limits.maxComputeWorkgroupSizeX < workgroup_size ||
++        limits.maxStorageBuffersPerShaderStage < 3 || limits.maxUniformBuffersPerShaderStage < 1 ||
++        limits.maxBindingsPerBindGroup < 4 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        limits.maxComputeWorkgroupsPerDimension == 0) {
++        return std::nullopt;
++    }
++
++    std::array<buffer_facts, 5> facts{};
++    binding bias, mask, result, sum;
++    if (!get_binding(ctx, a, facts, bias) || !get_binding(ctx, b, facts, mask) || !get_binding(ctx, dst, facts, result) ||
++        bindings_overlap(bias, mask) || bindings_overlap(bias, result) || bindings_overlap(mask, result) ||
++        result.element_offset % 2 || views.contains(add) || (input_cast && views.contains(graph.nodes[node_idx])) ||
++        !get_binding(ctx, add, facts, sum) || ggml_backend_buffer_get_usage(add->buffer) != GGML_BACKEND_BUFFER_USAGE_COMPUTE) {
++        return std::nullopt;
++    }
++    const uint32_t b_unit = ggml_type_size(b->type);
++    if ((payloads_overlap(sum, sizeof(float), bias, sizeof(float)) && has_other_readers(graph, views, a)) ||
++        (payloads_overlap(sum, sizeof(float), mask, b_unit) && has_other_readers(graph, views, b))) {
++        return std::nullopt;
++    }
++    if (input_cast) {
++        // The omitted write can change another input even when it is a different
++        // tensor root. Compare the payloads, excluding binding alignment padding.
++        binding converted;
++        const auto * cast = graph.nodes[node_idx];
++        if (!get_binding(ctx, cast, facts, converted) ||
++            ggml_backend_buffer_get_usage(cast->buffer) != GGML_BACKEND_BUFFER_USAGE_COMPUTE ||
++            payloads_overlap(converted, sizeof(float), bias, sizeof(float)) ||
++            payloads_overlap(converted, sizeof(float), mask, b_unit)) {
++            return std::nullopt;
++        }
++    }
++
++    const uint32_t count = uint32_t(ggml_nelements(dst));
++    const uint64_t max_groups = limits.maxComputeWorkgroupsPerDimension;
++    const uint32_t groups = CEIL_DIV(count / 2, workgroup_size);
++    if (count % 2 || groups > max_groups * max_groups) {
++        return std::nullopt;
++    }
++
++    auto & pipeline = ctx->shader_lib->get_add_cast_f16_pipeline(input_cast);
++    if (!pipeline.pipeline) {
++        return std::nullopt;
++    }
++    const std::vector<uint32_t> params = {
++        count, bias.element_offset, mask.element_offset, result.element_offset / 2,
++        uint32_t(a->nb[0] / sizeof(float)), uint32_t(a->nb[1] / sizeof(float)),
++        uint32_t(a->nb[2] / sizeof(float)), uint32_t(a->nb[3] / sizeof(float)),
++        uint32_t(b->nb[0] / b_unit), uint32_t(b->nb[1] / b_unit),
++        uint32_t(b->nb[2] / b_unit), uint32_t(b->nb[3] / b_unit),
++        uint32_t(a->ne[0]), uint32_t(a->ne[1]), uint32_t(a->ne[2]),
++        uint32_t(b->ne[0]), uint32_t(b->ne[1]), uint32_t(b->ne[2]), uint32_t(b->ne[3]),
++    };
++    const std::vector<wgpu::BindGroupEntry> entries = {
++        ggml_webgpu_make_bind_group_entry(0, bias.buffer, bias.offset, bias.size),
++        ggml_webgpu_make_bind_group_entry(1, mask.buffer, mask.offset, mask.size),
++        ggml_webgpu_make_bind_group_entry(2, result.buffer, result.offset, result.size),
++    };
++    uint32_t x, y;
++    compute_2d_workgroups(groups, limits.maxComputeWorkgroupsPerDimension, x, y);
++    auto command = ggml_backend_webgpu_build(ctx, pipeline, params, entries, x, y);
++    num_encoded_ops = input_cast ? 3 : 2;
++    return command;
++}
++
++} // namespace webgpu_add_cast_f16
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/add_cast_f16.wgsl
+@@ -0,0 +1,71 @@
++enable f16;
++
++// One invocation owns a complete 32-bit output word: no two invocations
++// write adjacent f16 values through separate read/modify/write operations.
++struct Params {
++    ne: u32,
++    offset_src0: u32,
++    offset_src1: u32,
++    offset_dst: u32,
++    stride_src0_0: u32,
++    stride_src0_1: u32,
++    stride_src0_2: u32,
++    stride_src0_3: u32,
++    stride_src1_0: u32,
++    stride_src1_1: u32,
++    stride_src1_2: u32,
++    stride_src1_3: u32,
++    a_ne0: u32,
++    a_ne1: u32,
++    a_ne2: u32,
++    b_ne0: u32,
++    b_ne1: u32,
++    b_ne2: u32,
++    b_ne3: u32,
++};
++
++// Keep pooled-buffer usage compatible; admission requires disjoint bindings.
++@group(0) @binding(0) var<storage, read_write> src0: array<f32>;
++#ifdef MASK_F16
++@group(0) @binding(1) var<storage, read_write> src1: array<f16>;
++#else
++@group(0) @binding(1) var<storage, read_write> src1: array<f32>;
++#endif
++@group(0) @binding(2) var<storage, read_write> dst: array<vec2<f16>>;
++@group(0) @binding(3) var<uniform> params: Params;
++
++fn mask_value(index: u32) -> f32 {
++#ifdef MASK_F16
++    return f32(src1[index]);
++#else
++    return src1[index];
++#endif
++}
++
++fn added_value(index: u32) -> f32 {
++    var i = index;
++    let i3 = i / (params.a_ne2 * params.a_ne1 * params.a_ne0);
++    i %= params.a_ne2 * params.a_ne1 * params.a_ne0;
++    let i2 = i / (params.a_ne1 * params.a_ne0);
++    i %= params.a_ne1 * params.a_ne0;
++    let i1 = i / params.a_ne0;
++    let i0 = i % params.a_ne0;
++    let a = params.offset_src0 + i0 * params.stride_src0_0 + i1 * params.stride_src0_1 +
++            i2 * params.stride_src0_2 + i3 * params.stride_src0_3;
++    let b = params.offset_src1 + (i0 % params.b_ne0) * params.stride_src1_0 +
++            (i1 % params.b_ne1) * params.stride_src1_1 +
++            (i2 % params.b_ne2) * params.stride_src1_2 +
++            (i3 % params.b_ne3) * params.stride_src1_3;
++    return src0[a] + mask_value(b);
++}
++
++@compute @workgroup_size(256)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>,
++        @builtin(num_workgroups) num_wg: vec3<u32>) {
++    let pair = gid.x + num_wg.x * 256u * gid.y;
++    if (pair >= params.ne / 2u) {
++        return;
++    }
++    let first = pair * 2u;
++    dst[params.offset_dst + pair] = vec2<f16>(f16(added_value(first)), f16(added_value(first + 1u)));
++}

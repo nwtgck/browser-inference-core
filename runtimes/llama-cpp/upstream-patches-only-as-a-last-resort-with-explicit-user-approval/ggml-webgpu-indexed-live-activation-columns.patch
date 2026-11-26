@@ -1,0 +1,84 @@
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -70,19 +70,20 @@
+ const TILE_SRC1_SHMEM = TILE_K * WORKGROUP_SIZE_N * TILE_N;
+ 
+ var<workgroup> shmem: array<f16, TILE_SRC0_SHMEM + TILE_SRC1_SHMEM>;
+-var<workgroup> gathered_expert_used: array<u32, TILE_N * WORKGROUP_SIZE_N>;
+-var<workgroup> gathered_tokens: array<u32, TILE_N * WORKGROUP_SIZE_N>;
++var<workgroup> gathered_dst_offset: array<u32, TILE_N * WORKGROUP_SIZE_N>;
++var<workgroup> gathered_src1_offset: array<u32, TILE_N * WORKGROUP_SIZE_N>;
+ 
+ #ifdef INIT_SRC1_SHMEM_FLOAT
+-fn init_shmem_id_src1(thread_id: u32, offset_src1: u32, rest_token_n: u32, k_outer: u32) {
+-    for (var elem_idx = thread_id * VEC_SIZE; elem_idx < TILE_SRC1_SHMEM; elem_idx += TOTAL_WORKGROUP_SIZE * VEC_SIZE) {
++fn init_shmem_id_src1(thread_id: u32, rest_token_n: u32, k_outer: u32) {
++    // The last active invocation can consume up to TILE_N columns. Keep its
++    // zero padding, and do not initialize columns no invocation can read.
++    let columns = ((rest_token_n + TILE_N - 1u) / TILE_N) * TILE_N;
++    for (var elem_idx = thread_id * VEC_SIZE; elem_idx < columns * TILE_K; elem_idx += TOTAL_WORKGROUP_SIZE * VEC_SIZE) {
+         let tile_n = elem_idx / TILE_K;
+         let tile_k = elem_idx % TILE_K;
+         if (tile_n < rest_token_n) {
+             let global_src10 = k_outer + tile_k;
+-            let expert_used_idx = gathered_expert_used[tile_n] % params.b_ne1;
+-            let token_idx = gathered_tokens[tile_n];
+-            let src1_idx = offset_src1 + token_idx * params.stride_12 + expert_used_idx * params.stride_11 + global_src10;
++            let src1_idx = gathered_src1_offset[tile_n] + global_src10;
+             let src1_val = select(
+                 SRC1_TYPE(0.0),
+                 src1[src1_idx/VEC_SIZE],
+@@ -125,8 +126,11 @@
+         rest_token_n = ids_tiles[1 + 3 * tile + 2];
+         for (var i = thread_id; i < rest_token_n; i += TOTAL_WORKGROUP_SIZE) {
+             let pos_in_ids = ids_slot_pos[slot_base + i];
+-            gathered_expert_used[i] = pos_in_ids % params.n_expert_used;
+-            gathered_tokens[i] = pos_in_ids / params.n_expert_used;
++            let token = pos_in_ids / params.n_expert_used;
++            let slot = pos_in_ids % params.n_expert_used;
++            gathered_src1_offset[i] = params.offset_src1 + token * params.stride_12 +
++                                     (slot % params.b_ne1) * params.stride_11;
++            gathered_dst_offset[i] = params.offset_dst + pos_in_ids * params.m;
+         }
+         src0_batch_offset = params.offset_src0 + expert_idx * params.stride_02;
+     }
+@@ -136,16 +140,13 @@
+     let output_row_base = offset_wg_m + local_m * TILE_M;
+     let output_col_base = local_n * TILE_N;
+ 
+-    let dst2_stride = params.m * params.n_expert_used;
+-    let dst1_stride = params.m;
+-
+     var acc: array<array<MUL_MAT_ID_ACC_TYPE, TILE_M>, TILE_N>;
+ 
+     for (var k_outer = 0u; k_outer < params.k; k_outer += TILE_K) {
+ 
+         if (is_valid) {
+             init_shmem_src0(thread_id, src0_batch_offset, offset_wg_m, k_outer);
+-            init_shmem_id_src1(thread_id, params.offset_src1, rest_token_n, k_outer);
++            init_shmem_id_src1(thread_id, rest_token_n, k_outer);
+         }
+ 
+         workgroupBarrier();
+@@ -201,9 +202,7 @@
+     if (is_valid && rest_token_n <= WORKGROUP_SIZE_N) {
+         let n_idx = local_n;
+         if (n_idx < rest_token_n) {
+-            let dst1_idx = gathered_expert_used[n_idx];
+-            let dst2_idx = gathered_tokens[n_idx];
+-            let dst12_offset = params.offset_dst + dst2_idx * dst2_stride + dst1_idx * dst1_stride;
++            let dst12_offset = gathered_dst_offset[n_idx];
+             for (var tm = 0u; tm < TILE_M; tm += VEC_SIZE) {
+                 let global_row = output_row_base + tm;
+                 if (global_row < params.m) {
+@@ -219,9 +218,7 @@
+         for (var tn = 0u; tn < TILE_N; tn++) {
+             let n_idx = output_col_base + tn;
+             if (n_idx < rest_token_n) {
+-                let dst1_idx = gathered_expert_used[n_idx];
+-                let dst2_idx = gathered_tokens[n_idx];
+-                let dst12_offset = params.offset_dst + dst2_idx * dst2_stride + dst1_idx * dst1_stride;
++                let dst12_offset = gathered_dst_offset[n_idx];
+                 for (var tm = 0u; tm < TILE_M; tm += VEC_SIZE) {
+                     let global_row = output_row_base + tm;
+                     if (global_row < params.m) {

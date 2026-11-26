@@ -24,6 +24,52 @@ test('concrete normal/profile recipes preserve order and isolate dedicated templ
   assert.ok(profile.findIndex(patch => patch.file === 'ggml-webgpu-q8-diagnostic.patch') < profile.findIndex(patch => patch.file === 'ggml-webgpu-matmul-vec4-layout-profile.patch'));
 });
 
+test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout: 120000 }, async () => {
+  await using directory = {
+    path: await mkdtemp(join(tmpdir(), 'llama-argsort-source-test-')),
+    async [Symbol.asyncDispose]() {
+      await rm(this.path, { recursive: true, force: true });
+    },
+  };
+  const { receipt } = await prepareSources({
+    inputs: { compileRoot: sourceRoot, upstreamRoots: { llama: join(sourceRoot, upstreamPath) } },
+    output: join(directory.path, 'prepared'),
+    options: { target: 'native', webgpu: true, gpuProfile: false, fileRows: false, qsa: false, mtmdMode: 'cpu' },
+    python: 'python3',
+  });
+  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_decls.tmpl',
+    'row_norm.wgsl', 'mul_mat_reg_tile.wgsl', 'mul_mat_decls.tmpl', 'mul_mat_vec.wgsl']) {
+    const shader = `ggml/src/ggml-webgpu/wgsl-shaders/${name}`;
+    const prepared = receipt.outputs[shader];
+    assert.ok(prepared);
+    assert.notEqual(prepared.sha256, receipt.inputs[shader]?.sha256);
+    assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[name], prepared);
+  }
+  for (const [name, header] of [
+    ['add_cast_f16.wgsl', 'ggml-webgpu-add-cast-f16-shaders.hpp'],
+    ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
+    ['indexed_vec_mask_block.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
+    ['mul_mat_vec_acc.tmpl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],
+    ['q8_subgroup_matvec.wgsl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],
+    ['mul_mat_id_vec.wgsl', 'ggml-webgpu-aligned-word-load-shaders.hpp'],
+    ['iq3s_id_subgroup.wgsl', 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp'],
+  ] as const) {
+    const prepared = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
+    assert.ok(prepared);
+    assert.deepEqual(receipt.shaders[header]?.[name], prepared);
+  }
+  const accumulator = 'mul_mat_vec_acc.tmpl';
+  const accumulatorPath = `ggml/src/ggml-webgpu/wgsl-shaders/${accumulator}`;
+  const indexedPatches = receipt.patches.filter(entry => entry.target === 'iq3s');
+  assert.deepEqual(receipt.shaders['ggml-webgpu-aligned-word-load-shaders.hpp']?.[accumulator],
+    receipt.outputs[accumulatorPath]);
+  assert.equal(indexedPatches[0]?.files.find(entry => entry.path === accumulatorPath)?.beforeSha256,
+    receipt.outputs[accumulatorPath]?.sha256);
+  assert.equal(indexedPatches.at(-1)?.files.find(entry => entry.path === accumulatorPath)?.afterSha256,
+    receipt.shaders['ggml-webgpu-iq3s-id-subgroup-shaders.hpp']?.[accumulator]?.sha256);
+  assert.deepEqual(receipt.shaders['ggml-webgpu-f32-matvec-epilogue-shaders.hpp']?.[accumulator], receipt.inputs[accumulatorPath]);
+});
+
 test('coherent source preparation preserves previous output and unchanged mtimes', { timeout: 120000 }, async () => {
   await using directory = {
     path: await mkdtemp(join(tmpdir(), 'llama-source-test-')),

@@ -1,0 +1,22 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2464,7 +2464,18 @@
+                     (weights->ne[2] == 48 || weights->ne[2] == 128) &&
+                     input->ne[1] == 1 && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+                     row_tile == 64 && main.tile_k == 64;
+-    if (!q2 && !q4) {
++    const auto nv_acc = weights->type == GGML_TYPE_NVFP4 ? ggml_prec_get_acc(dst) : GGML_PREC_UNDEFINED;
++    // Match the grouped NVFP4 shader's F32 accumulator selection.
++    const bool iq4_or_nv = weights->type == GGML_TYPE_IQ4_NL ||
++                           nv_acc == GGML_PREC_BF16 || nv_acc == GGML_PREC_F32;
++    const bool broadcast_gate = weights->ne[0] == 2304 && input->ne[1] == 1;
++    const bool per_slot_down = weights->ne[0] == 1152 && input->ne[1] == 8;
++    const bool grouped_quant = iq4_or_nv && !shader.indexed_split_weights &&
++                               !weights->view_src && ggml_is_contiguous(weights) &&
++                               weights->ne[1] == 2304 && weights->ne[2] == 128 &&
++                               (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
++                               row_tile == 64 && (main.tile_k == 32 || main.tile_k == 64);
++    if (!q2 && !q4 && !grouped_quant) {
+         return false;
+     }
+ 

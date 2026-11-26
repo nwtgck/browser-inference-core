@@ -541,6 +541,15 @@ not establish target-device speed.
 - **No-patch alternative:** retain separate RMS and scale dispatches or wait for upstream fusion.
 - **Removal:** equivalent upstream fusion or withdrawal of the optimization; remove patch, preparation, build wiring, tests and provenance together.
 
+## Fused WebGPU F32 L2 clipping
+
+- **Patch** `ggml-webgpu-l2-clip.patch`.
+- **Scope** Fuse an eligible square, row sum, square root, epsilon addition, threshold fill, division, clamp and multiplication into one dispatch. Admission requires dense F32 tensors of shape `[128,24,T,1]`, `[128,8,T,1]` or `[16,24,T,1]` for `1 ≤ T ≤ 128`, the original vector as the final multiplication input, and the checked coefficients and clip bounds. The dispatch uses one workgroup per head and token. Graph output, use-count and graph-wide raw view checks protect observable intermediate values across scheduler slices. Overlapping binding ranges use the separate operations unless input and output have identical tensor offsets and layouts.
+- **Integration** Normal and GPU-profiling WebGPU builds embed the same canonical shader. The patch uses the existing RMS-scale layout and binding helpers and the upstream `SUM_ROWS` reduction order for the populated lanes. GPU-profiling builds record the fused dispatch through the existing timestamp path. CPU builds do not apply the patch. The initial pin is llama.cpp `c212d25ad`. Review the graph view, allocator, `SUM_ROWS` and shader embedding contracts when updating it.
+- **Validation and limits** Complete-provider tests exercise single-token and batched admission, actual dispatch encoding, exact allocation alias, and raw views crossing a graph slice. Linked Wasm64 software WebGPU checks compare output words with the separate operations, including authored exceptional values in the single-token tests. A 128-token synthetic GGML graph and an authored Inkling model with a five-token prompt both produced identical output words. Physical-device throughput and model quality remain unmeasured.
+- **No-patch alternative** Keep the existing individual WebGPU dispatches until upstream provides equivalent fusion.
+- **Removal** Remove the patch, shader preparation, and focused provider checks when upstream provides equivalent behavior or the optimization is retired.
+
 ## Fixed-subgroup Q8_0 matvec
 
 - **Patch:** `ggml-webgpu-q8-subgroup-matvec.patch`.
@@ -569,6 +578,137 @@ not establish target-device speed.
 - **Validation and limits:** actual factory output for logical widths 16/32/64 is source-bound. Synthetic numerical comparisons covered width16 full and reported-width32 partial execution, input updates, skipped IDs, binding ends and guards. Target-device performance, full hardware width32/64, Mac/Metal and complete-model quality/performance are not established. Source read-expression counts are not physical bandwidth measurements.
 - **No-patch alternative:** retain the existing independent indexed matvec or wait for upstream equivalent field loads.
 - **Removal:** upstream equivalent support, withdrawal of this optimization, or removal of its parent indexed IQ3 implementation; remove this stage, patch, build dependencies, tests and provenance together.
+
+## Fixed-subgroup indexed IQ4_NL and NVFP4 decode
+
+- **Patch:** `ggml-webgpu-quantized-expert-subgroup-decode.patch`.
+- **Scope:** use independent 16- or 32-lane subgroups for single-token IQ4_NL or NVFP4 indexed matvec with F32 activations, K1152 or K2304, M2304 and eight selected experts. Select by tensor shape, physical binding bounds and device limits. Preserve the existing IQ3_S scope and the canonical fallback.
+- **Integration:** both WebGPU modes share the existing independent subgroup shader, quantization loaders and partial-subgroup arithmetic. This stage reuses its buffer and dispatch checks with the corresponding GGML block traits. The upstream revision and applied patch remain in the preparation receipt.
+- **Validation and limits:** complete provider tests cover fixed and varying widths, boundary binding limits and unchanged IQ3_S selection. Software WebGPU replay of representative packed tensors covers the two K sizes and fixed widths. Independent reductions change F32 addition order. Physical-device throughput and model-level quality require measurement.
+- **No-patch alternative:** retain the existing cooperative indexed decode path.
+- **Removal:** upstream equivalent support or withdrawal of the optimization. Remove this stage, tests and provenance together.
+
+## Packed coefficient decode for independent NVFP4 matvecs
+
+- **Patch** `ggml-webgpu-indexed-nvfp4-packed-decode.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use packed E2M1 coefficient magnitudes and branchless UE4M3 scale
+  decoding in the existing independent indexed NVFP4 matvec. Apply the patch
+  to that shader family's private accumulator input.
+- **Contract** Preserve the packed weight bytes, scale rules for all byte
+  values, per-lane accumulation order, subgroup reduction, and tensor
+  bindings. Selection, workgroup layout, and resource allocation are shared
+  with the previous kernel. The cooperative and dense paths keep the
+  canonical accumulator.
+- **Validation** Compare the emitted shaders on real NVFP4 weight slices and
+  exhaustively check coefficient and scale decoding. Software GPU timings
+  cover the isolated gate/up and down projections. Target-device and
+  model-wide throughput depend on the rest of the decode graph.
+- **Removal** Use the upstream accumulator once it provides equivalent
+  decoding and performance. Review the E2M1 and UE4M3 tables on upstream updates.
+
+## Indexed vector attention mask and block fusion
+
+- **Patch** `ggml-webgpu-indexed-mask-block-fusion.patch` against llama.cpp
+  `c212d25ad`. It applies after `ggml-webgpu-indexed-half-flash.patch`.
+- **Scope** Write the rounded F16 mask and the vector Flash Attention block
+  states in the same WebGPU dispatch. Select it for one query per stream with
+  complete 32-cell tiles. Other mask layouts and tile sizes use their original
+  dispatches.
+- **Contract** Reuse the allocated mask and block ranges and the existing
+  split and reduction shaders. Use the original block classifier's per-cell
+  clamp and reduction order. Source preparation embeds the original and fused
+  producers for both normal and profiling builds.
+- **Validation** The provider recorder checks dispatch count, fallback and the
+  block scratch bindings. Software WebGPU compares the two outputs with the
+  separate passes for four context lengths and exercises non-finite mask
+  input, multiple streams and a two-dimensional dispatch. A small Inkling
+  fixture compares logits, generated tokens and saved state through the
+  Wasm64 ABI. Measure model-wide throughput on target devices separately.
+- **Alternative** Keep the separate producer and mask classifier. The upstream
+  shader API has no option to combine these passes. Remove this patch when
+  upstream provides equivalent dispatch and numerical behavior.
+
+## Vectorized F32 row RMS normalization
+
+- **Patch** `ggml-webgpu-rms-norm-vec4.patch` against llama.cpp `c212d25ad`.
+  Source preparation embeds the patched row shader after RMS/SCALE support.
+- **Scope** Use four consecutive F32 elements per lane for aligned RMS
+  normalization with at least eight rows or 4,096 columns. The same shader
+  supports the existing affine epilogue. Unaligned layouts, smaller
+  dispatches, other norm operations and reduced device limits select the
+  scalar implementation.
+- **Contract** The 32 physical invocations preserve the element assignment,
+  accumulation order and reduction tree of the scalar 128-lane variant.
+  The vector shader uses the existing storage bindings, dispatch grid and
+  graph allocations.
+- **Validation** The provider recorder exercises aligned and shifted views,
+  padded rows, in-place writes, affine fusion and the scalar fallback.
+  Software WebGPU compares numerical outputs and times individual kernels.
+  A small Inkling fixture compares logits, tokens and saved state through
+  the Wasm64 ABI. Physical-device throughput depends on the workload.
+- **Alternative** Retain the scalar input and output path. Upstream exposes no
+  setting for this layout. Remove the patch when upstream ships equivalent
+  vectorized normalization and numerical behavior.
+
+## Paired RMS normalization and concatenation
+
+- **Patch** `ggml-webgpu-rms-concat.patch` against llama.cpp `c212d25ad`.
+  It reuses the vector RMS shader and follows `ggml-webgpu-rms-norm-vec4.patch`.
+- **Scope** Fuse two F32 RMS results with their column-wise concat when
+  the rows have equal widths, both intermediate values are private, and
+  the two source ranges and output are disjoint on WebGPU. A metadata-only
+  row view may precede the second RMS. Other graphs select their individual
+  operators.
+- **Contract** Each workgroup normalizes one half of a row with the existing
+  RMS reduction order and writes to its region of the concat output. The
+  two epsilons are independent. Use the graph allocation for all bindings.
+- **Validation** The recorder covers graph allocations, source views, a
+  two-dimensional grid, alignment, exposed and viewed intermediates, and
+  shared source ranges. Software WebGPU compares output and timings, and
+  the small Inkling fixture compares logits, tokens and saved state through
+  Wasm64. Physical-device throughput depends on the workload.
+- **Alternative** Keep the three existing operators. Upstream exposes no
+  fused variant for this graph. Remove the patch when upstream provides an
+  equivalent fusion with the same numerical behavior.
+
+## Shared packed words in subgroup and indexed Q8_0 matvecs
+
+- **Patch** `ggml-webgpu-q8-decode-paired-words.patch` against llama.cpp
+  `c212d25ad`. The Q8 subgroup shader and both indexed matvec shaders
+  enable the paired accumulator. Source preparation applies the indexed
+  accumulator patches after preparing the shared accumulator.
+- **Scope** Load the two neighboring packed integers together for each four-lane
+  Q8_0 block. A pair starting on a half-word boundary uses three underlying
+  words with one shared middle word. An aligned pair reads within its two
+  words. Both use the existing half scale and eight F32 products per lane.
+- **Contract** The shader uses the existing quantized weight layout, bindings,
+  lane mapping and reductions. The variant also covers the existing fused Q8
+  gate where that factory selects the independent kernel. The short cooperative
+  variant also enables the paired loader.
+- **Validation** Software WebGPU compares output bits and a Float64 reference
+  for the main shapes and for odd block counts, a row tail and longer vectors.
+  Indexed cases exercise broadcast and per-slot inputs with repeated and
+  skipped experts. The normal Wasm64 ABI exercises views and broadcast
+  batches. Whole-model throughput depends on the adapter and workload.
+- **Alternative** Use the canonical per-integer unaligned loads. Re-audit the
+  patch when upstream changes Q8_0 block size or divides the block differently
+  across lanes. Remove it when upstream provides equivalent loading.
+
+## Single-block lanes in cooperative Q8_0 matvecs
+
+- **Patch** `ggml-webgpu-q8-short-decode.patch` against llama.cpp `c212d25ad`.
+- **Scope** The reduced-workgroup Q8_0 × F32 single-column variant visits at
+  most one 32-value block per lane. Process it directly and use the paired
+  weight loader. Preserve the weight layout, workgroup geometry, arithmetic
+  and subgroup reduction. The variant has its own cache identity, so forced
+  profile workgroups and generic matvecs can still use the full block loop.
+- **Validation** Compare paired software WebGPU runs on Flash Next weight
+  slices and use the real provider factory to check cache identity and the
+  short-workgroup bound. Software timings cover the isolated matvec.
+- **Alternative and removal** Use the existing cooperative loop. Re-audit the
+  workgroup bound if upstream changes lane assignment, and remove the patch
+  when upstream specializes this case.
 
 ## Short Q5_1 / IQ4_NL expert matvec workgroups
 
@@ -600,6 +740,14 @@ not establish target-device speed.
 - **Maintenance and validation:** review the graph, allocator, backend, shader and generator contracts, and record the selected patch and output identities. Source-bound native tests exercise graph admission, actual allocator reuse, runtime bindings, dispatch, cache variants and both profile syntax configurations. These tests do not establish browser/model quality or target-device speed.
 - **Removal:** upstream implements equivalent guarded fusion or the owner withdraws it; remove the patch, preparation, build wiring, tests and provenance entry together.
 
+
+## WebGPU MoE sparse columns
+
+- **Patch:** `ggml-webgpu-moe-sparse-columns.patch`. Applied after the inactive column groups and NVFP4 accumulator patches.
+- **Scope:** Indexed IQ3_S and IQ4_NL matrix multiplication with scalar F32 input. For tiles of up to eight active columns, each participating lane accumulates one column. Larger tiles use the original grouped assignment.
+- **Contract:** Keep the gather metadata, WebGPU bindings, uniform layout, dispatch dimensions, and F16 accumulation order for each output. The existing pipeline key covers weight type, input type and vectorization. The separate indexed single-token kernel keeps its existing selection.
+- **Validation and limits:** Compare emitted normal and profile shaders and run numerical and timing comparisons for sparse, mixed and full tiles. Software tests cover authored routing and do not establish end-to-end prefill latency.
+- **Removal:** Remove when upstream provides an equivalent sparse tile, or revisit the patch when the indexed matrix tile shape or gather contract changes.
 
 ## WebGPU MoE matrix inactive column groups
 
@@ -658,6 +806,31 @@ not establish target-device speed.
 - **Validation and limits:** actual-ggml graph/allocator and complete-source dispatcher/factory tests, normal/profile syntax checks and synthetic software-GPU byte comparisons cover the guarded paths. These do not establish target-device speed or full-model quality. See `../../tests/runtimes/llama_cpp/webgpu-router-tail/README.md`.
 - **Removal:** remove the stage when upstream provides equivalent ordered gather normalization and alias handling, or the owner drops the optimization.
 
+## WebGPU router epsilon normalization
+
+- **Patch:** `ggml-webgpu-router-tail-epsilon.patch`, introduced against llama.cpp `c212d25ad`.
+- **Scope:** admit `SCALE(1, 1e-20)` as the denominator of the existing F32 gather normalization fusion. The workgroup reads the same ordered IDs, reduces the gathered weights with the same tree as `SUM_ROWS`, adds the epsilon and divides directly. Both the disjoint and single-token overlapping variants use separate pipeline keys for epsilon and clamp.
+- **Integration:** apply after the gather normalization tail in normal and profiling builds. The existing shader emission list generates both variants from the updated WGSL. The graph, tensor, view and binding guards of the existing fusion still apply.
+- **No-patch alternative:** execute the original gather, reduction, scale and division as four dispatches.
+- **Validation and maintenance:** the complete-provider test exercises both allocation layouts, clamp and epsilon pipeline selection, uploaded epsilon parameters, and fallback for an exposed denominator or different SCALE parameters. The initial software WebGPU comparison checked sorted IDs and normalized weights for tiny denominators, cancellation and nonfinite values. Confirm the SCALE parameter order and reduction tree at an upstream update. Isolated comparison does not establish target model throughput.
+- **Removal:** remove this stage when upstream fuses the ordered gather with epsilon normalization while preserving the existing alias contract.
+
+## Raw-view readers of fused convolution and router intermediates
+
+The `ggml-webgpu-conv-router-view-sources.patch` stage protects intermediates whose storage is observed through a raw GGML view. The upstream fusion check counts `src` edges, while `ggml_view_tensor` can expose a storage root through `view_src` alone. A scheduler slice can omit the reader while sharing the original graph visit set. The convolution and router encoders reuse the existing lazy index of those readers and leave the original dispatches in place when a discarded tensor remains observable. A raw view of the final result continues to observe storage written by the fusion.
+
+Apply the stage in ordinary and profiling builds after the shared encoder and fusion view index are installed. The native complete-provider cases cover clamp and epsilon routing, short-convolution residuals, single-token and batched convolution with SiLU, and readers outside the encoded slice. The recurrent copy still writes the full concatenation and the persistent cell. Remove the stage when upstream reports these readers in fusion admission or the corresponding fusions are removed.
+
+## WebGPU single-token short convolution and state store
+
+- **Patch:** `ggml-webgpu-short-conv.patch`, introduced against llama.cpp `c212d25ad`.
+- **Scope:** fuse four-tap F32 `SSM_CONV → RESHAPE → ADD → SCALE` into one dispatch for a single token and sequence. Preserve the tap order and evaluate the residual and scale in their original order. A separate fusion materializes `CONCAT` and writes the usual three-column recurrent state copy in one dispatch using raw 32-bit loads and stores.
+- **Admission:** the epilogue accepts disjoint tensors and exact per-channel residual/output reuse. State fusion requires four disjoint aligned binding ranges and keeps both destinations visible. Graph closure checks protect observed intermediates and side consumers. Dynamic taps retain their existing epilogue. Rollback `SET_ROWS`, multi-token shapes and unsupported layouts retain their existing state update.
+- **Integration:** compose in normal and profiling builds, emitting both WGSL sources through the upstream generator. The existing convolution/SiLU fusion continues to be tried first.
+- **No-patch alternative:** retain the staged convolution, residual math and recurrent copy.
+- **Validation and maintenance:** complete-provider cases cover both widths and allocation layouts, independent selection of the two fusions, observed intermediates and overlapping bindings. All 28 llvmpipe fixture pairs matched bit-for-bit for outputs and recurrent state. The fused source retains the F32 operation order, and adapter compilers can reassociate expressions across the former dispatch boundaries. These checks do not establish physical-device model throughput. Recheck the GGML copy destination view, the four-tap expression and the storage access modes when updating upstream.
+- **Removal:** remove this stage when upstream provides equivalent convolution and recurrent-state fusion, or the owner drops the optimization.
+
 ## Profile-only Q8 kernel diagnostic
 
 - **Patch:** `ggml-webgpu-q8-diagnostic.patch`.
@@ -667,6 +840,14 @@ not establish target-device speed.
 - **Integration:** apply a final profile-only stage after the other overlays. Normal final source and common generated ABI remain byte-identical. Pin upstream factory/decoder/submit contracts, patch, stage outputs, bridge contract and the owned public-domain SHA-256 header and its attribution. Separate extension records use generated native layout queries and a compiled schema fingerprint; absent exports remain optional for older artifacts.
 - **Validation and limits:** focused source-bound native tests cover the ABI, cache, shader identity, dispatch, lifetime and guarded fallback; these do not establish real-device speed or model quality. Only the existing profiler supplies GPU timestamps.
 - **Removal:** when upstream provides an equivalent optional diagnostic or the owner withdraws it, remove its profile stage, bridge, schema generator, build/provenance wiring and tests together.
+
+## Unary pipeline cache reuse
+
+- **Patch:** `ggml-webgpu-unary-parameter-cache.patch`.
+- **Scope:** Read the triangular mode from `op_params[0]` only for `GGML_OP_TRI`, whose WGSL depends on that mode. Clamp bounds and fill values remain uniforms and can reuse their existing pipelines.
+- **Integration:** Apply the shader-library stage in the normal and GPU-profile recipes. Binding layout and shader arithmetic are unchanged.
+- **Validation:** Native provider cases verify reuse for different clamp and fill values, distinct upper and lower triangular shaders, and uploads of each value. These cases establish cache behavior.
+- **Removal:** Remove the stage and its tests when upstream keys unary shaders by their compile-time variants.
 
 ## Synchronous host dispatch assembly
 
@@ -678,6 +859,16 @@ not establish target-device speed.
 - **Integration:** append a checked source stage after router-tail and before the optional profile diagnostic. Review upstream contracts and record the composed input, patch and output. No shader/header or common ABI changes.
 - **Validation and limits:** complete-source native tests observe bounded warm allocations and existing cache, queue, free and failure behavior. Normal and diagnostic providers compile the complete final source. Native mock allocations are not browser/GPU timings and do not establish model throughput or target-device improvement.
 - **Removal condition:** remove the stage, provenance/build wiring and tests when upstream provides equivalent synchronous assembly without the copies, or the owner drops the optimization.
+
+## Matrix dispatch assembly at the call sites
+
+- **Patch** `ggml-webgpu-matmul-host-dispatch.patch`.
+- **Scope** Submit ordinary single-dispatch matrix products through the existing synchronous builder. Reserve and move the two dispatch descriptions for MMVQ and indexed prefill. Borrow indexed matvec pipelines from the insertion-only cache during encoding.
+- **No-patch alternative** Keep the existing temporary dispatch descriptions and pipeline copies.
+- **Contract** Keep uniform layout, bindings, shader selection, direct and indirect dispatch order, and synchronous ownership transfer. The profiling result owns its pipeline names. Indexed matvec cache insertions and rehashes preserve borrowed references.
+- **Integration** Apply the same host and shader-library stage after the normal and GPU-profile recipes compose their dispatch paths.
+- **Validation** Complete native providers exercise the warm allocation bound, uniform uploads, indexed pipeline lifetime and existing direct/indirect routes in both modes. CPU recorder timing covers warm encoding only.
+- **Removal** Remove the stage and its tests when upstream provides equivalent call-site assembly and cached pipeline ownership.
 
 ## Profile query capacity with multi-dispatch operations
 
@@ -741,6 +932,88 @@ not establish target-device speed.
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
 
+## Packed bytes for wide Q6_K decoding
+
+- **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use the existing independent Q6_K matvec path with aligned F32
+  activations, K1536 through K5120, and at least 8,192 output rows.
+- **Contract** Share the block's half-word offset across the quantized loads
+  and reconstruct four six-bit codes at a time. Read each four-element F32
+  activation group as a vector. Keep the original scalar parameter units,
+  bindings, arithmetic order, subgroup geometry, and tensor storage.
+- **Validation and removal** Check selection and cache reuse at the alignment
+  and shape boundaries. Compare real model weight slices against the original
+  shader and an independent Q6_K reference. Remove once upstream provides
+  equivalent field and activation loads.
+
+## Wider indexed output tiles
+
+- **Patch** `ggml-webgpu-indexed-wide-row-tiles.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Expand the existing 64-row IQ4_NL and F32-accumulated NVFP4
+  prefill paths when the weights are aligned and contiguous. Choose 128
+  rows at 10,496 B for K32. For K64 choose 80, 96, or 128 rows at
+  14,592, 16,640, or 20,736 B of workgroup storage, respectively.
+- **Contract** Keep 64 lanes, the 32-slot gather descriptors, the K tile and
+  accumulation order, and the buffer layout. The direct and indirect grids
+  use the chosen row tile, including a partial tile for 2,304 rows at 80
+  rows per group. No persistent buffers are added.
+- **Validation and removal** Compare whole outputs and independent references
+  with real quantized weights and several routing distributions. Verify the
+  storage thresholds, cache entries, and indirect arguments on the complete
+  provider. Remove once upstream reuses activation tiles across equivalent
+  row groups for this path.
+
+## Compact BF16 single-column matvec
+
+- **Patch** `ggml-webgpu-compact-bf16-matvec.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use contiguous BF16 weights, F32 input and output, one input
+  column, one batch, and separate source bindings. The K/M pairs are
+  320/10240, 10240/4, 10240/320, and 2560 with M48, M128, or M512.
+  Require four output rows per workgroup, WG256 and fixed subgroups of
+  16 or 32 lanes. Other shapes, subgroup configurations and epilogues use
+  their existing pipeline.
+- **Contract** Reuse the four weight addresses across K iterations and
+  place each subgroup's four partial sums together. Preserve the K values
+  assigned to each lane, the full-subgroup reduction order, bindings and
+  dispatch geometry. With underfilled subgroups, elect a writer in each
+  subgroup and read every partial sum. Keep 4 KiB of workgroup storage to
+  accommodate any subgroup packing.
+- **Validation and removal** Compare real BF16 weights with the unmodified
+  shader and a Float64 reference. Check actual dispatch and cache selection
+  in the normal and profile providers, and compare the Wasm64 public
+  matmul outputs. Remove this patch when upstream uses equivalent row
+  addressing and subgroup reduction.
+
+## Packed F32 register tiles for long-K prefill
+
+- **Patch** `ggml-webgpu-f32-packed-prefill.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use a K64 tile with aligned, non-overlapping weights and F32
+  activations, 16 to 128 columns, and a single batch. The four-row tile at
+  K10240/M4 supports F32 and BF16 weights with 4,608 B of workgroup storage.
+  The standard tile requires 8 KiB. The F32 weight shapes are K4608/M64,
+  K2304/M128, K2048/M256, K2560/M48, K2560/M512, and K5120/M48.
+  The BF16 shapes are K10240/M320 and K2560 with M48, M128, or M512.
+  The matvec and subgroup-matrix paths keep their own selection.
+- **Contract** Stage four adjacent half values together and accumulate the
+  four output rows as a vector in ascending K order. Keep the existing
+  rounding to F16, F32 accumulation, workgroup grid, bindings, and output
+  layout. For BF16, one aligned pair of u32 words supplies four weights
+  before rounding. The extra storage is per-workgroup. No extra device
+  buffer is required. Cache the selected packed variant separately.
+- **Validation** Check production dispatch and cache selection with both
+  provider configurations, shapes on the dispatch boundaries, and workgroup
+  storage limits. Replay packed and stock shaders with real F32 and BF16
+  weights, compare the output bits and an independent rounded-input inner
+  product, and exercise the normal Wasm64 ABI with aligned and unaligned
+  views. Physical-device speed is workload-dependent.
+- **Alternative and removal** Use the K8 register tile. Remove the patch when
+  the upstream register-tile implementation provides equivalent packing or
+  a faster path with the same rounding and layout behavior.
+
 ## Four-row F32 matvec scale/sigmoid epilogue
 
 - **Patches:** `ggml-webgpu-f32-matvec-epilogue.patch` and `ggml-webgpu-f32-matvec-epilogue-profile.patch`.
@@ -792,14 +1065,77 @@ not establish target-device speed.
 - **Validation and limits:** actual normal/profile factory/cache/grid/source equivalence, ownership and pinned-header syntax are source/native gates. Finite authored software checks are separate from full runtime/model/hardware validation. Small-K and small-grid speed, cold compilation cost, physical peak and Windows/macOS improvements remain unmeasured; no additional K threshold is inferred from untested cases.
 - **Removal:** retire this stage and its build/provenance/tests when upstream provides equivalent generic selection or the owner drops it. Recheck geometry, memory limits, per-row arithmetic, pair ownership and key/grid coupling on updates.
 
+## Wider K tiles for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-wide-k.patch`.
+- **Scope:** Allow K64 for indexed IQ4_NL with its existing F16 accumulation and for indexed NVFP4 with F32 accumulation. Require F32 input and output, at least 12 input tokens, and at least 8,448 bytes of workgroup storage. The K/M pairs are 1152/2304, 2304/2304, and 2304/512. Keep the original matrix-vector selection. Use K32 for this matrix path when the adapter reports vendor `apple` or the K64 requirements are unmet.
+- **Contract:** Keep gather, workgroup grid, activation packing, K summation order, and accumulated precision. Include tile width in the actual pipeline cache key and distinguish it in profile labels. The sparse IQ4_NL column path remains active inside either tile width.
+- **Validation:** Test adapter selection and the shape, token, storage and precision boundaries in both provider modes. Compare actual shader output, including sparse and dense column counts, using deterministic inputs and local samples of packed model weights. Software WebGPU timing covers the isolated tile. An isolated K32/K64 comparison on a physical adapter is pending.
+- **Removal:** Remove when upstream supports equivalently fast indexed prefill for these layouts without changing precision or fallback behavior.
+
+`ggml-webgpu-indexed-wide-k-apple.patch` applies the Apple rule after indexed tiling is configured in the ordinary and profiling recipes. In a long-prompt comparison between runtime versions on an Apple `metal-3` adapter, the K64 shader took more GPU time at matching dispatch grids. K32 lowers workgroup storage from 8,448 to 4,352 bytes for these tiles. The paired Q4_K and Q4_0 selections keep their own rules. Revisit the Apple rule when an isolated physical-adapter comparison supports a faster tile.
+
+## Paired Q4_K loads for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-q4-k-paired.patch`.
+- **Scope:** Use K64 for indexed Q4_K x F32 to F32 at K/M 512/2048 or 2048/512. Require at least 12 input tokens and 8,448 bytes of workgroup storage. Lower limits, other dimensions and single-token matvec use their existing selections.
+- **Contract:** Decode the low and high nibbles of a packed Q4_K word together. Each half uses its original scale and minimum, F32 dequantization and F16 rounding before the original ascending K accumulation. Reuse gather, tile grid, binding layout and cache key. Use a dedicated indexed shader declaration input and the `tk64_paired` profile suffix.
+- **Validation:** Exercise both shape, token, storage and dtype boundaries through the normal and GPU-profile factories. Compare the emitted WGSL and deterministic packed-weight outputs. Isolated software WebGPU comparisons do not establish physical-adapter or model throughput.
+- **Removal:** Remove when upstream supplies equivalent indexed loads with the same precision and compatible fallback behavior.
+
+## Wider output-row tiles for indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-wide-m.patch`.
+- **Scope:** Use 64 output rows per workgroup for selected indexed matrices with F32 input and output and 128 input tokens. With 512 stored and ten selected experts, admit K32 for IQ2_S, IQ3_XXS, IQ3_S, IQ4_XS and Q4_K at K2560/M640 with broadcast input, and for IQ4_NL and Q5_1 at K640/M2560 with per-slot input. With 128 stored and eight selected experts, admit IQ4_NL and F32-accumulating NVFP4 at K2304/M2304 with broadcast input and K1152/M2304 with per-slot input for the already selected K32 or K64 tile. Require the matching I32 ID tensor, 64 compute invocations and at least 6,400 bytes of workgroup storage for K32 or 12,544 bytes for K64.
+- **Contract:** Reuse WG64, the 32-slot gather, the existing sparse and grouped column assignments, ascending K accumulation and the original uniform and storage bindings. Include the row tile in the pipeline cache key and derive the shader, `_tm8` label and dispatch geometry from it. Keep the K32/K64 and indexed matvec selection rules.
+- **Integration:** Apply one shader-library header stage in the normal and GPU-profile recipes. Reuse the existing indexed shader embedding and context limits. Keep upstream source untouched.
+- **No-patch alternative:** Keep the existing 32-row indexed tile or wait for upstream tuning.
+- **Validation:** Complete-provider native tests exercise the cache, exact shape and limit boundaries, grid and uniform layout for both K sizes and provider modes. They cover NVFP4 without F32 accumulation as a control. Independent CPU references and software WebGPU replay with sampled weight rows or experts cover sparse and grouped routing. Warm software measurements are limited to isolated dispatches. Physical-adapter and model first-token timing remain unmeasured.
+- **Removal:** Remove the patch, recipe entry and tests when upstream provides an equivalent indexed tile without changing the numerical or fallback contracts.
+
+## Paired Q4_0 blocks for indexed prefill
+
+- **Patch** `ggml-webgpu-indexed-q4-0-paired.patch`.
+- **Scope** Use a 64-row, K64 tile for single-binding indexed Q4_0 × F32 to F32 at K2816/M1408 with 48 or 128 experts, eight selected experts, 128 tokens and broadcast activation. Require contiguous, aligned root weights, matching I32 IDs, 64 invocations and 12,544 bytes of workgroup storage. Device features and tensor geometry determine eligibility.
+- **Contract** Load two adjacent 18-byte blocks in nine aligned words. Preserve each block's F32 scale multiplication, F16 rounding before staging and ascending K accumulation. The existing K and row tile cache key identifies the variant. The existing host uses the selected row tile for its grid and keeps the 32-slot gather and buffer layouts.
+- **Integration** Apply the checked normal and GPU-profile stage through the existing indexed shader embedding. Source selection and binding offset are derived from the existing WebGPU encoder. Ordinary placement and indexed matvec keep their current selection.
+- **No-patch alternative** Keep the 32-row, K32 path or wait for upstream tuning.
+- **Validation** The normal and GPU-profile native recorders exercise cache, alignment, resource limits and encoder dispatch. The E48 single-binding software WebGPU fixture included packed nibbles with half-float infinity and NaN bit patterns next to finite scales. Its outputs matched the CPU reference bitwise and isolated GPU time was 24–28% shorter in mirrored runs. The E128 single-binding case was checked at native selection with a device limit that admits its 285,474,816-byte weight tensor. Physical-adapter throughput and model first-token latency require separate measurements.
+- **Removal** Remove this stage and its tests when upstream provides equivalent indexed loads with comparable precision and device performance.
+
+## Live activation columns for grouped indexed prefill
+
+- **Patch:** `ggml-webgpu-indexed-live-activation-columns.patch`, against llama.cpp `c212d25`.
+- **Scope:** Stage only the columns consumed by the active invocations in a grouped indexed matrix workgroup, with zero padding through the last column tile. Compute input and destination row offsets once from each gathered slot.
+- **Contract:** Reuse the existing metadata, two shared arrays, and the original layout of the output and staged activations. Preserve the ascending K accumulation order, dispatch geometry, precision, skipped-slot handling, and the shared memory capacity. The same grouped shader serves direct and indirect dispatch.
+- **Validation:** Compare grouped and sparse expert outputs against the previous implementation for representative routing layouts. Report paired software WebGPU timing separately from physical-adapter and full-model behavior.
+- **Removal:** Retire this shader change when upstream stages only consumed columns and avoids repeated offset calculation.
+
+## Paired-half Q8 prefill tiles
+
+- **Patches:** `ggml-webgpu-q8-prefill-wide-m.patch` and `ggml-webgpu-q8-prefill-admission.patch`.
+- **Scope:** Ordinary single-matrix Q8_0 x F32 to F32 with complete K blocks. Use the 64x32 tile for K>=5120 with at least 640 output workgroups, or at N=128 for K/M pairs 2304/1024, 2304/3072 and 3072/2304. Use the 32x32 tile at N128 for K/M pairs 10240/320 and 2304/384 to retain their original dispatch grids. Keep the overlap, subgroup-matrix, vector and base-geometry exclusions. Selection uses tensor shape and backend capabilities without model or device identifiers.
+- **Additional shapes:** At N64 through N128, admit K/M 320/10240 and 640/2560 for the 64x32 tile and K/M 10240/320 and 2560/640 for the 32x32 tile. At N128, also admit K2560 with M6144, M10240 or M12288, 6144/2560, and 5120/6144 for the 64x32 tile. New 64-row selections fall back to paired 32 rows with less than 6 KiB of workgroup storage. New paired selections require at least 4 KiB.
+- **Contract:** Reuse the paired-half cache modes, labels, WG64/TK32 tiles and 16-word UBO. Decode signed packed Q8 bytes with the canonical 34-byte block layout and multiply the F32 scale before rounding the products to half. Store adjacent values as pairs and accumulate in the original K order. Preserve the existing bindings, offsets and global memory layout. No new buffers, exports, probe or host synchronization.
+- **Validation:** Exercise actual factory dispatch and cache transitions in normal and profile providers. Check packed decoding, full output bits and guard regions in representative prefill shapes. At K3072/M2304/N128 the 64-row tile was faster than both 32-row candidates in mirrored software WebGPU comparisons. Physical-device prefill and ordinary first-token latency require model measurements.
+- **Removal:** Delete the patch and its recipe entry when upstream supplies an equivalent Q8 prefill path with comparable numerical behavior and device performance.
+
+## Wider paired-half Q2 prefill
+
+- **Patch:** `ggml-webgpu-q2-prefill-wide-m.patch`.
+- **Scope:** Ordinary contiguous Q2_0 x F32 to F32 GEMM at N128 for K/M pairs 5120/17408, 17408/5120, 6144/5120 and 5120/10240, with default input and accumulator precision, singleton batch axes, 64 invocations and at least 6,144 bytes of workgroup storage. The device must support at least 1,088 workgroups on the X dimension. Explicit precision, source overlap, vector and subgroup-matrix paths retain their existing selection.
+- **Contract:** Reuse the 64x32 paired-half tile, K32, unchanged buffer bindings and 16-word uniform. Pack adjacent decoded half values into the existing shared-memory pairs. Preserve all four Q2_0 codes, round the decoded weights and activations to half, and accumulate with F32 in ascending K order. Adapter checks apply to the paired selection alone.
+- **Validation:** Cover ordinary and profiling provider selection, cache and limit fallbacks, and binding sizes that end after an 18-byte block. Replayed provider shaders agree with an independent arithmetic reference at full dispatch dimensions using sampled weight rows and a guarded fixture with all four codes. The 64-row tile won in both orders of mirrored software WebGPU comparisons for all four shape pairs. Physical-adapter performance and ordinary first-token latency remain unmeasured.
+- **Removal:** Retire the patch, recipe entry and focused tests when upstream provides equivalent Q2_0 prefill behavior and device performance.
+
 ## Ordinary fixed-subgroup Q4 matvecs
 
 - **Patch:** `ggml-webgpu-q4-subgroup-matvec.patch`.
-- **Scope:** Only ordinary Q4_0/Q4_K x F32 to F32 matvecs with N1, complete blocks K1024..4096, M>=4096 and checked broadcast/u32 bounds are eligible. Additionally admit 4096<K<=17408 and M>=2560 only when all six weight/input/output batch axes equal one. This is tensor-shape admission; actual strides and physical binding ranges remain caller contracts. Exclude indexed inputs, MMVQ, source overlap and epilogues. Only fixed advertised subgroup widths16/32 select the path; no vendor, OS or model condition is added.
+- **Scope:** Only ordinary Q4_0/Q4_K x F32 to F32 matvecs with N1 and complete blocks are eligible. Admit K1024..4096 and M>=4096 with checked broadcast/u32 bounds. For singleton weight/input/output batches, admit 4096<K<=17408 and M>=2560, plus Q4_K at K7680..10752 and M=2048. M=2048 fills complete row groups at both supported subgroup widths. The additional shape rule depends on tensor dimensions and dtype. Actual strides and physical binding ranges remain caller contracts. Exclude indexed inputs, MMVQ, source overlap and epilogues. Subgroup width follows the existing fixed advertised S16/S32 and optional requested S16 policy above.
 - **Contract:** reuse the existing independent-subgroup main and unchanged canonical accumulator/declarations. Each subgroup owns four rows in WG128; partial active subgroups retain the existing virtual-lane completion and non-owner collective participation. Existing subgroup-size/type keys and shader decisions define cache identity and output grid. Do not change Q8 selection, other dtypes, bindings, sixteen uniform words or host buffer-allocation/queue implementation. Pipeline cache variants and cold compilation still follow the existing ownership rules. Partitioning blocks among lanes changes floating-point addition/reduction order, so cross-path bit equality is not required.
 - **Integration:** append a checked normal/profile header-only stage after wide-M prefill selection. Keep shape/range eligibility separate from the fixed-width policy, record actual compiled copies. Reuse the existing embedding without new shader files, profiles or public ABI.
 - **No-patch alternative:** retain cooperative workgroup reduction or wait for equivalent upstream tuning. Upstream settings do not expose this per-type subgroup mapping.
-- **Validation and limits:** source/native factory/cache/geometry and rejection checks cover the guarded selector; finite authored numerical comparisons use the same original-F32 dot bound and preserve guards/inputs. Software hot-buffer timing is separate from target-device/model performance. Variable subgroup ranges, unmeasured shapes, cold compilation and actual browser throughput require separate validation; a separate topology probe does not establish the main shader's packing.
+- **Validation and limits:** source/native factory/cache/geometry and rejection checks cover the guarded selector. Finite authored numerical comparisons use the original-F32 dot bound and check guards and inputs. Software hot-buffer comparisons at M=2048 cover both K endpoints and fixed S16/S32. Intermediate K, requested-width device timing, cold compilation and model throughput remain unmeasured by those comparisons.
 - **Removal:** remove the stage and associated build/provenance/tests when upstream supplies equivalent selection or the owner withdraws it. Re-review block lane stride, partial subgroup completion, shape arithmetic, factory keys and host grid coupling on updates.
 
 
@@ -860,6 +1196,22 @@ not establish target-device speed.
 - **Validation and limits:** finite authored numerical bounds, source/factory/cache/grid and physical-range checks are separate gates. Floating-point partition and reduction may differ, so cross-path bit identity is diagnostic. Direct software hot evidence covers a down projection, two bounded heads and one larger resident test, not full vocabulary, all intermediate shapes, actual model quality or Windows/macOS speed. No new preload, dequantization copy, probe, clock or GPU wait is introduced.
 - **Removal:** retire this stage and its build/provenance/tests when upstream supplies equivalent selection or the owner drops it. Re-review lane stride, partial-subgroup ownership, shape/u32 checks, typed keys, current-context fallback and device feature/limit contracts on updates.
 
+## Long-K fixed-subgroup Q4_K and Q6_K matvecs
+
+- **Patch:** `ggml-webgpu-long-k-matvec.patch`.
+- **Scope:** Extend the existing independent Q4_K and Q6_K ordinary matvec paths to the complete K19968/M6656/N1 shape with F32 input and output, singleton batches and an advertised fixed subgroup width of 32. Keep the existing bounds for fixed SG16 and requested subgroup widths. The original layout, overlap, epilogue, indexed and MMVQ exclusions also apply.
+- **Contract:** Reuse each type's existing shader, cache key and bindings. The fixed SG32 kernel produces 16 rows per 128-lane workgroup and dispatches 416 workgroups for this shape. Its reduction order can differ from the cooperative kernel.
+- **Validation:** Exercise selection, dispatch, cache reuse and the existing fallback boundaries in both provider modes. Local software WebGPU replay checks output bounds and paired timing using complete rows sampled from the corresponding packed weights. Physical GPU generation speed requires model measurements.
+- **Removal:** Drop the stage when upstream selects a comparably fast implementation with equivalent numerical and layout behavior.
+
+## Dense Q2_0 independent subgroup matvecs
+
+- **Patch:** `ggml-webgpu-q2-dense-subgroup-matvec.patch`, against llama.cpp `c212d25`.
+- **Scope:** Use fixed subgroups of 16 or 32 lanes for contiguous single-batch Q2_0 × F32 → F32 matvecs with one input column and K/M pairs 5120/17408, 17408/5120, or 6144/5120. Require 128 workgroup invocations and exclude merged source bindings, indexed operations, epilogues, and MMVQ.
+- **Contract:** Reuse the existing independent subgroup shader and its handling of partial subgroups. The Q2_0 accumulator, sixteen uniform words, and original packed storage layout stay the same. Reduction order can differ. The provider derives the smaller grid from the existing pipeline decisions.
+- **Validation:** Native provider tests exercise dispatch, cache reuse, and fallback in both provider modes. Isolated software WebGPU replay checks all outputs and output bounds with sampled real rows at the full dispatch dimensions, including a control with all four codes and a shifted binding start. Full-model generation and physical GPU speed require separate measurement.
+- **Removal:** Drop the stage when upstream provides equivalent Q2_0 matvec selection and layout coverage.
+
 ## Independently owned model vocabulary and chat metadata
 
 - **Scope:** reuse native vocabulary and chat metadata for a host-owned graph.
@@ -906,3 +1258,469 @@ not establish target-device speed.
 - **Removal:** upstream preserves the representable allocation limit before
   narrowing, or supported profiles no longer include 32-bit WebGPU hosts. Remove
   this patch, preparation, provenance and independent tests together.
+
+## Scalar Flash Attention masking and KV tiles
+
+- **Patches:** `ggml-webgpu-flash-attn-maskskip.patch` and
+  `ggml-webgpu-flash-attn-wide-scalar-kv.patch`, against llama.cpp `c212d25`.
+- **Mask scope:** scalar prefill with F32 Q, F16 K/V in separate bindings, at
+  least 32 queries and 768 keys, and an F16 mask with contiguous key rows and
+  zero ALiBi max bias. Before loading K and V, skip a tile only when every
+  in-bounds score for every active query has the F16 negative infinity mask.
+  A partial subgroup conservatively retains the tile. Other variants retain
+  their existing mask behavior.
+- **Tile scope:** the same scalar prefill types and length bounds, with or
+  without a mask, equal Q/K and V head dimensions of 128, 256 or 512, and at
+  least 32 KiB of workgroup storage. Calculate the KV tile width using the
+  shader's shared K/V staging, query and probability arrays and any mask votes,
+  rounding each allocation for WebGPU validation.
+  Cache the actual geometry before creating a pipeline. Different tile widths
+  can change floating-point rounding in probability and output accumulation.
+- **Integration:** both patches apply to normal and profiling source
+  preparations. The aligned-word shader family embeds the patched scalar tile
+  through the upstream generator. The source receipt records the patch and
+  shader input identities. The width patch follows the mask patch to account
+  for its shared votes. There is no public ABI or binding layout change.
+- **Validation and limits:** native provider cases check admission, cache and
+  shader specialization. Software WebGPU comparisons cover causal and sliding
+  windows, head-specific masks, sinks, tails, and nonzero binding offsets.
+  Exact skipping preserves the tested finite outputs at the same geometry and
+  follows CPU mask semantics for nonfinite K/V in wholly masked tiles. Mixed
+  tiles retain the existing shader arithmetic. Wider-tile comparisons use
+  numerical tolerances. Measurements cover kernels on a software adapter.
+- **No-patch alternative:** retain the upstream scalar kernel and tile sizing,
+  or adopt corresponding upstream support when available.
+- **Removal:** retire each patch when upstream provides equivalent behavior or
+  its scope is withdrawn. Recheck the per-tile reduction, mask indexing and
+  workgroup storage budget when either upstream shader or factory changes.
+
+## Single-token depth residual mixing
+
+- **Patches:** `ggml-webgpu-depth-mix.patch` and
+  `ggml-webgpu-depth-mix-view-sources.patch`, with the normal and profiling
+  `ggml-webgpu-fusion-view-sources-*-encode.patch` adapters, against llama.cpp
+  `c212d25`.
+- **Scope:** contiguous F32 states of width 2304 and depth 2 to 5, with 1, 3 or
+  4 learned queries. Match the complete sequence from depth concatenation to
+  RMS normalization, query scores, unmasked softmax and weighted output.
+  Keep the decomposed path for an incomplete sequence, an exposed or shared
+  intermediate, unsupported layouts or device limits.
+- **View readers:** account for views that borrow storage without a `src`
+  edge, including readers in another scheduler slice. Index the enclosing
+  graph's view roots once per compute invocation when a candidate reaches the
+  closure check. The planned transpose's explicit source edge and the final
+  output's views are compatible with fusion.
+- **Contract:** normalize states directly into reusable device scratch, write
+  probabilities to a separate scratch buffer, then blend without a transpose
+  copy. The output can reuse storage whose last read has finished. Fixed SG16
+  and SG32 use the compact blend. Score reduction uses subgroups when their
+  total capacity equals the workgroup size and uses a complete workgroup tree
+  otherwise. The choice of reduction can change floating-point rounding.
+- **Integration:** use both normal and profiling source preparations with the
+  upstream WGSL generator. Model graph construction and public ABI are
+  unchanged. The prepared source receipt covers the patch and shader inputs.
+- **Validation and limits:** native contracts cover dependent mixes in one
+  graph, scratch reuse, external consumers, raw views across graph slices and
+  workgroup-storage boundaries.
+  Software WebGPU comparisons cover dependent outputs and actual partial
+  subgroup packing. Full-model output and physical throughput remain
+  unmeasured.
+- **No-patch alternative:** retain the decomposed graph and existing kernels.
+- **Removal:** retire when upstream fuses this graph with equivalent admission,
+  device limits and numerical behavior. Review graph order, RMS and matvec
+  reductions and storage binding rules when updating the upstream revision.
+
+## Packed expert SITU activation
+
+- **Patches:** `ggml-webgpu-situ-packed.patch` and
+  `ggml-webgpu-situ-packed-prefill.patch`, against llama.cpp `c212d25`.
+- **Purpose:** evaluate the nine materialized pointwise operations of the
+  packed expert SITU activation in one WebGPU dispatch across token batches. The
+  existing graph builders and indexed expert projections provide the inputs
+  and consume the result through their current interfaces.
+- **Scope:** contiguous F32 output of width 1152, eight selected experts, and
+  a contiguous token batch that fits the device's binding and dispatch limits.
+  The gate and up views must describe the first and second halves
+  of each row of the same dense F32 source. Admit the exact branch order,
+  original sigmoid input, and final multiplication. Retain the separate
+  dispatches for other operation sequences, unsupported shapes or layouts,
+  device limits, unfinished graph slices, aliased binding ranges, and any
+  discarded intermediate a different consumer can observe. Views of the
+  final output remain valid. The shared graph view-source index detects raw
+  view readers without explicit source edges, including readers in a later
+  scheduler slice.
+- **Contract:** keep the four scale/bias expressions, the standard TANH clamp,
+  SIGMOID, and the original multiplication order. Both storage bindings use
+  the same access mode when their non-overlapping ranges share an allocation.
+  The shader reads packed gate/up and writes the final value directly, without
+  scratch or a model/adapter allowlist. A supported wider scope must preserve
+  the same view offsets, lifetimes, binding limits, and numerical expressions.
+- **Integration:** the normal and profiling recipes use the same matcher and
+  embed the dedicated shader with the upstream generator. The public ABI and
+  the Q8 diagnostic encoder seam are unchanged.
+- **Validation and limits:** native recorder checks cover the fused dispatch,
+  raw view readers, supported final aliases, and overlapping storage fallback.
+  Software WebGPU checks compared packed inputs and downstream outputs,
+  including scale bias, non-finite inputs and shared allocations. Floating-point
+  lowering can vary across adapters. Full-model physical throughput is unmeasured.
+- **No-patch alternative:** retain the existing nine-operation WebGPU graph.
+- **Removal:** retire when upstream admits and fuses the same graph with
+  equivalent layout, alias and numerical behavior. Recheck operation order and
+  storage binding rules at each upstream update.
+
+## Paired single-token F32 loop controller
+
+- **Patches** `ggml-webgpu-loop-controller.patch` and
+  `ggml-webgpu-loop-controller-context-normal.patch`, against llama.cpp
+  `c212d25`. The profiling recipe already exposes the stock factory context.
+- **Scope** Two contiguous F32 K64/M2304/T1 matrix-vector projections sharing a
+  gate, followed by the exact TANH, MUL, SUB, TANH, MUL and ADD data dependencies.
+  Both projections must select the existing 256-invocation, four-row vec4
+  geometry. Preserve the stock operations for unrecognized graphs, other layouts
+  and limits, partial overlaps, or observable intermediates. The shared view index
+  accounts for raw view readers in other scheduler slices.
+- **Contract** Evaluate both projections with the same two-stage subgroup
+  reduction or workgroup tree as the stock operation. Evaluate the stock TANH
+  clamp and elementwise update formula. Bind disjoint ranges on the same device
+  allocation using consistent storage access. When the current input and the
+  result have identical ranges, a single binding reads and writes each element
+  in place. The fused pass writes only the destination and uses workgroup-local
+  storage. WGSL permits FMA contraction across the fused MUL, SUB and ADD, so
+  intermediate rounding can differ from the storage boundaries of separate
+  passes. Subgroup packing and floating-point results can vary by adapter.
+- **Integration** The normal and profiling recipes embed the same dedicated
+  WGSL using the upstream generator. The planner uses the existing graph and
+  matvec factory within the WebGPU backend.
+- **Validation and limits** Native encoder tests cover dispatch, bindings and
+  parameters, ownership and closure. Dawn/llvmpipe replay compared the emitted
+  WGSL with stock, including non-finite inputs and cancellation. The 48-chain
+  replay shortened from 241.60 ms to 134.87 ms on llvmpipe reporting a subgroup
+  width of 32 with 16 active lanes. The Apple Metal adapter reported width 32,
+  and its active lane count, numerical results and model throughput remain
+  unmeasured. A separate 64-invocation prototype was tested at fixed subgroup
+  width 16. The production path uses the canonical 256-invocation geometry.
+- **Alternative** Retain the two projections and six pointwise passes.
+- **Removal** Retire when upstream fuses this graph with equivalent numerical,
+  layout and lifetime behavior. Recheck the canonical matvec factory, reduction
+  and pointwise operations when updating upstream.
+
+## Indexed Q2_0 GPU-resident weights
+
+- **Purpose:** execute indexed Q2_0 expert operations on WebGPU when model
+  loading has explicitly placed the weights there. A contiguous tensor can be
+  larger than a storage binding even when it fits in a single device buffer.
+- **Scope:** admit resident Q2_0 weights for the checked vector and matrix
+  paths. The loader's metadata probe continues to select its existing buffer
+  types. An explicit tensor-buffer override uses the existing model parameters.
+- **Contract:** bind one range when it fits, otherwise split it into two aligned,
+  disjoint ranges on the same buffer. Route aligned word loads by the split
+  offset. Validate limits, sizes, backing device, overlap, and matrix scratch.
+  K640/M2560 matvecs can use a shorter workgroup; pipeline keys distinguish
+  width, split mode and matrix tile geometry.
+- **Discovery:** the existing WebGPU backend registry reports
+  `ggml_backend_webgpu_indexed_q2_placement_v1` as an `int (*)()` returning 1.
+  Its presence identifies the runtime implementation. Check the selected
+  device's limits separately before requesting a weight placement override.
+- **Integration:** apply the host, shader-library and WGSL stages in both WebGPU
+  preparations at llama.cpp `c212d25ad`. Use the existing shader generator and
+  argument buffer. The existing Wasm export list and CPU profiles are unchanged.
+- **Validation and limits:** native contracts exercise placement rejection and
+  real encoder ranges, including foreign allocations. Software WebGPU compares
+  decode and prefill output with CPU references. Total GPU memory availability
+  and browser model throughput require measurement on the target device.
+- **No-patch alternative:** keep indexed Q2_0 on the CPU through default loading.
+- **Removal:** retire the stages when upstream can admit and bind these weights
+  with equivalent layout and device checks. Review Q2_0 packing, matrix scratch,
+  view ownership and indexed cache keys when updating upstream.
+
+## BF16 small-M prefill register tiles
+
+- **Patch:** `ggml-webgpu-bf16-small-m.patch`, against llama.cpp `c212d25`.
+- **Scope:** ordinary BF16 × F32 → F32 matrix multiplication with K=10240,
+  M=4, N=5–128 and one batch. Source overlap and subgroup matrix paths retain
+  their existing tiles. The host continues to route N≤4 through matvec.
+- **Contract:** reuse the existing 4×32 output tile with a 32-invocation
+  workgroup and TK8. Keep packed BF16 storage, f16 staging, ascending K
+  accumulation in F32, binding layout, and dispatch dimensions. The existing
+  pipeline key and label distinguish the geometry. The kernel requires 576
+  bytes of workgroup storage and allocates no additional buffers.
+- **Integration:** apply this header-only selection in the ordinary and
+  profiling WebGPU recipes after the F32 small-M specialization.
+- **Validation and limits:** the complete-provider recorder verifies selection,
+  dispatch, cache isolation and fallback. The expanded software WebGPU
+  comparisons covered bitwise output and guard equality, including padded
+  strides and partial column tiles. Timing used N=32, 96 and 128. Physical-device
+  and full-model throughput remain unmeasured.
+- **Removal:** retire the extension when upstream supplies an equivalent BF16
+  geometry. Review its conversion, accumulation order and dispatch on pin changes.
+
+## Dense Q4_K SwiGLU projection fusion
+
+- **Patch** `ggml-webgpu-dense-q4-swiglu.patch` against llama.cpp `c212d25ad`.
+- **Scope** Fuse two dense Q4_K × F32 matvecs with the same F32 input and
+  their split SwiGLU into one dispatch. Admission covers K6656/M19968/N1,
+  one batch, and ordinary independent matvecs with fixed subgroup width 16
+  or 32. The four-row reduction and the activation approximation follow the
+  ordinary shaders. The input sums for Q4_K minimum offsets are shared across
+  both projections without changing their accumulation order.
+- **Contract** Check the graph closure, raw view readers, GPUBuffer ownership,
+  alignment and live ranges. Equivalent separate operations are available
+  for other shapes, observable intermediate values, overlapping live ranges
+  and rejected optional pipelines. Recheck the graph after cold creation,
+  invalidating the shared view index even when optional creation is rejected.
+- **Integration** The normal and GPU-profiling recipes specialize the same
+  WGSL with the selected fixed subgroup width. The optional cache uses the
+  existing device generation and error scope handling. The public ABI and
+  GGML tensor storage format are unchanged.
+- **Validation and limits** The complete-provider contract checks dispatch,
+  bindings, and fallback for raw views, aliasing and scope rejection. In a
+  software WebGPU comparison over real-size packed Q4_K weights, the fused
+  chain cut isolated GPU time by about 10–13% across both subgroup widths.
+  The normal Wasm ABI used the fused dispatch and produced identical output
+  in a synthetic graph with the same weights. Physical-device and full-model throughput
+  remain unmeasured.
+- **Alternative and removal** Use the two independent matvecs and separate
+  SwiGLU until upstream can fuse them with equivalent numerical and lifetime
+  behavior. Review Q4_K packing, graph closure and the independent subgroup
+  reduction when updating upstream.
+
+## Indirect dispatch for indexed prefill
+
+- **Patches** `ggml-webgpu-indexed-live-grid.patch` and
+  `ggml-webgpu-indexed-quant-live-grid.patch` against llama.cpp `c212d25ad`.
+- **Scope** Use the existing 32-slot gather to write an indirect grid for
+  K640/M2560/E512 Q2_0 with split bindings and K2816/M1408/E48 or E128 paired
+  Q4_0 with a single binding. The second patch covers aligned, contiguous
+  IQ4_NL and F32-accumulating NVFP4 with one weight binding, E128, eight
+  selected experts, and the existing 64-row grid. It accepts the K2304/M2304
+  broadcast and K1152/M2304 per-slot projections with either K tile.
+  Require 128 input tokens, the original F32
+  input and output, and room for the upper grid bound in one dimension.
+  Reuse the original matrix shader and its precision and tensor layouts.
+- **Lifetime** Share one 12-byte storage and indirect buffer on one device.
+  Every gather overwrites all three arguments before its matrix dispatch.
+  Submission batches keep each pair together and share an ordered queue.
+  The first eligible graph issues scoped buffer creation and uses direct
+  dispatch. Later graphs use the indirect path once all three scope callbacks
+  successfully validate the buffer. Pending or rejected creation uses direct
+  dispatch. No GPU completion or readback is added to graph encoding.
+- **Integration** Use the same gather source and patch in ordinary and
+  profiling builds. The cache distinguishes the direct and indirect gather
+  variants. Profiling continues to time the gather and matrix dispatches
+  separately. The public ABI and model weight placement stay the same.
+- **Validation and limits** Check pending initialization, same-queue reuse,
+  device and shape fallback, and zero valid experts. Software WebGPU tests
+  compared both paths bit-for-bit with a CPU reference for the Q2_0 split and
+  E48 Q4_0 fixtures. The same comparison used real IQ4_NL and NVFP4 weight
+  slices, including routes with no unused tiles. Complete-provider tests
+  check the added layouts at their full dimensions. Each E128 single-binding
+  layout still requires its original weight binding capacity. Prefill time
+  on physical adapters depends on routing and how many
+  empty workgroups the direct grid would submit.
+- **Alternative and removal** Retain the direct upper-bound grid until
+  upstream can dispatch only the active indexed tiles. Review the gather
+  descriptor width, scope semantics and queue submission boundaries on updates.
+
+## Raw-view readers of fused intermediates
+
+- **Patch** `ggml-webgpu-fusion-intermediate-views.patch` against llama.cpp `c212d25ad`.
+- **Scope** Preserve the stored values read through raw views of RMS norm and
+  scale chains, F32 matvec epilogues, and intermediate MoE adds. A raw view
+  can share storage without a source edge counted by upstream's fusion check.
+- **Contract** Consult the existing lazy view-source index for the intermediate
+  values that the selected shader would omit. A view of the value the shader
+  writes remains eligible, including an in-place final MUL that writes the
+  entire RMS result range with the same layout. A raw view of the unary result can still use the
+  two-operation scale fusion, and the RMS preference checks the same eligible
+  three-operation plan. Graph slices share the visit set, including later
+  readers. The index enumerates occupied slots using the used bitset and keeps
+  the existing invalidation at the cold optional-pipeline boundary.
+- **Integration and validation** Apply the admission checks in both WebGPU
+  preparations. Complete-provider fixtures check the same graphs as one batch
+  and as separate producer and reader slices, including terminal view and
+  shorter-fusion controls. Shader source, bindings, and the public ABI retain
+  their existing contracts.
+- **Alternative and removal** Use the separate operations until upstream
+  checks view-only uses of discarded storage across scheduler splits. Review
+  visited-set ownership, aliases and which outputs the fused shaders write when
+  updating upstream.
+
+## Compact workgroups for a single argsort tile
+
+- **Patch** `ggml-webgpu-argsort-compact-workgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** For 128, 256 or 512 source values that fit into a larger single tile,
+  use one invocation per source value. Use the same rule for argsort and top-k.
+  Bound the original network width by compute invocations, the X dimension and
+  workgroup storage. Build the merge pipeline only if the dispatch needs it.
+- **Contract** Compare the same live pairs in the same order, including later
+  stages that can affect NaN and equal-value ordering. In those stages the
+  omitted upper blocks contain only sentinels. The cache distinguishes the
+  network width, the physical workgroup width, and the sort order. Preserve
+  the existing global buffers, bindings, tile count, and multi-tile merge path.
+- **Validation and removal** Exercise production selection, uniform layout,
+  cache reuse and multi-tile fallback in both providers. Compare the emitted
+  kernels against the original GPU output and a CPU implementation of the
+  padded network. Use the pinned upstream sort when the overlay is omitted.
+  Remove this patch when upstream prunes equivalent padding and loads merge
+  pipelines on demand.
+
+## Vector Flash Attention mask workgroups
+
+- **Patch** `ggml-webgpu-flash-mask-block-workgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** Cap the mask classifier workgroup at 32 invocations for vector
+  attention tiles of up to 32 keys. Smaller device limits still apply. The
+  cache distinguishes the mask tile and workgroup widths.
+- **Contract** Use the existing shader and one workgroup per mask tile. The
+  extra invocations on wider workgroups contributed only neutral reduction
+  values. Preserve the three mask states, grid, uniform words, storage
+  bindings, scratch region and the consuming attention pipeline.
+- **Validation and removal** Check real mask dispatch selection in both
+  providers and replay emitted kernels with complete tiles, tails, padding,
+  separate heads and batches, and F16 special values. Use upstream's original
+  width in the absence of the overlay. Remove the patch when upstream bounds
+  classifier work by the tile width with equivalent outputs.
+
+## Q8_0 matvec sigmoid gate
+
+- **Patch** `ggml-webgpu-q8-sigmoid-mul.patch` against llama.cpp `c212d25ad`.
+- **Scope** Fuse a dense K2304/M3072/N1 Q8_0 matvec, its F32 sigmoid, and
+  multiplication by an independent contiguous F32 vector of length 3072.
+  Require one batch and the ordinary Q8_0 pipeline with a fixed subgroup
+  width of 16 or 32. Use the same accumulator and multiply in the existing
+  operand order.
+- **Contract** The current backend graph slice must contain all three nodes.
+  Check direct and raw-view readers of the discarded tensors. Accept a raw
+  contiguous view as the other MUL input. An exact physical alias between
+  this input and the result uses a single binding and reads each element
+  before writing it. Check the GPU buffer ownership, lengths, alignment,
+  and binding limits. The Q4_K SwiGLU fusion shares these binding checks.
+- **Integration** The normal and profiling providers specialize the same
+  subgroup source. The two gate variants have separate pipeline cache keys.
+  GGML layouts, model placement, and the public ABI are unchanged.
+- **Validation and removal** Exercise both binding layouts, graph splits,
+  additional raw-view readers, and varying subgroup widths through the
+  complete provider. Replay the emitted shaders for both subgroup widths
+  with packed Q8_0 inputs and compare the complete output against the three
+  original dispatches. Keep the original dispatches for unsupported graphs
+  or limits. Remove this patch when upstream supports an equivalent
+  epilogue with the same lifetime, layout, and subgroup guarantees.
+
+## Fixed-subgroup indexed Q8_0 and Q5_K decode
+
+- **Patch** `ggml-webgpu-indexed-q8-q5-subgroup.patch` against llama.cpp `c212d25ad`.
+- **Scope** Extend the fixed-subgroup indexed matvec to Q8_0 at K1152 or
+  K2304 and Q5_K at K2304. Require M2304, eight selected experts, one input
+  token, F32 activations and outputs, and fixed subgroup width 16 or 32.
+- **Contract** Use the existing quantization loaders, packed weight layout,
+  and physical binding checks. Select the 128-wide workgroup only when it
+  fits the X dimension. The independent shader writes the same output
+  layout and zeroes skipped expert slots. F32 reduction order changes.
+- **Validation and removal** Check selection and fallbacks in both providers.
+  Replay the emitted kernels with bounded slices of representative GGUF
+  weights and check every selected output against an independent reference,
+  including duplicate and skipped experts. Other shapes and capabilities use
+  the existing backend selection and cooperative dispatch when supported.
+  Remove this patch when upstream supplies equivalent selection for these
+  packed formats.
+
+## Packed row views in the Inkling graph
+
+- **Patch** `inkling-packed-row-views.patch` against llama.cpp `c212d25ad`.
+- **Scope** In WebGPU preparations, read packed F32 rows of loop messages
+  and mixed attention inputs as views. Use the canonical contiguous layout
+  for a single token and preserve the bank's token stride for batches.
+  Other tensor formats use the existing extraction path.
+- **Contract** Keep the row offsets, token order, tensor shapes, and model
+  arithmetic. Both token counts use a view with an explicit source edge.
+  GGML tracks the bank's lifetime across all consumers. Keep the ordinary
+  COPY-based graph when this overlay is omitted.
+- **Validation and removal** Compare the actual CPU and Wasm64 model graphs
+  across prefill, decode, and append with an authored Inkling GGUF. Confirm
+  matching logits, scheduler allocations, and the affected dispatches.
+  Review consumer strides, aliasing, and placement when updating upstream.
+  Remove this patch when upstream reads these rows without a materialized copy.
+
+## WebGPU 1024-point Hadamard transform
+
+- **Patch** `ggml-webgpu-fwht-1024.patch` against llama.cpp `c212d25ad`.
+- **Scope** Use a butterfly transform for an explicitly Hadamard-hinted
+  F32 matrix product with packed 1024-element columns, at least five columns,
+  and default source and accumulator precision. Require 128 invocations and
+  4 KiB of workgroup storage. Keep the ordinary matvec and subgroup-matrix
+  routes for their existing inputs.
+- **Contract** Preserve the register-tile path's half-precision input rounding
+  and the normalized Sylvester coefficients. The F32 accumulation order
+  changes. Each workgroup reads one input column and writes the matching output
+  column. Accept contiguous input views and reject overlapping aligned storage
+  ranges. The dispatch binds the input and output plus uniforms. The graph and
+  loader retain the dense weights for fallback.
+- **Validation and removal** Exercise the complete normal and profiling
+  providers with contiguous views, shared buffers, explicit precision, and
+  unsupported layouts and limits. Compare the emitted WGSL with the dense
+  register-tile shader on representative decode and prefill shapes. Omitting
+  this overlay uses the original matrix product. Remove it when upstream
+  WebGPU accelerates the Hadamard hint with compatible layout and precision.
+
+## WebGPU packed F16 mask addition
+
+- **Patch** `ggml-webgpu-add-cast-f16.patch` against llama.cpp `c212d25ad`.
+- **Scope** In the existing WebGPU graph, combine F32 bias addition with its
+  F16 cast. Accept a packed F32 mask or an immediately preceding private
+  F16-to-F32 mask cast. Keep the ordinary operations for an unsupported layout,
+  device limit, or graph slice.
+- **Contract** Keep F32 addition and the native conversions used by ordinary
+  WebGPU casts. Each invocation writes two F16 values as one output word. Use
+  the shared raw-view index to preserve all readers of discarded values.
+  Verify every aligned binding range and reject
+  overlaps by physical buffer identity. Compatible disjoint ranges may share
+  the same GPU buffer. GGML graph placement and allocations are unchanged.
+- **Validation and removal** Exercise both routes, raw-view readers in a later
+  graph slice, and overlapping storage in the normal and profiling providers.
+  Replay the emitted original and fused shaders in the same arena with causal
+  masks and rounding boundaries. Remove when upstream provides the equivalent
+  packed fusion with the same lifetime and conversion guarantees.
+
+## WebGPU indexed NVFP4 half-vector staging
+
+- **Patch** `ggml-webgpu-nvfp4-indexed-half-staging.patch` against llama.cpp `c212d25ad`.
+- **Scope** In the grouped expert matrix shader, stage NVFP4 weights in
+  half vectors when the activations and accumulator are F32. Retain the
+  existing K and M tiles, bindings, shared storage, and F32 accumulation.
+  Other input and precision combinations keep their existing staging.
+- **Contract** Preserve every decoded half bit for all 256 scale bytes and
+  16 codes, including signed zero and the exceptional scale byte 127.
+  The normal and profiling builds use the same derived shader and
+  pipeline key. Omitting this patch restores the scalar decode.
+- **Validation and removal** Check indexed selection and fallbacks in both
+  complete providers. Compare the emitted shaders and exhaustively check
+  their scale and code combinations on a software adapter. Replay real
+  expert gate and down weight slices against scalar staging and check all
+  output bits. The replay measures kernel time on the software adapter.
+  Remove this patch when upstream provides equivalent indexed staging.
+
+## Compact relative-position bias for Inkling Flash Attention
+
+- **Patches** `inkling-indexed-half-flash.patch`, `ggml-webgpu-indexed-half-flash.patch`,
+  and `ggml-cpu-indexed-half-flash.patch` against llama.cpp `c212d25ad`.
+- **Purpose** Keep Inkling's relative-position attention on WebGPU at large
+  context and batch sizes without creating a dense per-head mask for prefill.
+  Short queries still use the existing vector Flash path with a bounded F16
+  mask generated into its scratch allocation.
+- **Scope** The Inkling graph uses compact indexed bias for Flash Attention on
+  the Wasm WebGPU backend with resident K/V and supported tensor layout. The
+  stock graph remains the fallback for the automatic capability probe, disabled
+  Flash Attention, observer and training modes, and unavailable placement. The
+  WebGPU source applies in both normal and GPU-profile builds. Ordinary Flash
+  also checks the actual aligned F16 mask binding against both device limits.
+- **Contract** The indexed mode adds relative bias to the input mask in F32 and
+  rounds the combined sum to F16 before the head slope. The GPU scalar shader,
+  vector mask producer, and CPU fallback preserve this rounding. CPU-only
+  builds keep upstream behavior. The setup adds no public ABI controls.
+- **Upstream alternative** Use the upstream dense mask, or update to upstream
+  relative-position Flash Attention that meets the same rounding, allocation,
+  and vector-decode contracts. Review the Inkling graph, GGML Flash mode tag,
+  tensor alignment and scratch allocation when updating upstream.
+- **Validation and removal** Check ordinary mask bindings before and after
+  allocation, transferred CPU views, scalar and vector pipeline selection, and
+  numerical parity across prefill and generation. Remove the patches and
+  generated shader entry together when upstream covers these contracts.

@@ -1,0 +1,70 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3398,6 +3398,12 @@
+         if (key.f32_accumulator) {
+             variant += "_acc_f32";
+         }
++
++        if (!key.vectorized && key.src1_type == GGML_TYPE_F32 &&
++            (key.src0_type == GGML_TYPE_IQ3_S || key.src0_type == GGML_TYPE_IQ4_NL)) {
++            defines.push_back("BICORE_SPARSE_EXPERT_COLUMNS");
++        }
++
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+         auto decisions       = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -136,7 +136,26 @@
+ 
+         workgroupBarrier();
+ 
++#ifdef BICORE_SPARSE_EXPERT_COLUMNS
++        if (is_valid && rest_token_n <= WORKGROUP_SIZE_N && local_n < rest_token_n) {
++            let k_end = min(TILE_K, params.k - k_outer);
++            for (var k_inner = 0u; k_inner < k_end; k_inner++) {
++                var src0_tile: array<f16, TILE_M>;
++                for (var tm = 0u; tm < TILE_M; tm++) {
++                    let src0_m = local_m * TILE_M + tm;
++                    let src0_idx = k_inner + src0_m * TILE_K;
++                    src0_tile[tm] = shmem[src0_idx];
++                }
++                let src1_idx = local_n * TILE_K + k_inner;
++                let src1_val = shmem[TILE_SRC0_SHMEM + src1_idx];
++                for (var tm = 0u; tm < TILE_M; tm++) {
++                    acc[0][tm] += src0_tile[tm] * src1_val;
++                }
++            }
++        } else if (is_valid && rest_token_n > WORKGROUP_SIZE_N && output_col_base < rest_token_n) {
++#else
+         if (is_valid && output_col_base < rest_token_n) {
++#endif
+             let k_end = min(TILE_K, params.k - k_outer);
+ 
+             for (var k_inner = 0u; k_inner < k_end; k_inner++) {
+@@ -160,7 +179,25 @@
+         workgroupBarrier();
+     }
+ 
++#ifdef BICORE_SPARSE_EXPERT_COLUMNS
++    if (is_valid && rest_token_n <= WORKGROUP_SIZE_N) {
++        let n_idx = local_n;
++        if (n_idx < rest_token_n) {
++            let dst1_idx = gathered_expert_used[n_idx];
++            let dst2_idx = gathered_tokens[n_idx];
++            let dst12_offset = params.offset_dst + dst2_idx * dst2_stride + dst1_idx * dst1_stride;
++            for (var tm = 0u; tm < TILE_M; tm += VEC_SIZE) {
++                let global_row = output_row_base + tm;
++                if (global_row < params.m) {
++                    let dst_idx = dst12_offset + global_row;
++                    dst[dst_idx/VEC_SIZE] = store_val(acc, 0u, tm);
++                }
++            }
++        }
++    } else if (is_valid) {
++#else
+     if (is_valid) {
++#endif
+         for (var tn = 0u; tn < TILE_N; tn++) {
+             let n_idx = output_col_base + tn;
+             if (n_idx < rest_token_n) {

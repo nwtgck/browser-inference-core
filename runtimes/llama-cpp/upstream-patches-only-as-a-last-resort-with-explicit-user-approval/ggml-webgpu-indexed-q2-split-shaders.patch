@@ -1,0 +1,124 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -107,6 +107,7 @@
+     uint32_t    max_wg_size;
+     uint32_t    max_workgroups_per_dim = 0;
+     uint64_t    max_storage_binding_bytes = 0;
++    bool        indexed_split_weights = false;
+     // Actual aligned bindings, ordered as weights, input, IDs, output.
+     uint64_t    indexed_prefix_bytes[4] = {};
+     uint64_t    indexed_binding_bytes[4] = {};
+@@ -1626,12 +1627,14 @@
+     uint32_t  tile_m;
+     int       vectorized;
+     bool      f32_accumulator;
++    bool      split_weights;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+-               f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m;
++               f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m &&
++               split_weights == other.split_weights;
+     }
+ };
+ 
+@@ -1648,6 +1651,7 @@
+         ggml_webgpu_hash_combine(seed, key.f32_accumulator);
+         ggml_webgpu_hash_combine(seed, key.tile_k);
+         ggml_webgpu_hash_combine(seed, key.tile_m);
++        ggml_webgpu_hash_combine(seed, key.split_weights);
+         return seed;
+     }
+ };
+@@ -3377,6 +3381,8 @@
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
++        key.split_weights                       = context.indexed_split_weights;
++        GGML_ASSERT(!key.split_weights || key.src0_type == GGML_TYPE_Q2_0);
+         if (key.src0_type == GGML_TYPE_NVFP4) {
+             const auto precision = ggml_prec_get_acc(context.dst);
+             key.f32_accumulator = precision == GGML_PREC_BF16 || precision == GGML_PREC_F32;
+@@ -3556,6 +3562,10 @@
+         if (key.tile_m == wide_tile_m) {
+             variant += "_tm8";
+         }
++        if (key.split_weights) {
++            defines.push_back("BICORE_INDEXED_SPLIT_WEIGHTS");
++            variant += "_split_weights";
++        }
+         auto processed = preprocessor.preprocess(wgsl_mul_mat_id_group, defines);
+ 
+         auto decisions       = std::make_shared<ggml_webgpu_mul_mat_shader_decisions>();
+@@ -3577,6 +3587,8 @@
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
++        key.split_weights                       = context.indexed_split_weights;
++        GGML_ASSERT(!key.split_weights || key.src0_type == GGML_TYPE_Q2_0);
+         key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+@@ -3704,6 +3716,10 @@
+         defines.push_back(std::string("NUM_COLS=1"));
+ 
+         defines.push_back(std::string("N_EXPERTS=") + std::to_string(key.n_experts));
++        if (key.split_weights) {
++            defines.push_back("BICORE_INDEXED_SPLIT_WEIGHTS");
++            variant += "_split_weights";
++        }
+ 
+         auto processed = preprocessor.preprocess(shader_src, defines);
+ 
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
+@@ -24,6 +24,9 @@
+     stride_11: u32,
+     stride_02: u32,
+     stride_12: u32,
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    split_word: u32,
++#endif
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>; // [cols, rows, n_expert]
+@@ -32,7 +35,12 @@
+ @group(0) @binding(3) var<storage, read_write> dst: array<f32>;   // [rows, n_expert_used, n_tokens(1)]
+ 
+ // "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++@group(0) @binding(4) var<storage, read_write> src0_high: array<u32>;
++@group(0) @binding(5) var<uniform> params: MulMatIdVecParams;
++#else
+ @group(0) @binding(4) var<uniform> params: MulMatIdVecParams;
++#endif
+ 
+ // Flattened as [row][thread] to keep each row's reduction contiguous in memory.
+ var<workgroup> partial_sums: array<f32, OUTPUTS_PER_WG * WG_SIZE>;
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -39,6 +39,9 @@
+     stride_11: u32,
+     stride_02: u32,
+     stride_12: u32,
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    split_word: u32,
++#endif
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>; // [cols, rows, n_expert]
+@@ -48,7 +51,12 @@
+ @group(0) @binding(3) var<storage, read_write> ids_slot_pos: array<u32>; // [n_expert_used * n_tokens]
+ @group(0) @binding(4) var<storage, read_write> ids_tiles: array<u32>; // [n_tiles, (expert, first slot, n slots) * n_tiles]
+ 
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++@group(0) @binding(5) var<storage, read_write> src0_high: array<u32>;
++@group(0) @binding(6) var<uniform> params: MulMatIdParams;
++#else
+ @group(0) @binding(5) var<uniform> params: MulMatIdParams;
++#endif
+ 
+ fn get_local_n(thread_id: u32) -> u32 {
+     return thread_id / WORKGROUP_SIZE_M;

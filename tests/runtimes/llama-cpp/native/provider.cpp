@@ -4,10 +4,11 @@
 #include "cases/q8-short.hpp"
 
 static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_context & input, uint32_t dimension,
-                                                   bool overlap) {
+                                                   bool overlap, std::optional<bool> expected_matvec = std::nullopt) {
     auto ctx = recording_context();
     auto & capabilities = ctx->global_ctx->capabilities;
     capabilities.limits.maxComputeInvocationsPerWorkgroup = input.max_wg_size;
+    capabilities.limits.maxComputeWorkgroupStorageSize = uint32_t(input.wg_mem_limit_bytes);
     capabilities.limits.maxComputeWorkgroupsPerDimension = dimension;
     capabilities.limits.minStorageBufferOffsetAlignment = 256;
     capabilities.supports_subgroups = input.supports_subgroups;
@@ -47,6 +48,11 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
     const auto encoded = ggml_webgpu_mul_mat(ctx, &tensors[0], &tensors[1], &tensors[2]);
     BICORE_CHECK(encoded.num_kernels == commands.dispatches.size() && !commands.dispatches.empty());
     const auto dispatch = commands.dispatches.back();
+    if (expected_matvec) {
+        const auto expected = *expected_matvec ? ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, true)
+                                               : ctx->shader_lib->get_mul_mat_fast_pipeline(input, overlap, true);
+        BICORE_CHECK(dispatch.pipeline == expected.pipeline.Get()->id);
+    }
 #ifndef GGML_WEBGPU_GPU_PROFILE
     ctx->active_compute_pass.End();
 #endif
@@ -257,8 +263,10 @@ static void encoding_and_upload() {
 #include "cases/profile-query.hpp"
 #include "cases/subgroup.hpp"
 #include "cases/matrix.hpp"
+#include "cases/argsort.hpp"
 #include "cases/cache.hpp"
 #include "cases/expert.hpp"
+#include "cases/attention.hpp"
 
 int main(int argc, char ** argv) {
     BICORE_CHECK(argc == 2);
@@ -272,8 +280,10 @@ int main(int argc, char ** argv) {
     copy_cases::all();
     subgroup_cases::all(argv[1]);
     matrix_cases::all(argv[1]);
+    argsort_cases::all(argv[1]);
     cache_cases::all();
     expert_cases::all(argv[1]);
+    attention_cases::all(argv[1]);
 #ifdef GGML_WEBGPU_GPU_PROFILE
     profile_query_cases::all();
 #endif

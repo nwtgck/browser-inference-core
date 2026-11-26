@@ -1,0 +1,51 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index d6e07cf..4935bd5 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -320,16 +320,17 @@ inline uint32_t ggml_webgpu_q8_requested_subgroup_size(const ggml_webgpu_shader_
+ }
+ 
+ // The independently reduced rows use quant-specific block strides. IQ3_S needs
+-// at least sixteen logical lanes per 256 weights. The short IQ4_NL/NVFP4
+-// shapes use fixed widths of 16 or 32, with four output rows per subgroup.
++// at least sixteen logical lanes per 256 weights. The short expert shapes use
++// fixed widths of 16 or 32, with four output rows per subgroup.
+ inline bool ggml_webgpu_id_subgroup_shape(const ggml_webgpu_shader_lib_context & context) {
+     const auto * a = context.src0;
+     const auto * x = context.src1;
+     const auto * ids = context.src2;
+     const auto * dst = context.dst;
+     const uint32_t sg = context.min_subgroup_size;
+-    if (!a || (a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4) ||
+-        !x || !ids || !dst ||
++    if (!a || !x || !ids || !dst ||
++        (a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
++         a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+         !context.supports_subgroups || context.max_wg_size < 128 ||
+         sg != context.max_subgroup_size ||
+@@ -345,7 +346,9 @@ inline bool ggml_webgpu_id_subgroup_shape(const ggml_webgpu_shader_lib_context &
+                a->ne[0] >= 2048 && a->ne[0] <= 4096 && a->ne[0] % 256 == 0 &&
+                a->ne[1] >= 256 && a->ne[1] <= UINT32_MAX - 31u;
+     }
+-    return (sg == 16 || sg == 32) && (a->ne[0] == 1152 || a->ne[0] == 2304) && a->ne[1] == 2304 && dst->ne[1] == 8;
++    const bool matched_k = a->ne[0] == 2304 || (a->ne[0] == 1152 && a->type != GGML_TYPE_Q5_K);
++    return (sg == 16 || sg == 32) && matched_k &&
++           a->ne[1] == 2304 && dst->ne[1] == 8;
+ }
+ 
+ inline uint32_t ggml_webgpu_id_subgroup_size(const ggml_webgpu_shader_lib_context & context) {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index 4b85332..5e8b57d 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2280,7 +2280,8 @@ static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
+     if (q2_split) {
+         ggml_webgpu_bind_q2_high_range(*q2_split, params, entries);
+     }
+-    if (ggml_webgpu_id_subgroup_shape(shader_lib_ctx)) {
++    if (ctx->global_ctx->capabilities.limits.maxComputeWorkgroupSizeX >= 128 &&
++        ggml_webgpu_id_subgroup_shape(shader_lib_ctx)) {
+         shader_lib_ctx.max_workgroups_per_dim = ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension;
+         shader_lib_ctx.max_storage_binding_bytes = ctx->global_ctx->capabilities.limits.maxStorageBufferBindingSize;
+         const ggml_tensor * tensors[4] = {src0, src1, src2, dst};

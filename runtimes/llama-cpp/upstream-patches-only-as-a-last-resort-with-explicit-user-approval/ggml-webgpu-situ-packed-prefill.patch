@@ -1,0 +1,75 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-situ.hpp
+@@ -19,13 +19,13 @@
+     int nodes;
+ };
+ 
+-inline bool shape(const ggml_tensor * tensor, int64_t columns) {
++inline bool shape(const ggml_tensor * tensor, int64_t columns, int64_t tokens) {
+     return tensor && tensor->type == GGML_TYPE_F32 && tensor->ne[0] == columns &&
+-           tensor->ne[1] == experts && tensor->ne[2] == 1 && tensor->ne[3] == 1;
++           tensor->ne[1] == experts && tokens > 0 && tensor->ne[2] == tokens && tensor->ne[3] == 1;
+ }
+ 
+ inline bool packed_view(const ggml_tensor * view, const ggml_tensor * packed, uint64_t offset) {
+-    return shape(view, width) && view->op == GGML_OP_VIEW && view->src[0] == packed &&
++    return shape(view, width, packed->ne[2]) && view->op == GGML_OP_VIEW && view->src[0] == packed &&
+            view->view_src == packed && view->view_offs == offset &&
+            view->nb[0] == packed->nb[0] && view->nb[1] == packed->nb[1] &&
+            view->nb[2] == packed->nb[2] && view->nb[3] == packed->nb[3];
+@@ -34,7 +34,8 @@
+ inline bool match(const ggml_cgraph * graph, int first, webgpu_fusion_view_sources & views, plan & result) {
+     if (!graph || first < 0 || graph->n_nodes - first < 9) { return false; }
+     const auto nodes = graph->nodes + first;
+-    if (!shape(nodes[0], width) || nodes[0]->op != GGML_OP_SCALE) { return false; }
++    const auto tokens = nodes[0] ? nodes[0]->ne[2] : 0;
++    if (!shape(nodes[0], width, tokens) || nodes[0]->op != GGML_OP_SCALE) { return false; }
+     constexpr int operations = 9;
+     const ggml_op ops[operations] = {
+         GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_SCALE, GGML_OP_UNARY, GGML_OP_MUL,
+@@ -50,13 +51,13 @@
+     for (int i = 0; i < operations; ++i) {
+         indices[i] = first + i + (i >= 5 ? view_inside : 0);
+         operation[i] = graph->nodes[indices[i]];
+-        if (!shape(operation[i], width) || operation[i]->op != ops[i] ||
++        if (!shape(operation[i], width, tokens) || operation[i]->op != ops[i] ||
+             !scale_unary_dense(operation[i])) { return false; }
+     }
+     const auto * gate = operation[0]->src[0];
+     const auto * up = operation[5]->src[0];
+     const auto * packed = gate ? gate->view_src : nullptr;
+-    if (!shape(packed, 2 * width) || !scale_unary_dense(packed) ||
++    if (!shape(packed, 2 * width, tokens) || !scale_unary_dense(packed) ||
+         !packed_view(gate, packed, 0) || !packed_view(up, packed, width * sizeof(float)) ||
+         (view_inside && nodes[5] != up) ||
+         ggml_get_unary_op(operation[1]) != GGML_UNARY_OP_TANH ||
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4819,17 +4819,23 @@
+                                                        webgpu_fusion_view_sources & views, int & consumed) {
+     webgpu_situ::plan plan;
+     if (!webgpu_situ::match(graph, index, views, plan)) { return std::nullopt; }
+-    constexpr uint32_t groups = webgpu_situ::elements / webgpu_situ::workgroup;
++    constexpr uint32_t groups_per_token = webgpu_situ::elements / webgpu_situ::workgroup;
++    const auto tokens = uint64_t(plan.output->ne[2]);
+     const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint64_t byte_limit = std::min<uint64_t>({limits.maxStorageBufferBindingSize, limits.maxBufferSize, SIZE_MAX});
++    if (tokens > byte_limit / webgpu_situ::input_bytes || tokens > limits.maxComputeWorkgroupsPerDimension / groups_per_token) {
++        return std::nullopt;
++    }
++    const auto groups = uint32_t(tokens) * groups_per_token;
+     if (limits.maxComputeInvocationsPerWorkgroup < webgpu_situ::workgroup ||
+         limits.maxComputeWorkgroupSizeX < webgpu_situ::workgroup ||
+-        limits.maxComputeWorkgroupsPerDimension < groups || limits.maxStorageBuffersPerShaderStage < 2 ||
++        limits.maxStorageBuffersPerShaderStage < 2 ||
+         limits.maxBindingsPerBindGroup < 3 || limits.maxUniformBuffersPerShaderStage < 1 ||
+         limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) { return std::nullopt; }
+ 
+     webgpu_router_tail_binding packed, output;
+-    if (!ggml_webgpu_router_tail_binding(ctx, plan.packed, webgpu_situ::input_bytes, packed) ||
+-        !ggml_webgpu_router_tail_binding(ctx, plan.output, webgpu_situ::output_bytes, output) ||
++    if (!ggml_webgpu_router_tail_binding(ctx, plan.packed, size_t(tokens * webgpu_situ::input_bytes), packed) ||
++        !ggml_webgpu_router_tail_binding(ctx, plan.output, size_t(tokens * webgpu_situ::output_bytes), output) ||
+         (packed.buffer.Get() == output.buffer.Get() &&
+          !router_tail_disjoint(packed.offset, packed.size, output.offset, output.size))) { return std::nullopt; }
+ 

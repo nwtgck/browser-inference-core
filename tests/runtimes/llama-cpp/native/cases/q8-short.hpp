@@ -117,8 +117,19 @@ static int run_q8_short_cases(int argc, char ** argv) {
         require(get(320, 1023).pipeline.Get()->id == p256.pipeline.Get()->id, "fallback must not reuse short pipeline");
         require(get(320, 10240, 2).pipeline.Get()->id != p64.pipeline.Get()->id, "column cache distinction");
         require(get(320, 10240, 1, true).pipeline.Get()->id != p64.pipeline.Get()->id, "overlap cache distinction");
-        require(p64.name == "mul_mat_vec_q8_0_f32_sg_reduce_wg64", "profile suffix");
+        require(p64.name == "mul_mat_vec_q8_0_f32_sg_reduce_wg64_single_block", "short profile label");
         require(p256.name == "mul_mat_vec_q8_0_f32_sg_reduce", "default profile label preserved");
+        using mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind;
+        a.ne[0] = b.ne[0] = 640;
+        auto key = lib.make_mul_mat_vec_key(c, false, false);
+        require(key.subgroup_mode == mode::single_block_q8, "single-block mode selected for short K");
+        key.subgroup_mode = mode::legacy;
+        const auto forced = lib.prepare_mul_mat_vec_pipeline(c, key);
+        require(forced.pipeline.Get()->id != p128.pipeline.Get()->id, "same workgroup can cache both loop modes");
+        a.ne[0] = b.ne[0] = 2560;
+        require(lib.prepare_mul_mat_vec_pipeline(c, key).pipeline.Get()->id == forced.pipeline.Get()->id,
+                "forced WG128 can reuse its full block loop for longer K");
+        require(get(640).pipeline.Get()->id == p128.pipeline.Get()->id, "forced shader does not replace AUTO");
         b.type = GGML_TYPE_F16;
         require(static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(get(320).context.get())->wg_size == 256,
                 "factory F16 exclusion");

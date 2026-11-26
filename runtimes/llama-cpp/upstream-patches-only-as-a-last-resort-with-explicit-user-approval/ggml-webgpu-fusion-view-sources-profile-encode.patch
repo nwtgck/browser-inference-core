@@ -1,0 +1,14 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5115,5 +5115,9 @@
+     webgpu_profile_operation_guard guard(backend_ctx->webgpu_ctx->operation_in_progress);
+     if (!guard.acquired) { return GGML_STATUS_FAILED; }
+-    return ggml_backend_webgpu_graph_compute_impl(backend, cgraph, ggml_webgpu_encode);
++    webgpu_fusion_view_sources fusion_views(*cgraph);
++    const auto encode = [&fusion_views](const webgpu_context & ctx, ggml_cgraph * graph, int index, int & count) {
++        return ggml_webgpu_encode(ctx, graph, index, fusion_views, count);
++    };
++    return ggml_backend_webgpu_graph_compute_impl(backend, cgraph, encode);
+ }
+ 

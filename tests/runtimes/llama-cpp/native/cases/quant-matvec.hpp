@@ -255,6 +255,46 @@ size_t run(ggml_webgpu_shader_lib & library, ggml_webgpu_shader_lib & scalar, co
         require(scalar.select() == 0, "Subgroup capability required by width policy");
         factory(scalar, false, false, output);
     }
+    for (const int64_t k : {7680, 8192, 10752}) {
+        Fixture f(GGML_TYPE_Q4_K, k, 2048);
+        for (const uint32_t sg : {16u, 32u}) {
+            f.min_sg = f.max_sg = sg;
+            require(f.eligible() && f.select() == sg, "Q4_K at M=2048 admits complete blocks within the new K bounds");
+            factory(f, true, false, {});
+        }
+
+        auto variable = f.context<ggml_webgpu_shader_lib_context>();
+        variable.min_subgroup_size = 8;
+        require(ggml_webgpu_q4_requested_subgroup_size(variable, false, false) == 0,
+                "Q4_K at M=2048 requires explicit control for a variable width");
+        variable.subgroup_size_control_enabled = true;
+        require(ggml_webgpu_q4_requested_subgroup_size(variable, false, false) == 16,
+                "Q4_K at M=2048 uses the existing requested S16 policy");
+    }
+    for (const int64_t k : {7424, 7681, 10751, 11008}) {
+        Fixture f(GGML_TYPE_Q4_K, k, 2048);
+        require(!f.eligible() && f.select() == 0, "Q4_K at M=2048 rejects K outside the bounds or with partial blocks");
+    }
+    for (const int64_t m : {2047, 2049, 2080, 2559}) {
+        Fixture f(GGML_TYPE_Q4_K, 7680, m);
+        require(!f.eligible() && f.select() == 0, "Q4_K below the old long-K M floor only admits M=2048");
+    }
+    {
+        Fixture q4_0(GGML_TYPE_Q4_0, 7680, 2048);
+        require(!q4_0.eligible() && q4_0.select() == 0, "The long-K Q4_0 row floor stays at M=2560");
+        factory(q4_0, false, false, {});
+
+        Fixture f(GGML_TYPE_Q4_K, 7680, 2048);
+        require(!f.eligible(true) && !f.eligible(false, true), "Q4_K at M=2048 rejects MMVQ and overlap");
+        f.x.ne[1] = f.dst.ne[1] = 2;
+        require(!f.eligible(), "Q4_K at M=2048 requires a single input column");
+        f.x.ne[1] = f.dst.ne[1] = 1;
+        f.a.ne[2] = f.x.ne[2] = f.dst.ne[2] = 2;
+        require(!f.eligible(), "Q4_K at M=2048 requires singleton batches");
+        f.a.ne[2] = f.x.ne[2] = f.dst.ne[2] = 1;
+        f.post = 1;
+        require(!f.eligible(), "Q4_K at M=2048 rejects epilogues");
+    }
     for (const auto type : {GGML_TYPE_Q8_0, GGML_TYPE_Q6_K, GGML_TYPE_F32, GGML_TYPE_F16}) {
         for (const auto sg : {8u, 16u, 32u, 64u}) {
             Fixture f(type, 2048);
@@ -424,7 +464,152 @@ size_t run(wgpu::Device device, wgpu::Instance instance, const std::filesystem::
     return checks;
 }
 
+static void packed_vec4(const std::filesystem::path & output) {
+    for (const uint32_t subgroup : {16u, 32u}) {
+        auto ctx = recording_context();
+        const uint32_t rows = (128u / subgroup) * 4u;
+        const auto check = [&](int64_t k, int64_t m, bool aligned, bool packed) {
+            q4_current::Fixture fixture(GGML_TYPE_Q6_K, k, m);
+            fixture.min_sg = fixture.max_sg = subgroup;
+            const auto input = fixture.context<ggml_webgpu_shader_lib_context>();
+            const auto pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(input, false, aligned);
+            require((pipeline.name.find("_packed_vec4_") != std::string::npos) == packed);
+            const auto & shape = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+            require(shape.vec_size == 1 && shape.wg_size == 128 && shape.outputs_per_wg == rows);
+            require(ctx->shader_lib->get_mul_mat_vec_pipeline(input, false, aligned).pipeline.Get() ==
+                    pipeline.pipeline.Get());
+            if (aligned) {
+                require(production_dispatch(input, 65535, false, true) ==
+                        std::array<uint32_t, 2>{uint32_t(CEIL_DIV(m, rows)), 1});
+            }
+            if (!output.empty() && k == 2560 && m == 8193) {
+                std::ofstream shader(output / (pipeline.name + ".wgsl"));
+                shader << pipeline.pipeline.Get()->code;
+                require(bool(shader));
+            }
+            return pipeline.pipeline.Get();
+        };
+        require(check(2560, 8193, true, true) != check(2560, 8193, false, false));
+        check(1536, 8192, true, true);
+        check(5120, 8192, true, true);
+        check(5376, 8192, true, false);
+        check(2560, 8191, true, false);
+        check(2560, 8193, true, true);
+    }
+}
+
 } // namespace q6_current
+
+static void check_long_k_matvecs(ggml_webgpu_shader_lib & library, const std::filesystem::path & output) {
+    for (const auto type : {GGML_TYPE_Q4_K, GGML_TYPE_Q6_K}) {
+        q4_current::Fixture f(type, 19968, 6656);
+        f.min_sg = f.max_sg = 32;
+        auto c = f.context<ggml_webgpu_shader_lib_context>();
+        const auto fixed = [type](const ggml_webgpu_shader_lib_context & context, bool overlap = false) {
+            return type == GGML_TYPE_Q4_K ? ggml_webgpu_q4_matvec_subgroup_size(context, false, overlap)
+                                          : ggml_webgpu_q6_matvec_subgroup_size(context, false, overlap);
+        };
+        BICORE_CHECK(fixed(c) == 32 && fixed(c, true) == 0);
+        const auto pipeline = library.get_mul_mat_vec_pipeline(c, false, false);
+        const auto & decisions = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+        BICORE_CHECK(decisions.wg_size == 128 && decisions.outputs_per_wg == 16);
+        BICORE_CHECK((production_dispatch(c, 65535, false) == std::array<uint32_t, 2>{416, 1}));
+        BICORE_CHECK(pipeline.name.find("_independent_sg32_wg128") != std::string::npos);
+        std::ofstream shader(output / (std::string(ggml_type_name(type)) + "-long-k-sg32.wgsl"));
+        shader << pipeline.pipeline.Get()->code;
+        BICORE_CHECK(bool(shader));
+
+        c.min_subgroup_size = c.max_subgroup_size = 16;
+        BICORE_CHECK(fixed(c) == 0);
+        c.max_subgroup_size = 32;
+        c.subgroup_size_control_enabled = true;
+        BICORE_CHECK(fixed(c) == 0);
+        BICORE_CHECK(ggml_webgpu_q4_requested_subgroup_size(c, false, false) == 0);
+        BICORE_CHECK(ggml_webgpu_q6_requested_subgroup_size(c, false, false) == 0);
+        c.min_subgroup_size = 32;
+        f.a.ne[1] = f.dst.ne[0] = 6655;
+        BICORE_CHECK(fixed(c) == 0);
+        f.a.ne[1] = f.dst.ne[0] = 6656;
+        f.a.ne[0] = f.x.ne[0] = 19712;
+        BICORE_CHECK(fixed(c) == 0);
+        f.a.ne[0] = f.x.ne[0] = 19968;
+        f.x.ne[2] = f.dst.ne[2] = 2;
+        BICORE_CHECK(fixed(c) == 0);
+        f.x.ne[2] = f.dst.ne[2] = 1;
+        f.a.ne[0] = f.x.ne[0] = 2048;
+        f.a.ne[1] = f.dst.ne[0] = 4096;
+        BICORE_CHECK(library.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == pipeline.pipeline.Get());
+    }
+}
+
+static void check_dense_q2_matvecs(ggml_webgpu_shader_lib & library, const std::filesystem::path & output) {
+    constexpr std::pair<int64_t, int64_t> shapes[] = {{5120, 17408}, {17408, 5120}, {6144, 5120}};
+    for (const uint32_t sg : {16u, 32u}) {
+        wgpu::ComputePipeline shared;
+        for (const auto [k, m] : shapes) {
+            q4_current::Fixture f(GGML_TYPE_Q2_0, k, m);
+            for (auto * tensor : {&f.a, &f.x, &f.dst}) {
+                tensor->nb[0] = ggml_type_size(tensor->type);
+                tensor->nb[1] = ggml_row_size(tensor->type, tensor->ne[0]);
+                tensor->nb[2] = tensor->nb[1] * tensor->ne[1];
+                tensor->nb[3] = tensor->nb[2];
+            }
+            f.min_sg = f.max_sg = sg;
+            const auto c = f.context<ggml_webgpu_shader_lib_context>();
+            const auto key = [&](bool overlap = false) {
+                return library.make_mul_mat_vec_key(f.context<ggml_webgpu_shader_lib_context>(), overlap, false);
+            };
+            const uint32_t rows = 4 * (128 / sg);
+            const auto candidate = library.get_mul_mat_vec_pipeline(c, false, false);
+            const auto & decisions =
+                *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(candidate.context.get());
+            BICORE_CHECK(decisions.logical_subgroup_size == sg && decisions.wg_size == 128 &&
+                         decisions.outputs_per_wg == rows);
+            BICORE_CHECK((production_dispatch(c, 65535, false) == std::array<uint32_t, 2>{uint32_t(m) / rows, 1}));
+            if (shared) {
+                BICORE_CHECK(shared.Get() == candidate.pipeline.Get());
+            } else {
+                shared = candidate.pipeline;
+                std::ofstream shader(output / ("q2_0-dense-sg" + std::to_string(sg) + ".wgsl"));
+                shader << shared.Get()->code;
+                BICORE_CHECK(bool(shader));
+            }
+
+            BICORE_CHECK(key(true).subgroup_size == 0);
+            f.max_wg = 127;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.max_wg = 256;
+            f.indexed = true;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.indexed = false;
+            f.subgroups = false;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.subgroups = true;
+            f.x.ne[1] = f.dst.ne[1] = 2;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.x.ne[1] = f.dst.ne[1] = 1;
+            f.x.ne[2] = f.dst.ne[2] = 2;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.x.ne[2] = f.dst.ne[2] = 1;
+            ++f.a.nb[1];
+            BICORE_CHECK(key().subgroup_size == 0);
+            --f.a.nb[1];
+            f.a.ne[1] = f.dst.ne[0] = m - 1;
+            BICORE_CHECK(key().subgroup_size == 0);
+            f.a.ne[1] = f.dst.ne[0] = m;
+            f.min_sg = 16;
+            f.max_sg = 32;
+            auto variable = f.context<ggml_webgpu_shader_lib_context>();
+            variable.subgroup_size_control_enabled = true;
+            const auto fallback = library.get_mul_mat_vec_pipeline(variable, false, false);
+            BICORE_CHECK(fallback.pipeline.Get() != candidate.pipeline.Get());
+            const auto fallback_key = library.make_mul_mat_vec_key(variable, false, false);
+            BICORE_CHECK(!fallback_key.subgroup_size && !fallback_key.requested_subgroup_size &&
+                         fallback_key.workgroup_size == 256);
+        }
+    }
+}
+
 static int run_quant_matvec_cases(int argc, char ** argv) {
     try {
         if (argc != 2)
@@ -438,6 +623,9 @@ static int run_quant_matvec_cases(int argc, char ** argv) {
                                       std::make_shared<ggml_webgpu_optional::DeviceGeneration>());
         const size_t q4_checks = q4_current::run(library, scalar, argv[1]);
         const size_t q6_checks = q6_current::run(device, instance, argv[1]);
+        q6_current::packed_vec4(argv[1]);
+        check_long_k_matvecs(library, argv[1]);
+        check_dense_q2_matvecs(library, argv[1]);
         BICORE_CHECK(q4_checks + q6_checks > 9000 && created > 100);
         std::cout << "{\"status\":\"passed\",\"checks\":" << q4_checks + q6_checks << ",\"pipelines\":" << created
                   << "}\n";

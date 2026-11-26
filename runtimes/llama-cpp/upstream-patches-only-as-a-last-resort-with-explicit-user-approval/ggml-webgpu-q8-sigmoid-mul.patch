@@ -1,0 +1,557 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5072,6 +5072,7 @@
+ }
+ 
+ #include "ggml-webgpu-dense-q4-swiglu.hpp"
++#include "ggml-webgpu-q8-sigmoid-mul.hpp"
+ 
+ // Returns the encoded command, or std::nullopt if the operation is a no-op
+ static std::optional<webgpu_encoded_op> ggml_webgpu_encode(webgpu_context ctx,
+@@ -5115,6 +5116,7 @@
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             if (auto fused = webgpu_dense_q4_swiglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            if (auto fused = webgpu_q8_sigmoid_mul::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_mul_mat(ctx, src0, src1, node);
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -98,7 +98,7 @@
+ }
+ 
+ struct ggml_webgpu_shader_lib_context {
+-    enum class matvec_post_op : uint32_t { none = 0, scale_sigmoid_scale = 1 };
++    enum class matvec_post_op : uint32_t { none = 0, scale_sigmoid_scale = 1, q8_sigmoid_mul, q8_sigmoid_mul_in_place };
+     ggml_tensor * src0;
+     ggml_tensor * src1;
+     ggml_tensor * src2;
+@@ -1559,22 +1559,6 @@
+     uint32_t vec_size;
+     bool     src_overlap = false;
+ };
+-
+-inline bool ggml_webgpu_matvec_post_supported(const ggml_webgpu_shader_lib_context & context,
+-                                                ggml_webgpu_shader_lib_context::matvec_post_op kind,
+-                                                bool src_overlap) {
+-    using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
+-    if (kind == post_op::none) { return true; }
+-    if (kind != post_op::scale_sigmoid_scale || src_overlap || !context.src0 || !context.src1 || !context.dst ||
+-        context.src0->type != GGML_TYPE_F32 || context.src1->type != GGML_TYPE_F32 || context.dst->type != GGML_TYPE_F32 ||
+-        context.src0->ne[0] < 1 || context.src0->ne[0] > 16384 || context.src0->ne[1] != 4 ||
+-        context.src1->ne[0] != context.src0->ne[0] || context.src1->ne[1] != 1 ||
+-        context.dst->ne[0] != 4 || context.dst->ne[1] != 1 || context.max_wg_size < 256) { return false; }
+-    for (int i = 2; i < GGML_MAX_DIMS; ++i) {
+-        if (context.src0->ne[i] != 1 || context.src1->ne[i] != 1 || context.dst->ne[i] != 1) { return false; }
+-    }
+-    return true;
+-}
+ 
+ struct ggml_webgpu_quantize_q8_pipeline_key {
+     ggml_type src0_type;
+@@ -1830,6 +1814,33 @@
+         }
+     }
+     return false;
++}
++
++inline bool ggml_webgpu_matvec_post_supported(const ggml_webgpu_shader_lib_context & context,
++                                                ggml_webgpu_shader_lib_context::matvec_post_op kind,
++                                                bool src_overlap) {
++    using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
++    if (kind == post_op::none) { return true; }
++    if (kind == post_op::q8_sigmoid_mul || kind == post_op::q8_sigmoid_mul_in_place) {
++        if (!context.src0 || !context.src1 || !context.dst) { return false; }
++        const bool mmvq = ggml_webgpu_can_use_mmvq(
++            context.src0, context.src1, context.src1->ne[1], context.supports_dot_product, context.vendor);
++        const uint32_t sg = ggml_webgpu_q8_matvec_subgroup_size(context, mmvq, src_overlap);
++        if (sg != 16 && sg != 32) { return false; }
++        for (int i = 2; i < GGML_MAX_DIMS; ++i) {
++            if (context.src0->ne[i] != 1 || context.src1->ne[i] != 1 || context.dst->ne[i] != 1) { return false; }
++        }
++        return true;
++    }
++    if (kind != post_op::scale_sigmoid_scale || src_overlap || !context.src0 || !context.src1 || !context.dst ||
++        context.src0->type != GGML_TYPE_F32 || context.src1->type != GGML_TYPE_F32 || context.dst->type != GGML_TYPE_F32 ||
++        context.src0->ne[0] < 1 || context.src0->ne[0] > 16384 || context.src0->ne[1] != 4 ||
++        context.src1->ne[0] != context.src0->ne[0] || context.src1->ne[1] != 1 ||
++        context.dst->ne[0] != 4 || context.dst->ne[1] != 1 || context.max_wg_size < 256) { return false; }
++    for (int i = 2; i < GGML_MAX_DIMS; ++i) {
++        if (context.src0->ne[i] != 1 || context.src1->ne[i] != 1 || context.dst->ne[i] != 1) { return false; }
++    }
++    return true;
+ }
+ 
+ class ggml_webgpu_shader_lib {
+@@ -3019,10 +3030,15 @@
+         ggml_webgpu_optional::Attempt<webgpu_pipeline> * optional_result) {
+         require_healthy_device();
+         if (!ggml_webgpu_matvec_post_supported(context, key.epilogue, key.src_overlap)) { return {}; }
+-        if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none &&
++        using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
++        if (key.epilogue == post_op::scale_sigmoid_scale &&
+             (key.src0_type != GGML_TYPE_F32 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
+              key.workgroup_size != 256 || key.subgroup_size != 0 || key.use_mmvq || key.src_overlap ||
+              key.vectorized < 0 || key.vectorized > 1 || (key.vectorized && context.src0->ne[0] % 4))) { return {}; }
++        const bool q8_post = key.epilogue == post_op::q8_sigmoid_mul || key.epilogue == post_op::q8_sigmoid_mul_in_place;
++        if (q8_post && (key.src0_type != GGML_TYPE_Q8_0 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
++            key.workgroup_size != 128 || (key.subgroup_size != 16 && key.subgroup_size != 32) ||
++            key.requested_subgroup_size || key.use_mmvq || key.src_overlap || key.vectorized)) { return {}; }
+         auto it = mul_mat_vec_pipelines.find(key);
+         if (it != mul_mat_vec_pipelines.end()) {
+             return it->second;
+@@ -3180,7 +3196,16 @@
+         }
+         defines.push_back(std::string("NUM_COLS=") + std::to_string(key.num_cols));
+ 
+-        if (key.epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none) { variant += "_scale_sigmoid_scale"; }
++        if (key.epilogue == post_op::scale_sigmoid_scale) {
++            variant += "_scale_sigmoid_scale";
++        } else if (q8_post) {
++            defines.push_back("Q8_SIGMOID_MUL");
++            variant += "_sigmoid_mul";
++            if (key.epilogue == post_op::q8_sigmoid_mul_in_place) {
++                defines.push_back("Q8_SIGMOID_MUL_IN_PLACE");
++                variant += "_in_place";
++            }
++        }
+         auto processed            = preprocessor.preprocess(shader_src, defines);
+         auto decisions            = std::make_shared<ggml_webgpu_mul_mat_vec_shader_decisions>();
+         decisions->wg_size        = wg_size;
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
+@@ -1,40 +1,18 @@
+ #pragma once
+ 
+-#include <array>
++#include "ggml-webgpu-checked-tensor-binding.hpp"
+ #include <iterator>
+ 
+ // The encoder shares the ordinary matvec layout and WebGPU binding helpers.
+ namespace webgpu_dense_q4_swiglu {
++
++using namespace webgpu_checked_tensor_binding;
+ 
+ constexpr int64_t input_width = 6656;
+ constexpr int64_t output_width = 19968;
+ constexpr uint32_t workgroup = 128;
+ constexpr uint32_t rows_per_subgroup = 4;
+ constexpr int operations = 3;
+-
+-static bool packed_bytes(const ggml_tensor * tensor, uint64_t & bytes) {
+-    const uint64_t block = ggml_blck_size(tensor->type);
+-    const uint64_t unit = ggml_type_size(tensor->type);
+-    if (tensor->ne[0] <= 0 || uint64_t(tensor->ne[0]) % block != 0 ||
+-        uint64_t(tensor->ne[0]) / block > UINT32_MAX / unit || tensor->nb[0] != unit) {
+-        return false;
+-    }
+-    bytes = uint64_t(tensor->ne[0]) / block * unit;
+-    for (int axis = 1; axis < GGML_MAX_DIMS; ++axis) {
+-        if (tensor->ne[axis] <= 0 || uint64_t(tensor->ne[axis]) > UINT32_MAX / bytes ||
+-            tensor->nb[axis] != bytes) {
+-            return false;
+-        }
+-        bytes *= uint64_t(tensor->ne[axis]);
+-    }
+-    return true;
+-}
+-
+-static bool shape(const ggml_tensor * tensor, ggml_type type, int64_t width, int64_t rows) {
+-    uint64_t bytes;
+-    return tensor && tensor->type == type && tensor->ne[0] == width && tensor->ne[1] == rows &&
+-        tensor->ne[2] == 1 && tensor->ne[3] == 1 && packed_bytes(tensor, bytes);
+-}
+ 
+ static bool matches_projection_weight(const ggml_tensor * weight) {
+     return weight && weight->type == GGML_TYPE_Q4_K &&
+@@ -89,97 +67,6 @@
+         return std::nullopt;
+     }
+     return pattern{gate, up, output};
+-}
+-
+-struct binding {
+-    wgpu::Buffer buffer;
+-    uint64_t offset = 0;
+-    uint64_t size = 0;
+-    uint32_t element_offset = 0;
+-};
+-
+-struct buffer_facts {
+-    WGPUBuffer handle = nullptr;
+-    uint64_t size = 0;
+-    bool storage = false;
+-};
+-
+-static bool get_binding(webgpu_context & ctx, const ggml_tensor * tensor,
+-                        std::array<buffer_facts, 4> & facts, binding & result) {
+-    const auto * buffer = tensor->buffer;
+-    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
+-        !tensor->data) {
+-        return false;
+-    }
+-    const auto * buffer_ctx = static_cast<const ggml_backend_webgpu_buffer_context *>(buffer->context);
+-    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer) {
+-        return false;
+-    }
+-
+-    const auto * root = tensor->view_src ? tensor->view_src : tensor;
+-    uint64_t bytes, root_bytes;
+-    const auto base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
+-    const auto root_data = reinterpret_cast<uintptr_t>(root->data);
+-    if (root->view_src || root->view_offs || root->type != tensor->type || root->buffer != buffer ||
+-        root_data < base || tensor->view_offs > UINTPTR_MAX - root_data ||
+-        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs ||
+-        !packed_bytes(tensor, bytes)) {
+-        return false;
+-    }
+-    if (root != tensor && (!packed_bytes(root, root_bytes) || tensor->view_offs > root_bytes ||
+-        bytes > root_bytes - tensor->view_offs)) {
+-        return false;
+-    }
+-
+-    const uint64_t payload = root_data - base + tensor->view_offs;
+-    const uint64_t unit = ggml_type_size(tensor->type);
+-    const auto & limits = ctx->global_ctx->capabilities.limits;
+-    const uint64_t alignment = limits.minStorageBufferOffsetAlignment;
+-    if (alignment < 4 || (alignment & (alignment - 1)) || payload % 4 != 0) {
+-        return false;
+-    }
+-    // Match ordinary quantized matvec's block-aligned rebase, with a checked
+-    // underflow path for a tensor offset which cannot be expressed in blocks.
+-    uint64_t offset = payload & ~(alignment - 1);
+-    while ((payload - offset) % unit != 0) {
+-        if (offset < alignment) {
+-            return false;
+-        }
+-        offset -= alignment;
+-    }
+-    const uint64_t prefix = payload - offset;
+-    if (prefix > UINT32_MAX - bytes) {
+-        return false;
+-    }
+-    // F32 and Q4_K units are multiples of four bytes.
+-    const uint64_t size = prefix + bytes;
+-    if (size > limits.maxStorageBufferBindingSize || offset > buffer->size || size > buffer->size - offset) {
+-        return false;
+-    }
+-
+-    const auto handle = buffer_ctx->buffer.Get();
+-    auto found = std::find_if(facts.begin(), facts.end(), [handle](const buffer_facts & fact) {
+-        return !fact.handle || fact.handle == handle;
+-    });
+-    if (found == facts.end()) {
+-        return false;
+-    }
+-    if (!found->handle) {
+-        *found = {handle, buffer_ctx->buffer.GetSize(),
+-            (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) != wgpu::BufferUsage::None};
+-    }
+-    if (!found->storage || offset > found->size || size > found->size - offset) {
+-        return false;
+-    }
+-    result = {buffer_ctx->buffer, offset, size, uint32_t(prefix / unit)};
+-    return true;
+-}
+-
+-static bool bindings_overlap(const binding & first, const binding & second) {
+-    // The binding ranges include the payload. Reject overlap by physical
+-    // handle even when the ggml buffer wrappers are distinct.
+-    return first.buffer.Get() == second.buffer.Get() &&
+-        first.offset < second.offset + second.size && second.offset < first.offset + first.size;
+ }
+ 
+ struct dispatch_plan {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/q8_subgroup_matvec.wgsl
+@@ -26,13 +26,23 @@
+     bs02: u32,
+     bs03: u32,
+     broadcast2: u32,
++#ifdef Q8_SIGMOID_MUL
++    broadcast3: u32,
++    offset_value: u32
++#else
+     broadcast3: u32
++#endif
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>;
+ @group(0) @binding(1) var<storage, read_write> src1: array<SRC1_TYPE>;
+ @group(0) @binding(2) var<storage, read_write> dst: array<f32>;
++#if defined(Q8_SIGMOID_MUL) && !defined(Q8_SIGMOID_MUL_IN_PLACE)
++@group(0) @binding(3) var<storage, read_write> value: array<f32>;
++@group(0) @binding(4) var<uniform> params: MulMatParams;
++#else
+ @group(0) @binding(3) var<uniform> params: MulMatParams;
++#endif
+ 
+ @compute @workgroup_size(Q8_SUBGROUP_WORKGROUP_SIZE)
+ #ifdef REQUESTED_SUBGROUP_SIZE
+@@ -92,7 +102,16 @@
+     for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
+         let total = subgroupAdd(acc[0][row]);
+         if (owns_rows && subgroup_invocation_id == 0u && row_base + row < params.m) {
++#ifdef Q8_SIGMOID_MUL
++            let gate = 1.0 / (1.0 + exp(-total));
++#ifdef Q8_SIGMOID_MUL_IN_PLACE
++            dst[dst_idx_base + row] = dst[dst_idx_base + row] * gate;
++#else
++            dst[dst_idx_base + row] = value[params.offset_value + row_base + row] * gate;
++#endif
++#else
+             dst[dst_idx_base + row] = total;
++#endif
+         }
+     }
+ }
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-q8-sigmoid-mul.hpp
+@@ -0,0 +1,121 @@
++#pragma once
++
++#include "ggml-webgpu-checked-tensor-binding.hpp"
++
++namespace webgpu_q8_sigmoid_mul {
++
++using namespace webgpu_checked_tensor_binding;
++
++constexpr uint32_t workgroup = 128;
++constexpr uint32_t input_width = 2304;
++constexpr uint32_t output_width = 3072;
++constexpr int operations = 3;
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, ggml_cgraph & graph, int index,
++                                               webgpu_fusion_view_sources & views, int & consumed) {
++    const auto * mat = graph.nodes[index];
++    auto * weights = mat->src[0];
++    if (!weights || weights->type != GGML_TYPE_Q8_0 ||
++        weights->ne[0] != input_width || weights->ne[1] != output_width ||
++        graph.n_nodes - index < operations) {
++        return std::nullopt;
++    }
++    const auto * sigmoid = graph.nodes[index + 1];
++    auto * output = graph.nodes[index + 2];
++    auto * input = mat->src[1];
++    const auto * value = output->src[0];
++    if (sigmoid->op != GGML_OP_UNARY || ggml_get_unary_op(sigmoid) != GGML_UNARY_OP_SIGMOID ||
++        sigmoid->src[0] != mat || output->op != GGML_OP_MUL || output->src[1] != sigmoid ||
++        !shape(weights, GGML_TYPE_Q8_0, input_width, output_width) ||
++        !shape(input, GGML_TYPE_F32, input_width, 1) || !shape(value, GGML_TYPE_F32, output_width, 1) ||
++        !std::all_of(std::begin(mat->op_params), std::end(mat->op_params), [](int32_t word) { return word == 0; })) {
++        return std::nullopt;
++    }
++    const ggml_tensor * chain[] = {mat, sigmoid, output};
++    for (const auto * node : chain) {
++        if (node->view_src || node->view_offs || !shape(node, GGML_TYPE_F32, output_width, 1) ||
++            std::any_of(std::begin(node->src) + (node == sigmoid ? 1 : 2), std::end(node->src),
++                [](const ggml_tensor * source) { return source != nullptr; })) {
++            return std::nullopt;
++        }
++    }
++
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        ctx->param_arena.slot_size < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        limits.maxComputeWorkgroupSizeX < workgroup ||
++        limits.maxComputeWorkgroupsPerDimension < output_width / 16) {
++        return std::nullopt;
++    }
++    auto context = ggml_webgpu_mat_context(ctx, weights, input, output);
++    using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
++    if (!ggml_webgpu_matvec_post_supported(context, post_op::q8_sigmoid_mul, false)) {
++        return std::nullopt;
++    }
++
++    const int indices[] = {index, index + 1, index + 2};
++    const int outputs[] = {index + 2};
++    const ggml_op ops[] = {GGML_OP_MUL_MAT, GGML_OP_UNARY, GGML_OP_MUL};
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices, operations, ops, outputs, 1) ||
++        views.contains(mat) || views.contains(sigmoid)) {
++        return std::nullopt;
++    }
++
++    const ggml_tensor * live[] = {weights, input, output, value};
++    std::array<binding, 4> bindings;
++    std::array<buffer_facts, 6> facts{};
++    for (size_t i = 0; i < bindings.size(); ++i) {
++        const auto * root = live[i]->view_src ? live[i]->view_src : live[i];
++        if ((i != 2 && std::find(std::begin(chain), std::end(chain), root) != std::end(chain)) ||
++            !get_binding(ctx, live[i], facts, bindings[i])) {
++            return std::nullopt;
++        }
++    }
++    const auto & dst = bindings[2];
++    const auto & src = bindings[3];
++    const bool in_place = dst.buffer.Get() == src.buffer.Get() && dst.offset == src.offset &&
++        dst.size == src.size && dst.element_offset == src.element_offset;
++    for (size_t i = 1; i < bindings.size(); ++i) {
++        for (size_t j = 0; j < i; ++j) {
++            if (!(in_place && i == 3 && j == 2) && bindings_overlap(bindings[i], bindings[j])) {
++                return std::nullopt;
++            }
++        }
++    }
++    // The old kernels wrote both intermediates before reading the other MUL
++    // input. An externally aliased allocation could make those writes observable.
++    for (const auto * intermediate : {mat, sigmoid}) {
++        binding discarded;
++        if (!get_binding(ctx, intermediate, facts, discarded) || bindings_overlap(discarded, src)) {
++            return std::nullopt;
++        }
++    }
++    if (!in_place && (limits.maxStorageBuffersPerShaderStage < 4 || limits.maxBindingsPerBindGroup < 5)) {
++        return std::nullopt;
++    }
++
++    context.matvec_epilogue = in_place ? post_op::q8_sigmoid_mul_in_place : post_op::q8_sigmoid_mul;
++    auto pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(context, false, false);
++    if (!pipeline.context) {
++        return std::nullopt;
++    }
++    const auto & decisions = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
++    constexpr uint32_t weight_stride = input_width / 32;
++    const std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[1].element_offset, dst.element_offset, output_width, 1, input_width,
++        weight_stride, input_width, weight_stride * output_width, input_width, weight_stride * output_width, input_width,
++        1, 1, 1, 1, src.element_offset,
++    };
++    std::vector<wgpu::BindGroupEntry> entries;
++    const uint32_t storage_count = in_place ? 3 : 4;
++    entries.reserve(storage_count);
++    for (uint32_t i = 0; i < storage_count; ++i) {
++        const auto & binding = bindings[i];
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, binding.buffer, binding.offset, binding.size));
++    }
++    consumed = operations;
++    return ggml_backend_webgpu_build(ctx, pipeline, params, entries, CEIL_DIV(output_width, decisions.outputs_per_wg));
++}
++
++}  // namespace webgpu_q8_sigmoid_mul
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-checked-tensor-binding.hpp
+@@ -0,0 +1,122 @@
++#pragma once
++
++#include <array>
++
++namespace webgpu_checked_tensor_binding {
++
++static bool packed_bytes(const ggml_tensor * tensor, uint64_t & bytes) {
++    const uint64_t block = ggml_blck_size(tensor->type);
++    const uint64_t unit = ggml_type_size(tensor->type);
++    if (tensor->ne[0] <= 0 || uint64_t(tensor->ne[0]) % block != 0 ||
++        uint64_t(tensor->ne[0]) / block > UINT32_MAX / unit || tensor->nb[0] != unit) {
++        return false;
++    }
++    bytes = uint64_t(tensor->ne[0]) / block * unit;
++    for (int axis = 1; axis < GGML_MAX_DIMS; ++axis) {
++        if (tensor->ne[axis] <= 0 || uint64_t(tensor->ne[axis]) > UINT32_MAX / bytes ||
++            tensor->nb[axis] != bytes) {
++            return false;
++        }
++        bytes *= uint64_t(tensor->ne[axis]);
++    }
++    return true;
++}
++
++static bool shape(const ggml_tensor * tensor, ggml_type type, int64_t width, int64_t rows) {
++    uint64_t bytes;
++    return tensor && tensor->type == type && tensor->ne[0] == width && tensor->ne[1] == rows &&
++        tensor->ne[2] == 1 && tensor->ne[3] == 1 && packed_bytes(tensor, bytes);
++}
++
++struct binding {
++    wgpu::Buffer buffer;
++    uint64_t offset = 0;
++    uint64_t size = 0;
++    uint32_t element_offset = 0;
++};
++
++struct buffer_facts {
++    WGPUBuffer handle = nullptr;
++    uint64_t size = 0;
++    bool storage = false;
++};
++
++template<size_t N>
++static bool get_binding(webgpu_context & ctx, const ggml_tensor * tensor,
++                        std::array<buffer_facts, N> & facts, binding & result) {
++    const auto * buffer = tensor->buffer;
++    if (!buffer || !buffer->context || buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base ||
++        !tensor->data) {
++        return false;
++    }
++    const auto * buffer_ctx = static_cast<const ggml_backend_webgpu_buffer_context *>(buffer->context);
++    if (buffer_ctx->global_ctx != ctx->global_ctx || !buffer_ctx->buffer) {
++        return false;
++    }
++
++    const auto * root = tensor->view_src ? tensor->view_src : tensor;
++    uint64_t bytes, root_bytes;
++    const auto base = reinterpret_cast<uintptr_t>(webgpu_ptr_base);
++    const auto root_data = reinterpret_cast<uintptr_t>(root->data);
++    if (root->view_src || root->view_offs || root->type != tensor->type || root->buffer != buffer ||
++        root_data < base || tensor->view_offs > UINTPTR_MAX - root_data ||
++        reinterpret_cast<uintptr_t>(tensor->data) != root_data + tensor->view_offs ||
++        !packed_bytes(tensor, bytes)) {
++        return false;
++    }
++    if (root != tensor && (!packed_bytes(root, root_bytes) || tensor->view_offs > root_bytes ||
++        bytes > root_bytes - tensor->view_offs)) {
++        return false;
++    }
++
++    const uint64_t payload = root_data - base + tensor->view_offs;
++    const uint64_t unit = ggml_type_size(tensor->type);
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint64_t alignment = limits.minStorageBufferOffsetAlignment;
++    if (alignment < 4 || (alignment & (alignment - 1)) || payload % 4 != 0) {
++        return false;
++    }
++    // Match ordinary quantized matvec's block-aligned rebase, with a checked
++    // underflow path for a tensor offset which cannot be expressed in blocks.
++    uint64_t offset = payload & ~(alignment - 1);
++    while ((payload - offset) % unit != 0) {
++        if (offset < alignment) {
++            return false;
++        }
++        offset -= alignment;
++    }
++    const uint64_t prefix = payload - offset;
++    if (prefix > UINT32_MAX - bytes) {
++        return false;
++    }
++    const uint64_t size = prefix + bytes;
++    if (size % 4 || size > limits.maxStorageBufferBindingSize || offset > buffer->size || size > buffer->size - offset) {
++        return false;
++    }
++
++    const auto handle = buffer_ctx->buffer.Get();
++    auto found = std::find_if(facts.begin(), facts.end(), [handle](const buffer_facts & fact) {
++        return !fact.handle || fact.handle == handle;
++    });
++    if (found == facts.end()) {
++        return false;
++    }
++    if (!found->handle) {
++        *found = {handle, buffer_ctx->buffer.GetSize(),
++            (buffer_ctx->buffer.GetUsage() & wgpu::BufferUsage::Storage) != wgpu::BufferUsage::None};
++    }
++    if (!found->storage || offset > found->size || size > found->size - offset) {
++        return false;
++    }
++    result = {buffer_ctx->buffer, offset, size, uint32_t(prefix / unit)};
++    return true;
++}
++
++static bool bindings_overlap(const binding & first, const binding & second) {
++    // The binding ranges include the payload. Reject overlap by physical
++    // handle even when the ggml buffer wrappers are distinct.
++    return first.buffer.Get() == second.buffer.Get() &&
++        first.offset < second.offset + second.size && second.offset < first.offset + first.size;
++}
++
++}  // namespace webgpu_checked_tensor_binding

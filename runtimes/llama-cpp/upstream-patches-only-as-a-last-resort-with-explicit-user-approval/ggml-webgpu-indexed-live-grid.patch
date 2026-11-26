@@ -1,0 +1,533 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -348,6 +348,11 @@
+     wgpu::Adapter  adapter;
+     wgpu::Device   device;
+     std::shared_ptr<ggml_webgpu_optional::DeviceGeneration> optional_device;
++    enum class indexed_live_grid_phase { idle, issuing, pending, ready, rejected };
++    std::atomic<indexed_live_grid_phase> indexed_live_grid_state{indexed_live_grid_phase::idle};
++    std::mutex indexed_live_grid_mutex;
++    ggml_webgpu_optional::Attempt<wgpu::Buffer> indexed_live_grid_pending;
++    wgpu::Buffer indexed_live_grid_args;
+     std::atomic<ggml_webgpu_optional::InitializationPhase> device_initialization{ggml_webgpu_optional::InitializationPhase::empty};
+     wgpu::Queue    queue;
+     uint32_t       command_submit_batch_size = WEBGPU_DEFAULT_COMMAND_SUBMIT_BATCH_SIZE;
+@@ -419,6 +424,9 @@
+ struct webgpu_context_struct {
+     // Points to global instances owned by ggml_backend_webgpu_reg_context
+     webgpu_global_context global_ctx;
++    // Stable for all indexed nodes in one graph encode.
++    const wgpu::Buffer *     graph_indexed_live_grid_args = nullptr;
++    bool                     graph_may_issue_indexed_live_grid = false;
+ 
+     std::unique_ptr<ggml_webgpu_shader_lib> shader_lib;
+ 
+@@ -766,8 +774,27 @@
+     const std::vector<wgpu::BindGroupEntry> & bind_group_entries;
+     std::pair<uint32_t, uint32_t> workgroups;
+ };
+-template<class Dispatch>
+-static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches, size_t dispatch_count) {
++struct webgpu_dispatch_direct {
++    void operator()(wgpu::ComputePassEncoder & pass, const std::pair<uint32_t, uint32_t> & groups, size_t) const {
++        pass.DispatchWorkgroups(groups.first, groups.second, 1);
++    }
++};
++
++struct webgpu_dispatch_second_indirect {
++    const wgpu::Buffer & args;
++
++    void operator()(wgpu::ComputePassEncoder & pass, const std::pair<uint32_t, uint32_t> & groups, size_t index) const {
++        if (index == 1) {
++            pass.DispatchWorkgroupsIndirect(args, 0);
++            return;
++        }
++        webgpu_dispatch_direct{}(pass, groups, index);
++    }
++};
++
++template<class Dispatch, class Launch = webgpu_dispatch_direct>
++static webgpu_encoded_op ggml_backend_webgpu_build_impl(webgpu_context & ctx, const Dispatch * dispatches,
++                                                        size_t dispatch_count, const Launch & launch = {}) {
+     ctx->shader_lib->require_healthy_device();
+     webgpu_encoded_op            result = {};
+     std::vector<wgpu::BindGroup> bind_groups;
+@@ -824,7 +851,7 @@
+ 
+         pass.SetPipeline(dispatches[i].pipeline.pipeline);
+         pass.SetBindGroup(0, bind_groups[i]);
+-        pass.DispatchWorkgroups(dispatches[i].workgroups.first, dispatches[i].workgroups.second, 1);
++        launch(pass, dispatches[i].workgroups, i);
+         pass.End();
+         result.pipeline_names.push_back(dispatches[i].pipeline.name);
+     }
+@@ -833,13 +860,12 @@
+         if (ctx->batch_compute_passes) {
+             ctx->active_compute_pass.SetPipeline(dispatches[i].pipeline.pipeline);
+             ctx->active_compute_pass.SetBindGroup(0, bind_groups[i]);
+-            ctx->active_compute_pass.DispatchWorkgroups(dispatches[i].workgroups.first, dispatches[i].workgroups.second,
+-                                                        1);
++            launch(ctx->active_compute_pass, dispatches[i].workgroups, i);
+         } else {
+             wgpu::ComputePassEncoder pass = ctx->active_command_encoder.BeginComputePass();
+             pass.SetPipeline(dispatches[i].pipeline.pipeline);
+             pass.SetBindGroup(0, bind_groups[i]);
+-            pass.DispatchWorkgroups(dispatches[i].workgroups.first, dispatches[i].workgroups.second, 1);
++            launch(pass, dispatches[i].workgroups, i);
+             pass.End();
+         }
+     }
+@@ -2297,6 +2323,139 @@
+     return (1 + 3 * (size_t) ggml_webgpu_mul_mat_id_max_tiles(dst)) * sizeof(uint32_t);
+ }
+ 
++static constexpr uint64_t WEBGPU_INDEXED_LIVE_GRID_ARGS_BYTES = 3 * sizeof(uint32_t);
++
++static bool ggml_webgpu_indexed_live_grid_binding_fits(const wgpu::Limits & limits) {
++    return limits.maxStorageBuffersPerShaderStage >= 5 && limits.maxBindingsPerBindGroup >= 6 &&
++           limits.maxBufferSize >= WEBGPU_INDEXED_LIVE_GRID_ARGS_BYTES &&
++           limits.maxStorageBufferBindingSize >= WEBGPU_INDEXED_LIVE_GRID_ARGS_BYTES;
++}
++
++static void ggml_webgpu_issue_indexed_live_grid_args(webgpu_global_context_struct & global) {
++    using phase = webgpu_global_context_struct::indexed_live_grid_phase;
++    auto expected = phase::idle;
++    if (!global.indexed_live_grid_state.compare_exchange_strong(expected, phase::issuing, std::memory_order_acq_rel)) {
++        return;
++    }
++    const auto & limits = global.capabilities.limits;
++    // Even the smallest reviewed matrix uses 64 threads and at least this many
++    // direct workgroups. Devices below these bounds use the canonical grid.
++    if (!ggml_webgpu_indexed_live_grid_binding_fits(limits) ||
++        limits.maxComputeInvocationsPerWorkgroup < 64 || limits.maxComputeWorkgroupSizeX < 64 ||
++        limits.maxComputeWorkgroupsPerDimension < 1716) {
++        global.indexed_live_grid_state.store(phase::rejected, std::memory_order_release);
++        return;
++    }
++
++    // Use the provider's scoped, terminal-aware creation protocol. In
++    // particular, a non-null buffer can still be a validation/OOM error object.
++    // The first exact-shape caller issues the three scopes synchronously.
++    // Each spawned callback holds only its independent CPU status record.
++    struct ops {
++        using Pipeline = wgpu::Buffer;
++        wgpu::Device & device;
++        wgpu::Instance & instance;
++
++        uint64_t now_ns() const noexcept {
++            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                std::chrono::steady_clock::now().time_since_epoch()).count());
++        }
++        void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
++        Pipeline create() {
++            Pipeline buffer;
++            ggml_webgpu_create_buffer(device, buffer, WEBGPU_INDEXED_LIVE_GRID_ARGS_BYTES,
++                                      wgpu::BufferUsage::Storage | wgpu::BufferUsage::Indirect,
++                                      "mul_mat_id indirect dispatch");
++            return buffer;
++        }
++        wgpu::Future pop(wgpu::CallbackMode mode,
++                        void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView,
++                                         ggml_webgpu_optional::Ticket *) noexcept,
++                        ggml_webgpu_optional::Ticket * ticket) {
++            return device.PopErrorScope(mode, callback, ticket);
++        }
++        wgpu::WaitStatus wait(wgpu::Future future, uint64_t timeout) { return instance.WaitAny(future, timeout); }
++        bool valid(const Pipeline & buffer) { return static_cast<bool>(buffer); }
++    } api{global.device, global.instance};
++    auto attempt = ggml_webgpu_optional::create_optional(api, global.optional_device->control, 0, true);
++    if (attempt.outcome != ggml_webgpu_optional::Outcome::pending) {
++        GGML_ABORT("ggml_webgpu: indexed indirect buffer scope issue failed (reason %d)", int(attempt.fatal));
++    }
++    global.indexed_live_grid_pending = std::move(attempt);
++    global.indexed_live_grid_state.store(phase::pending, std::memory_order_release);
++}
++
++static const wgpu::Buffer * ggml_webgpu_snapshot_indexed_live_grid_args(webgpu_global_context_struct & global,
++                                                                       bool & may_issue) {
++    using phase = webgpu_global_context_struct::indexed_live_grid_phase;
++    const auto state = global.indexed_live_grid_state.load(std::memory_order_acquire);
++    may_issue = state == phase::idle;
++    if (state != phase::pending) {
++        return state == phase::ready ? &global.indexed_live_grid_args : nullptr;
++    }
++
++    const std::unique_lock<std::mutex> lock(global.indexed_live_grid_mutex, std::try_to_lock);
++    if (!lock.owns_lock()) {
++        return nullptr;
++    }
++    const auto current = global.indexed_live_grid_state.load(std::memory_order_relaxed);
++    if (current != phase::pending) {
++        return current == phase::ready ? &global.indexed_live_grid_args : nullptr;
++    }
++    auto & pending = global.indexed_live_grid_pending;
++    if (std::any_of(pending.scopes.begin(), pending.scopes.end(), [](const auto & scope) {
++            return !scope->done.load(std::memory_order_acquire);
++        })) {
++        return nullptr;
++    }
++    ggml_webgpu_optional::finish_optional(pending, global.optional_device->control,
++                                         [](const wgpu::Buffer & buffer) { return static_cast<bool>(buffer); });
++    if (pending.outcome == ggml_webgpu_optional::Outcome::terminal) {
++        GGML_ABORT("ggml_webgpu: indexed indirect buffer scope completion failed (reason %d)", int(pending.fatal));
++    }
++    const bool ready = pending.outcome == ggml_webgpu_optional::Outcome::ready;
++    if (ready) {
++        global.indexed_live_grid_args = std::move(pending.pipeline);
++    }
++    pending = {};
++    global.indexed_live_grid_state.store(ready ? phase::ready : phase::rejected, std::memory_order_release);
++    return ready ? &global.indexed_live_grid_args : nullptr;
++}
++
++static bool ggml_webgpu_use_indexed_live_grid(webgpu_context & ctx,
++                                             const ggml_webgpu_shader_lib_context & shader,
++                                             const ggml_webgpu_mul_mat_shader_decisions & main,
++                                             uint32_t row_groups) {
++    const ggml_tensor * weights = shader.src0;
++    const ggml_tensor * input = shader.src1;
++    const ggml_tensor * ids = shader.src2;
++    const ggml_tensor * dst = shader.dst;
++    if (!shader.indexed_src0_aligned ||
++        input->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
++        dst->ne[2] != 128 || input->ne[2] != 128 || ids->ne[1] != 128 ||
++        weights->ne[3] != 1 || input->ne[3] != 1 || ids->ne[2] != 1 || ids->ne[3] != 1 || dst->ne[3] != 1) {
++        return false;
++    }
++
++    const uint32_t row_tile = main.tile_m * main.wg_size_m;
++    const bool q2 = weights->type == GGML_TYPE_Q2_0 && shader.indexed_split_weights &&
++                    weights->ne[0] == 640 && weights->ne[1] == 2560 && weights->ne[2] == 512 &&
++                    input->ne[1] == 10 && dst->ne[1] == 10 && ids->ne[0] == 10 &&
++                    row_tile == 32 && main.tile_k == 32;
++    const bool q4 = weights->type == GGML_TYPE_Q4_0 && !shader.indexed_split_weights &&
++                    weights->ne[0] == 2816 && weights->ne[1] == 1408 &&
++                    (weights->ne[2] == 48 || weights->ne[2] == 128) &&
++                    input->ne[1] == 1 && dst->ne[1] == 8 && ids->ne[0] == 8 &&
++                    row_tile == 64 && main.tile_k == 64;
++    if (!q2 && !q4) {
++        return false;
++    }
++
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint64_t upper_groups = uint64_t(row_groups) * ggml_webgpu_mul_mat_id_max_tiles(dst);
++    return upper_groups <= limits.maxComputeWorkgroupsPerDimension;
++}
++
+ static webgpu_encoded_op ggml_webgpu_mul_mat_id(webgpu_context & ctx,
+                                                 ggml_tensor *    src0,
+                                                 ggml_tensor *    src1,
+@@ -2336,8 +2495,27 @@
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
+     const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0) &&
+                               ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1) && offset_dst % 4 == 0;
+-    gather_pipeline = ctx->shader_lib->get_mul_mat_id_gather_pipeline(shader_lib_ctx);
+-    main_pipeline   = ctx->shader_lib->get_mul_mat_id_pipeline(shader_lib_ctx, vec4_aligned);
++    const auto * indirect_args = ctx->graph_indexed_live_grid_args;
++    if (!indirect_args) {
++        gather_pipeline = ctx->shader_lib->get_mul_mat_id_gather_pipeline(shader_lib_ctx);
++    }
++    main_pipeline = ctx->shader_lib->get_mul_mat_id_pipeline(shader_lib_ctx, vec4_aligned);
++
++    const auto & main_decisions = *static_cast<const ggml_webgpu_mul_mat_shader_decisions *>(main_pipeline.context.get());
++    // This is the slot width of the descriptors produced by both gather variants.
++    GGML_ASSERT(main_decisions.tile_n * main_decisions.wg_size_n == WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N);
++    const uint32_t tile_m_s = main_decisions.tile_m * main_decisions.wg_size_m;
++    const uint32_t wg_m     = CEIL_DIV(dst->ne[0], tile_m_s);
++    const bool eligible = (indirect_args || ctx->graph_may_issue_indexed_live_grid) &&
++                          ggml_webgpu_use_indexed_live_grid(ctx, shader_lib_ctx, main_decisions, wg_m);
++    if (eligible && ctx->graph_may_issue_indexed_live_grid) {
++        ctx->graph_may_issue_indexed_live_grid = false;
++        ggml_webgpu_issue_indexed_live_grid_args(*ctx->global_ctx);
++    }
++    const bool live_grid = eligible && indirect_args;
++    if (indirect_args) {
++        gather_pipeline = ctx->shader_lib->get_mul_mat_id_gather_pipeline(shader_lib_ctx, live_grid);
++    }
+ 
+     const uint32_t param_n_expert      = (uint32_t) src0->ne[2];
+     const uint32_t param_n_expert_used = (uint32_t) dst->ne[1];
+@@ -2354,6 +2532,10 @@
+         (uint32_t) dst->ne[0],
+     };
+ 
++    if (live_grid) {
++        gather_params.push_back(wg_m);
++    }
++
+     const size_t dst_offset       = ggml_webgpu_tensor_offset(dst);
+     const size_t ids_cache_nbytes = src2->ne[0] * src1->ne[2] * sizeof(uint32_t);
+     const size_t ids_tiles_nbytes = ggml_webgpu_mul_mat_id_tiles_nbytes(dst);
+@@ -2376,6 +2558,11 @@
+         ggml_webgpu_make_bind_group_entry(3, ggml_webgpu_tensor_buf(dst), ggml_webgpu_tensor_align_offset(ctx, dst),
+                                           ggml_webgpu_tensor_binding_size(ctx, dst)),
+     };
++
++    if (live_grid) {
++        gather_entries.push_back(ggml_webgpu_make_bind_group_entry(4, *indirect_args, 0,
++                                                                   WEBGPU_INDEXED_LIVE_GRID_ARGS_BYTES));
++    }
+ 
+     dispatches.push_back({
+         gather_pipeline, std::move(gather_params), std::move(gather_entries), { 1, 1 }
+@@ -2417,21 +2604,21 @@
+     uint32_t wg_x = 1;
+     uint32_t wg_y = 1;
+ 
+-    auto * main_decisions = static_cast<ggml_webgpu_mul_mat_shader_decisions *>(main_pipeline.context.get());
+-
+-    // must match `TILE_N_SLOTS` of mul_mat_id_gather.wgsl
+-    GGML_ASSERT(main_decisions->tile_n * main_decisions->wg_size_n == WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N);
+-
+-    const uint32_t tile_m_s = main_decisions->tile_m * main_decisions->wg_size_m;
+-    const uint32_t wg_m     = CEIL_DIV(dst->ne[0], tile_m_s);
+-    const uint32_t total_wg = wg_m * ggml_webgpu_mul_mat_id_max_tiles(dst);
+-
+-    compute_2d_workgroups(total_wg, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, wg_x, wg_y);
++    if (!live_grid) {
++        const uint32_t total_wg = wg_m * ggml_webgpu_mul_mat_id_max_tiles(dst);
++        compute_2d_workgroups(total_wg, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, wg_x, wg_y);
++    }
+ 
+     dispatches.push_back({
+         main_pipeline, std::move(main_params), std::move(main_entries), { wg_x, wg_y }
+     });
+ 
++    if (live_grid) {
++        // Each batch contains complete gather/consumer pairs. All backends
++        // for this logical device submit to the same ordered queue.
++        return ggml_backend_webgpu_build_impl(ctx, dispatches.data(), dispatches.size(),
++                                               webgpu_dispatch_second_indirect{*indirect_args});
++    }
+     return ggml_backend_webgpu_build_multi(ctx, dispatches);
+ }
+ 
+@@ -5105,6 +5292,8 @@
+     ggml_backend_webgpu_context * backend_ctx = (ggml_backend_webgpu_context *) backend->context;
+     webgpu_context                ctx         = backend_ctx->webgpu_ctx;
+ 
++    ctx->graph_indexed_live_grid_args = ggml_webgpu_snapshot_indexed_live_grid_args(
++        *ctx->global_ctx, ctx->graph_may_issue_indexed_live_grid);
+     WEBGPU_CPU_PROFILE_TOTAL_START(graph_compute);
+     ctx->bind_group_cache.begin_graph(ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed));
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1632,9 +1632,10 @@
+ 
+ struct ggml_webgpu_mul_mat_id_gather_pipeline_key {
+     uint32_t n_experts;
++    bool     live_grid;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_gather_pipeline_key & other) const {
+-        return n_experts == other.n_experts;
++        return n_experts == other.n_experts && live_grid == other.live_grid;
+     }
+ };
+ 
+@@ -1642,6 +1643,7 @@
+     size_t operator()(const ggml_webgpu_mul_mat_id_gather_pipeline_key & key) const {
+         size_t seed = 0;
+         ggml_webgpu_hash_combine(seed, key.n_experts);
++        ggml_webgpu_hash_combine(seed, key.live_grid);
+         return seed;
+     }
+ };
+@@ -3419,9 +3421,10 @@
+         return mul_mat_fast_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_mul_mat_id_gather_pipeline(const ggml_webgpu_shader_lib_context & context) {
++    webgpu_pipeline get_mul_mat_id_gather_pipeline(const ggml_webgpu_shader_lib_context & context, bool live_grid = false) {
+         ggml_webgpu_mul_mat_id_gather_pipeline_key key = {};
+-        key.n_experts                                  = (uint32_t) context.src0->ne[2];
++        key.n_experts = (uint32_t) context.src0->ne[2];
++        key.live_grid = live_grid;
+ 
+         auto it = mul_mat_id_gather_pipelines.find(key);
+         if (it != mul_mat_id_gather_pipelines.end()) {
+@@ -3433,11 +3436,16 @@
+         defines.push_back(std::string("TILE_N_SLOTS=") +
+                           std::to_string(WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N) + "u");
+ 
++        if (key.live_grid) {
++            defines.push_back("BICORE_INDEXED_LIVE_GRID");
++        }
++
+         auto processed     = preprocessor.preprocess(wgsl_mul_mat_id_gather_logical32, defines);
+         auto decisions     = std::make_shared<ggml_webgpu_generic_shader_decisions>();
+         decisions->wg_size = context.max_wg_size;
+ 
+-        webgpu_pipeline pipeline         = ggml_webgpu_create_pipeline(device, processed, "mul_mat_id_gather");
++        webgpu_pipeline pipeline         = ggml_webgpu_create_pipeline(
++            device, processed, key.live_grid ? "mul_mat_id_gather_live_grid" : "mul_mat_id_gather");
+         pipeline.context                 = decisions;
+         mul_mat_id_gather_pipelines[key] = pipeline;
+         return pipeline;
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_gather_logical32.wgsl
+@@ -11,6 +11,9 @@
+     stride_ids_1: u32,
+ 
+     m: u32,
++#ifdef BICORE_INDEXED_LIVE_GRID
++    rows_per_tile: u32,
++#endif
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> ids: array<i32>;        // [n_expert_used, n_tokens]
+@@ -19,7 +22,12 @@
+ 
+ @group(0) @binding(3) var<storage, read_write> dst: array<f32>; // [m, n_expert_used, n_tokens]
+ 
++#ifdef BICORE_INDEXED_LIVE_GRID
++@group(0) @binding(4) var<storage, read_write> dispatch_args: array<u32, 3>;
++@group(0) @binding(5) var<uniform> params: MulMatIdGatherParams;
++#else
+ @group(0) @binding(4) var<uniform> params: MulMatIdGatherParams;
++#endif
+ 
+ // per expert: the slot count, replaced by the first slot of the expert in ids_slot_pos by the prefix sum, then advanced as its write cursor
+ var<workgroup> ids_count: array<atomic<u32>, N_EXPERT>;
+@@ -70,6 +78,11 @@
+         }
+ 
+         ids_tiles[0] = tile;
++#ifdef BICORE_INDEXED_LIVE_GRID
++        dispatch_args[0] = params.rows_per_tile * tile;
++        dispatch_args[1] = 1u;
++        dispatch_args[2] = 1u;
++#endif
+     }
+ 
+     workgroupBarrier();
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
+@@ -14,7 +14,7 @@
+ 
+ namespace ggml_webgpu_optional {
+ 
+-enum class Outcome { ready, rejected, terminal };
++enum class Outcome { ready, rejected, terminal, pending };
+ enum class Fatal {
+     none,
+     device_lost,
+@@ -94,12 +94,51 @@
+     std::size_t indeterminate_tickets = 0;
+ };
+ 
++// Called only after all three independent callback records are ready.
++template<class Pipeline, class Valid>
++void finish_optional(Attempt<Pipeline> & result, DeviceState & device, Valid valid) {
++    const auto terminal = [&](Fatal reason) {
++        device.terminal.store(true, std::memory_order_release);
++        result.outcome = Outcome::terminal;
++        result.fatal = reason;
++    };
++    if (!device.healthy() || result.fatal != Fatal::none) {
++        terminal(device.lost.load(std::memory_order_acquire) ? Fatal::device_lost : Fatal::device_terminal);
++        return;
++    }
++    bool rejected = false;
++    for (const auto& scope : result.scopes) {
++        // done acquire above precedes every non-atomic field read.
++        if (scope->status != wgpu::PopErrorScopeStatus::Success) {
++            terminal(Fatal::callback_failed);
++            return;
++        }
++        switch (scope->error) {
++            case wgpu::ErrorType::NoError: break;
++            case wgpu::ErrorType::Validation:
++            case wgpu::ErrorType::Internal:
++            case wgpu::ErrorType::OutOfMemory: rejected = true; break;
++            default:
++                terminal(Fatal::unknown_gpu_error);
++                return;
++        }
++    }
++    if (rejected) {
++        result.outcome = Outcome::rejected;
++    } else if (!valid(result.pipeline)) {
++        terminal(Fatal::null_pipeline);
++    } else {
++        result.outcome = Outcome::ready;
++    }
++}
++
+ // Ops performs synchronous push/create/pop with no JSPI yield. Wait is outside
+ // that interval. Native callers must preserve one thread for the whole interval;
+ // browser callers must use their existing synchronous factory call boundary.
+ template<class Ops>
+ Attempt<typename Ops::Pipeline> create_optional(Ops& ops, DeviceState& device,
+-                                                std::uint64_t timeout_ns) {
++                                                std::uint64_t timeout_ns,
++                                                bool defer = false) {
+     using Result = Attempt<typename Ops::Pipeline>;
+     Result result;
+     const auto started_ns = ops.now_ns();
+@@ -153,7 +192,8 @@
+             for (std::size_t i = 0; i < futures.size(); ++i) {
+                 Ticket* ticket = tickets[i].release();
+                 try {
+-                    futures[i] = ops.pop(wgpu::CallbackMode::WaitAnyOnly, &scope_complete, ticket);
++                    const auto mode = defer ? wgpu::CallbackMode::AllowSpontaneous : wgpu::CallbackMode::WaitAnyOnly;
++                    futures[i] = ops.pop(mode, &scope_complete, ticket);
+                     if (futures[i].id == 0) {
+                         ++result.indeterminate_tickets;
+                         // Its scope/event state is unknown. Publish terminal
+@@ -182,6 +222,15 @@
+         return result;
+     }
+ 
++    if (defer) {
++        if (result.fatal != Fatal::none) {
++            terminal(unusable_reason());
++        } else {
++            result.outcome = Outcome::pending;
++        }
++        return result;
++    }
++
+     // WaitAny Success need only complete one future. Each count-1 wait and each
+     // callback's done bit are checked independently; array Success is not enough.
+     try {
+@@ -209,34 +258,7 @@
+         terminal(Fatal::host_exception);
+         return result;
+     }
+-    if (!device.healthy() || result.fatal != Fatal::none) {
+-        terminal(unusable_reason());
+-        return result;
+-    }
+-    bool rejected = false;
+-    for (const auto& scope : result.scopes) {
+-        // done acquire above precedes every non-atomic field read.
+-        if (scope->status != wgpu::PopErrorScopeStatus::Success) {
+-            terminal(Fatal::callback_failed);
+-            return result;
+-        }
+-        switch (scope->error) {
+-            case wgpu::ErrorType::NoError: break;
+-            case wgpu::ErrorType::Validation:
+-            case wgpu::ErrorType::Internal:
+-            case wgpu::ErrorType::OutOfMemory: rejected = true; break;
+-            default:
+-                terminal(Fatal::unknown_gpu_error);
+-                return result;
+-        }
+-    }
+-    if (rejected) {
+-        result.outcome = Outcome::rejected;
+-    } else if (!ops.valid(result.pipeline)) {
+-        terminal(Fatal::null_pipeline);
+-    } else {
+-        result.outcome = Outcome::ready;
+-    }
++    finish_optional(result, device, [&](const auto & value) { return ops.valid(value); });
+     return result;
+ }
+ 

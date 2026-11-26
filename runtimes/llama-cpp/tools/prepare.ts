@@ -16,6 +16,7 @@ const shaderBase = `${webgpuBase}/wgsl-shaders`;
 const derivedShaders = {
   'ssm_conv_silu.wgsl': 'ssm_conv.wgsl',
   'mul_mat_id_group.wgsl': 'mul_mat_id.wgsl',
+  'mul_mat_id_group_decls.tmpl': 'mul_mat_decls.tmpl',
   'mul_mat_id_gather_logical32.wgsl': 'mul_mat_id_gather.wgsl',
   'mul_mat_reg_tile_half_pairs.wgsl': 'mul_mat_reg_tile.wgsl',
   'mul_mat_half_pairs_decls.tmpl': 'mul_mat_decls.tmpl',
@@ -66,16 +67,24 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
   const edited = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(patched, shaderBase, name)]));
   const upstream = ({ names }: { names: readonly string[] }): Record<string, string> => Object.fromEntries(names.map(name => [name, join(original, shaderBase, name)]));
   return {
+    'ggml-webgpu-indexed-vec-mask-shaders.hpp': edited({ names: ['indexed_vec_mask.wgsl', 'indexed_vec_mask_block.wgsl'] }),
+    'ggml-webgpu-add-cast-f16-shaders.hpp': edited({ names: ['add_cast_f16.wgsl'] }),
     'ggml-webgpu-hc-shaders.hpp': edited({ names: ['hc_pre.wgsl', 'hc_post.wgsl'] }),
     'ggml-webgpu-moe-sum-shaders.hpp': edited({ names: ['moe_expert_sum.wgsl'] }),
     'ggml-webgpu-scale-unary-shaders.hpp': edited({ names: ['scale_unary.wgsl'] }),
     'ggml-webgpu-rms-scale-shaders.hpp': { 'rms_norm_scale.wgsl': join(patched, shaderBase, 'row_norm.wgsl') },
     'ggml-webgpu-ssm-conv-silu-shaders.hpp': edited({ names: ['ssm_conv_silu.wgsl'] }),
+    'ggml-webgpu-short-conv-residual-shaders.hpp': edited({ names: ['short_conv_residual.wgsl', 'short_conv_concat_state.wgsl'] }),
+    'ggml-webgpu-depth-mix-shaders.hpp': edited({ names: ['depth_normalize.wgsl', 'depth_scores.wgsl', 'depth_blend.wgsl'] }),
+    'ggml-webgpu-l2-clip-shaders.hpp': edited({ names: ['l2_clip.wgsl'] }),
     'ggml-webgpu-router-tail-shaders.hpp': edited({ names: ['router_tail.wgsl', 'router_tail_merged.wgsl'] }),
+    'ggml-webgpu-situ-shaders.hpp': edited({ names: ['situ_packed.wgsl'] }),
+    'ggml-webgpu-loop-controller-shaders.hpp': edited({ names: ['loop_controller.wgsl'] }),
+    'ggml-webgpu-dense-q4-swiglu-shaders.hpp': edited({ names: ['dense_q4_swiglu.wgsl'] }),
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),
-    'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...accumulator, ...edited({ names: ['q8_subgroup_matvec.wgsl'] }) },
+    'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_vec_acc.tmpl', 'q8_subgroup_matvec.wgsl'] }) },
     'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': { ...common, ...edited({ names: ['iq3s_id_subgroup.wgsl'] }), 'mul_mat_vec_acc.tmpl': join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') },
-    'ggml-webgpu-mul-mat-id-group-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_id_group.wgsl'] }), ...upstream({ names: ['mul_mat_decls.tmpl', 'quant_inner_loops.tmpl'] }) },
+    'ggml-webgpu-mul-mat-id-group-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_id_group.wgsl', 'mul_mat_id_group_decls.tmpl'] }), ...upstream({ names: ['quant_inner_loops.tmpl'] }) },
     'ggml-webgpu-f32-matvec-epilogue-shaders.hpp': { ...common, ...accumulator, ...upstream({ names: ['mul_mat_vec_q_acc.tmpl'] }), ...edited({ names: ['mul_mat_vec_f32_epilogue.wgsl'] }) },
     'ggml-webgpu-quant-half-pairs-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_reg_tile_half_pairs.wgsl', 'mul_mat_half_pairs_decls.tmpl', 'quant_half_pairs_inner_loops.tmpl'] }) },
   };
@@ -95,12 +104,17 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   }
   const iq3s = join(scratch, 'iq3s');
   const words = join(scratch, 'word-template');
-  await copyInput({ source: join(original, shaderBase, 'mul_mat_vec_acc.tmpl'), destination: join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') });
   await copyInput({ source: join(original, shaderBase, 'common_decls.tmpl'), destination: join(words, shaderBase, 'common_decls.tmpl') });
   const patches: PatchReceipt[] = [];
-  for (const patch of webgpuPatches({ mode })) {
-    const sourceRoot = patch.target === 'iq3s' ? iq3s : patch.target === 'word-template' ? words : source;
+  const recipe = webgpuPatches({ mode });
+  for (const patch of recipe.filter(entry => entry.target !== 'iq3s')) {
+    const sourceRoot = patch.target === 'word-template' ? words : source;
     patches.push(await applyPatch({ sourceRoot, patchRoot, patch }));
+  }
+  // Apply indexed-only accumulator changes on top of the shared matvec source.
+  await copyInput({ source: join(source, shaderBase, 'mul_mat_vec_acc.tmpl'), destination: join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') });
+  for (const patch of recipe.filter(entry => entry.target === 'iq3s')) {
+    patches.push(await applyPatch({ sourceRoot: iq3s, patchRoot, patch }));
   }
   const headers = shaderInputs({ original, patched: source, iq3s, words });
   const canonical: Record<string, string> = {};
@@ -110,12 +124,22 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
     }
   }
   canonical['common_decls.tmpl'] = join(words, shaderBase, 'common_decls.tmpl');
+  canonical['flash_attn_decls.tmpl'] = join(source, shaderBase, 'flash_attn_decls.tmpl');
+  canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
+  canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
+  canonical['mul_mat_vec.wgsl'] = join(source, shaderBase, 'mul_mat_vec.wgsl');
+  canonical['mul_mat_reg_tile.wgsl'] = join(source, shaderBase, 'mul_mat_reg_tile.wgsl');
+  canonical['mul_mat_decls.tmpl'] = join(source, shaderBase, 'mul_mat_decls.tmpl');
+  canonical['mul_mat_vec_acc.tmpl'] = join(source, shaderBase, 'mul_mat_vec_acc.tmpl');
+  canonical['mul_mat_fwht_1024.wgsl'] = join(source, shaderBase, 'mul_mat_fwht_1024.wgsl');
+  canonical['argsort.wgsl'] = join(source, shaderBase, 'argsort.wgsl');
+  canonical['row_norm.wgsl'] = join(source, shaderBase, 'row_norm.wgsl');
   headers['ggml-webgpu-aligned-word-load-shaders.hpp'] = canonical;
   const shaders: Record<string, Record<string, FileIdentity>> = {};
   const generator = join(original, shaderBase, 'embed_wgsl.py');
   // Each dedicated header is emitted once by the unmodified upstream generator.
-  // The canonical family takes upstream shaders and the accepted word template;
-  // e.g. the dedicated RMS shader must not replace upstream row_norm here.
+  // The canonical header combines the explicit patched inputs above with the remaining upstream shaders.
+  // Dedicated variants such as the fused RMS shader keep their separate headers.
   for (const [header, files] of Object.entries(headers)) {
     const shaderRoot = join(scratch, 'shaders', header.slice(0, -4));
     for (const [name, path] of Object.entries(files)) {
@@ -200,6 +224,9 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
         await cp(join(root, shaderBase), join(canonicalRoot, shaderBase), { recursive: true });
         const result = await prepareWebgpu({ source: root, original: canonicalRoot, scratch: scratch.root, patchRoot, runtime: owned, mode: gpuProfile ? 'profile' : 'normal', python });
         patches.push(...result.patches);
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingRowViews }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.indexedHalfCpu }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingIndexedHalfFlash }));
         shaders = result.shaders;
         switch (target) {
         case 'native': {

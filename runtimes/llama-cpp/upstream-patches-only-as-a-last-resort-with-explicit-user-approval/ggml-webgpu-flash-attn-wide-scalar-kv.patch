@@ -1,0 +1,79 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1068,10 +1068,11 @@
+     ggml_webgpu_flash_attn_common_pipeline_key common;
+     bool                                       use_sg_matrix;
+     bool                                       skip_masked_tiles;
++    uint32_t                                   kv_tile;
+ 
+     bool operator==(const ggml_webgpu_flash_attn_pipeline_key & other) const {
+         return common == other.common && use_sg_matrix == other.use_sg_matrix &&
+-               skip_masked_tiles == other.skip_masked_tiles;
++               skip_masked_tiles == other.skip_masked_tiles && kv_tile == other.kv_tile;
+     }
+ };
+ 
+@@ -1081,6 +1082,7 @@
+         ggml_webgpu_flash_attn_hash_common_pipeline_key(seed, key.common);
+         ggml_webgpu_hash_combine(seed, key.use_sg_matrix);
+         ggml_webgpu_hash_combine(seed, key.skip_masked_tiles);
++        ggml_webgpu_hash_combine(seed, key.kv_tile);
+         return seed;
+     }
+ };
+@@ -1131,6 +1133,35 @@
+            context.wg_mem_limit_bytes;
+ }
+ 
++inline uint32_t ggml_webgpu_flash_attn_wider_scalar_kv_tile(
++        const ggml_webgpu_shader_lib_context & context,
++        const ggml_webgpu_flash_attn_decisions & decisions,
++        const ggml_webgpu_flash_attn_pipeline_key & key) {
++    if (decisions.use_sg_matrix || key.common.kv_overlap || key.common.q_type != GGML_TYPE_F32 ||
++        key.common.k_type != GGML_TYPE_F16 || key.common.v_type != GGML_TYPE_F16 ||
++        key.common.head_dim_qk != key.common.head_dim_v ||
++        (key.common.head_dim_qk != 128 && key.common.head_dim_qk != 256 && key.common.head_dim_qk != 512) ||
++        context.src0->ne[1] < 32 || context.src1->ne[1] < 768 || context.wg_mem_limit_bytes < 32768) {
++        return decisions.kv_tile;
++    }
++    const auto shared_bytes = [&](uint32_t kv_tile) {
++        return ggml_webgpu_flash_attn_scalar_tile_shared_bytes(
++            decisions.q_tile, kv_tile, key.common.head_dim_qk, key.common.head_dim_v, key.skip_masked_tiles);
++    };
++    const size_t fixed = shared_bytes(0);
++    if (context.wg_mem_limit_bytes <= fixed) {
++        return decisions.kv_tile;
++    }
++    // Bound the search with unrounded per-row storage, then validate the complete variables.
++    const size_t bytes_per_row = (size_t(key.common.head_dim_qk) + decisions.q_tile) * sizeof(uint16_t);
++    const size_t available_rows = (context.wg_mem_limit_bytes - fixed) / bytes_per_row;
++    auto kv_tile = uint32_t(std::min<size_t>(GGML_WEBGPU_FLASH_ATTN_TILE_MAX_KV_TILE, available_rows));
++    while (kv_tile > decisions.kv_tile && shared_bytes(kv_tile) > context.wg_mem_limit_bytes) {
++        --kv_tile;
++    }
++    return std::max(decisions.kv_tile, kv_tile);
++}
++
+ inline size_t ggml_webgpu_flash_attn_tensor_offset(const ggml_tensor * tensor) {
+     constexpr uintptr_t ptr_base_addr = 0x1000u;
+     const ggml_tensor * base          = tensor->view_src != nullptr ? tensor->view_src : tensor;
+@@ -3948,6 +3979,9 @@
+         }
+ 
+         key.skip_masked_tiles = ggml_webgpu_flash_attn_skip_masked_tiles(context, decisions, key.common);
++        const auto original_kv_tile = decisions.kv_tile;
++        decisions.kv_tile = ggml_webgpu_flash_attn_wider_scalar_kv_tile(context, decisions, key);
++        key.kv_tile = decisions.kv_tile;
+         auto it = flash_attn_pipelines.find(key);
+         if (it != flash_attn_pipelines.end()) {
+             return it->second;
+@@ -3967,6 +4001,9 @@
+                 defines.push_back("SKIP_MASKED_TILES");
+                 variant += "_maskskip";
+             }
++            if (decisions.kv_tile != original_kv_tile) {
++                variant += "_kv" + std::to_string(decisions.kv_tile);
++            }
+         } else {
+             shader_src = wgsl_flash_attn;
+             defines.push_back(std::string("SG_MAT_M=") + std::to_string(context.sg_mat_m));
