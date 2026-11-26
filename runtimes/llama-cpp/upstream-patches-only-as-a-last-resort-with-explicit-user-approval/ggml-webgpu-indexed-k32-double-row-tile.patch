@@ -1,0 +1,42 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3711,8 +3711,10 @@
+         key.tile_m = WEBGPU_MUL_MAT_TILE_M;
+         constexpr uint32_t wide_tile_m = 8;
++        constexpr uint32_t double_row_tile_m = 2 * wide_tile_m;
+         constexpr uint32_t wide_rows = wide_tile_m * WEBGPU_MUL_MAT_WG_SIZE_M;
+         constexpr uint32_t grouped_threads = WEBGPU_MUL_MAT_WG_SIZE_M * WEBGPU_MUL_MAT_WG_SIZE_N;
+         const uint32_t wide_m_shared_bytes =
+             sizeof(ggml_fp16_t) * key.tile_k * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
++        const uint32_t double_row_shared_bytes = wide_m_shared_bytes + sizeof(ggml_fp16_t) * key.tile_k * wide_rows;
+         const bool wide_gate_up = k == 2560 && m == 640 &&
+                                   (key.src0_type == GGML_TYPE_IQ2_S || key.src0_type == GGML_TYPE_IQ3_XXS ||
+@@ -3733,4 +3735,11 @@
+             context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
+             key.tile_m = wide_tile_m;
++            // Reuse the gathered activation tile across more rows on the measured K32 path.
++            if (key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT &&
++                !key.split_weights && context.indexed_src0_aligned && !context.src0->view_src &&
++                ggml_is_contiguous(context.src0) &&
++                context.wg_mem_limit_bytes >= double_row_shared_bytes) {
++                key.tile_m = double_row_tile_m;
++            }
+         }
+         if ((wide_gate_up || wide_down) && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
+@@ -3891,4 +3900,6 @@
+         if (key.tile_m == wide_tile_m) {
+             variant += "_tm8";
++        } else if (key.tile_m == double_row_tile_m) {
++            variant += "_tm16";
+         }
+         if (key.split_weights) {
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2478,5 +2478,6 @@
+                                weights->ne[1] == 2304 && weights->ne[2] == 128 &&
+                                (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+-                               row_tile == 64 && (main.tile_k == 32 || main.tile_k == 64);
++                               ((row_tile == 64 && (main.tile_k == 32 || main.tile_k == 64)) ||
++                                (row_tile == 128 && main.tile_k == 32));
+     if (!q2 && !q4 && !grouped_quant) {
+         return false;

@@ -98,6 +98,15 @@ static void indexed_wide_m(const std::filesystem::path & output) {
         };
         std::vector<Dispatch> dispatches{{narrow, 6399, 32}, {chosen, 6400, 64}};
         if (has_128_experts) {
+            context.indexed_src0_aligned = true;
+            BICORE_CHECK(select(10495, 64).pipeline.Get() == chosen.pipeline.Get());
+            const auto double_rows = select(10496, 128);
+            BICORE_CHECK(double_rows.pipeline.Get() != chosen.pipeline.Get());
+            BICORE_CHECK(select(32768, 128).pipeline.Get() == double_rows.pipeline.Get());
+            context.indexed_src0_aligned = false;
+            BICORE_CHECK(select(10496, 64).pipeline.Get() == chosen.pipeline.Get());
+            context.indexed_src0_aligned = true;
+            dispatches.push_back({double_rows, 10496, 128});
             context.prefer_narrow_indexed_k = false;
             BICORE_CHECK(select(8447, 64).pipeline.Get() == chosen.pipeline.Get());
             const auto k64_narrow = select(12543, 32, 64);
@@ -132,6 +141,7 @@ static void indexed_wide_m(const std::filesystem::path & output) {
         uint32_t graph_index = 0;
         for (const auto & [pipeline, memory, rows] : dispatches) {
             limits.maxComputeWorkgroupStorageSize = memory;
+            ctx->global_ctx->vendor = rows == 128 ? "apple" : "";
             commands = {};
             ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
             ctx->bind_group_cache.begin_graph(graph_index);
@@ -152,7 +162,7 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             BICORE_CHECK(main.pipeline == pipeline.pipeline.Get()->id && main.y == 1 && main.z == 1);
             BICORE_CHECK(main.x == max_tiles * m / rows);
             BICORE_CHECK(commands.writes.front().bytes.size() == 512);
-            if (rows == 64) {
+            if (rows > 32) {
                 BICORE_CHECK(commands.writes.front().bytes == narrow_parameters);
             } else {
                 narrow_parameters = commands.writes.front().bytes;

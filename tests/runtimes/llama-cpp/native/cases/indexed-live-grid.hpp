@@ -214,7 +214,9 @@ static void all() {
     check_activation(split_q2);
     check_activation(paired_q4);
     for (const auto & matrix : {iq4_broadcast, iq4_per_slot, nvfp4_broadcast, nvfp4_per_slot}) {
-        check_activation(matrix, "apple");
+        auto double_rows = matrix;
+        double_rows.row_tile = 128;
+        check_activation(double_rows, "apple");
         check_activation(matrix, "nvidia");
     }
     Matrix f32 = nvfp4_per_slot;

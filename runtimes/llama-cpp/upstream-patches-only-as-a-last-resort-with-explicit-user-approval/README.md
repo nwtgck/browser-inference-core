@@ -917,6 +917,23 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
 
+## Wider K32 indexed output tiles
+
+- **Patch** `ggml-webgpu-indexed-k32-double-row-tile.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** For the existing K32, 64-row IQ4_NL and F32-accumulated NVFP4
+  prefill shapes, admit a 128-row tile with aligned contiguous weights and
+  at least 10,496 B of workgroup storage.
+- **Contract** Keep 64 lanes, the 32-slot gather descriptors, the accumulation
+  precision and order, and all bindings. The direct and indirect grids both
+  use 18 groups per descriptor for 2,304 output rows. The shared storage
+  increases from 6,400 B to 10,496 B. No persistent buffers are added.
+- **Validation and removal** Compare whole outputs and independent references
+  with real quantized weights and several routing distributions. Verify the
+  memory threshold, cache entries, and indirect arguments on the complete
+  provider. Remove once upstream reuses activation tiles across equivalent
+  row groups for this path.
+
 ## Compact BF16 single-column matvec
 
 - **Patch** `ggml-webgpu-compact-bf16-matvec.patch` against llama.cpp
