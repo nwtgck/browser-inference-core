@@ -278,7 +278,7 @@ export interface LowLevelFunctions {
   ggml_gallocr_reserve(arg0: bigint, arg1: bigint): Promise<number>;
   ggml_gallocr_reserve_n(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint): Promise<number>;
   ggml_gallocr_reserve_n_size(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<void>;
-  ggml_gated_delta_net(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: bigint): Promise<bigint>;
+  ggml_gated_delta_net_ext(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: bigint, arg7: bigint, arg8: bigint, arg9: bigint, arg10: bigint, arg11: number): Promise<bigint>;
   ggml_gated_linear_attn(arg0: bigint, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint, arg6: number): Promise<bigint>;
   ggml_geglu(arg0: bigint, arg1: bigint): Promise<bigint>;
   ggml_geglu_erf(arg0: bigint, arg1: bigint): Promise<bigint>;

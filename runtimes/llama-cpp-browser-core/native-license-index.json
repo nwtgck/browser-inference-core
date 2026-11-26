@@ -12,6 +12,17 @@
       ]
     },
     {
+      "id": "@ggml-org/llama-harness",
+      "name": "@ggml-org/llama-harness",
+      "version": null,
+      "license": null,
+      "notices": [
+        {
+          "path": "licenses/2/ui/lib/harness/LICENSE"
+        }
+      ]
+    },
+    {
       "id": "@ggml-org/llama-ui",
       "name": "@ggml-org/llama-ui",
       "version": null,

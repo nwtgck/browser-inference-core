@@ -337,7 +337,7 @@
   "_ggml_gallocr_reserve",
   "_ggml_gallocr_reserve_n",
   "_ggml_gallocr_reserve_n_size",
-  "_ggml_gated_delta_net",
+  "_ggml_gated_delta_net_ext",
   "_ggml_gated_linear_attn",
   "_ggml_geglu",
   "_ggml_geglu_erf",

@@ -1,6 +1,6 @@
 {
   "formatVersion": 6,
-  "sourceCommit": "f83cc02b2087a16be8cba02384a1a83d9ddfe474",
+  "sourceCommit": "cad81581087829393455ca3b1f7bce7ecb8f99c9",
   "runtimes": {
     "llama-cpp": {
       "manifest": "runtimes/llama-cpp-browser-core/manifest.json",
@@ -33,18 +33,18 @@
     },
     {
       "path": "runtimes/llama-cpp-browser-core/manifest.json",
-      "bytes": 21841731,
-      "sha256": "785ba19bc3e867c843b7e2516f42fdcc9f9becc9a85cbbbe8d124af3fa2fe029"
+      "bytes": 22216603,
+      "sha256": "a48c5036bd73399884cdfcfad4e190b7f2cc8f130a3ef34e817d486e32f7d9bb"
     },
     {
       "path": "runtimes/speech-cpp-browser-core/manifest.json",
       "bytes": 246344,
-      "sha256": "6af99b8ab35ae6e9160c4b07c0a13bf113890c0a9b3b7e8dd05eadbf7e806e33"
+      "sha256": "f6193e5db7048634a582e144ea1ea70d130278d424f0f8437ce60fba3de134d9"
     },
     {
       "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
       "bytes": 1172295,
-      "sha256": "dc6a766ab813f04270e54c61b8c032869f4cae027cbf04e3f397f674204f5e16"
+      "sha256": "f1c433893ff5ffc698d9e5b1ca76203844b59dcccd7e314d3e934e58304f0eb3"
     }
   ]
 }

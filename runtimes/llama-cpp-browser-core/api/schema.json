@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 4,
-  "schemaSha256": "fb2718d8afaff23770233905acd37b332190adec1f9e8614a1097a211bb4ba80",
+  "schemaSha256": "990cd301bb1d138d589f0a604e8097ef62d7799b169c7fb5d9a8f7323c74b337",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -9834,8 +9834,8 @@
       "bridge": false
     },
     {
-      "name": "ggml_gated_delta_net",
-      "export": "_ggml_gated_delta_net",
+      "name": "ggml_gated_delta_net_ext",
+      "export": "_ggml_gated_delta_net_ext",
       "returnType": "struct ggml_tensor *",
       "returnKind": "pointer",
       "abiType": {
@@ -9907,13 +9907,49 @@
           }
         },
         {
-          "name": "K",
-          "cType": "int64_t",
-          "kind": "i64",
+          "name": "pend_k",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 32
+          }
+        },
+        {
+          "name": "pend_v",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 32
+          }
+        },
+        {
+          "name": "pend_gb",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 32
+          }
+        },
+        {
+          "name": "n_rep",
+          "cType": "struct ggml_tensor *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 32
+          }
+        },
+        {
+          "name": "keep",
+          "cType": "bool",
+          "kind": "boolean",
           "abiType": {
             "kind": "integer",
-            "bits": 64,
-            "signed": true
+            "bits": 8,
+            "signed": false
           }
         }
       ],
@@ -37162,7 +37198,7 @@
       "name": "ggml_backend_dev_caps",
       "cType": "struct ggml_backend_dev_caps",
       "id": 0,
-      "size": 5,
+      "size": 6,
       "alignment": 1,
       "fields": [
         {
@@ -37228,6 +37264,19 @@
           },
           "id": 4,
           "offset": 4,
+          "size": 1
+        },
+        {
+          "name": "fast_async_host_input",
+          "cType": "bool",
+          "kind": "boolean",
+          "abiType": {
+            "kind": "integer",
+            "bits": 8,
+            "signed": false
+          },
+          "id": 5,
+          "offset": 5,
           "size": 1
         }
       ]
@@ -37326,7 +37375,7 @@
           },
           "id": 6,
           "offset": 24,
-          "size": 5
+          "size": 6
         }
       ]
     },
@@ -45053,6 +45102,10 @@
       "reason": "variadic C APIs require a separately reviewed ordinary interface"
     },
     {
+      "name": "ggml_gated_delta_net",
+      "reason": "deprecated upstream declaration"
+    },
+    {
       "name": "ggml_threadpool_get_n_threads",
       "reason": "declared by upstream but not implemented in the pinned source set"
     },
@@ -45416,7 +45469,7 @@
     "_ggml_gallocr_reserve",
     "_ggml_gallocr_reserve_n",
     "_ggml_gallocr_reserve_n_size",
-    "_ggml_gated_delta_net",
+    "_ggml_gated_delta_net_ext",
     "_ggml_gated_linear_attn",
     "_ggml_geglu",
     "_ggml_geglu_erf",
@@ -46452,7 +46505,7 @@
     "ggml_gallocr_reserve",
     "ggml_gallocr_reserve_n",
     "ggml_gallocr_reserve_n_size",
-    "ggml_gated_delta_net",
+    "ggml_gated_delta_net_ext",
     "ggml_gated_linear_attn",
     "ggml_geglu",
     "ggml_geglu_erf",
@@ -47775,12 +47828,12 @@
     }
   ],
   "targets": {
-    "e791c0a428528739721342d9c8dc41f4e12a6b0ceda2460e45dd1d92c58f5707": {
+    "c9136643e4f1b5b6b664ec45d5581b60c33862f800f2df3139b091f2df2db30f": {
       "abiVersion": 3,
       "runtime": "llama-cpp",
       "pointerRepresentation": "bigint_native",
       "pointerBytes": 4,
-      "schemaSha256": "e791c0a428528739721342d9c8dc41f4e12a6b0ceda2460e45dd1d92c58f5707",
+      "schemaSha256": "c9136643e4f1b5b6b664ec45d5581b60c33862f800f2df3139b091f2df2db30f",
       "functions": [
         {
           "name": "bicore_file_backed_rows_version",
@@ -57611,8 +57664,8 @@
           "bridge": false
         },
         {
-          "name": "ggml_gated_delta_net",
-          "export": "_ggml_gated_delta_net",
+          "name": "ggml_gated_delta_net_ext",
+          "export": "_ggml_gated_delta_net_ext",
           "returnType": "struct ggml_tensor *",
           "returnKind": "pointer",
           "abiType": {
@@ -57684,13 +57737,49 @@
               }
             },
             {
-              "name": "K",
-              "cType": "int64_t",
-              "kind": "i64",
+              "name": "pend_k",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 32
+              }
+            },
+            {
+              "name": "pend_v",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 32
+              }
+            },
+            {
+              "name": "pend_gb",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 32
+              }
+            },
+            {
+              "name": "n_rep",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 32
+              }
+            },
+            {
+              "name": "keep",
+              "cType": "bool",
+              "kind": "boolean",
               "abiType": {
                 "kind": "integer",
-                "bits": 64,
-                "signed": true
+                "bits": 8,
+                "signed": false
               }
             }
           ],
@@ -84939,7 +85028,7 @@
           "name": "ggml_backend_dev_caps",
           "cType": "struct ggml_backend_dev_caps",
           "id": 0,
-          "size": 5,
+          "size": 6,
           "alignment": 1,
           "fields": [
             {
@@ -85005,6 +85094,19 @@
               },
               "id": 4,
               "offset": 4,
+              "size": 1
+            },
+            {
+              "name": "fast_async_host_input",
+              "cType": "bool",
+              "kind": "boolean",
+              "abiType": {
+                "kind": "integer",
+                "bits": 8,
+                "signed": false
+              },
+              "id": 5,
+              "offset": 5,
               "size": 1
             }
           ]
@@ -85103,7 +85205,7 @@
               },
               "id": 6,
               "offset": 24,
-              "size": 5
+              "size": 6
             }
           ]
         },
@@ -92830,6 +92932,10 @@
           "reason": "variadic C APIs require a separately reviewed ordinary interface"
         },
         {
+          "name": "ggml_gated_delta_net",
+          "reason": "deprecated upstream declaration"
+        },
+        {
           "name": "ggml_threadpool_get_n_threads",
           "reason": "declared by upstream but not implemented in the pinned source set"
         },
@@ -93193,7 +93299,7 @@
         "_ggml_gallocr_reserve",
         "_ggml_gallocr_reserve_n",
         "_ggml_gallocr_reserve_n_size",
-        "_ggml_gated_delta_net",
+        "_ggml_gated_delta_net_ext",
         "_ggml_gated_linear_attn",
         "_ggml_geglu",
         "_ggml_geglu_erf",
@@ -94229,7 +94335,7 @@
         "ggml_gallocr_reserve",
         "ggml_gallocr_reserve_n",
         "ggml_gallocr_reserve_n_size",
-        "ggml_gated_delta_net",
+        "ggml_gated_delta_net_ext",
         "ggml_gated_linear_attn",
         "ggml_geglu",
         "ggml_geglu_erf",
@@ -95552,12 +95658,12 @@
         }
       ]
     },
-    "4ca73e6779255892c78065aa57e95572d5a937cb1eb99509ab66224f48661bb7": {
+    "61d63d4d4228de25b96b11c147abe6c37c0703df1655a26c3b53e65561f791b2": {
       "abiVersion": 3,
       "runtime": "llama-cpp",
       "pointerRepresentation": "bigint_native",
       "pointerBytes": 8,
-      "schemaSha256": "4ca73e6779255892c78065aa57e95572d5a937cb1eb99509ab66224f48661bb7",
+      "schemaSha256": "61d63d4d4228de25b96b11c147abe6c37c0703df1655a26c3b53e65561f791b2",
       "functions": [
         {
           "name": "bicore_file_backed_rows_version",
@@ -105388,8 +105494,8 @@
           "bridge": false
         },
         {
-          "name": "ggml_gated_delta_net",
-          "export": "_ggml_gated_delta_net",
+          "name": "ggml_gated_delta_net_ext",
+          "export": "_ggml_gated_delta_net_ext",
           "returnType": "struct ggml_tensor *",
           "returnKind": "pointer",
           "abiType": {
@@ -105461,13 +105567,49 @@
               }
             },
             {
-              "name": "K",
-              "cType": "int64_t",
-              "kind": "i64",
+              "name": "pend_k",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "pend_v",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "pend_gb",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "n_rep",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "keep",
+              "cType": "bool",
+              "kind": "boolean",
               "abiType": {
                 "kind": "integer",
-                "bits": 64,
-                "signed": true
+                "bits": 8,
+                "signed": false
               }
             }
           ],
@@ -132716,7 +132858,7 @@
           "name": "ggml_backend_dev_caps",
           "cType": "struct ggml_backend_dev_caps",
           "id": 0,
-          "size": 5,
+          "size": 6,
           "alignment": 1,
           "fields": [
             {
@@ -132782,6 +132924,19 @@
               },
               "id": 4,
               "offset": 4,
+              "size": 1
+            },
+            {
+              "name": "fast_async_host_input",
+              "cType": "bool",
+              "kind": "boolean",
+              "abiType": {
+                "kind": "integer",
+                "bits": 8,
+                "signed": false
+              },
+              "id": 5,
+              "offset": 5,
               "size": 1
             }
           ]
@@ -132880,7 +133035,7 @@
               },
               "id": 6,
               "offset": 48,
-              "size": 5
+              "size": 6
             }
           ]
         },
@@ -140607,6 +140762,10 @@
           "reason": "variadic C APIs require a separately reviewed ordinary interface"
         },
         {
+          "name": "ggml_gated_delta_net",
+          "reason": "deprecated upstream declaration"
+        },
+        {
           "name": "ggml_threadpool_get_n_threads",
           "reason": "declared by upstream but not implemented in the pinned source set"
         },
@@ -140970,7 +141129,7 @@
         "_ggml_gallocr_reserve",
         "_ggml_gallocr_reserve_n",
         "_ggml_gallocr_reserve_n_size",
-        "_ggml_gated_delta_net",
+        "_ggml_gated_delta_net_ext",
         "_ggml_gated_linear_attn",
         "_ggml_geglu",
         "_ggml_geglu_erf",
@@ -142006,7 +142165,7 @@
         "ggml_gallocr_reserve",
         "ggml_gallocr_reserve_n",
         "ggml_gallocr_reserve_n_size",
-        "ggml_gated_delta_net",
+        "ggml_gated_delta_net_ext",
         "ggml_gated_linear_attn",
         "ggml_geglu",
         "ggml_geglu_erf",
@@ -143329,12 +143488,12 @@
         }
       ]
     },
-    "7593f6b0c5793b8caf24c0f49846b4a0219bfe84a8bfe7ab3f88389ce8562b7a": {
+    "2559fc23721019616c69fd0531a64ec220903b0f19769de780800145a81bed49": {
       "abiVersion": 3,
       "runtime": "llama-cpp",
       "pointerRepresentation": "bigint_native",
       "pointerBytes": 8,
-      "schemaSha256": "7593f6b0c5793b8caf24c0f49846b4a0219bfe84a8bfe7ab3f88389ce8562b7a",
+      "schemaSha256": "2559fc23721019616c69fd0531a64ec220903b0f19769de780800145a81bed49",
       "functions": [
         {
           "name": "bicore_file_backed_rows_version",
@@ -153165,8 +153324,8 @@
           "bridge": false
         },
         {
-          "name": "ggml_gated_delta_net",
-          "export": "_ggml_gated_delta_net",
+          "name": "ggml_gated_delta_net_ext",
+          "export": "_ggml_gated_delta_net_ext",
           "returnType": "struct ggml_tensor *",
           "returnKind": "pointer",
           "abiType": {
@@ -153238,13 +153397,49 @@
               }
             },
             {
-              "name": "K",
-              "cType": "int64_t",
-              "kind": "i64",
+              "name": "pend_k",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "pend_v",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "pend_gb",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "n_rep",
+              "cType": "struct ggml_tensor *",
+              "kind": "pointer",
+              "abiType": {
+                "kind": "pointer",
+                "bits": 64
+              }
+            },
+            {
+              "name": "keep",
+              "cType": "bool",
+              "kind": "boolean",
               "abiType": {
                 "kind": "integer",
-                "bits": 64,
-                "signed": true
+                "bits": 8,
+                "signed": false
               }
             }
           ],
@@ -180493,7 +180688,7 @@
           "name": "ggml_backend_dev_caps",
           "cType": "struct ggml_backend_dev_caps",
           "id": 0,
-          "size": 5,
+          "size": 6,
           "alignment": 1,
           "fields": [
             {
@@ -180559,6 +180754,19 @@
               },
               "id": 4,
               "offset": 4,
+              "size": 1
+            },
+            {
+              "name": "fast_async_host_input",
+              "cType": "bool",
+              "kind": "boolean",
+              "abiType": {
+                "kind": "integer",
+                "bits": 8,
+                "signed": false
+              },
+              "id": 5,
+              "offset": 5,
               "size": 1
             }
           ]
@@ -180657,7 +180865,7 @@
               },
               "id": 6,
               "offset": 48,
-              "size": 5
+              "size": 6
             }
           ]
         },
@@ -188384,6 +188592,10 @@
           "reason": "variadic C APIs require a separately reviewed ordinary interface"
         },
         {
+          "name": "ggml_gated_delta_net",
+          "reason": "deprecated upstream declaration"
+        },
+        {
           "name": "ggml_threadpool_get_n_threads",
           "reason": "declared by upstream but not implemented in the pinned source set"
         },
@@ -188747,7 +188959,7 @@
         "_ggml_gallocr_reserve",
         "_ggml_gallocr_reserve_n",
         "_ggml_gallocr_reserve_n_size",
-        "_ggml_gated_delta_net",
+        "_ggml_gated_delta_net_ext",
         "_ggml_gated_linear_attn",
         "_ggml_geglu",
         "_ggml_geglu_erf",
@@ -189786,7 +189998,7 @@
         "ggml_gallocr_reserve",
         "ggml_gallocr_reserve_n",
         "ggml_gallocr_reserve_n_size",
-        "ggml_gated_delta_net",
+        "ggml_gated_delta_net_ext",
         "ggml_gated_linear_attn",
         "ggml_geglu",
         "ggml_geglu_erf",

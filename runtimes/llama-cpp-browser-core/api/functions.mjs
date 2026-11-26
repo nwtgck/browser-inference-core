@@ -279,7 +279,7 @@ export function createLowLevelFunctions({ invoker }) {
     "ggml_gallocr_reserve": (arg0, arg1) => invoker.number({ name: "ggml_gallocr_reserve", args: [arg0, arg1] }),
     "ggml_gallocr_reserve_n": (arg0, arg1, arg2, arg3) => invoker.number({ name: "ggml_gallocr_reserve_n", args: [arg0, arg1, arg2, arg3] }),
     "ggml_gallocr_reserve_n_size": (arg0, arg1, arg2, arg3, arg4) => invoker.void({ name: "ggml_gallocr_reserve_n_size", args: [arg0, arg1, arg2, arg3, arg4] }),
-    "ggml_gated_delta_net": (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7) => invoker.bigint({ name: "ggml_gated_delta_net", args: [arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7] }),
+    "ggml_gated_delta_net_ext": (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11) => invoker.bigint({ name: "ggml_gated_delta_net_ext", args: [arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11] }),
     "ggml_gated_linear_attn": (arg0, arg1, arg2, arg3, arg4, arg5, arg6) => invoker.bigint({ name: "ggml_gated_linear_attn", args: [arg0, arg1, arg2, arg3, arg4, arg5, arg6] }),
     "ggml_geglu": (arg0, arg1) => invoker.bigint({ name: "ggml_geglu", args: [arg0, arg1] }),
     "ggml_geglu_erf": (arg0, arg1) => invoker.bigint({ name: "ggml_geglu_erf", args: [arg0, arg1] }),
