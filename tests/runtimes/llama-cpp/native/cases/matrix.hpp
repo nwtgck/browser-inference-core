@@ -273,7 +273,62 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
     BICORE_CHECK(run({6144, 10240, 1280, 0}, 128, 0, false, false, nullptr) == scalar);
 }
 
+static void compact_bf16_matvec(const std::filesystem::path & output) {
+    const auto make_fixture = [](int64_t k, int64_t m, uint32_t subgroup) {
+        q4_current::Fixture fixture(GGML_TYPE_BF16, k, m);
+        fixture.subgroups = subgroup != 0;
+        fixture.min_sg = fixture.max_sg = subgroup;
+        fixture.a.nb[0] = ggml_type_size(fixture.a.type);
+        fixture.a.nb[1] = ggml_row_size(fixture.a.type, k);
+        fixture.a.nb[2] = fixture.a.nb[3] = fixture.a.nb[1] * m;
+        return fixture;
+    };
+    for (uint32_t subgroup : {16u, 32u, 0u}) {
+        auto ctx = recording_context();
+        const auto check = [&](q4_current::Fixture & fixture, bool overlap, bool packed, bool dispatch) {
+            auto input = fixture.context<ggml_webgpu_shader_lib_context>();
+            const auto pipeline = ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, false);
+            BICORE_CHECK(pipeline.name.ends_with("_compact") == packed);
+            const auto & decisions =
+                *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+            BICORE_CHECK(decisions.wg_size == 256 && decisions.outputs_per_wg == 4 && decisions.vec_size == 1);
+            BICORE_CHECK(ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, false).pipeline.Get() ==
+                         pipeline.pipeline.Get());
+            if (dispatch) {
+                BICORE_CHECK((production_dispatch(input, 65535, overlap, true) ==
+                              std::array<uint32_t, 2>{uint32_t((fixture.dst.ne[0] + 3) / 4), 1}));
+            }
+            if (!output.empty() && !overlap && fixture.dst.ne[1] == 1) {
+                std::ofstream shader(output / (pipeline.name + ".wgsl"));
+                shader << pipeline.pipeline.Get()->code;
+                BICORE_CHECK(bool(shader));
+            }
+        };
+        for (auto [k, m] : {std::pair{320, 10240}, {10240, 4}, {10240, 320}, {2560, 48}, {2560, 128}, {2560, 512}}) {
+            auto fixture = make_fixture(k, m, subgroup);
+            check(fixture, false, subgroup != 0, true);
+        }
+        auto regular = make_fixture(324, 10240, subgroup);
+        check(regular, false, false, true);
+        auto padded = make_fixture(320, 10240, subgroup);
+        padded.a.nb[1] += 2;
+        padded.a.nb[2] = padded.a.nb[3] = padded.a.nb[1] * padded.a.ne[1];
+        check(padded, false, false, false);
+        auto shared = make_fixture(320, 10240, subgroup);
+        check(shared, true, false, true);
+        auto two = make_fixture(320, 10240, subgroup);
+        two.x.ne[1] = two.dst.ne[1] = 2;
+        check(two, false, false, true);
+        if (subgroup) {
+            auto variable = make_fixture(320, 10240, subgroup);
+            variable.min_sg = 8;
+            check(variable, false, false, true);
+        }
+    }
+}
+
 static void all(const std::filesystem::path & output) {
+    compact_bf16_matvec(output);
     q2_paired_prefill(output);
     std::vector<Case> cases;
     for (const auto type : {GGML_TYPE_Q4_0, GGML_TYPE_Q4_K}) {

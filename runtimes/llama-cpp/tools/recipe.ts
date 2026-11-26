@@ -1001,6 +1001,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-compact-bf16-matvec.patch',
+    target: 'llama-webgpu',
+    reason: 'reuse BF16 row addresses and co-locate subgroup partial sums in single-column matvecs',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

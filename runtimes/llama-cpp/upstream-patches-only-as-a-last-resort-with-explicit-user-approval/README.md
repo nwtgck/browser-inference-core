@@ -917,6 +917,28 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
 
+## Compact BF16 single-column matvec
+
+- **Patch** `ggml-webgpu-compact-bf16-matvec.patch` against llama.cpp
+  `c212d25ad`.
+- **Scope** Use contiguous BF16 weights, F32 input and output, one input
+  column, one batch, and separate source bindings. The K/M pairs are
+  320/10240, 10240/4, 10240/320, and 2560 with M48, M128, or M512.
+  Require four output rows per workgroup, WG256 and fixed subgroups of
+  16 or 32 lanes. Other shapes, subgroup configurations and epilogues use
+  their existing pipeline.
+- **Contract** Reuse the four weight addresses across K iterations and
+  place each subgroup's four partial sums together. Preserve the K values
+  assigned to each lane, the full-subgroup reduction order, bindings and
+  dispatch geometry. With underfilled subgroups, elect a writer in each
+  subgroup and read every partial sum. Keep 4 KiB of workgroup storage to
+  accommodate any subgroup packing.
+- **Validation and removal** Compare real BF16 weights with the unmodified
+  shader and a Float64 reference. Check actual dispatch and cache selection
+  in the normal and profile providers, and compare the Wasm64 public
+  matmul outputs. Remove this patch when upstream uses equivalent row
+  addressing and subgroup reduction.
+
 ## Packed F32 register tiles for long-K prefill
 
 - **Patch** `ggml-webgpu-f32-packed-prefill.patch` against llama.cpp

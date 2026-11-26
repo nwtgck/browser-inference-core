@@ -1,0 +1,131 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1555,3 +1555,3 @@
+ struct ggml_webgpu_mul_mat_vec_pipeline_key {
+-    enum class subgroup_mode_kind : uint32_t { legacy, requested_size };
++    enum class subgroup_mode_kind : uint32_t { legacy, requested_size, compact_bf16 };
+     subgroup_mode_kind subgroup_mode = subgroup_mode_kind::legacy;
+@@ -3076,2 +3076,17 @@
+                                  ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
++        if (key.src0_type == GGML_TYPE_BF16 && key.src1_type == GGML_TYPE_F32 &&
++            context.dst->type == GGML_TYPE_F32 && key.num_cols == 1 && !key.src_overlap &&
++            key.epilogue == ggml_webgpu_shader_lib_context::matvec_post_op::none &&
++            key.workgroup_size == 256 && context.max_wg_size >= 256 &&
++            context.supports_subgroups && context.min_subgroup_size == context.max_subgroup_size &&
++            (context.min_subgroup_size == 16 || context.min_subgroup_size == 32) &&
++            WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG == 4 && context.dst->ne[2] == 1 && context.dst->ne[3] == 1) {
++            const int64_t k = context.src0->ne[0];
++            const int64_t m = context.dst->ne[0];
++            const bool compact_shape = (k == 320 && m == 10240) || (k == 10240 && (m == 4 || m == 320)) ||
++                (k == 2560 && (m == 48 || m == 128 || m == 512));
++            if (compact_shape && ggml_is_contiguous(context.src0)) {
++                key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16;
++            }
++        }
+ 
+@@ -3279,2 +3294,6 @@
+         defines.push_back(std::string("NUM_COLS=") + std::to_string(key.num_cols));
++        if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16) {
++            defines.push_back("COMPACT_BF16_MATVEC");
++            variant += "_compact";
++        }
+ 
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl
+@@ -57,12 +57,17 @@
+ // "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
+ @group(0) @binding(DST_BINDING + 1) var<uniform> params: MulMatParams;
+ 
++#ifdef COMPACT_BF16_MATVEC
++// Subgroups can contain fewer active invocations than their advertised size.
++var<workgroup> partial_sums: array<vec4<f32>, WG_SIZE>;
++#else
+ // Flattened as [row][thread] to keep each row's reduction contiguous in memory.
+ var<workgroup> partial_sums: array<f32, OUTPUTS_PER_WG * WG_SIZE>;
+ 
+ fn partial_index(row: u32, thread: u32) -> u32 {
+     return row * WG_SIZE + thread;
+ }
++#endif
+ 
+ @compute @workgroup_size(WG_SIZE)
+ fn main(
+@@ -108,6 +113,38 @@
+     let acc = accumulate_vec_dot(thread_id, row_base, src0_batch_offset, src1_idx_base);
+ #endif
+ 
++#ifdef COMPACT_BF16_MATVEC
++    let totals = subgroupAdd(vec4<f32>(acc[0][0], acc[0][1], acc[0][2], acc[0][3]));
++    if (num_subgroups * subgroup_size != WG_SIZE) {
++        if (subgroupElect()) {
++            partial_sums[subgroup_id] = totals;
++        }
++        workgroupBarrier();
++        // Each output row has one workgroup lane that reads all subgroup sums.
++        if (thread_id < OUTPUTS_PER_WG && row_base + thread_id < params.m) {
++            var row_total = 0.0f;
++            for (var k = 0u; k < num_subgroups; k += 1u) {
++                row_total += partial_sums[k][thread_id];
++            }
++            dst[dst_idx_base + thread_id] = row_total;
++        }
++        return;
++    }
++    if (subgroup_invocation_id == 0u) {
++        partial_sums[subgroup_id] = totals;
++    }
++    workgroupBarrier();
++    for (var row = subgroup_id; (row < OUTPUTS_PER_WG) && (row_base + row < params.m); row += num_subgroups) {
++        var row_acc = 0.0f;
++        for (var k = subgroup_invocation_id; k < num_subgroups; k += subgroup_size) {
++            row_acc += partial_sums[k][row];
++        }
++        let row_total = subgroupAdd(row_acc);
++        if (subgroup_invocation_id == 0u) {
++            dst[dst_idx_base + row] = row_total;
++        }
++    }
++#else
+     for (var col = 0u;col < NUM_COLS;col += 1) {
+ 
+ #ifdef USE_SUBGROUP_REDUCTION
+@@ -164,4 +201,5 @@
+     workgroupBarrier();
+ 
+     }
++#endif
+ }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -46,6 +46,23 @@
+ 
+ #ifdef MUL_ACC_FLOAT
+ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
++#ifdef COMPACT_BF16_MATVEC
++    // A full four-row tile with even weight strides. Each lane keeps its
++    // original K indices, all with the same half-word position.
++    let first_element = src0_batch_offset + row_base * params.stride_01 + thread_id;
++    let shift = 16u - 16u * (first_element & 1u);
++    let row_words = params.stride_01 / 2u;
++    var word = first_element / 2u;
++    var sums = vec4<f32>(0.0);
++    for (var k = thread_id; k < params.k; k += WG_SIZE) {
++        let packed = vec4<u32>(SRC0[word], SRC0[word + row_words],
++            SRC0[word + 2u * row_words], SRC0[word + 3u * row_words]);
++        let weights = bitcast<vec4<f32>>((packed << vec4<u32>(shift)) & vec4<u32>(0xffff0000u));
++        sums += weights * SRC1[src1_idx_base + k];
++        word += WG_SIZE / 2u;
++    }
++    return array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>(array<f32, OUTPUTS_PER_WG>(sums.x, sums.y, sums.z, sums.w));
++#else
+     var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
+ 
+     let k_vec = params.k / VEC_SIZE;
+@@ -76,6 +93,7 @@
+     }
+ 
+     return acc;
++#endif
+ }
+ #endif
+ 
