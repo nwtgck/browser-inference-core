@@ -1144,10 +1144,10 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 ## Short cooperative Q4_0 matvecs
 
-- **Patch:** `ggml-webgpu-q4-zero-short-workgroup.patch`.
+- **Patches:** `ggml-webgpu-q4-zero-short-workgroup.patch` and `ggml-webgpu-q4-zero-single-block.patch`.
 - **Scope:** Ordinary single-column Q4_0 × F32 to F32 matvecs with complete blocks, K up to 1024 and at least 1024 output rows. Require checked batch broadcasting, supported subgroup limits and enough device invocations for the selected size. Preserve the existing independent-subgroup priority. Indexed, integer-dot, overlapping and epilogue paths retain their existing selection.
-- **Contract:** Each block is processed by four lanes. Size the workgroup for every useful lane and at least one full subgroup. Retain four output rows per workgroup, the dispatch grid, the existing accumulation and reduction source, and all bindings. At K256 with subgroup width up to 32, this uses 32 instead of 256 invocations and 512 instead of 4096 bytes of workgroup storage.
-- **Validation:** The normal and profiled native provider tests cover actual selection, cache identity, four-row tiling, a partial final row group, host dispatch and fallback conditions. The ordinary WebGPU Wasm64 provider compiles with the patch. Small software WebGPU comparisons exercise the generated WGSL; full projection throughput still requires a working timing comparison.
+- **Contract:** Each block is processed by four lanes. Size the workgroup for every useful lane and at least one full subgroup. Each of those lanes can then visit its block once without a loop. The existing pipeline key distinguishes the specialization from the generic shader at the same width. Preserve four output rows per workgroup, the dispatch grid, the scale and accumulation order, and all bindings. At K256 with subgroup width up to 32, this uses 32 instead of 256 invocations and 512 instead of 4096 bytes of workgroup storage.
+- **Validation:** The normal and profiled native provider tests cover actual selection, cache identity, four-row tiling, a partial final row group, host dispatch and fallback conditions. The ordinary WebGPU Wasm64 provider compiles with both patches. Generated WGSL produced bit-identical results in paired software WebGPU runs at reported subgroup widths 16 and 32 for K256/M1536, M1537 and M2560, and K512 and K1024/M1536. The short shapes took less GPU time in those runs. Device-level and full-model measurements remain outstanding.
 - **Removal:** Remove the stage and focused coverage when upstream chooses equivalent geometry for short Q4_0 operations.
 
 ## Ordinary fixed-subgroup Q4 matvecs
