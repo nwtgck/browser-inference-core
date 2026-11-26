@@ -1,6 +1,6 @@
 import type { Patch } from '#tools/source/patches';
 
-export const patchDirectory = 'upstream-patches-only-as-a-last-resort-with-explicit-user-approval';
+export const patchDirectory = 'upstream-patches';
 
 export type SourceMode = 'normal' | 'profile';
 export type RecipePatch = Patch & { modes: readonly SourceMode[] };

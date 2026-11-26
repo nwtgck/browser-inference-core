@@ -112,7 +112,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/prepared-source-root.txt" "${LCB_LLAMA_S
 # intermediate and final source digests are not compatibility gates.
 file(GLOB_RECURSE LCB_PREPARATION_DEPENDENCIES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/native/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval/*.patch"
+    "${CMAKE_CURRENT_SOURCE_DIR}/upstream-patches/*.patch"
     "${LCB_COMPILE_ROOT}/tools/abi/*.cmake"
     "${LCB_COMPILE_ROOT}/tools/abi/*.in")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${LCB_PREPARATION_DEPENDENCIES})

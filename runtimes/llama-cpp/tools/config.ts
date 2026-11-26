@@ -49,7 +49,7 @@ export function selectConfiguration({ configuration, profile, variant }: { confi
 
 /** Inputs consumed by CMake and the native compiler, independent of Node tooling. */
 export function sourceCaptureSelection({ kind }: { kind: 'native' | 'wasm' }): { include: readonly string[]; exclude: readonly string[] } {
-  const include = [`${runtimePath}/CMakeLists.txt`, `${runtimePath}/cmake`, `${runtimePath}/native`, `${runtimePath}/host/emscripten`, `${runtimePath}/upstream-patches-only-as-a-last-resort-with-explicit-user-approval`, `${runtimePath}/config/variants.json`, 'tools/abi/Bindings.cmake', 'tools/abi/ConfigureFingerprint.cmake', 'tools/abi/fingerprint.h.in', 'tools/shared/TargetSources.cmake' ];
+  const include = [`${runtimePath}/CMakeLists.txt`, `${runtimePath}/cmake`, `${runtimePath}/native`, `${runtimePath}/host/emscripten`, `${runtimePath}/upstream-patches`, `${runtimePath}/config/variants.json`, 'tools/abi/Bindings.cmake', 'tools/abi/ConfigureFingerprint.cmake', 'tools/abi/fingerprint.h.in', 'tools/shared/TargetSources.cmake' ];
   switch (kind) {
   case 'native': include.push('tests/runtimes/llama_cpp/model-graph/boundary.cpp');
     break;

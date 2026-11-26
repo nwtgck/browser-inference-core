@@ -21,7 +21,7 @@ reconstructing the retired integration.
 | Audio and BF16 vision | New architecture/support code appears outside the existing worker/weight-conversion insertion points. | Both existing patches still apply and remain byte-identical. Keep them independent. |
 | Chat | Prompt parts, byte-indexed token-aware input, native parser arenas and session-owned continuation replace the old string/serialized-parser boundary. | Bind upstream values and public session interfaces directly. Do not recreate removed JSON serialization or flatten prompt segments at the boundary. |
 
-See [the exception register](../upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md),
+See [the exception register](../upstream-patches/README.md),
 [upstream MoE selection](moe-direct-slot.md) and [chat API](chat-and-multimodal.md).
 
 ## QSA observation and fixture requirements

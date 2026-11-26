@@ -14,5 +14,5 @@ checked mtmd subtree in `cmake/MtmdOverlay.cmake`.
 Controlled tests of the actual helper distinguish pool creation, requested
 counts, ownership and failures across the compile guards. Such tests are not
 successful model loading, audio quality, actual browser or pthread execution.
-See the [exception register](../upstream-patches-only-as-a-last-resort-with-explicit-user-approval/README.md)
+See the [exception register](../upstream-patches/README.md)
 for scope, alternatives and removal conditions.
