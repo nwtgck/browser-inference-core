@@ -134,7 +134,7 @@ static int run_q8_short_cases(int argc, char ** argv) {
         require(static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(get(320).context.get())->wg_size == 256,
                 "factory F16 exclusion");
         b.type = GGML_TYPE_F32;
-        a.type = GGML_TYPE_Q4_0;
+        a.type = GGML_TYPE_Q5_1;
         require(static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(get(320).context.get())->wg_size == 256,
                 "factory other quant exclusion");
         a.type = GGML_TYPE_Q8_0;

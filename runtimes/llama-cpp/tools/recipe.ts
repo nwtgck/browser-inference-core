@@ -1058,6 +1058,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q4-zero-short-workgroup.patch',
+    target: 'llama-webgpu',
+    reason: 'Use fewer idle lanes for short ordinary Q4_0 matrix-vector products.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

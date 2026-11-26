@@ -1,0 +1,66 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -423,6 +423,44 @@
+     return a->ne[0] == 19968 && a->ne[1] == 6656 &&
+            a->ne[2] == 1 && x->ne[2] == 1 && dst->ne[2] == 1 &&
+            a->ne[3] == 1 && x->ne[3] == 1 && dst->ne[3] == 1;
++}
++
++// Each 32-value Q4_0 block uses four lanes. Size the cooperative workgroup
++// for all its useful lanes so every lane keeps its original block assignment.
++inline uint32_t ggml_webgpu_q4_0_short_workgroup(const ggml_webgpu_shader_lib_context & context,
++                                                bool use_mmvq, bool src_overlap) {
++    constexpr uint32_t fallback = WEBGPU_MUL_MAT_VEC_WG_SIZE;
++    const auto * a = context.src0;
++    const auto * x = context.src1;
++    const auto * dst = context.dst;
++    const uint32_t sg_min = context.min_subgroup_size;
++    const uint32_t sg_max = context.max_subgroup_size;
++    if (!a || !x || !dst || context.src2 || !context.supports_subgroups || use_mmvq || src_overlap ||
++        context.matvec_epilogue != ggml_webgpu_shader_lib_context::matvec_post_op::none ||
++        a->type != GGML_TYPE_Q4_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
++        a->ne[0] <= 0 || a->ne[0] > 1024 || a->ne[0] % 32 != 0 ||
++        a->ne[1] < 1024 || a->ne[1] > UINT32_MAX - 3u ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1 ||
++        sg_min < 4 || sg_max > 128 || sg_min > sg_max ||
++        (sg_min & (sg_min - 1)) != 0 || (sg_max & (sg_max - 1)) != 0) {
++        return fallback;
++    }
++    uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
++    for (int axis = 2; axis < 4; ++axis) {
++        if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
++            x->ne[axis] <= 0 || x->ne[axis] > UINT32_MAX ||
++            dst->ne[axis] != x->ne[axis] || x->ne[axis] % a->ne[axis] != 0 ||
++            static_cast<uint64_t>(x->ne[axis]) > UINT32_MAX / output_elements) {
++            return fallback;
++        }
++        output_elements *= static_cast<uint64_t>(x->ne[axis]);
++    }
++    uint32_t workgroup = std::max(32u, sg_max);
++    const uint32_t useful_lanes = static_cast<uint32_t>(a->ne[0] / 8);
++    while (workgroup < useful_lanes) {
++        workgroup *= 2;
++    }
++    return workgroup <= context.max_wg_size ? workgroup : fallback;
+ }
+ 
+ // Tensor-shape admission is independent of the subgroup-width policy.
+@@ -3106,9 +3144,15 @@
+         key.q6_packed_vec4 = vec4_aligned && key.src0_type == GGML_TYPE_Q6_K &&
+             (key.subgroup_size || key.requested_subgroup_size) && context.src0->ne[0] <= 5120 &&
+             context.src0->ne[1] >= 8192;
+-        key.workgroup_size = (key.subgroup_size || key.requested_subgroup_size) ? 128 : (context.src0->type == GGML_TYPE_Q4_K || context.src0->type == GGML_TYPE_Q6_K) ?
+-                                 ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap) :
+-                                 ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
++        if (key.subgroup_size || key.requested_subgroup_size) {
++            key.workgroup_size = 128;
++        } else if (key.src0_type == GGML_TYPE_Q4_K || key.src0_type == GGML_TYPE_Q6_K) {
++            key.workgroup_size = ggml_webgpu_q4_short_workgroup(context, false, key.use_mmvq, src_overlap);
++        } else if (key.src0_type == GGML_TYPE_Q4_0) {
++            key.workgroup_size = ggml_webgpu_q4_0_short_workgroup(context, key.use_mmvq, src_overlap);
++        } else {
++            key.workgroup_size = ggml_webgpu_q8_short_workgroup(context, key.use_mmvq, src_overlap);
++        }
+         // The ordinary short cooperative Q8 selector sizes the workgroup
+         // for all K blocks at four lanes per block. Forced profile variants
+         // use legacy mode since they can override that workgroup size.

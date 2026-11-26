@@ -107,12 +107,47 @@ static void factory(Fixture & f, bool selected, bool overlap, const std::filesys
     }
 }
 
+static void short_workgroups(const std::filesystem::path & output) {
+    for (const auto [k, m, width] :
+         {std::tuple{256, 1536, 32u}, {256, 1537, 32u}, {256, 2560, 32u}, {512, 1536, 64u}, {1024, 1536, 128u}}) {
+        Fixture f(GGML_TYPE_Q4_0, k, m);
+        const auto context = f.context<ggml_webgpu_shader_lib_context>();
+        const auto pipeline = new_library->get_mul_mat_vec_pipeline(context, false, false);
+        const auto decisions = std::static_pointer_cast<ggml_webgpu_mul_mat_vec_shader_decisions>(pipeline.context);
+        require(decisions->wg_size == width && decisions->outputs_per_wg == 4, "Short Q4_0 uses fewer lanes");
+        factory(f, false, false, {});
+        if (!output.empty()) {
+            std::ofstream(output / ("q4_0-short-wg" + std::to_string(width) + ".wgsl"))
+                << pipeline.pipeline.Get()->code;
+        }
+    }
+    Fixture f(GGML_TYPE_Q4_0, 256, 1536);
+    const auto eligible = f.context<ggml_webgpu_shader_lib_context>();
+    if (!output.empty()) {
+        // Compile the previous workgroup geometry from the same source and bindings.
+        auto baseline = ggml_webgpu_shader_lib::make_mul_mat_vec_key(eligible, false, false);
+        baseline.workgroup_size = WEBGPU_MUL_MAT_VEC_WG_SIZE;
+        std::ofstream(output / "q4_0-short-wg256.wgsl")
+            << new_library->prepare_mul_mat_vec_pipeline(eligible, baseline).pipeline.Get()->code;
+    }
+    require(ggml_webgpu_q4_0_short_workgroup(eligible, true, false) == 256, "Short Q4_0 excludes MMVQ");
+    require(ggml_webgpu_q4_0_short_workgroup(eligible, false, true) == 256, "Short Q4_0 excludes overlap");
+    f.max_sg = 64;
+    f.x.ne[2] = f.dst.ne[2] = 2;
+    require(ggml_webgpu_q4_0_short_workgroup(f.context<ggml_webgpu_shader_lib_context>(), false, false) == 64,
+            "Short Q4_0 keeps full subgroups and supports valid broadcast");
+    f.dst.ne[2] = 3;
+    require(ggml_webgpu_q4_0_short_workgroup(f.context<ggml_webgpu_shader_lib_context>(), false, false) == 256,
+            "Short Q4_0 excludes incompatible broadcast");
+}
+
 size_t run(ggml_webgpu_shader_lib & library, ggml_webgpu_shader_lib & scalar, const std::filesystem::path & output) {
     new_library = &library;
     scalar_library = &scalar;
     if (!output.empty()) {
         std::filesystem::create_directories(output);
     }
+    short_workgroups(output);
     for (const auto type : {GGML_TYPE_Q4_0, GGML_TYPE_Q4_K}) {
         for (const uint32_t sg : {16u, 32u}) {
             for (const int64_t k : {1024, 1536, 2048, 2560, 4096}) {

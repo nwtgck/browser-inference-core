@@ -1142,6 +1142,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation:** Cover ordinary and profiling provider selection, cache and limit fallbacks, and binding sizes that end after an 18-byte block. Replayed provider shaders agree with an independent arithmetic reference at full dispatch dimensions using sampled weight rows and a guarded fixture with all four codes. The 64-row tile won in both orders of mirrored software WebGPU comparisons for all four shape pairs. Physical-adapter performance and ordinary first-token latency remain unmeasured.
 - **Removal:** Retire the patch, recipe entry and focused tests when upstream provides equivalent Q2_0 prefill behavior and device performance.
 
+## Short cooperative Q4_0 matvecs
+
+- **Patch:** `ggml-webgpu-q4-zero-short-workgroup.patch`.
+- **Scope:** Ordinary single-column Q4_0 × F32 to F32 matvecs with complete blocks, K up to 1024 and at least 1024 output rows. Require checked batch broadcasting, supported subgroup limits and enough device invocations for the selected size. Preserve the existing independent-subgroup priority. Indexed, integer-dot, overlapping and epilogue paths retain their existing selection.
+- **Contract:** Each block is processed by four lanes. Size the workgroup for every useful lane and at least one full subgroup. Retain four output rows per workgroup, the dispatch grid, the existing accumulation and reduction source, and all bindings. At K256 with subgroup width up to 32, this uses 32 instead of 256 invocations and 512 instead of 4096 bytes of workgroup storage.
+- **Validation:** The normal and profiled native provider tests cover actual selection, cache identity, four-row tiling, a partial final row group, host dispatch and fallback conditions. The ordinary WebGPU Wasm64 provider compiles with the patch. Small software WebGPU comparisons exercise the generated WGSL; full projection throughput still requires a working timing comparison.
+- **Removal:** Remove the stage and focused coverage when upstream chooses equivalent geometry for short Q4_0 operations.
+
 ## Ordinary fixed-subgroup Q4 matvecs
 
 - **Patch:** `ggml-webgpu-q4-subgroup-matvec.patch`.
