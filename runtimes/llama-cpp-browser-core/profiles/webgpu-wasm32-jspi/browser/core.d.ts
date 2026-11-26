@@ -924,13 +924,17 @@ interface WasmModule {
   _ggml_reglu(_0: number, _1: number): Promise<number>;
   _ggml_argsort_top_k(_0: number, _1: number, _2: number): Promise<number>;
   _ggml_add_id(_0: number, _1: number, _2: number, _3: number): Promise<number>;
+  _ggml_backend_dev_supports_buft(_0: number, _1: number): Promise<number>;
+  _ggml_is_matrix(_0: number): Promise<number>;
+  _ggml_flash_attn_ext_add_indexed_bias(_0: number, _1: number, _2: number): Promise<void>;
+  _ggml_backend_dev_supports_op(_0: number, _1: number): number;
   _ggml_flash_attn_ext_rows(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number): Promise<number>;
   _ggml_flash_attn_ext_set_n_kv_max(_0: number, _1: number): Promise<void>;
   _ggml_top_k_mask(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): Promise<number>;
   _ggml_fill_inplace(_0: number, _1: number, _2: number): Promise<number>;
+  _ggml_get_no_alloc(_0: number): Promise<number>;
   _ggml_unary(_0: number, _1: number, _2: number): Promise<number>;
   _ggml_nrows(_0: number): Promise<bigint>;
-  _ggml_is_matrix(_0: number): Promise<number>;
   _ggml_log_get(_0: number, _1: number): Promise<void>;
   _ggml_log_set(_0: number, _1: number): Promise<void>;
   _gguf_get_arr_str(_0: number, _1: bigint, _2: number): Promise<number>;
@@ -949,7 +953,6 @@ interface WasmModule {
   _ggml_backend_tensor_alloc(_0: number, _1: number, _2: number): Promise<number>;
   _ggml_ssm_scan(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: bigint): Promise<number>;
   _ggml_rwkv_wkv6(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number): Promise<number>;
-  _ggml_backend_dev_supports_op(_0: number, _1: number): number;
   _gguf_set_val_i32(_0: number, _1: number, _2: number): Promise<void>;
   _gguf_set_val_u64(_0: number, _1: number, _2: bigint): Promise<void>;
   _gguf_set_arr_str(_0: number, _1: number, _2: number, _3: number): Promise<void>;
@@ -1044,7 +1047,6 @@ interface WasmModule {
   _ggml_threadpool_free(_0: number): Promise<void>;
   _ggml_threadpool_pause(_0: number): Promise<void>;
   _ggml_threadpool_resume(_0: number): Promise<void>;
-  _ggml_get_no_alloc(_0: number): Promise<number>;
   _ggml_unravel_index(_0: number, _1: bigint, _2: number, _3: number, _4: number, _5: number): Promise<void>;
   _ggml_is_empty(_0: number): Promise<number>;
   _ggml_get_unary_op(_0: number): Promise<number>;
@@ -1216,7 +1218,6 @@ interface WasmModule {
   _ggml_pad_ext_circular(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number): Promise<number>;
   _ggml_timestep_embedding(_0: number, _1: number, _2: number, _3: number): Promise<number>;
   _ggml_flash_attn_ext_get_prec(_0: number): Promise<number>;
-  _ggml_flash_attn_ext_add_indexed_bias(_0: number, _1: number, _2: number): Promise<void>;
   _ggml_flash_attn_back(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): Promise<number>;
   _ggml_win_part(_0: number, _1: number, _2: number): Promise<number>;
   _ggml_win_unpart(_0: number, _1: number, _2: number, _3: number, _4: number): Promise<number>;
@@ -1282,7 +1283,6 @@ interface WasmModule {
   _ggml_backend_graph_plan_compute(_0: number, _1: number): Promise<number>;
   _ggml_backend_graph_compute(_0: number, _1: number): Promise<number>;
   _ggml_backend_graph_compute_async(_0: number, _1: number): Promise<number>;
-  _ggml_backend_dev_supports_buft(_0: number, _1: number): Promise<number>;
   _ggml_backend_dev_offload_op(_0: number, _1: number): Promise<number>;
   _ggml_backend_compare_graph_backend(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number): Promise<number>;
   _ggml_backend_meta_split_axis_name(_0: number): Promise<number>;
