@@ -1,0 +1,107 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-q8-sigmoid-mul.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-q8-sigmoid-mul.hpp
+@@ -7,26 +7,33 @@
+ using namespace webgpu_checked_tensor_binding;
+ 
+ constexpr uint32_t workgroup = 128;
+-constexpr uint32_t input_width = 2304;
+-constexpr uint32_t output_width = 3072;
+ constexpr int operations = 3;
++
++static bool matches_projection_weight(const ggml_tensor * weight) {
++    return weight && ((weight->type == GGML_TYPE_Q8_0 && weight->ne[0] == 2304 && weight->ne[1] == 3072) ||
++        ((weight->type == GGML_TYPE_Q4_K || weight->type == GGML_TYPE_Q8_0) &&
++         weight->ne[0] == 6656 && weight->ne[1] == 4096));
++}
+ 
+ static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, ggml_cgraph & graph, int index,
+                                                webgpu_fusion_view_sources & views, int & consumed) {
++    if (index < 0 || index >= graph.n_nodes || graph.n_nodes - index < operations) {
++        return std::nullopt;
++    }
+     const auto * mat = graph.nodes[index];
+     auto * weights = mat->src[0];
+-    if (!weights || weights->type != GGML_TYPE_Q8_0 ||
+-        weights->ne[0] != input_width || weights->ne[1] != output_width ||
+-        graph.n_nodes - index < operations) {
++    if (mat->op != GGML_OP_MUL_MAT || !matches_projection_weight(weights)) {
+         return std::nullopt;
+     }
++    const uint32_t input_width = uint32_t(weights->ne[0]);
++    const uint32_t output_width = uint32_t(weights->ne[1]);
+     const auto * sigmoid = graph.nodes[index + 1];
+     auto * output = graph.nodes[index + 2];
+     auto * input = mat->src[1];
+     const auto * value = output->src[0];
+     if (sigmoid->op != GGML_OP_UNARY || ggml_get_unary_op(sigmoid) != GGML_UNARY_OP_SIGMOID ||
+         sigmoid->src[0] != mat || output->op != GGML_OP_MUL || output->src[1] != sigmoid ||
+-        !shape(weights, GGML_TYPE_Q8_0, input_width, output_width) ||
++        !shape(weights, weights->type, input_width, output_width) ||
+         !shape(input, GGML_TYPE_F32, input_width, 1) || !shape(value, GGML_TYPE_F32, output_width, 1) ||
+         !std::all_of(std::begin(mat->op_params), std::end(mat->op_params), [](int32_t word) { return word == 0; })) {
+         return std::nullopt;
+@@ -101,7 +108,7 @@
+         return std::nullopt;
+     }
+     const auto & decisions = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(pipeline.context.get());
+-    constexpr uint32_t weight_stride = input_width / 32;
++    const uint32_t weight_stride = input_width / ggml_blck_size(weights->type);
+     const std::vector<uint32_t> params = {
+         bindings[0].element_offset, bindings[1].element_offset, dst.element_offset, output_width, 1, input_width,
+         weight_stride, input_width, weight_stride * output_width, input_width, weight_stride * output_width, input_width,
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1984,6 +1984,22 @@
+     return false;
+ }
+ 
++// Keep the ordinary projection's shape and subgroup policy for the epilogue.
++// The Q8-prefixed shader and enum predate its Q4_K specialization.
++inline uint32_t ggml_webgpu_sigmoid_mul_subgroup_size(const ggml_webgpu_shader_lib_context & context,
++                                                       bool use_mmvq, bool src_overlap) {
++    if (!context.src0) { return 0; }
++    if (context.src0->type == GGML_TYPE_Q8_0) {
++        return ggml_webgpu_q8_matvec_subgroup_size(context, use_mmvq, src_overlap);
++    }
++    if (context.src0->type != GGML_TYPE_Q4_K || context.src0->ne[0] != 6656 || context.src0->ne[1] != 4096) {
++        return 0;
++    }
++    auto projection = context;
++    projection.matvec_epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
++    return ggml_webgpu_q4_matvec_subgroup_size(projection, use_mmvq, src_overlap);
++}
++
+ inline bool ggml_webgpu_matvec_post_supported(const ggml_webgpu_shader_lib_context & context,
+                                                 ggml_webgpu_shader_lib_context::matvec_post_op kind,
+                                                 bool src_overlap) {
+@@ -1993,7 +2009,7 @@
+         if (!context.src0 || !context.src1 || !context.dst) { return false; }
+         const bool mmvq = ggml_webgpu_can_use_mmvq(
+             context.src0, context.src1, context.src1->ne[1], context.supports_dot_product, context.vendor);
+-        const uint32_t sg = ggml_webgpu_q8_matvec_subgroup_size(context, mmvq, src_overlap);
++        const uint32_t sg = ggml_webgpu_sigmoid_mul_subgroup_size(context, mmvq, src_overlap);
+         if (sg != 16 && sg != 32) { return false; }
+         for (int i = 2; i < GGML_MAX_DIMS; ++i) {
+             if (context.src0->ne[i] != 1 || context.src1->ne[i] != 1 || context.dst->ne[i] != 1) { return false; }
+@@ -3200,7 +3216,10 @@
+             ggml_webgpu_can_use_mmvq(context.src0, context.src1, context.src1->ne[1], context.supports_dot_product, context.vendor);
+         key.src_overlap = src_overlap;
+         key.epilogue = context.matvec_epilogue;
+-        key.subgroup_size = ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
++        using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
++        const bool sigmoid_mul = key.epilogue == post_op::q8_sigmoid_mul || key.epilogue == post_op::q8_sigmoid_mul_in_place;
++        key.subgroup_size = sigmoid_mul ? ggml_webgpu_sigmoid_mul_subgroup_size(context, key.use_mmvq, src_overlap) :
++            ggml_webgpu_q8_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         if (!key.subgroup_size) {
+             key.subgroup_size = ggml_webgpu_q4_matvec_subgroup_size(context, key.use_mmvq, src_overlap);
+         }
+@@ -3309,7 +3328,8 @@
+              key.workgroup_size != 256 || key.subgroup_size != 0 || key.use_mmvq || key.src_overlap ||
+              key.vectorized < 0 || key.vectorized > 1 || (key.vectorized && context.src0->ne[0] % 4))) { return {}; }
+         const bool q8_post = key.epilogue == post_op::q8_sigmoid_mul || key.epilogue == post_op::q8_sigmoid_mul_in_place;
+-        if (q8_post && (key.src0_type != GGML_TYPE_Q8_0 || key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
++        if (q8_post && ((key.src0_type != GGML_TYPE_Q8_0 && key.src0_type != GGML_TYPE_Q4_K) ||
++            key.src1_type != GGML_TYPE_F32 || key.num_cols != 1 ||
+             key.workgroup_size != 128 || (key.subgroup_size != 16 && key.subgroup_size != 32) ||
+             key.requested_subgroup_size || key.use_mmvq || key.src_overlap || key.vectorized)) { return {}; }
+         auto it = mul_mat_vec_pipelines.find(key);

@@ -1084,6 +1084,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation and removal** Exercise the vocabulary-wide graph and its
   intermediate consumers. Remove once upstream fuses the same sequence.
 
+## Sigmoid attention gate for the K6656 projection
+
+- **Patch** `ggml-webgpu-muse-sigmoid-gate.patch` against llama.cpp
+  `07ba74babd`, after the existing Q8 sigmoid gate overlay.
+- **Scope** Fuse the Q4_K or Q8_0 K6656/M4096 single-token projection,
+  sigmoid, and multiplication by the attention result. Use the ordinary
+  fixed subgroup 16 or 32 projection and its existing accumulator.
+- **Contract** Keep the packed weights and matching graph order. The
+  existing ownership and byte-range checks admit disjoint output and exact
+  reuse of the attention result. Graph breaks and other consumers retain
+  separate dispatches.
+- **Validation and removal** Exercise both quantizations, the existing
+  Q8_0 shape, and the in-place and rejection paths. Remove when upstream
+  provides equivalent checked gate fusion.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

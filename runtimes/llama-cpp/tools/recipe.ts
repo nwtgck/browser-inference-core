@@ -1205,6 +1205,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-muse-sigmoid-gate.patch',
+    target: 'llama-webgpu',
+    reason: 'Fuse the sigmoid attention gate after supported Q4_K and Q8_0 projections.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-q8-sigmoid-mul.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

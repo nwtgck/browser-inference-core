@@ -2,18 +2,36 @@
 
 namespace q8_sigmoid_mul_cases {
 
-enum class Use { separate, in_place, raw_matvec_reader, raw_sigmoid_reader, split, varying_subgroups };
+enum class Use {
+    separate,
+    in_place,
+    raw_matvec_reader,
+    raw_sigmoid_reader,
+    observed_matvec,
+    split,
+    varying_subgroups,
+    wrong_shape,
+    explicit_precision,
+    partial_alias,
+    input_stride
+};
 
-static void graph(uint32_t subgroup, Use use) {
+struct Projection {
+    ggml_type type;
+    int64_t input;
+    int64_t output;
+};
+
+static void graph(const Projection & projection, uint32_t subgroup, Use use) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     auto & global = *gpu.context->global_ctx;
     auto & caps = global.capabilities;
     caps.supports_subgroups = true;
     caps.min_subgroup_size = use == Use::varying_subgroups ? 16 : subgroup;
     caps.max_subgroup_size = subgroup;
-    caps.limits.maxStorageBufferBindingSize = 16 * 1024 * 1024;
-    caps.limits.maxBufferSize = 16 * 1024 * 1024;
-    gpu.type.iface.get_max_size = [](ggml_backend_buffer_type_t) -> size_t { return 16 * 1024 * 1024; };
+    caps.limits.maxStorageBufferBindingSize = 64 * 1024 * 1024;
+    caps.limits.maxBufferSize = 64 * 1024 * 1024;
+    gpu.type.iface.get_max_size = [](ggml_backend_buffer_type_t) -> size_t { return 64 * 1024 * 1024; };
     gpu.context->param_arena.cleanup();
     gpu.context->param_arena.init(global.device, WEBGPU_PARAMS_BUF_SIZE_BYTES, 74, 256);
 
@@ -22,22 +40,31 @@ static void graph(uint32_t subgroup, Use use) {
     BICORE_CHECK(storage && memory);
     auto * persistent = storage.get();
     auto * ctx = memory.get();
-    auto * weight_root = ggml_new_tensor_2d(persistent, GGML_TYPE_Q8_0, 2304, 3073);
-    // Two Q8_0 blocks put the logical weight start 68 bytes into the allocation.
-    auto * weight = ggml_view_2d(persistent, weight_root, 2304, 3072, weight_root->nb[1], 68);
-    auto * input = ggml_new_tensor_1d(persistent, GGML_TYPE_F32, 2304);
-    auto * attention_input = ggml_new_tensor_2d(persistent, GGML_TYPE_F32, 128, 24);
+    const int64_t k = projection.input;
+    const int64_t m = projection.output + (use == Use::wrong_shape ? 128 : 0);
+    auto * weight_root = ggml_new_tensor_2d(persistent, projection.type, k, m + 1);
+    // Preserve nonzero quantized rebasing for both 34-byte and 144-byte blocks.
+    const size_t prefix = 2 * ggml_type_size(projection.type);
+    auto * weight = ggml_view_2d(persistent, weight_root, k, m, weight_root->nb[1], prefix);
+    auto * input = ggml_new_tensor_1d(persistent, GGML_TYPE_F32, k);
+    auto * attention_input = ggml_new_tensor_2d(persistent, GGML_TYPE_F32, 128, m / 128);
     const auto allocated = transfer_cases::Buffer(ggml_backend_alloc_ctx_tensors_from_buft(persistent, &gpu.type),
                                                   ggml_backend_buffer_free);
     BICORE_CHECK(allocated);
 
     auto * attention = ggml_dup(ctx, attention_input);
-    auto * value = ggml_reshape_1d(ctx, attention, 3072);
+    auto * value = ggml_reshape_1d(ctx, attention, m);
     auto * matvec = ggml_mul_mat(ctx, weight, input);
+    if (use == Use::explicit_precision) {
+        BICORE_CHECK(ggml_prec_set_acc(matvec, GGML_PREC_F32));
+    }
     auto * sigmoid = ggml_sigmoid(ctx, matvec);
     auto * output = ggml_mul(ctx, value, sigmoid);
     auto * layout = ggml_new_graph_custom(ctx, 32, false);
     ggml_set_output(output);
+    if (use == Use::observed_matvec) {
+        ggml_set_output(matvec);
+    }
     ggml_build_forward_expand(layout, output);
     const int stop = ggml_graph_n_nodes(layout);
     if (use == Use::raw_matvec_reader || use == Use::raw_sigmoid_reader) {
@@ -57,6 +84,10 @@ static void graph(uint32_t subgroup, Use use) {
     if (use == Use::in_place) {
         // Exercise the same physical reuse that GGML can assign to MUL.
         output->data = value->data;
+    } else if (use == Use::partial_alias) {
+        output->data = static_cast<char *>(value->data) + sizeof(float);
+    } else if (use == Use::input_stride) {
+        input->nb[1] += sizeof(float);
     }
 
     const auto first_matvec = std::find(layout->nodes, layout->nodes + stop, matvec);
@@ -95,7 +126,7 @@ static void graph(uint32_t subgroup, Use use) {
     BICORE_CHECK(first != slots.end());
     const bool in_place = use == Use::in_place;
     BICORE_CHECK(first->pipeline.Get()->name.ends_with(in_place ? "_sigmoid_mul_in_place" : "_sigmoid_mul"));
-    BICORE_CHECK(dispatch.x == (subgroup == 16 ? 96 : 192) && dispatch.y == 1 && dispatch.z == 1);
+    BICORE_CHECK(dispatch.x == uint32_t(m) / (4 * 128 / subgroup) && dispatch.y == 1 && dispatch.z == 1);
     const ggml_tensor * tensors[] = {weight, input, output, value};
     const size_t storage_count = in_place ? 3 : 4;
     BICORE_CHECK(first->bindings.size() == storage_count + 1);
@@ -109,16 +140,31 @@ static void graph(uint32_t subgroup, Use use) {
     BICORE_CHECK(uniform.binding_index == storage_count && uniform.size == WEBGPU_PARAMS_BUF_SIZE_BYTES);
     std::array<uint32_t, 17> params{};
     std::memcpy(params.data(), uniform.buffer.Get()->bytes.data() + uniform.offset, sizeof(params));
-    const std::array<uint32_t, 17> expected_params = {2,    0,      0,    3072, 1, 2304, 72, 2304, 221184,
-                                                      2304, 221184, 2304, 1,    1, 1,    1,  0};
+    const uint32_t ku = uint32_t(k), mu = uint32_t(m);
+    const uint32_t stride = ku / ggml_blck_size(projection.type);
+    const std::array<uint32_t, 17> expected_params = {2,  0,           0,  mu, 1, ku, stride, ku, stride * mu,
+                                                      ku, stride * mu, ku, 1,  1, 1,  1,      0};
     BICORE_CHECK(params == expected_params);
+
+    const auto pipelines_after_cold = created;
+    const auto groups_after_cold = resources.groups_created;
+    commands = {};
+    run(slice);
+    BICORE_CHECK(commands.dispatches.size() == 1 && created == pipelines_after_cold &&
+                 resources.groups_created == groups_after_cold);
 }
 
 static void all() {
-    graph(16, Use::separate);
-    for (const auto use : {Use::separate, Use::in_place, Use::raw_matvec_reader, Use::raw_sigmoid_reader, Use::split,
-                           Use::varying_subgroups}) {
-        graph(32, use);
+    for (const Projection projection :
+         {Projection{GGML_TYPE_Q8_0, 2304, 3072}, Projection{GGML_TYPE_Q4_K, 6656, 4096},
+          Projection{GGML_TYPE_Q8_0, 6656, 4096}}) {
+        graph(projection, 16, Use::separate);
+        graph(projection, 16, Use::in_place);
+        for (const auto use : {Use::separate, Use::in_place, Use::raw_matvec_reader, Use::raw_sigmoid_reader,
+                               Use::observed_matvec, Use::split, Use::varying_subgroups, Use::wrong_shape,
+                               Use::explicit_precision, Use::partial_alias, Use::input_stride}) {
+            graph(projection, 32, use);
+        }
     }
 }
 
