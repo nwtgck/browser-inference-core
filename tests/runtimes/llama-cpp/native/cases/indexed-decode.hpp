@@ -33,7 +33,11 @@ static void check_bounds(ggml_webgpu_shader_lib_context candidate) {
         return;
     invalid = candidate;
     copied = *candidate.src0;
-    copied.ne[2] = copied.ne[0] == 2560 ? 512 : 128;
+    if (copied.type == GGML_TYPE_MXFP4) {
+        copied.ne[2] = 32;
+    } else {
+        copied.ne[2] = copied.ne[0] == 2560 ? 512 : 128;
+    }
     const size_t full_weights = ggml_nbytes(&copied);
     invalid.src0 = &copied;
     invalid.indexed_binding_bytes[0] = full_weights;
@@ -140,5 +144,13 @@ static void all() {
         check_provider(quant, 2560, 1, 32, 32, true, 640, 10);
         check_provider(quant, 2560, 1, 16, 32, true, 640, 10);
     }
+    check_provider(GGML_TYPE_MXFP4, 2880, 1, 8, 16, true, 2880, 4);
+    check_provider(GGML_TYPE_MXFP4, 2880, 4, 32, 32, true, 2880, 4);
+    check_provider(GGML_TYPE_MXFP4, 2880, 4, 8, 32, true, 2880, 4);
+    check_provider(GGML_TYPE_MXFP4, 2880, 4, 4, 32, false, 2880, 4);
+    check_provider(GGML_TYPE_Q4_0, 2816, 1, 8, 32, true, 1408, 8);
+    check_provider(GGML_TYPE_Q4_0, 704, 8, 16, 16, true, 2816, 8);
+    check_provider(GGML_TYPE_Q4_0, 704, 8, 8, 32, true, 2816, 8);
+    check_provider(GGML_TYPE_Q4_0, 704, 1, 8, 32, false, 2816, 8);
 }
 } // namespace indexed_decode_cases

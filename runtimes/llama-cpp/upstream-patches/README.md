@@ -988,6 +988,29 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   the independent path over the same ranges. Recheck the virtual-lane
   mapping and active-lane reduction after upstream updates.
 
+## Independent indexed MXFP4 and Q4_0 decode
+
+- **Patches** `ggml-webgpu-indexed-mxfp4-q4-subgroups.patch` and
+  `ggml-webgpu-indexed-mxfp4-scale.patch` against llama.cpp `07ba74babd`.
+- **Scope** Admit K2880/M2880 MXFP4 with four selected experts and
+  broadcast or per-slot activation. Admit eight selected experts on
+  K2816/M1408 Q4_0 with broadcast activation and K704/M2816 Q4_0 with
+  per-slot activation. Require one token, F32 activations and output, a
+  checked binding, and logical width 16 or 32. Use the existing fixed and
+  portable width rules.
+- **Contract** Preserve each weight layout, addressing, activation stride,
+  and output ownership. Reduce four rows per logical subgroup and allow
+  the corresponding change in F32 reduction order. Read the MXFP4 exponent
+  from its containing word and construct the E8M0 half-scale directly
+  from its bits, including the two subnormal codes. Apply this change to
+  the independent indexed accumulator.
+- **Validation and removal** Compare the emitted shaders with GGML CPU
+  dequantization and an independent dot product for broadcast and per-slot
+  activations, skipped IDs, and physical widths 8, 16, and 32. Verify
+  dispatch and binding limits on both providers. Remove these patches when
+  upstream covers the same shapes and scale loads. Review the 17-byte
+  MXFP4 block and subgroup mapping on upstream updates.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

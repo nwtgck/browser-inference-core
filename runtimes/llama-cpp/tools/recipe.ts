@@ -1097,6 +1097,20 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-mxfp4-q4-subgroups.patch',
+    target: 'llama-webgpu',
+    reason: 'Use independent subgroups on checked indexed MXFP4 and Q4_0 projections.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-indexed-mxfp4-scale.patch',
+    target: 'iq3s',
+    reason: 'Read the indexed MXFP4 exponent in one aligned word and construct its half-scale bits.',
+    files: ['ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-indexed-iq4-paired-half.patch',
     target: 'llama-webgpu',
     reason: 'stage complete IQ4_NL expert tiles with paired nibbles and checked half arithmetic',

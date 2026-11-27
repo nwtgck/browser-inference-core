@@ -1,0 +1,30 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -343,7 +343,9 @@
+     }
+     const bool iq2_or_iq3_xxs = a->type == GGML_TYPE_IQ2_XXS || a->type == GGML_TYPE_IQ2_XS ||
+                                   a->type == GGML_TYPE_IQ2_S || a->type == GGML_TYPE_IQ3_XXS;
+-    if ((!iq2_or_iq3_xxs && a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
++    const bool mxfp4_or_q4_0 = a->type == GGML_TYPE_MXFP4 || a->type == GGML_TYPE_Q4_0;
++    if ((!iq2_or_iq3_xxs && !mxfp4_or_q4_0 && a->type != GGML_TYPE_IQ3_S &&
++         a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
+          a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K && a->type != GGML_TYPE_Q2_0) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+         !context.supports_subgroups || context.max_wg_size < 128 ||
+@@ -364,6 +366,15 @@
+         const bool wide_rows = a->ne[0] == 2304 && a->ne[1] == 2304 && dst->ne[1] == 8;
+         const bool narrow_rows = a->ne[0] == 2560 && a->ne[1] == 640 && dst->ne[1] == 10;
+         return (sg == 16 || sg == 32) && x->ne[1] == 1 && (wide_rows || narrow_rows);
++    }
++    if (mxfp4_or_q4_0) {
++        const bool mxfp4_square = a->type == GGML_TYPE_MXFP4 &&
++                                  a->ne[0] == 2880 && a->ne[1] == 2880 && dst->ne[1] == 4;
++        const bool q4_gate_up = a->type == GGML_TYPE_Q4_0 &&
++                                a->ne[0] == 2816 && a->ne[1] == 1408 && dst->ne[1] == 8 && x->ne[1] == 1;
++        const bool q4_down = a->type == GGML_TYPE_Q4_0 &&
++                             a->ne[0] == 704 && a->ne[1] == 2816 && dst->ne[1] == 8 && x->ne[1] == 8;
++        return (sg == 16 || sg == 32) && (mxfp4_square || q4_gate_up || q4_down);
+     }
+     if (a->type == GGML_TYPE_Q2_0) {
+         return !context.indexed_split_weights && (sg == 16 || sg == 32) && a->ne[0] == 1152 &&
