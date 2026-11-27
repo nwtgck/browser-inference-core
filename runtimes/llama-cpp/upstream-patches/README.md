@@ -1926,6 +1926,19 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove this patch when upstream supplies equivalent selection for these
   packed formats.
 
+## Single-output row selection in Gemma 4
+
+- **Patch** `gemma4-single-output-row.patch` against llama.cpp `07ba74babd`.
+- **Scope** Use the original row and attention masks directly when the
+  graph has one input and one output. This removes identity gathers and
+  the shared-KV output mask copies for the eligible graph.
+- **Contract** Base the decision on the effective graph output count.
+  Preserve the established topology for parallel pipelines, zero-output
+  steps that still update KV, and batches with multiple rows.
+- **Validation and removal** Compare real synthetic-model graphs and
+  outputs across shared and independent KV, embeddings, graph reuse, and
+  state restore. Remove when upstream skips the equivalent identity work.
+
 ## Shared message bank for Inkling loop passes
 
 - **Patch** `inkling-loop-shared-mix-state.patch` against llama.cpp `07ba74babd`.

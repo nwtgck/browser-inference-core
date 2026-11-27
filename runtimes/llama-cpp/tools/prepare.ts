@@ -212,6 +212,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       const selections: PreparationReceipt['selections'] = [];
       let shaders: Record<string, Record<string, FileIdentity>> = {};
       patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingLoopMix }));
+      patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.gemma4SingleOutputRow }));
       switch (target) {
       case 'wasm':
         for (const patch of wasmCpuPatches) {

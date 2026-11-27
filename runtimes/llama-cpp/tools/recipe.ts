@@ -1246,6 +1246,12 @@ export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
 }
 
 export const modelPatches = {
+  gemma4SingleOutputRow: {
+    file: 'gemma4-single-output-row.patch',
+    target: 'llama',
+    reason: 'Skip identity output gathers and mask repacking for one Gemma 4 input and output token.',
+    files: ['src/models/gemma4.cpp'],
+  },
   webgpuExpertStorageRetry: {
     file: 'ggml-webgpu-expert-storage-retry.patch',
     target: 'llama-webgpu',

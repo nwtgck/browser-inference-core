@@ -1,0 +1,26 @@
+diff --git a/src/models/gemma4.cpp b/src/models/gemma4.cpp
+--- a/src/models/gemma4.cpp
++++ b/src/models/gemma4.cpp
+@@ -220,8 +220,12 @@
+     const bool needs_unmasked_nextn =
+         cparams.embeddings_nextn && !cparams.embeddings_nextn_masked;
+ 
++    // One input and one output make row selection an identity. Keep the
++    // established graph topology for the parallel pipeline.
++    const bool single_output_row = n_tokens == 1 && n_outputs == 1 && !cparams.pipeline_parallel;
++
+     // KV-shared layers do not write to the KV cache, so prune non-output token rows before the first KV-shared layer
+-    bool prune_shared = !needs_unmasked_nextn &&
++    bool prune_shared = !single_output_row && !needs_unmasked_nextn &&
+                         hparams.n_layer_kv_from_start > 0 && hparams.n_layer_kv_from_start < n_layer &&
+                         !cparams.embeddings;
+     for (int il = (int) hparams.n_layer_kv_from_start; prune_shared && il <= n_layer; ++il) {
+@@ -232,7 +236,7 @@
+ 
+     ggml_tensor * inp_prune_ids = nullptr;
+     ggml_tensor * inp_prune_keep = nullptr;
+-    ggml_tensor * inp_out_ids = prune_shared ? nullptr : build_inp_out_ids();
++    ggml_tensor * inp_out_ids = (prune_shared || single_output_row) ? nullptr : build_inp_out_ids();
+ 
+     for (int il = 0; il < n_layer; ++il) {
+         if (prune_shared && il == (int) hparams.n_layer_kv_from_start) {
