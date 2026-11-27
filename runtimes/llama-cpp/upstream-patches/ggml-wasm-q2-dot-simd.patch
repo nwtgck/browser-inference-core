@@ -1,0 +1,55 @@
+--- a/ggml/src/ggml-cpu/quants.c
++++ b/ggml/src/ggml-cpu/quants.c
+@@ -179,6 +179,34 @@
+     *s = sumf;
+ }
+ 
++#if defined(__wasm_simd128__)
++static inline int ggml_q2_0_q8_0_dot32(const uint8_t * packed, const int8_t * q8) {
++    // Expand exactly eight packed bytes, interleaving their two-bit codes in element order.
++    const v128_t bits = wasm_v128_load64_zero(packed);
++    const v128_t adjacent01 = wasm_i8x16_shuffle(bits, wasm_u16x8_shr(bits, 2),
++                                                0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
++    const v128_t adjacent23 = wasm_i8x16_shuffle(wasm_u16x8_shr(bits, 4), wasm_u16x8_shr(bits, 6),
++                                                0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
++    const v128_t mask = wasm_i8x16_splat(3);
++    const v128_t bias = wasm_i8x16_splat(1);
++    const v128_t lo = wasm_i8x16_sub(wasm_v128_and(
++        wasm_i16x8_shuffle(adjacent01, adjacent23, 0, 8, 1, 9, 2, 10, 3, 11), mask), bias);
++    const v128_t hi = wasm_i8x16_sub(wasm_v128_and(
++        wasm_i16x8_shuffle(adjacent01, adjacent23, 4, 12, 5, 13, 6, 14, 7, 15), mask), bias);
++    const v128_t qlo = wasm_v128_load(q8);
++    const v128_t qhi = wasm_v128_load(q8 + 16);
++    const v128_t sums = wasm_i32x4_add(
++        wasm_i32x4_add(
++            wasm_i32x4_dot_i16x8(wasm_i16x8_extend_low_i8x16(lo), wasm_i16x8_extend_low_i8x16(qlo)),
++            wasm_i32x4_dot_i16x8(wasm_i16x8_extend_high_i8x16(lo), wasm_i16x8_extend_high_i8x16(qlo))),
++        wasm_i32x4_add(
++            wasm_i32x4_dot_i16x8(wasm_i16x8_extend_low_i8x16(hi), wasm_i16x8_extend_low_i8x16(qhi)),
++            wasm_i32x4_dot_i16x8(wasm_i16x8_extend_high_i8x16(hi), wasm_i16x8_extend_high_i8x16(qhi))));
++    return wasm_i32x4_extract_lane(sums, 0) + wasm_i32x4_extract_lane(sums, 1) +
++           wasm_i32x4_extract_lane(sums, 2) + wasm_i32x4_extract_lane(sums, 3);
++}
++#endif
++
+ void ggml_vec_dot_q2_0_q8_0_generic(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+     const int qk = QK2_0;
+     const int nb = n / qk;
+@@ -209,6 +237,9 @@
+             const uint8_t * GGML_RESTRICT qs = &x[i].qs[k * 8];
+             const int8_t  * GGML_RESTRICT qy = yb->qs;
+ 
++#if defined(__wasm_simd128__)
++            sumi_block = ggml_q2_0_q8_0_dot32(qs, qy);
++#else
+             for (int b = 0; b < 8; ++b) {
+                 const uint8_t byte = qs[b];
+                 // Extract 4 two-bit values, map {0,1,2,3} -> {-1,0,1,2}
+@@ -217,6 +248,7 @@
+                 sumi_block += ((int)((byte >> 4) & 3) - 1) * qy[b*4 + 2];
+                 sumi_block += ((int)((byte >> 6) & 3) - 1) * qy[b*4 + 3];
+             }
++#endif
+ 
+             sumi += d1 * sumi_block;
+         }

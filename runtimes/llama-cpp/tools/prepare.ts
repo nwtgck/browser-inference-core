@@ -9,7 +9,7 @@ import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { applyPatch, type PatchReceipt } from '#tools/source/patches';
 import { generateWgsl } from '#tools/source/wgsl';
 import { loadConfiguration, runtimePath } from '#runtimes/llama-cpp/tools/config';
-import { modelPatches, mtmdPatches, patchDirectory, webgpuPatches, type SourceMode } from '#runtimes/llama-cpp/tools/recipe';
+import { modelPatches, mtmdPatches, patchDirectory, wasmQ2DotPatch, webgpuPatches, type SourceMode } from '#runtimes/llama-cpp/tools/recipe';
 
 const webgpuBase = 'ggml/src/ggml-webgpu';
 const shaderBase = `${webgpuBase}/wgsl-shaders`;
@@ -211,6 +211,16 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       const selections: PreparationReceipt['selections'] = [];
       let shaders: Record<string, Record<string, FileIdentity>> = {};
       patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingLoopMix }));
+      switch (target) {
+      case 'wasm':
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: wasmQ2DotPatch }));
+        break;
+      case 'native': break;
+      default: {
+        const _ex: never = target;
+        throw new Error(`Unknown preparation target: ${String(_ex)}`);
+      }
+      }
       if (webgpu) {
         const nativeContext = join(scratch.root, 'native-context.cpp');
         switch (target) {

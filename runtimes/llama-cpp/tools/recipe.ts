@@ -1143,6 +1143,13 @@ export const modelPatches = {
   },
 } satisfies Record<string, Patch>;
 
+export const wasmQ2DotPatch: Patch = {
+  file: 'ggml-wasm-q2-dot-simd.patch',
+  target: 'llama',
+  reason: 'Vectorize packed Q2_0 CPU dots with standard Wasm SIMD.',
+  files: ['ggml/src/ggml-cpu/quants.c'],
+};
+
 export function mtmdPatches({ mode }: { mode: 'cpu' | 'webgpu' }): Patch[] {
   const patches: Patch[] = [{
     file: 'mtmd-vision-bf16-runtime.patch',

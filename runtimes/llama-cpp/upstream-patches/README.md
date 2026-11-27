@@ -1458,6 +1458,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   with equivalent layout and device checks. Review Q2_0 packing, matrix scratch,
   view ownership and indexed cache keys when updating upstream.
 
+## Wasm SIMD Q2_0 CPU dot product
+
+- **Patch** `ggml-wasm-q2-dot-simd.patch` against llama.cpp `07ba74babd`.
+- **Scope** Use standard SIMD128 for the CPU Q2_0 × Q8_0 dot in Wasm
+  preparations, including CPU operations in WebGPU profiles.
+- **Contract** Expand eight packed Q2_0 bytes in element order per Q8_0
+  block. Widen signed operands to 16 bits and accumulate exact integer
+  products in 32 bits. Keep both Q8_0 scales and the original floating-point
+  accumulation order. Retain the scalar body when SIMD128 is unavailable.
+- **Validation and removal** Compile the CPU translation unit under Wasm32 and
+  Wasm64 production settings. Compare packed finite data against the original
+  dot, including signed scales, subnormals, and inputs at the memory boundary.
+  Remove the overlay when upstream provides an equivalent standard SIMD
+  implementation on the CPU backend used by Wasm.
+
 ## Indexed Q2_0 decode subgroups
 
 - **Patch** `ggml-webgpu-indexed-q2-subgroup-matvec.patch` against llama.cpp
