@@ -1,0 +1,140 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1762,13 +1762,14 @@
+     int       vectorized;
+     bool      f32_accumulator;
+     bool      split_weights;
++    bool      iq4_paired_half;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+                f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m &&
+-               split_weights == other.split_weights;
++               split_weights == other.split_weights && iq4_paired_half == other.iq4_paired_half;
+     }
+ };
+ 
+@@ -1786,6 +1787,7 @@
+         ggml_webgpu_hash_combine(seed, key.tile_k);
+         ggml_webgpu_hash_combine(seed, key.tile_m);
+         ggml_webgpu_hash_combine(seed, key.split_weights);
++        ggml_webgpu_hash_combine(seed, key.iq4_paired_half);
+         return seed;
+     }
+ };
+@@ -3904,6 +3906,13 @@
+             key.tile_m = wide_tile_m;
+         }
+ 
++        // Paired staging assumes complete packed blocks and output row tiles.
++        const uint32_t output_rows = key.tile_m * WEBGPU_MUL_MAT_WG_SIZE_M;
++        key.iq4_paired_half = key.src0_type == GGML_TYPE_IQ4_NL && key.src1_type == GGML_TYPE_F32 &&
++                              !key.vectorized && key.tile_m == double_row_tile_m &&
++                              key.tile_k % 32u == 0 && k > 0 && k % key.tile_k == 0 &&
++                              m > 0 && m % output_rows == 0;
++
+         auto it = mul_mat_id_pipelines.find(key);
+         if (it != mul_mat_id_pipelines.end()) {
+             return it->second;
+@@ -4015,6 +4024,11 @@
+ 
+         if (key.f32_accumulator) {
+             variant += "_acc_f32";
++        }
++
++        if (key.iq4_paired_half) {
++            defines.push_back("BICORE_IQ4_PAIRED_HALF");
++            variant += "_iq4_half";
+         }
+ 
+         if (key.src0_type == GGML_TYPE_NVFP4 && key.src1_type == GGML_TYPE_F32 && key.f32_accumulator) {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -731,6 +731,51 @@
+ const BLOCK_SIZE_BYTES = 18u;
+ const NQ = 4u;
+ 
++#ifdef BICORE_IQ4_PAIRED_HALF
++fn iq4_pair_codes(word: u32, shift: u32) -> vec4<f32> {
++    let codes = (vec4<u32>(word) >> (vec4<u32>(0u, 8u, 16u, 24u) + vec4<u32>(shift))) & vec4<u32>(15u);
++    return vec4<f32>(f32(kvalues_iq4nl[codes.x]), f32(kvalues_iq4nl[codes.y]),
++                     f32(kvalues_iq4nl[codes.z]), f32(kvalues_iq4nl[codes.w]));
++}
++
++fn iq4_write_half4(at: u32, values: vec4<f16>) {
++    shmem[at] = values.x;
++    shmem[at + 1u] = values.y;
++    shmem[at + 2u] = values.z;
++    shmem[at + 3u] = values.w;
++}
++
++fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
++    const blocks_per_row = TILE_K / 32u;
++    for (var g = thread_id; g < TILE_SRC0_SHMEM / 16u; g += TOTAL_WORKGROUP_SIZE) {
++        let block = g / 2u;
++        let m = offset_m + block / blocks_per_row;
++        let k = k_outer / 32u + block % blocks_per_row;
++        let bytes = (batch_offset + m * params.stride_01 + k) * 18u;
++        let scale = load_f16_as_f32_at_src0(bytes);
++        let magnitude = abs(scale);
++        // All IQ4_NL coefficients have absolute value 1..127. Inside this
++        // scale range their products are finite, normal half values.
++        let use_half = magnitude >= 0.00006103515625 && magnitude <= 512.0;
++        let first = (g % 2u) * 2u;
++        for (var j = 0u; j < 2u; j++) {
++            let word = first + j;
++            let qs = load_u32_at_src0(bytes + 2u + 4u * word);
++            let lo = iq4_pair_codes(qs, 0u);
++            let hi = iq4_pair_codes(qs, 4u);
++            let dst_lo = block * 32u + 4u * word;
++            let dst_hi = dst_lo + 16u;
++            if (use_half) {
++                iq4_write_half4(dst_lo, f16(scale) * vec4<f16>(lo));
++                iq4_write_half4(dst_hi, f16(scale) * vec4<f16>(hi));
++            } else {
++                iq4_write_half4(dst_lo, vec4<f16>(scale * lo));
++                iq4_write_half4(dst_hi, vec4<f16>(scale * hi));
++            }
++        }
++    }
++}
++#else
+ fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
+     for (var elem_idx = thread_id * NQ; elem_idx < TILE_SRC0_SHMEM; elem_idx += NQ * TOTAL_WORKGROUP_SIZE) {
+         let tile_m = elem_idx / TILE_K;
+@@ -765,6 +810,7 @@
+         shmem[elem_idx + 3u] = f16(d * f32(kvalues_iq4nl[(qs_u32 >> (24u + 4u * shift_phase)) & 0xFu]));
+     }
+ }
++#endif
+ #endif // INIT_SRC0_SHMEM_IQ4_NL
+ 
+ // i-quants (super block size: 256)
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -153,7 +153,11 @@
+ 
+ #ifdef BICORE_SPARSE_EXPERT_COLUMNS
+         if (is_valid && rest_token_n <= WORKGROUP_SIZE_N && local_n < rest_token_n) {
++#ifdef BICORE_IQ4_PAIRED_HALF
++            let k_end = TILE_K;
++#else
+             let k_end = min(TILE_K, params.k - k_outer);
++#endif
+             for (var k_inner = 0u; k_inner < k_end; k_inner++) {
+                 var src0_tile: array<f16, TILE_M>;
+                 for (var tm = 0u; tm < TILE_M; tm++) {
+@@ -171,7 +175,11 @@
+ #else
+         if (is_valid && output_col_base < rest_token_n) {
+ #endif
++#ifdef BICORE_IQ4_PAIRED_HALF
++            let k_end = TILE_K;
++#else
+             let k_end = min(TILE_K, params.k - k_outer);
++#endif
+ 
+             for (var k_inner = 0u; k_inner < k_end; k_inner++) {
+                 var src0_tile: array<f16, TILE_M>;

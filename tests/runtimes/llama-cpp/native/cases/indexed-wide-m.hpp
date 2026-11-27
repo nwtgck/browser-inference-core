@@ -53,6 +53,10 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             const auto & d = *static_cast<const ggml_webgpu_mul_mat_shader_decisions *>(pipeline.context.get());
             BICORE_CHECK(d.tile_m * d.wg_size_m == expected_rows && d.tile_n * d.wg_size_n == 32);
             BICORE_CHECK(d.tile_k == expected_k && d.wg_size == 64);
+            const bool iq4_paired_half = type == GGML_TYPE_IQ4_NL && expected_rows == 128;
+            BICORE_CHECK((pipeline.name.find("_iq4_half") != std::string::npos) == iq4_paired_half);
+            BICORE_CHECK((pipeline.pipeline.Get()->code.find("iq4_pair_codes") != std::string::npos) ==
+                         iq4_paired_half);
             return pipeline;
         };
         const auto narrow = select(6399, 32);

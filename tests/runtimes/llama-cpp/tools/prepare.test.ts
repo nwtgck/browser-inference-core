@@ -53,6 +53,8 @@ test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout
     ['q8_subgroup_matvec.wgsl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],
     ['mul_mat_id_vec.wgsl', 'ggml-webgpu-aligned-word-load-shaders.hpp'],
     ['iq3s_id_subgroup.wgsl', 'ggml-webgpu-iq3s-id-subgroup-shaders.hpp'],
+    ['mul_mat_id_group.wgsl', 'ggml-webgpu-mul-mat-id-group-shaders.hpp'],
+    ['mul_mat_id_group_decls.tmpl', 'ggml-webgpu-mul-mat-id-group-shaders.hpp'],
   ] as const) {
     const prepared = receipt.outputs[`ggml/src/ggml-webgpu/wgsl-shaders/${name}`];
     assert.ok(prepared);

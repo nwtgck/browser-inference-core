@@ -1083,6 +1083,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-iq4-paired-half.patch',
+    target: 'llama-webgpu',
+    reason: 'stage complete IQ4_NL expert tiles with paired nibbles and checked half arithmetic',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-vector-attention-mask-bitset.patch',
     target: 'llama-webgpu',
     reason: 'Skip masked KV tiles in long F16 vector attention without visiting the inner loop.',

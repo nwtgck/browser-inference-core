@@ -1795,6 +1795,24 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   masks and rounding boundaries. Remove when upstream provides the equivalent
   packed fusion with the same lifetime and conversion guarantees.
 
+## WebGPU indexed IQ4_NL paired half staging
+
+- **Patch** `ggml-webgpu-indexed-iq4-paired-half.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Reuse the 128-row indexed IQ4_NL prefill tile with F32 input and
+  complete K and M tiles. Use its existing K32 or K64 selection. Distinguish
+  the paired stage in the matrix pipeline cache.
+- **Contract** Read each packed word once and stage both sets of four
+  coefficients. With an absolute scale from the smallest normal half through
+  512, both the scale and the rounded products are normal finite half values.
+  Multiplication in F32 is exact in that range, so half multiplication rounds
+  the same exact product. Use the F32 product for other scales. Keep the
+  shared storage, gather and binding layouts, and the ascending K order.
+- **Validation and removal** Check emitted code and actual dispatch selection in
+  both providers. Replay the shaders with synthetic packed weights, varied
+  scales and routes, and independent reference samples. Remove the patch when
+  upstream stages both nibbles with equivalent guarded arithmetic.
+
 ## WebGPU indexed NVFP4 half-vector staging
 
 - **Patch** `ggml-webgpu-nvfp4-indexed-half-staging.patch` against llama.cpp `c212d25ad`.
