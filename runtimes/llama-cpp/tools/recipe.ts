@@ -1258,6 +1258,20 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-lfm-short-conv.patch',
+    target: 'llama-webgpu',
+    reason: 'Fuse short recurrent state updates and convolution output gates.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-gate.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv_gate.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

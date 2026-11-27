@@ -13,6 +13,7 @@
 #include "cases/expert-storage.hpp"
 #include "cases/short-conv.hpp"
 #include "cases/short-conv-dynamic.hpp"
+#include "cases/ssm-conv-gate.hpp"
 #include "cases/depth-mix.hpp"
 #include "cases/situ.hpp"
 #include "cases/loop-controller.hpp"
@@ -37,6 +38,7 @@ int main() {
     expert_storage_cases::all();
     short_conv_cases::all();
     short_conv_dynamic_cases::all();
+    ssm_conv_gate_cases::all();
     depth_mix_cases::all();
     situ_cases::all();
     loop_controller_cases::all();

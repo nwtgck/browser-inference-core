@@ -1,0 +1,376 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -19,6 +19,7 @@
+ #include "ggml-webgpu-loop-controller-shaders.hpp"
+ #include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
++#include "ggml-webgpu-ssm-conv-gate-shaders.hpp"
+ #include "ggml-webgpu-short-conv-dynamic-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp"
+@@ -962,14 +963,17 @@
+ };
+ 
+ /** SSM Conv **/
++enum class webgpu_ssm_conv_epilogue { none, silu, gate };
++
+ struct ggml_webgpu_ssm_conv_pipeline_key {
+     int type;
+     int vectorized;
+     uint32_t tokens_per_wg;
+-    bool post_silu;
++    webgpu_ssm_conv_epilogue epilogue;
+ 
+     bool operator==(const ggml_webgpu_ssm_conv_pipeline_key & other) const {
+-        return type == other.type && vectorized == other.vectorized && tokens_per_wg == other.tokens_per_wg && post_silu == other.post_silu;
++        return type == other.type && vectorized == other.vectorized && tokens_per_wg == other.tokens_per_wg &&
++               epilogue == other.epilogue;
+     }
+ };
+ 
+@@ -1068,7 +1072,7 @@
+         ggml_webgpu_hash_combine(seed, key.type);
+         ggml_webgpu_hash_combine(seed, key.vectorized);
+         ggml_webgpu_hash_combine(seed, key.tokens_per_wg);
+-        ggml_webgpu_hash_combine(seed, key.post_silu);
++        ggml_webgpu_hash_combine(seed, static_cast<int>(key.epilogue));
+         return seed;
+     }
+ };
+@@ -2071,7 +2075,7 @@
+     webgpu_pipeline situ_pipeline;
+     webgpu_pipeline fwht_1024_pipeline;
+     std::array<webgpu_pipeline, 2> add_cast_f16_pipelines;
+-    webgpu_pipeline short_conv_state_pipeline;
++    std::array<webgpu_pipeline, 3> short_conv_state_pipelines;
+     webgpu_pipeline loop_controller_pipelines[2][2];
+     std::unordered_map<int, webgpu_pipeline> row_norm_scale_pipelines;
+     webgpu_pipeline rms_vec4_pipelines[4];
+@@ -2746,9 +2750,10 @@
+         return solve_tri_pipelines[key];
+     }
+ 
+-    webgpu_pipeline get_ssm_conv_pipeline(const ggml_webgpu_shader_lib_context & context, bool post_silu = false) {
++    webgpu_pipeline get_ssm_conv_pipeline(const ggml_webgpu_shader_lib_context & context,
++                                         webgpu_ssm_conv_epilogue epilogue = webgpu_ssm_conv_epilogue::none) {
+         ggml_webgpu_ssm_conv_pipeline_key key = {};
+-        key.post_silu                         = post_silu;
++        key.epilogue = epilogue;
+         key.type                              = context.dst->type;
+         key.vectorized                        = context.src1->ne[0] == 4;
+         // Single-token decode needs no lanes for additional tokens. Keep the
+@@ -2776,7 +2781,18 @@
+             variant += "_vec4";
+         }
+ 
+-        if (key.post_silu) { variant += "_silu"; }
++        const char * source = wgsl_ssm_conv;
++        switch (epilogue) {
++            case webgpu_ssm_conv_epilogue::none: break;
++            case webgpu_ssm_conv_epilogue::silu:
++                source = wgsl_ssm_conv_silu;
++                variant += "_silu";
++                break;
++            case webgpu_ssm_conv_epilogue::gate:
++                source = wgsl_ssm_conv_gate;
++                variant += "_gate";
++                break;
++        }
+ 
+         constexpr uint32_t block_size    = 32u;
+         const uint32_t     tokens_per_wg = key.tokens_per_wg;
+@@ -2784,7 +2800,7 @@
+         defines.push_back("BLOCK_SIZE=" + std::to_string(block_size) + "u");
+         defines.push_back("TOKENS_PER_WG=" + std::to_string(tokens_per_wg) + "u");
+ 
+-        auto processed           = preprocessor.preprocess(key.post_silu ? wgsl_ssm_conv_silu : wgsl_ssm_conv, defines);
++        auto processed           = preprocessor.preprocess(source, defines);
+         auto decisions           = std::make_shared<ggml_webgpu_ssm_conv_shader_decisions>();
+         decisions->block_size    = block_size;
+         decisions->tokens_per_wg = tokens_per_wg;
+@@ -2951,11 +2967,20 @@
+         }
+     }
+ 
+-    webgpu_pipeline get_short_conv_state_pipeline() {
+-        if (!short_conv_state_pipeline.pipeline) {
+-            short_conv_state_pipeline = ggml_webgpu_create_pipeline(device, wgsl_short_conv_concat_state, "short_conv_concat_state_f32");
++    webgpu_pipeline get_short_conv_state_pipeline(uint32_t width) {
++        GGML_ASSERT(width == 3 || width == 4 || width == 7);
++        const size_t variant = width == 7 ? 2 : width - 3;
++        auto & pipeline = short_conv_state_pipelines[variant];
++        if (!pipeline.pipeline) {
++            const auto source = preprocessor.preprocess(wgsl_short_conv_concat_state,
++                {"HISTORY_WIDTH=" + std::to_string(width)});
++            std::string name = "short_conv_concat_state_f32";
++            if (width != 4) {
++                name += "_w" + std::to_string(width);
++            }
++            pipeline = ggml_webgpu_create_pipeline(device, source, name.c_str());
+         }
+-        return short_conv_state_pipeline;
++        return pipeline;
+     }
+ 
+     webgpu_pipeline get_router_tail_pipeline(uint32_t wg_size, bool merged, bool epsilon) {
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-state.hpp
+@@ -31,20 +31,25 @@
+     const auto * current = concat->src[1];
+     const auto * current_root = current->view_src;
+     const int64_t channels = concat->ne[1];
+-    if (channels <= 0 || channels > UINT32_MAX / 4 || !current_root || current->view_offs || current_root->view_src) {
++    const int64_t width = concat->ne[0];
++    if ((width != 3 && width != 4 && width != 7) || channels <= 0 || channels > UINT32_MAX / width ||
++        !current_root || current->view_offs || current_root->view_src) {
+         return false;
+     }
++    const int64_t past_width = width - 1;
+     for (const auto * tensor : {past, current, concat, tail, cell, copy, current_root}) {
+         if (tensor->type != GGML_TYPE_F32 || tensor->ne[2] != 1 || tensor->ne[3] != 1) {
+             return false;
+         }
+     }
+-    if (past->ne[0] != 3 || past->ne[1] != channels || past->nb[0] != 4 || past->nb[1] != 12 ||
++    if (past->ne[0] != past_width || past->ne[1] != channels || past->nb[0] != sizeof(float) ||
++        past->nb[1] != past_width * sizeof(float) ||
+         current->ne[0] != 1 || current->ne[1] != channels || current->nb[1] != 4 ||
+         current_root->ne[0] != channels || current_root->ne[1] != 1 || current_root->nb[0] != 4 ||
+-        concat->ne[0] != 4 || concat->nb[0] != 4 || concat->nb[1] != 16 || concat->view_src ||
+-        tail->ne[0] != 3 || tail->ne[1] != channels || tail->nb[0] != 4 || tail->nb[1] != 16 ||
+-        cell->ne[0] != 3 * channels || cell->ne[1] != 1 || cell->nb[0] != 4 ||
++        concat->nb[0] != sizeof(float) || concat->nb[1] != width * sizeof(float) || concat->view_src ||
++        tail->ne[0] != past_width || tail->ne[1] != channels || tail->nb[0] != sizeof(float) ||
++        tail->nb[1] != width * sizeof(float) ||
++        cell->ne[0] != past_width * channels || cell->ne[1] != 1 || cell->nb[0] != sizeof(float) ||
+         !ggml_are_same_shape(cell, copy) || !ggml_are_same_stride(cell, copy)) {
+         return false;
+     }
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-ssm-conv-gate.hpp
+@@ -0,0 +1,47 @@
++#pragma once
++
++#include "ggml-webgpu-ssm-conv-silu.hpp"
++
++struct ssm_conv_gate_plan {
++    ggml_tensor * history = nullptr;
++    ggml_tensor * weights = nullptr;
++    ggml_tensor * gate = nullptr;
++    ggml_tensor * output = nullptr;
++    uint64_t history_bytes = 0, weights_bytes = 0, gate_bytes = 0, output_bytes = 0;
++};
++
++inline bool plan_ssm_conv_gate(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                              ssm_conv_gate_plan & plan) {
++    plan = {};
++    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2 ||
++        !ggml_can_fuse(graph, index, {GGML_OP_SSM_CONV, GGML_OP_MUL})) {
++        return false;
++    }
++    auto * conv = graph->nodes[index];
++    auto * output = graph->nodes[index + 1];
++    auto * history = conv->src[0];
++    auto * weights = conv->src[1];
++    auto * gate = output->src[0];
++    if (!history || !weights || !gate || conv->view_src || output->view_src || output->src[1] != conv ||
++        gate == conv || gate->view_src == conv || !ggml_are_same_shape(gate, conv) ||
++        !ggml_are_same_shape(conv, output)) {
++        return false;
++    }
++    for (int source = 2; source < GGML_MAX_SRC; ++source) {
++        if (conv->src[source] || output->src[source]) {
++            return false;
++        }
++    }
++    uint64_t h, w, g, c, o;
++    if (!ssm_conv_silu_layout(history, false, h) || !ssm_conv_silu_layout(weights, false, w) ||
++        !ssm_conv_silu_layout(gate, false, g) || !ssm_conv_silu_layout(conv, true, c) ||
++        !ssm_conv_silu_layout(output, true, o) || history->ne[3] != 1 || weights->ne[2] != 1 ||
++        weights->ne[3] != 1 || output->ne[3] != 1 ||
++        history->ne[0] != weights->ne[0] - 1 + output->ne[1] ||
++        history->ne[1] != weights->ne[1] || output->ne[0] != history->ne[1] ||
++        output->ne[2] != history->ne[2] || views.contains(conv)) {
++        return false;
++    }
++    plan = {history, weights, gate, output, h, w, g, o};
++    return true;
++}
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -24,6 +24,7 @@
+ #include "ggml-webgpu-short-conv-residual.hpp"
+ #include "ggml-webgpu-short-conv-dynamic.hpp"
+ #include "ggml-webgpu-short-conv-state.hpp"
++#include "ggml-webgpu-ssm-conv-gate.hpp"
+ #include "ggml-backend-host-snapshot.h"
+ #include "ggml-impl.h"
+ #include "ggml-webgpu-shader-lib.hpp"
+@@ -1593,7 +1594,8 @@
+     shader_lib_ctx.dst                            = dst;
+     shader_lib_ctx.max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+ 
+-    webgpu_pipeline pipeline  = ctx->shader_lib->get_ssm_conv_pipeline(shader_lib_ctx, post_silu);
++    webgpu_pipeline pipeline  = ctx->shader_lib->get_ssm_conv_pipeline(shader_lib_ctx,
++        post_silu ? webgpu_ssm_conv_epilogue::silu : webgpu_ssm_conv_epilogue::none);
+     auto *          decisions = static_cast<ggml_webgpu_ssm_conv_shader_decisions *>(pipeline.context.get());
+ 
+     const uint32_t token_tiles = CEIL_DIV((uint32_t) dst->ne[1], decisions->tokens_per_wg);
+@@ -5379,14 +5381,14 @@
+             }
+         }
+     }
+-    std::vector<uint32_t> params = {
++    const uint32_t params[] = {
+         bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset, bindings[3].element_offset, count
+     };
+-    std::vector<wgpu::BindGroupEntry> entries;
++    std::array<wgpu::BindGroupEntry, 4> entries;
+     for (uint32_t i = 0; i < 4; ++i) {
+-        entries.push_back(ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size));
++        entries[i] = ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size);
+     }
+-    auto pipeline = ctx->shader_lib->get_short_conv_state_pipeline();
++    auto pipeline = ctx->shader_lib->get_short_conv_state_pipeline(static_cast<uint32_t>(plan.history->ne[0]));
+     auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, groups, 1);
+     consumed = 4;
+     return encoded;
+@@ -5426,6 +5428,64 @@
+     return true;
+ }
+ 
++static std::optional<webgpu_encoded_op> ggml_webgpu_ssm_conv_gate(webgpu_context & ctx,
++                                                                 ggml_cgraph * graph, int index,
++                                                                 webgpu_fusion_view_sources & views,
++                                                                 int & num_encoded_ops) {
++    ssm_conv_gate_plan plan;
++    if (!plan_ssm_conv_gate(graph, index, views, plan)) { return std::nullopt; }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint64_t tokens_per_wg = plan.output->ne[1] == 1 ? 1 : 8;
++    const uint64_t token_tiles = (uint64_t(plan.output->ne[1]) + tokens_per_wg - 1) / tokens_per_wg;
++    const uint64_t x = (uint64_t(plan.output->ne[0]) + 31) / 32;
++    const uint64_t y = token_tiles * uint64_t(plan.output->ne[2]);
++    if (limits.maxComputeInvocationsPerWorkgroup < 32 * tokens_per_wg ||
++        limits.maxComputeWorkgroupSizeX < 32 || limits.maxComputeWorkgroupSizeY < tokens_per_wg ||
++        limits.maxStorageBuffersPerShaderStage < 4 || limits.maxBindingsPerBindGroup < 5 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        x > limits.maxComputeWorkgroupsPerDimension || y > limits.maxComputeWorkgroupsPerDimension ||
++        y * tokens_per_wg > UINT32_MAX) { return std::nullopt; }
++    webgpu_ssm_conv_silu_binding bindings[4];
++    if (!ggml_webgpu_ssm_conv_silu_binding(ctx, plan.history, plan.history_bytes, bindings[0]) ||
++        !ggml_webgpu_ssm_conv_silu_binding(ctx, plan.weights, plan.weights_bytes, bindings[1]) ||
++        !ggml_webgpu_ssm_conv_silu_binding(ctx, plan.output, plan.output_bytes, bindings[2]) ||
++        !ggml_webgpu_ssm_conv_silu_binding(ctx, plan.gate, plan.gate_bytes, bindings[3])) { return std::nullopt; }
++    // Each storage binding is read_write. Reject aligned-range overlap even
++    // between inputs; the discarded convolution allocation may be reused.
++    for (int a = 0; a < 4; ++a) {
++        for (int b = a + 1; b < 4; ++b) {
++            if (bindings[a].buffer.Get() == bindings[b].buffer.Get() &&
++                !ssm_conv_silu_disjoint(bindings[a].offset, bindings[a].size,
++                                        bindings[b].offset, bindings[b].size)) { return std::nullopt; }
++        }
++    }
++    ggml_webgpu_shader_lib_context shader = {};
++    shader.src0 = plan.history;
++    shader.src1 = plan.weights;
++    shader.dst = plan.output;
++    shader.max_wg_size = limits.maxComputeInvocationsPerWorkgroup;
++    auto pipeline = ctx->shader_lib->get_ssm_conv_pipeline(shader, webgpu_ssm_conv_epilogue::gate);
++    const auto element_offset = [&](int binding) {
++        return static_cast<uint32_t>((bindings[binding].tensor_offset - bindings[binding].offset) / sizeof(float));
++    };
++    const uint32_t params[] = {
++        element_offset(0), element_offset(1), element_offset(2),
++        uint32_t(plan.history->nb[1] / 4), uint32_t(plan.history->nb[2] / 4), uint32_t(plan.weights->nb[1] / 4),
++        uint32_t(plan.output->nb[0] / 4), uint32_t(plan.output->nb[1] / 4), uint32_t(plan.output->nb[2] / 4),
++        uint32_t(plan.weights->ne[0]), uint32_t(plan.output->ne[0]), uint32_t(plan.output->ne[1]),
++        uint32_t(plan.output->ne[2]), uint32_t(token_tiles),
++        element_offset(3), uint32_t(plan.gate->nb[1] / 4), uint32_t(plan.gate->nb[2] / 4),
++    };
++    std::array<wgpu::BindGroupEntry, 4> entries;
++    for (uint32_t binding = 0; binding < 4; ++binding) {
++        entries[binding] = ggml_webgpu_make_bind_group_entry(binding, bindings[binding].buffer,
++                                                            bindings[binding].offset, bindings[binding].size);
++    }
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, uint32_t(x), uint32_t(y));
++    num_encoded_ops = 2;
++    return encoded;
++}
++
+ static std::optional<webgpu_encoded_op> ggml_webgpu_ssm_conv_silu(webgpu_context & ctx,
+                                                                  ggml_cgraph * graph, int index,
+                                                                  webgpu_fusion_view_sources & views,
+@@ -5861,6 +5921,7 @@
+         case GGML_OP_SOLVE_TRI:
+             return ggml_webgpu_solve_tri(ctx, src0, src1, node);
+         case GGML_OP_SSM_CONV:
++            if (auto fused = ggml_webgpu_ssm_conv_gate(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_ssm_conv_silu(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_short_conv_residual(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_ssm_conv(ctx, src0, src1, node);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_concat_state.wgsl
+@@ -18,6 +18,7 @@
+     if (channel >= params.channels) {
+         return;
+     }
++#if HISTORY_WIDTH == 4
+     let p = params.past_offset + channel * 3u;
+     let h = params.history_offset + channel * 4u;
+     let s = params.state_offset + channel * 3u;
+@@ -32,4 +33,20 @@
+     state[s] = p1;
+     state[s + 1u] = p2;
+     state[s + 2u] = cur;
++#else
++    const past_width: u32 = HISTORY_WIDTH - 1u;
++    let p = params.past_offset + channel * past_width;
++    let h = params.history_offset + channel * HISTORY_WIDTH;
++    let s = params.state_offset + channel * past_width;
++    for (var tap = 0u; tap < past_width; tap++) {
++        let value = past[p + tap];
++        history[h + tap] = value;
++        if (tap > 0u) {
++            state[s + tap - 1u] = value;
++        }
++    }
++    let cur = current[params.current_offset + channel];
++    history[h + past_width] = cur;
++    state[s + past_width - 1u] = cur;
++#endif
+ }
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv_gate.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/ssm_conv_gate.wgsl
+@@ -7,6 +7,9 @@
+ @group(0) @binding(2)
+ var<storage, read_write> dst: array<f32>;
+ 
++@group(0) @binding(3)
++var<storage, read_write> gate: array<f32>;
++
+ struct Params {
+     offset_src0: u32,
+     offset_src1: u32,
+@@ -25,9 +28,13 @@
+     n_t: u32,
+     n_s: u32,
+     token_tiles: u32,
++
++    offset_gate: u32,
++    stride_gate1: u32,
++    stride_gate2: u32,
+ };
+ 
+-@group(0) @binding(3)
++@group(0) @binding(4)
+ var<uniform> params: Params;
+ 
+ @compute @workgroup_size(BLOCK_SIZE, TOKENS_PER_WG)
+@@ -61,5 +68,6 @@
+ #endif
+ 
+     let dst_idx = params.offset_dst + i3 * params.stride_dst2 + i2 * params.stride_dst1 + i1 * params.stride_dst0;
+-    dst[dst_idx] = sum;
++    let gate_idx = params.offset_gate + i3 * params.stride_gate2 + i2 * params.stride_gate1 + i1;
++    dst[dst_idx] = gate[gate_idx] * sum;
+ }

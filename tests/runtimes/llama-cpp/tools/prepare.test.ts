@@ -47,6 +47,8 @@ test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout
   }
   for (const [name, header] of [
     ['add_cast_f16.wgsl', 'ggml-webgpu-add-cast-f16-shaders.hpp'],
+    ['ssm_conv_gate.wgsl', 'ggml-webgpu-ssm-conv-gate-shaders.hpp'],
+    ['short_conv_concat_state.wgsl', 'ggml-webgpu-short-conv-residual-shaders.hpp'],
     ['indexed_vec_mask.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
     ['indexed_vec_mask_block.wgsl', 'ggml-webgpu-indexed-vec-mask-shaders.hpp'],
     ['mul_mat_vec_acc.tmpl', 'ggml-webgpu-q8-subgroup-shaders.hpp'],

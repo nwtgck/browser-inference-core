@@ -15,6 +15,7 @@ const webgpuBase = 'ggml/src/ggml-webgpu';
 const shaderBase = `${webgpuBase}/wgsl-shaders`;
 const derivedShaders = {
   'ssm_conv_silu.wgsl': 'ssm_conv.wgsl',
+  'ssm_conv_gate.wgsl': 'ssm_conv.wgsl',
   'mul_mat_id_group.wgsl': 'mul_mat_id.wgsl',
   'mul_mat_id_group_decls.tmpl': 'mul_mat_decls.tmpl',
   'mul_mat_id_gather_logical32.wgsl': 'mul_mat_id_gather.wgsl',
@@ -74,6 +75,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-scale-unary-shaders.hpp': edited({ names: ['scale_unary.wgsl'] }),
     'ggml-webgpu-rms-scale-shaders.hpp': { 'rms_norm_scale.wgsl': join(patched, shaderBase, 'row_norm.wgsl') },
     'ggml-webgpu-ssm-conv-silu-shaders.hpp': edited({ names: ['ssm_conv_silu.wgsl'] }),
+    'ggml-webgpu-ssm-conv-gate-shaders.hpp': edited({ names: ['ssm_conv_gate.wgsl'] }),
     'ggml-webgpu-short-conv-residual-shaders.hpp': edited({ names: ['short_conv_residual.wgsl', 'short_conv_concat_state.wgsl'] }),
     'ggml-webgpu-short-conv-dynamic-shaders.hpp': edited({ names: ['short_conv_dynamic.wgsl'] }),
     'ggml-webgpu-depth-mix-shaders.hpp': edited({ names: ['depth_normalize.wgsl', 'depth_scores.wgsl', 'depth_blend.wgsl'] }),

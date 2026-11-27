@@ -831,6 +831,24 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation and maintenance:** complete-provider cases cover both widths and allocation layouts, independent selection of the two fusions, observed intermediates and overlapping bindings. All 28 llvmpipe fixture pairs matched bit-for-bit for outputs and recurrent state. The fused source retains the F32 operation order, and adapter compilers can reassociate expressions across the former dispatch boundaries. These checks do not establish physical-device model throughput. Recheck the GGML copy destination view, the four-tap expression and the storage access modes when updating upstream.
 - **Removal:** remove this stage when upstream provides equivalent convolution and recurrent-state fusion, or the owner drops the optimization.
 
+## Fused recurrent state updates and convolution gates
+
+- **Patch** `ggml-webgpu-lfm-short-conv.patch` against `07ba74babd`, after
+  the existing short-convolution and SiLU overlays.
+- **Scope** Extend the single-token, single-sequence state store to three
+  and seven taps. Separately fuse an F32 convolution with an immediately
+  adjacent same-shape gate multiplication. The gate may have padded
+  strides between its tokens or sequences. Both fusions use one dispatch.
+- **Contract** Keep the complete concatenation and its recurrent state
+  write. The gate fusion preserves the original convolution tap order,
+  retains the usual one-token and eight-token workgroups, and rejects a
+  live convolution result or overlapping storage bindings. Each variant
+  uses the same storage access mode across all bound ranges, including
+  ranges sharing a backing GPUBuffer. No additional GPU scratch is needed.
+- **Validation and removal** Exercise tail channels, multiple sequences,
+  shared allocations, raw views, cache keys, and resource limits. Remove
+  once equivalent guarded state updates and gates are available upstream.
+
 ## Profile-only Q8 kernel diagnostic
 
 - **Patch:** `ggml-webgpu-q8-diagnostic.patch`.

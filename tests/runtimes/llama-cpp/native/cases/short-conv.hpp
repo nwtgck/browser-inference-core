@@ -3,22 +3,23 @@
 namespace short_conv_cases {
 enum class Guard { ordinary, observed_convolution, dynamic_filter, observed_state_source, raw_convolution, raw_output };
 
-static void graph(int64_t channels, bool natural, Guard guard) {
+static void graph(int64_t channels, int64_t width, bool natural, Guard guard) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
     auto * ctx = memory.get();
-    auto * state = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 3 * channels, 4);
+    const int64_t past_width = width - 1;
+    auto * state = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, past_width * channels, 4);
     auto * slot = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 1);
     auto * activation = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, channels, 1);
-    auto * weights = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4, channels);
+    auto * weights = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, width, channels);
     for (auto * tensor : {state, slot, activation, weights})
         ggml_set_input(tensor);
-    auto * snapshot = ggml_reshape_3d(ctx, ggml_get_rows(ctx, state, slot), 3, channels, 1);
+    auto * snapshot = ggml_reshape_3d(ctx, ggml_get_rows(ctx, state, slot), past_width, channels, 1);
     auto * current = ggml_dup(ctx, activation);
     auto * history = ggml_concat(ctx, snapshot, ggml_transpose(ctx, ggml_reshape_3d(ctx, current, channels, 1, 1)), 0);
-    auto * recent = ggml_view_3d(ctx, history, 3, channels, 1, history->nb[1], history->nb[2], sizeof(float));
-    auto * cell = ggml_view_2d(ctx, state, 3 * channels, 1, state->nb[1], state->nb[1]);
+    auto * recent = ggml_view_3d(ctx, history, past_width, channels, 1, history->nb[1], history->nb[2], sizeof(float));
+    auto * cell = ggml_view_2d(ctx, state, past_width * channels, 1, state->nb[1], state->nb[1]);
     auto * graph = ggml_new_graph_custom(ctx, 64, false);
     auto * copy = ggml_cpy(ctx, recent, cell);
     ggml_build_forward_expand(graph, copy);
@@ -53,8 +54,9 @@ static void graph(int64_t channels, bool natural, Guard guard) {
                                ggml_backend_buffer_free);
     BICORE_CHECK(natural ? allocator && ggml_gallocr_alloc_graph(allocator.get(), graph) : bool(storage));
     const bool epilogue =
-        guard == Guard::ordinary || guard == Guard::observed_state_source || guard == Guard::raw_output;
-    const bool state_store = guard != Guard::observed_state_source;
+        width == 4 && (guard == Guard::ordinary || guard == Guard::observed_state_source || guard == Guard::raw_output);
+    const bool supported_width = width == 3 || width == 4 || width == 7;
+    const bool state_store = supported_width && guard != Guard::observed_state_source;
     const unsigned ordinary = guard == Guard::dynamic_filter ? 10u : 8u;
     const unsigned dispatches = ordinary - (epilogue ? 2 : 0) - (state_store ? 1 : 0);
     const auto compute = [&](ggml_cgraph * view, unsigned expected) {
@@ -71,18 +73,22 @@ static void graph(int64_t channels, bool natural, Guard guard) {
     compute(graph, dispatches + unsigned(raw_reader));
     const auto selected = [&](const webgpu_pipeline & pipeline) {
         return std::count_if(commands.dispatches.begin(), commands.dispatches.end(), [&](const auto & dispatch) {
-            return dispatch.pipeline == pipeline.pipeline.Get()->id && dispatch.x == uint32_t(channels / 128) &&
+            return dispatch.pipeline == pipeline.pipeline.Get()->id && dispatch.x == uint32_t((channels + 127) / 128) &&
                    dispatch.y == 1 && dispatch.z == 1;
         });
     };
-    const auto state_pipeline = gpu.context->shader_lib->get_short_conv_state_pipeline();
-    BICORE_CHECK(selected(state_pipeline) == (state_store ? 1 : 0));
+    for (uint32_t candidate : {3u, 4u, 7u}) {
+        const auto pipeline = gpu.context->shader_lib->get_short_conv_state_pipeline(candidate);
+        BICORE_CHECK(selected(pipeline) == (state_store && candidate == width ? 1 : 0));
+        BICORE_CHECK(gpu.context->shader_lib->get_short_conv_state_pipeline(candidate).pipeline.Get() ==
+                     pipeline.pipeline.Get());
+    }
     const auto residual_inplace = gpu.context->shader_lib->get_short_conv_residual_pipeline(true);
     const auto residual_disjoint = gpu.context->shader_lib->get_short_conv_residual_pipeline(false);
     BICORE_CHECK(selected(residual_inplace) == (epilogue && natural ? 1 : 0));
     BICORE_CHECK(selected(residual_disjoint) == (epilogue && !natural ? 1 : 0));
 
-    if (guard == Guard::ordinary && natural) {
+    if (guard == Guard::ordinary && natural && supported_width) {
         const auto index = [&](const ggml_tensor * tensor) {
             const auto * found = std::find(graph->nodes, graph->nodes + graph->n_nodes, tensor);
             BICORE_CHECK(found < graph->nodes + graph->n_nodes);
@@ -149,7 +155,14 @@ static void all() {
         for (bool natural : {false, true})
             for (auto guard : {Guard::ordinary, Guard::observed_convolution, Guard::dynamic_filter,
                                Guard::observed_state_source, Guard::raw_convolution, Guard::raw_output})
-                graph(channels, natural, guard);
+                graph(channels, 4, natural, guard);
+    for (int64_t width : {3, 7})
+        for (bool natural : {false, true})
+            for (auto guard : {Guard::ordinary, Guard::observed_state_source})
+                graph(2048, width, natural, guard);
+    graph(137, 3, false, Guard::ordinary);
+    graph(137, 7, false, Guard::ordinary);
+    graph(2048, 5, false, Guard::ordinary);
     for (int64_t tokens : {1, 17}) {
         silu_graph(tokens, Guard::raw_convolution);
         silu_graph(tokens, Guard::raw_output);
