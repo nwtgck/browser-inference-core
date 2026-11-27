@@ -834,13 +834,14 @@ interface WasmModule {
   _llama_numa_init(_0: number): void;
   _llama_backend_free(): void;
   _ggml_quantize_free(): void;
-  _ggml_backend_reg_name(_0: number): number;
-  _ggml_backend_dev_get_props(_0: number, _1: number): void;
-  _ggml_backend_meta_device(_0: number, _1: number, _2: number, _3: number): number;
+  _llama_model_load_without_optional_expert_storage(_0: number, _1: number, _2: number): number;
   _llama_model_save_to_file(_0: number, _1: number): void;
   _llama_split_path(_0: number, _1: number, _2: number, _3: number, _4: number): number;
   _llama_split_prefix(_0: number, _1: number, _2: number, _3: number, _4: number): number;
   _ggml_backend_reg_get(_0: number): number;
+  _ggml_backend_reg_name(_0: number): number;
+  _ggml_backend_dev_get_props(_0: number, _1: number): void;
+  _ggml_backend_meta_device(_0: number, _1: number, _2: number, _3: number): number;
   _ggml_fopen(_0: number, _1: number): number;
   _llama_adapter_lora_init_from_file_ptr(_0: number, _1: number): number;
   _gguf_type_name(_0: number): number;
@@ -890,6 +891,7 @@ interface WasmModule {
   _ggml_opt_dataset_ndata(_0: number): bigint;
   _ggml_opt_dataset_get_batch_host(_0: number, _1: number, _2: number, _3: number, _4: bigint): void;
   _ggml_blck_size(_0: number): bigint;
+  _llama_init_from_model_with_allocation_status(_0: number, _1: number, _2: number): number;
   _llama_detach_threadpool(_0: number): void;
   _llama_set_n_threads(_0: number, _1: number, _2: number): void;
   _llama_set_embeddings(_0: number, _1: number): void;

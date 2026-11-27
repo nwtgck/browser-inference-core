@@ -838,12 +838,13 @@ interface WasmModule {
   _llama_numa_init(_0: number): Promise<void>;
   _llama_backend_free(): Promise<void>;
   _ggml_quantize_free(): Promise<void>;
-  _ggml_backend_dev_get_props(_0: number, _1: number): Promise<void>;
-  _ggml_backend_meta_device(_0: number, _1: number, _2: number, _3: number): Promise<number>;
+  _llama_model_load_without_optional_expert_storage(_0: number, _1: number, _2: number): Promise<number>;
   _llama_model_save_to_file(_0: number, _1: number): Promise<void>;
   _llama_split_path(_0: number, _1: number, _2: number, _3: number, _4: number): Promise<number>;
   _llama_split_prefix(_0: number, _1: number, _2: number, _3: number, _4: number): Promise<number>;
   _ggml_backend_reg_get(_0: number): Promise<number>;
+  _ggml_backend_dev_get_props(_0: number, _1: number): Promise<void>;
+  _ggml_backend_meta_device(_0: number, _1: number, _2: number, _3: number): Promise<number>;
   _ggml_fopen(_0: number, _1: number): Promise<number>;
   _llama_adapter_lora_init_from_file_ptr(_0: number, _1: number): Promise<number>;
   _gguf_type_name(_0: number): Promise<number>;
@@ -888,6 +889,7 @@ interface WasmModule {
   _ggml_opt_dataset_ndata(_0: number): Promise<bigint>;
   _ggml_opt_dataset_get_batch_host(_0: number, _1: number, _2: number, _3: number, _4: bigint): Promise<void>;
   _ggml_blck_size(_0: number): Promise<bigint>;
+  _llama_init_from_model_with_allocation_status(_0: number, _1: number, _2: number): Promise<number>;
   _llama_detach_threadpool(_0: number): Promise<void>;
   _llama_set_n_threads(_0: number, _1: number, _2: number): Promise<void>;
   _llama_set_embeddings(_0: number, _1: number): Promise<void>;
@@ -928,8 +930,8 @@ interface WasmModule {
   _ggml_backend_dev_supports_buft(_0: number, _1: number): Promise<number>;
   _ggml_flash_attn_ext_rows(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number): Promise<number>;
   _ggml_flash_attn_ext_set_n_kv_max(_0: number, _1: number): Promise<void>;
-  _ggml_flash_attn_ext_add_indexed_bias(_0: number, _1: number, _2: number): Promise<void>;
   _ggml_backend_dev_supports_op(_0: number, _1: number): number;
+  _ggml_flash_attn_ext_add_indexed_bias(_0: number, _1: number, _2: number): Promise<void>;
   _ggml_top_k_mask(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number): Promise<number>;
   _ggml_fill_inplace(_0: number, _1: number, _2: number): Promise<number>;
   _ggml_get_no_alloc(_0: number): Promise<number>;
@@ -940,6 +942,7 @@ interface WasmModule {
   _gguf_get_arr_str(_0: number, _1: bigint, _2: number): Promise<number>;
   _gguf_get_val_data(_0: number, _1: bigint): Promise<number>;
   _ggml_quantize_chunk(_0: number, _1: number, _2: number, _3: bigint, _4: bigint, _5: bigint, _6: number): Promise<number>;
+  _ggml_is_vector(_0: number): Promise<number>;
   _ggml_rope_ext_inplace(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number, _7: number, _8: number, _9: number, _10: number, _11: number, _12: number): Promise<number>;
   _ggml_backend_alloc_ctx_tensors_from_buft_size(_0: number, _1: number): Promise<number>;
   _ggml_backend_buffer_get_usage(_0: number): Promise<number>;
@@ -1123,7 +1126,6 @@ interface WasmModule {
   _ggml_op_symbol(_0: number): Promise<number>;
   _ggml_glu_op_name(_0: number): Promise<number>;
   _ggml_op_desc(_0: number): number;
-  _ggml_is_vector(_0: number): Promise<number>;
   _ggml_is_3d(_0: number): Promise<number>;
   _ggml_ftype_to_ggml_type(_0: number): Promise<number>;
   _ggml_is_transposed(_0: number): Promise<number>;

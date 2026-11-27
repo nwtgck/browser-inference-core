@@ -728,6 +728,7 @@ export interface LowLevelFunctions {
   llama_get_sampled_probs_ith(arg0: bigint, arg1: number): Promise<bigint>;
   llama_get_sampled_token_ith(arg0: bigint, arg1: number): Promise<number>;
   llama_init_from_model(arg0: bigint, arg1: bigint): Promise<bigint>;
+  llama_init_from_model_with_allocation_status(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
   llama_load_mode_from_str(arg0: bigint): Promise<number>;
   llama_load_mode_name(arg0: number): Promise<bigint>;
   llama_log_get(arg0: bigint, arg1: bigint): Promise<void>;
@@ -763,6 +764,7 @@ export interface LowLevelFunctions {
   llama_model_load_from_file(arg0: bigint, arg1: bigint): Promise<bigint>;
   llama_model_load_from_file_ptr(arg0: bigint, arg1: bigint): Promise<bigint>;
   llama_model_load_from_splits(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
+  llama_model_load_without_optional_expert_storage(arg0: bigint, arg1: bigint, arg2: bigint): Promise<bigint>;
   llama_model_meta_arr_n(arg0: bigint, arg1: bigint): Promise<number>;
   llama_model_meta_arr_str(arg0: bigint, arg1: bigint, arg2: number): Promise<bigint>;
   llama_model_meta_count(arg0: bigint): Promise<number>;

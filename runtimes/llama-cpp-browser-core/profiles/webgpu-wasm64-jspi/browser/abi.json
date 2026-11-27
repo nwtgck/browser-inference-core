@@ -3,7 +3,7 @@
   "runtime": "llama-cpp",
   "pointerRepresentation": "bigint_native",
   "pointerBytes": 8,
-  "schemaSha256": "61d63d4d4228de25b96b11c147abe6c37c0703df1655a26c3b53e65561f791b2",
+  "schemaSha256": "62dfb08b9fe1cbea476d88996a15bc453d91eda439b61aad603484de55edc67e",
   "functions": [
     {
       "name": "bicore_file_backed_rows_version",
@@ -27537,6 +27537,46 @@
       "bridge": true
     },
     {
+      "name": "llama_init_from_model_with_allocation_status",
+      "export": "_llama_init_from_model_with_allocation_status",
+      "returnType": "struct llama_context *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "cType": "struct llama_model *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "params",
+          "cType": "const struct llama_context_params *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "status",
+          "cType": "int32_t *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
+    },
+    {
       "name": "llama_load_mode_from_str",
       "export": "_llama_load_mode_from_str",
       "returnType": "enum llama_load_mode",
@@ -28593,6 +28633,48 @@
         }
       ],
       "bridge": true
+    },
+    {
+      "name": "llama_model_load_without_optional_expert_storage",
+      "export": "_llama_model_load_without_optional_expert_storage",
+      "returnType": "struct llama_model *",
+      "returnKind": "pointer",
+      "abiType": {
+        "kind": "pointer",
+        "bits": 64
+      },
+      "parameters": [
+        {
+          "name": "paths",
+          "cType": "const char **",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        },
+        {
+          "name": "n_paths",
+          "cType": "size_t",
+          "kind": "u64",
+          "abiType": {
+            "kind": "integer",
+            "bits": 64,
+            "signed": false,
+            "pointerSized": true
+          }
+        },
+        {
+          "name": "params",
+          "cType": "const struct llama_model_params *",
+          "kind": "pointer",
+          "abiType": {
+            "kind": "pointer",
+            "bits": 64
+          }
+        }
+      ],
+      "bridge": false
     },
     {
       "name": "llama_model_meta_arr_n",
@@ -44366,6 +44448,10 @@
     "LLAMA_ATTENTION_TYPE_CAUSAL",
     "LLAMA_ATTENTION_TYPE_NON_CAUSAL",
     "LLAMA_ATTENTION_TYPE_UNSPECIFIED",
+    "LLAMA_CONTEXT_INIT_FAILED",
+    "LLAMA_CONTEXT_INIT_OK",
+    "LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE",
+    "LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED",
     "LLAMA_CONTEXT_TYPE_DEFAULT",
     "LLAMA_CONTEXT_TYPE_MTP",
     "LLAMA_DEFAULT_SEED",
@@ -44892,6 +44978,10 @@
     "LLAMA_ATTENTION_TYPE_CAUSAL": "0",
     "LLAMA_ATTENTION_TYPE_NON_CAUSAL": "1",
     "LLAMA_ATTENTION_TYPE_UNSPECIFIED": "-1",
+    "LLAMA_CONTEXT_INIT_FAILED": "1",
+    "LLAMA_CONTEXT_INIT_OK": "0",
+    "LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE": "2",
+    "LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED": "3",
     "LLAMA_CONTEXT_TYPE_DEFAULT": "0",
     "LLAMA_CONTEXT_TYPE_MTP": "1",
     "LLAMA_DEFAULT_SEED": "4294967295",
@@ -45907,6 +45997,7 @@
     "_llama_get_sampled_probs_count_ith",
     "_llama_get_sampled_probs_ith",
     "_llama_get_sampled_token_ith",
+    "_llama_init_from_model_with_allocation_status",
     "_llama_load_mode_from_str",
     "_llama_load_mode_name",
     "_llama_log_get",
@@ -45937,6 +46028,7 @@
     "_llama_model_is_diffusion",
     "_llama_model_is_hybrid",
     "_llama_model_is_recurrent",
+    "_llama_model_load_without_optional_expert_storage",
     "_llama_model_meta_arr_n",
     "_llama_model_meta_arr_str",
     "_llama_model_meta_count",
@@ -46932,6 +47024,7 @@
     "llama_get_sampled_probs_count_ith",
     "llama_get_sampled_probs_ith",
     "llama_get_sampled_token_ith",
+    "llama_init_from_model_with_allocation_status",
     "llama_load_mode_from_str",
     "llama_load_mode_name",
     "llama_log_get",
@@ -46962,6 +47055,7 @@
     "llama_model_is_diffusion",
     "llama_model_is_hybrid",
     "llama_model_is_recurrent",
+    "llama_model_load_without_optional_expert_storage",
     "llama_model_meta_arr_n",
     "llama_model_meta_arr_str",
     "llama_model_meta_count",
