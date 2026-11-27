@@ -25,15 +25,19 @@ export function botComment({ body }: { body: string }): GitHubIssueComment {
   return { id: 42, user: { login: 'github-actions[bot]', type: 'Bot' }, body };
 }
 
-export async function reportArchive({ root, run, changes, body, envelope, yaml }: { root: string; run: GitHubWorkflowRun; changes: Record<string, unknown>; body: string | undefined; envelope: { input: unknown } | undefined; yaml: string }): Promise<{ path: string; directory: string }> {
+export async function reportArchive({ root, run, changes, body, envelope, yaml }: { root: string; run: GitHubWorkflowRun; changes: Record<string, unknown>; body: string | undefined; envelope: { input: unknown } | undefined; yaml: string | undefined }): Promise<{ path: string; directory: string }> {
   const directory = await mkdtemp(join(root, 'archive-'));
   const markdown = body ?? reportPayload({ head: run.head_sha });
   const fields = { schemaVersion: 1, repository, sourceCommit: run.head_sha, artifactCommit: artifact, runId: run.id, runAttempt: run.run_attempt, markdownSha256: createHash('sha256').update(markdown).digest('hex'), ...changes };
   await writeFile(join(directory, 'report.json'), JSON.stringify(envelope ? envelope.input : fields));
   await writeFile(join(directory, 'consumer-update.md'), markdown);
-  await writeFile(join(directory, 'consumer-update.yaml'), yaml);
+  const members = ['report.json', 'consumer-update.md'];
+  if (yaml !== undefined) {
+    await writeFile(join(directory, 'consumer-update.yaml'), yaml);
+    members.push('consumer-update.yaml');
+  }
   const path = join(directory, 'report.zip');
-  await runProcess({ command: 'zip', args: ['-q', '-X', path, 'report.json', 'consumer-update.md', 'consumer-update.yaml'], cwd: directory });
+  await runProcess({ command: 'zip', args: ['-q', '-X', path, ...members], cwd: directory });
   return { path, directory };
 }
 

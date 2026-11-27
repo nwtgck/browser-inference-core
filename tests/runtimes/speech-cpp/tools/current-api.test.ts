@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { copyFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { copyFile, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { decodeAbiSchema } from '#dto/shared';
 import { readJson } from '#tools/shared/json';
@@ -50,10 +50,20 @@ test('actual speech metadata preserves opaque handles, Haru dialogue callbacks a
 test('a consumer compiles against the actual generated speech C API declarations', { skip: schemaPath === undefined }, async () => {
   assert.ok(schemaPath);
   await using temporary = await temporaryDirectory();
-  for (const name of ['functions.d.ts', 'core.d.ts', 'module-options.d.ts']) {
-    await copyFile(join(dirname(schemaPath), name), join(temporary.root, name));
+  const fromPackage = basename(schemaPath) === 'abi.json';
+  const packageName = 'speech-cpp-browser-core';
+  const packageDirectory = resolve(schemaPath, '../../../..');
+  const profileDirectory = relative(packageDirectory, dirname(resolve(schemaPath))).split(sep).join('/');
+  if (fromPackage) {
+    const modules = join(temporary.root, 'node_modules');
+    await mkdir(modules);
+    await symlink(packageDirectory, join(modules, packageName), 'junction');
+  } else {
+    for (const name of ['functions.d.ts', 'core.d.ts', 'module-options.d.ts']) {
+      await copyFile(join(dirname(schemaPath), name), join(temporary.root, name));
+    }
+    await copyFile(join(process.cwd(), 'runtimes/shared/host/abi.d.ts'), join(temporary.root, 'host-abi.d.ts'));
   }
-  await copyFile(join(process.cwd(), 'runtimes/shared/host/abi.d.ts'), join(temporary.root, 'host-abi.d.ts'));
   await writeFile(join(temporary.root, 'package.json'), '{"type":"module"}');
   const actualSchema = await readJson({ path: schemaPath, decode: decodeAbiSchema });
   const nativePointer = actualSchema.pointerBytes === 4 ? 'number' : 'bigint';
@@ -62,10 +72,9 @@ test('a consumer compiles against the actual generated speech C API declarations
   const nativeTable = actualSchema.pointerBytes === 4 ? 'Number(frameCallback)' : 'BigInt(frameCallback)';
   const consumer = join(temporary.root, 'consumer.ts');
   await writeFile(consumer, `\
-import type { LowLevelFunctions } from './functions.js';
-import type { SpeechModule } from './core.js';
-import { createAbiCaller } from './host-abi.js';
-import type { AbiSchema } from './host-abi.js';
+import type { LowLevelFunctions } from '${fromPackage ? `${packageName}/api/functions` : './functions.js'}';
+import type { SpeechModule } from '${fromPackage ? `${packageName}/${profileDirectory}/core.mjs` : './core.js'}';
+import { createAbiCaller, type AbiSchema } from '${fromPackage ? `${packageName}/host/abi` : './host-abi.js'}';
 declare const api: LowLevelFunctions;
 declare const module: SpeechModule;
 declare const schema: AbiSchema;

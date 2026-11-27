@@ -51,13 +51,16 @@ staged runtime files and provenance. They do not upload SDK executables, object
 files, static libraries or CMake caches as runtime artifacts.
 
 The matrices use `fail-fast: false` and no artificial `max-parallel` cap. Runner
-availability still limits concurrency. Each runtime assembly waits for its own
-required checks and shards. The publication job joins the two validated runtime
-packages and never publishes a partial profile set. Assembly does not compile the
-core again. The native QSA comparison is a separate required gate.
+availability still limits concurrency. Each runtime package waits for its own
+build shards and runs its required startup checks. The publication job assembles
+all three runtime packages without compiling any core again. Native and detailed
+regression checks run independently of publication. The [native QSA
+comparison](qsa-all-pools-selection.md) remains available as a manual check.
 
-`validation runtime` runs the saved package's browser matrix and writes a
-source-bound receipt. CPU smoke uses a small synthetic GGUF, not trained-model
+`validation runtime --phase startup` tests the distributable browser variants
+and records the evidence in the manifest. The regression phase checks the test
+variants in the saved package and writes a separate source-bound receipt. CPU
+smoke uses a small synthetic GGUF, not trained-model
 quality or large-model acceptance. WebGPU build coverage and mock-adapter
 suspension checks do not establish physical GPU inference. The manifest records
 what each variant actually exercised. Production browser files and test files

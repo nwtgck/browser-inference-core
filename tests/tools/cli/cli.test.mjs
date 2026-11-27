@@ -250,20 +250,23 @@ test('freeze connects real source verification arguments without a dependency ro
   const facts = { verified: true };
   const frozen = { sourceCommit: 'actual-source' };
   const calls = [];
+  let measurePublication;
   const cli = runner({
     modules: {
       publication: async () => ({
-        freezePackage: async args => {
-          const { verifySource, ...options } = args;
+        freezePackage: async ({ verifySource, measure, ...options }) => {
+          assert.equal(typeof measure, 'function');
+          measurePublication = measure;
           calls.push(options);
           assert.equal(await verifySource({ sourceCommit: 'actual-source', manifests }), facts);
           return frozen;
         },
       }),
       publicationSources: async () => ({
-        verifyPublicationSources: async args => {
-          calls.push(args);
-          return facts;
+        verifyPublicationSources: async ({ measure, ...options }) => {
+          assert.equal(measure, measurePublication);
+          calls.push(options);
+          return measure({ phase: 'publication.freeze.source-fingerprint', operation: async () => facts });
         },
       }),
     },

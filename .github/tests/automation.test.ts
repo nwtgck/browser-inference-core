@@ -9,11 +9,12 @@ import { decodeGitHubReleases } from '#dto/llama-cpp';
 import { selectUpstream } from '#tools/automation/upstream/plan';
 import { main } from '#tools/automation/cli';
 import { checkoutUpstream, prepareCandidate, upstreamPath } from '#tools/automation/upstream/operations';
+import { renderInstallGuide } from '#tools/publication/consumer';
 import { optionalStat } from '#tools/shared/files';
 import { readJson } from '#tools/shared/json';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import { commitFiles, git, initializeRepository, temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
-import { botComment, pullRequest, reportArchive, repository, source, workflowRun } from '#tests/tools/automation/comments.test-support';
+import { artifact, botComment, pullRequest, reportArchive, repository, source, workflowRun } from '#tests/tools/automation/comments.test-support';
 import type { Scenario } from './automation-service.test-support.js';
 import { createUpdaterFixture } from '#tests/tools/automation/upstream.test-support';
 
@@ -47,7 +48,7 @@ async function workflow({ name, job }: { name: string; job: string }): Promise<{
 }
 
 function scenario(): Scenario {
-  return { pulls: [pullRequest({ head: source, number: 7 })], runs: [workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'success' })], comments: [], currentPulls: undefined, currentRuns: undefined, totalCount: undefined, currentTotalCount: undefined, redirect: 'https://storage.invalid/signed-report', directArchive: false, failArtifactListing: false, failWrite: false, latest: undefined, releases: [], failRelease: false, relation: 'ahead' };
+  return { pulls: [pullRequest({ head: source, number: 7 })], runs: [workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'success' })], comments: [], currentPulls: undefined, currentRuns: undefined, totalCount: undefined, currentTotalCount: undefined, archives: [{ id: 91, runId: 123, attempt: 1, kind: 'details', malformed: false }], redirect: 'https://storage.invalid/signed-report', directArchive: false, failArtifactListing: false, failWrite: false, latest: undefined, releases: [], failRelease: false, relation: 'ahead' };
 }
 
 async function serviceEnvironment({ root, value }: { root: string; value: Scenario }): Promise<NodeJS.ProcessEnv> {
@@ -67,10 +68,24 @@ async function recorded({ root, name }: { root: string; name: string }): Promise
   return await optionalStat({ path }) ? (await readFile(path, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as Call) : [];
 }
 
+function requestedArchiveIds({ calls }: { calls: readonly Call[] }): number[] {
+  return calls.filter(call => call.tool === 'curl' && call.hasToken).map(call => Number(call.args.at(-1)?.split('/').at(-2)));
+}
+
 async function executeReporter({ root, value }: { root: string; value: Scenario }): Promise<void> {
   const env = await serviceEnvironment({ root, value });
-  const report = await reportArchive({ root, run: value.runs.at(-1) ?? workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'success' }), changes: {}, body: undefined, envelope: undefined, yaml: '' });
-  await writeFile(join(root, 'report.zip'), await readFile(report.path));
+  for (const { id, runId, attempt, kind, malformed } of value.archives) {
+    const run = value.runs.find(item => item.id === runId);
+    assert.ok(run);
+    const path = join(root, `artifact-${id}.zip`);
+    if (malformed) {
+      await writeFile(path, 'malformed');
+    } else {
+      const body = kind === 'guide' ? renderInstallGuide({ repository, commit: artifact, sourceCommit: run.head_sha }) : undefined;
+      const report = await reportArchive({ root, run, changes: { runAttempt: attempt }, body, envelope: undefined, yaml: kind === 'details' ? '' : undefined });
+      await writeFile(path, await readFile(report.path));
+    }
+  }
   const { steps } = await workflow({ name: 'runtime-comments.yml', job: 'report' });
   for (const step of steps) {
     if (!step.run || ['Acquire trusted tooling dependencies (online)', 'Acquire offline automation image (online)', 'Emit trusted default-branch tooling'].includes(step.name)) {
@@ -140,8 +155,81 @@ test('literal reporter shell separates API credentials, consumes the attempt-bou
   const writes = await recorded({ root: temporary.root, name: 'writes.jsonl' });
   assert.equal(writes.length, 1);
   const calls = await recorded({ root: temporary.root, name: 'calls.jsonl' });
-  assert.deepEqual(calls.filter(call => call.tool === 'curl').map(call => call.hasToken), [true, false]);
-  assert.match(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8'), /succeeded for this PR head/u);
+  const transfers = calls.filter(call => call.tool === 'curl');
+  assert.deepEqual(transfers.map(call => call.hasToken), [true, false]);
+  for (const { args } of transfers) {
+    assert.ok(args.includes('--max-time'));
+    assert.ok(Number(args[args.indexOf('--max-time') + 1]) > 0);
+  }
+  assert.match(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8'), /Runtime publication confirmed for this PR head/u);
+});
+
+test('literal reporter displays the guide for a failed run and keeps its attempt across newer failures and reruns', async () => {
+  for (const latest of [
+    undefined,
+    workflowRun({ head: source, id: 124, attempt: 1, status: 'completed', conclusion: 'failure' }),
+    workflowRun({ head: source, id: 123, attempt: 2, status: 'in_progress', conclusion: null }),
+  ]) {
+    await using temporary = await temporaryDirectory();
+    const value = scenario();
+    value.runs = [
+      workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'failure' }),
+      workflowRun({ head: source, id: 122, attempt: 1, status: 'completed', conclusion: 'success' }),
+    ];
+    if (latest) {
+      value.runs.push(latest);
+    }
+    value.archives = [
+      { id: 91, runId: 123, attempt: 1, kind: 'details', malformed: true },
+      { id: 92, runId: 123, attempt: 1, kind: 'guide', malformed: false },
+      { id: 90, runId: 122, attempt: 1, kind: 'details', malformed: false },
+    ];
+    if (latest?.status === 'in_progress') {
+      // Completion is required before a guide from this attempt can be posted.
+      value.archives.push({ id: 93, runId: 123, attempt: 2, kind: 'guide', malformed: false });
+    }
+    await executeReporter({ root: temporary.root, value });
+    const { body } = JSON.parse(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8')) as { body: string };
+    assert.ok(body.includes(`[Build run summary](${latest?.html_url ?? value.runs[0]?.html_url}/attempts/${latest?.run_attempt ?? 1})`));
+    assert.match(body, /Runtime publication confirmed for this PR head. \[Publication run summary\]\(https:\/\/github.com\/example\/core\/actions\/runs\/123\/attempts\/1\)/u);
+    assert.match(body, /Consumer integration details are unavailable/u);
+    assert.match(body, /Report retrieval error/u);
+    assert.equal(body.split('\n').filter(line => line.startsWith('npm install ')).length, 4);
+    const calls = await recorded({ root: temporary.root, name: 'calls.jsonl' });
+    assert.deepEqual(requestedArchiveIds({ calls }), [91, 92]);
+  }
+});
+
+test('literal reporter fetches only the verified details archive even when independent checks failed', async () => {
+  await using temporary = await temporaryDirectory();
+  const value = scenario();
+  value.runs[0] = workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'failure' });
+  value.archives.push({ id: 92, runId: 123, attempt: 1, kind: 'guide', malformed: false });
+  await executeReporter({ root: temporary.root, value });
+  const { body } = JSON.parse(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8')) as { body: string };
+  assert.match(body, /concluded \*\*failure\*\*/u);
+  assert.match(body, /Runtime publication confirmed for this PR head/u);
+  assert.match(body, /<summary>Metadata<\/summary>/u);
+  assert.doesNotMatch(body, /Consumer integration details are unavailable/u);
+  assert.deepEqual(requestedArchiveIds({ calls: await recorded({ root: temporary.root, name: 'calls.jsonl' }) }), [91]);
+});
+
+test('rerunning an old build does not make its earlier publication replace a later publication', async () => {
+  await using temporary = await temporaryDirectory();
+  const value = scenario();
+  value.runs = [
+    { ...workflowRun({ head: source, id: 123, attempt: 2, status: 'in_progress', conclusion: null }), run_started_at: '2026-11-27T13:00:00Z' },
+    { ...workflowRun({ head: source, id: 124, attempt: 1, status: 'completed', conclusion: 'success' }), run_started_at: '2026-11-27T11:00:00Z' },
+  ];
+  value.archives = [
+    { id: 91, runId: 123, attempt: 1, kind: 'guide', malformed: false, createdAt: '2026-11-27T10:30:00Z' },
+    { id: 92, runId: 124, attempt: 1, kind: 'details', malformed: false, createdAt: '2026-11-27T11:30:00Z' },
+  ];
+  await executeReporter({ root: temporary.root, value });
+  const { body } = JSON.parse(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8')) as { body: string };
+  assert.match(body, /\[Build run summary\]\(https:\/\/github.com\/example\/core\/actions\/runs\/123\/attempts\/2\)/u);
+  assert.match(body, /\[Publication run summary\]\(https:\/\/github.com\/example\/core\/actions\/runs\/124\/attempts\/1\)/u);
+  assert.deepEqual(requestedArchiveIds({ calls: await recorded({ root: temporary.root, name: 'calls.jsonl' }) }), [92]);
 });
 
 test('literal reporter handles direct archives, bot updates and all open PRs', async () => {
@@ -184,6 +272,7 @@ test('literal reporter pagination selects a later-page rerun and rejects incompl
   const value = scenario();
   value.runs = Array.from({ length: 100 }, (_, index) => ({ ...workflowRun({ head: source, id: 200 + index, attempt: 1, status: 'completed', conclusion: 'success' }), run_started_at: '2026-09-22T10:00:00Z' }));
   value.runs.push({ ...workflowRun({ head: source, id: 100, attempt: 3, status: 'completed', conclusion: 'success' }), run_started_at: '2026-09-22T12:00:00Z' });
+  value.archives = [{ id: 91, runId: 100, attempt: 3, kind: 'details', malformed: false }];
   await executeReporter({ root: temporary.root, value });
   assert.match(await readFile(join(temporary.root, 'state/7/body.json'), 'utf8'), /attempt 3/u);
   const histories = (await recorded({ root: temporary.root, name: 'calls.jsonl' })).filter(call => call.args.some(arg => arg.endsWith('/actions/workflows/build.yml/runs')));

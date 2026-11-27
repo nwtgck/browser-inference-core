@@ -1,12 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import yargs from 'yargs';
+import yargs, { type InferredOptionTypes } from 'yargs';
 import type { RuntimeName } from '#dto/shared';
 import { runtimeNames } from '#tools/shared/contracts';
 import { ProcessError, runProcess } from '#tools/shared/process';
 import { READ_ENV_BIC_METRICS_MODE, READ_ENV_GITHUB_JOB, READ_ENV_GITHUB_RUN_ATTEMPT, READ_ENV_GITHUB_RUN_ID, READ_ENV_LCB_SOURCE_COMMIT, READ_ENV_SDCB_TEST_WEBGPU } from '#tools/shared/node-env';
 import type { PackageKind } from '#tools/ci/metrics';
+import type { ConfirmedPublication, VerifySource } from '#tools/publication/artifacts';
+import type { MeasurePublication } from '#tools/publication/metrics';
 import { cachePlanOptions, requiredString } from '#tools/toolchain/cli-options';
 
 const executingCheckoutRoot = dirname(dirname(fileURLToPath(import.meta.resolve('#source/toolchain.json'))));
@@ -66,10 +68,10 @@ export type CliModules = {
   runtimePackage: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/package'), 'buildPackage'> | Pick<typeof import('#runtimes/speech-cpp/tools/package'), 'buildPackage'>>;
   runtimeVerify: ({ runtime }: { runtime: RuntimeName }) => Promise<Pick<typeof import('#runtimes/llama-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/stable-diffusion-cpp/tools/verify'), 'verifyRuntimePackage'> | Pick<typeof import('#runtimes/speech-cpp/tools/verify'), 'verifyRuntimePackage'>>;
   aggregate: () => Promise<Pick<typeof import('#tools/package/aggregate'), 'assemblePackage' | 'validatePackage'>>;
-  publication: () => Promise<Pick<typeof import('#tools/publication/artifacts'), 'freezePackage' | 'confirmPublication'>>;
+  publication: () => Promise<Pick<typeof import('#tools/publication/artifacts'), 'freezePackage' | 'assembleAndFreezePackage' | 'confirmPublication'>>;
   publicationSources: () => Promise<Pick<typeof import('#tools/publication/source'), 'verifyPublicationSources'>>;
   npmResolution: () => Promise<Pick<typeof import('#tools/publication/npm-lock'), 'prepareNpmResolution' | 'readNpmResolution'>>;
-  report: () => Promise<Pick<typeof import('#tools/publication/consumer'), 'writeConfirmedReport'>>;
+  report: () => Promise<Pick<typeof import('#tools/publication/consumer'), 'writeConfirmedReport' | 'writeConfirmedGuide' | 'readConfirmedGuide'>>;
   metrics: () => Promise<Pick<typeof import('#tools/ci/metrics'), 'createMetrics'>>;
   validation: () => Promise<Pick<typeof import('#tools/validation/runtime'), 'validateSavedRuntimePackage'>>;
 };
@@ -117,6 +119,17 @@ const defaultModules: CliModules = {
 const checkoutRootOption = { ...requiredString, description: 'Checkout that owns the executing tools and configuration' } as const;
 const runtimeOption = { type: 'string', choices: runtimeNames, demandOption: true } as const;
 const booleanOption = { type: 'boolean', default: false } as const;
+const optionalString = { ...requiredString, demandOption: false } as const;
+const publicationFreezeOptions = {
+  repository: { ...requiredString, description: 'GitHub owner/repository publishing the package' },
+  'checkout-root': checkoutRootOption,
+  'work-root': { ...requiredString, description: 'Fresh artifact snapshot directory' },
+  receipt: requiredString,
+  branch: requiredString,
+  'source-commit': requiredString,
+  'source-work-root': { ...requiredString, description: 'Fresh compiler snapshot and upstream preparation directory' },
+  python: { ...requiredString, description: 'Python executable for the upstream WGSL generator' },
+} as const;
 
 /** Ordinary yargs builders infer each handler's options without a second schema. */
 export function createCli({ modules, writeJson }: { modules: CliModules | undefined; writeJson: typeof jsonOutput | undefined }) {
@@ -135,6 +148,28 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
     });
     const observer = await metrics;
     return observer ? observer.measure({ phase, packageKind, operation }) : operation();
+  }
+  const measurePublication: MeasurePublication = ({ phase, operation }) => measured({ phase, packageKind: 'root', operation });
+  async function freeze({ options, input }: { options: InferredOptionTypes<typeof publicationFreezeOptions>; input: { packageDirectory: string } | { inputs: string } }): Promise<void> {
+    const sourceRoot = resolve(options['checkout-root']);
+    const workRoot = resolve(options['source-work-root']);
+    const { freezePackage, assembleAndFreezePackage } = await tools.publication();
+    const { verifyPublicationSources } = await tools.publicationSources();
+    const verifySource: VerifySource = ({ sourceCommit, manifests }) => verifyPublicationSources({ sourceRoot, workRoot, sourceCommit, manifests, python: options.python, measure: measurePublication });
+    const common = {
+      sourceRoot,
+      work: resolve(options['work-root']),
+      receipt: resolve(options.receipt),
+      branch: options.branch,
+      expectedSource: options['source-commit'],
+      repository: options.repository,
+      measure: measurePublication,
+      verifySource,
+    };
+    const frozen = 'inputs' in input
+      ? await assembleAndFreezePackage({ ...common, inputs: input.inputs })
+      : await freezePackage({ ...common, packageDirectory: input.packageDirectory });
+    await emit({ value: frozen, output: undefined });
   }
   return yargs()
     .scriptName('bicore')
@@ -238,27 +273,19 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
           }
         },
       })), () => {})
-    .command('publication', 'Freeze, confirm, and report local publication state', command => command
+    .command('publication', 'Freeze, confirm, and report publication state', command => command
       .demandCommand(1)
       .command('freeze', 'Freeze a verified package and its source facts', command => command
-        .option('repository', { ...requiredString, description: 'GitHub owner/repository publishing the package' })
-        .option('checkout-root', checkoutRootOption)
-        .option('directory', requiredString)
-        .option('work-root', { ...requiredString, description: 'Fresh artifact snapshot directory' })
-        .option('receipt', requiredString)
-        .option('branch', requiredString)
-        .option('source-commit', requiredString)
-        .option('source-work-root', { ...requiredString, description: 'Fresh compiler snapshot and upstream preparation directory' })
-        .option('python', { ...requiredString, description: 'Python executable for the upstream WGSL generator' }), async options => measured({
+        .options(publicationFreezeOptions)
+        .option('directory', requiredString), async options => measurePublication({
         phase: 'cli.publication.freeze',
-        packageKind: 'root',
-        operation: async () => {
-          const sourceRoot = resolve(options['checkout-root']);
-          const { freezePackage } = await tools.publication();
-          const { verifyPublicationSources } = await tools.publicationSources();
-          const frozen = await freezePackage({ sourceRoot, packageDirectory: resolve(options.directory), work: resolve(options['work-root']), receipt: resolve(options.receipt), branch: options.branch, expectedSource: options['source-commit'], repository: options.repository, verifySource: ({ sourceCommit, manifests }) => verifyPublicationSources({ sourceRoot, workRoot: resolve(options['source-work-root']), sourceCommit, manifests, python: options.python }) });
-          await emit({ value: frozen, output: undefined });
-        },
+        operation: () => freeze({ options, input: { packageDirectory: resolve(options.directory) } }),
+      }))
+      .command('assemble-freeze', 'Assemble runtime packages into a frozen publication tree', command => command
+        .options(publicationFreezeOptions)
+        .option('inputs', requiredString), async options => measurePublication({
+        phase: 'cli.publication.assemble-freeze',
+        operation: () => freeze({ options, input: { inputs: resolve(options.inputs) } }),
       }))
       .command('confirm', 'Confirm the published commit against this job\'s frozen receipt', command => command
         .option('work-root', requiredString)
@@ -270,6 +297,23 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
           const { confirmPublication } = await tools.publication();
           const publication = await confirmPublication({ work: resolve(options['work-root']), receipt: resolve(options.receipt), commit: options.commit });
           await emit({ value: { commit: publication.commit, sourceCommit: publication.frozen.sourceCommit, tree: publication.frozen.tree }, output: undefined });
+        },
+      }))
+      .command('guide', 'Record installation commands for a confirmed publication', command => command
+        .option('work-root', requiredString)
+        .option('receipt', requiredString)
+        .option('commit', requiredString)
+        .option('repository', requiredString)
+        .option('output', requiredString)
+        .option('run-id', { type: 'number', demandOption: true })
+        .option('run-attempt', { type: 'number', demandOption: true }), async options => measured({
+        phase: 'cli.publication.guide',
+        packageKind: 'root',
+        operation: async () => {
+          const { confirmPublication } = await tools.publication();
+          const { writeConfirmedGuide } = await tools.report();
+          const publication = await confirmPublication({ work: resolve(options['work-root']), receipt: resolve(options.receipt), commit: options.commit });
+          await writeConfirmedGuide({ publication, repository: options.repository, output: resolve(options.output), run: { id: options['run-id'], attempt: options['run-attempt'] } });
         },
       }))
       .command('npm-fixture', 'Prepare local files for the workflow-owned npm resolution', command => command
@@ -285,8 +329,10 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
         },
       }))
       .command('report', 'Write a report from the confirmed frozen state', command => command
-        .option('work-root', requiredString)
-        .option('receipt', requiredString)
+        .option('work-root', optionalString)
+        .option('receipt', optionalString)
+        .option('guide', optionalString)
+        .option('source-commit', optionalString)
         .option('commit', requiredString)
         .option('repository', requiredString)
         .option('npm-fixture', requiredString)
@@ -294,6 +340,8 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
         .option('summary', { type: 'string', requiresArg: true })
         .option('run-id', { type: 'number', requiresArg: true })
         .option('run-attempt', { type: 'number', requiresArg: true })
+        .conflicts('guide', ['work-root', 'receipt'])
+        .implies('source-commit', 'guide')
         .implies('run-id', 'run-attempt')
         .implies('run-attempt', 'run-id')
         .check(options => {
@@ -303,33 +351,64 @@ export function createCli({ modules, writeJson }: { modules: CliModules | undefi
             }
           }
           return true;
-        }), async options => measured({
-        phase: 'cli.publication.report',
-        packageKind: 'root',
-        operation: async () => {
-          const { confirmPublication } = await tools.publication();
-          const { readNpmResolution } = await tools.npmResolution();
-          const { writeConfirmedReport } = await tools.report();
-          const publication = await confirmPublication({ work: resolve(options['work-root']), receipt: resolve(options.receipt), commit: options.commit });
-          const resolution = await readNpmResolution({ directory: resolve(options['npm-fixture']), expected: { repository: options.repository, commit: options.commit, version: publication.frozen.report.data.package.version } });
-          const output = resolve(options.output);
-          const run = options['run-id'] === undefined || options['run-attempt'] === undefined ? undefined : { id: options['run-id'], attempt: options['run-attempt'] };
-          await writeConfirmedReport({ publication, repository: options.repository, resolution, output, run, summary: options.summary === undefined ? undefined : resolve(options.summary) });
-          await emit({ value: { output, artifactCommit: publication.commit, sourceCommit: publication.frozen.sourceCommit }, output: undefined });
-        },
-      })), () => {})
+        }), async options => {
+        const { guide, 'source-commit': sourceCommit, 'work-root': work, receipt, 'run-id': id, 'run-attempt': attempt, repository, commit } = options;
+        const run = id === undefined || attempt === undefined ? undefined : { id, attempt };
+        function reportInput() {
+          if (guide !== undefined) {
+            if (sourceCommit === undefined || run === undefined) {
+              throw new Error('Missing required arguments for --guide: --source-commit, --run-id and --run-attempt');
+            }
+            return { kind: 'guide' as const, directory: resolve(guide), sourceCommit, run };
+          }
+          if (work === undefined) {
+            throw new Error('Missing required argument: work-root');
+          }
+          if (receipt === undefined) {
+            throw new Error('Missing required argument: receipt');
+          }
+          return { kind: 'local' as const, work: resolve(work), receipt: resolve(receipt) };
+        }
+        const input = reportInput();
+        await measured({
+          phase: 'cli.publication.report',
+          packageKind: 'root',
+          operation: async () => {
+            const { readConfirmedGuide, writeConfirmedReport } = await tools.report();
+            let publication: ConfirmedPublication;
+            switch (input.kind) {
+            case 'guide':
+              publication = await readConfirmedGuide({ directory: input.directory, repository, commit, sourceCommit: input.sourceCommit, run: input.run });
+              break;
+            case 'local':
+              publication = await (await tools.publication()).confirmPublication({ work: input.work, receipt: input.receipt, commit });
+              break;
+            default: {
+              const exhaustive: never = input;
+              throw new Error(`Unhandled report input: ${String(exhaustive)}`);
+            }
+            }
+            const { readNpmResolution } = await tools.npmResolution();
+            const resolution = await readNpmResolution({ directory: resolve(options['npm-fixture']), expected: { repository, commit, version: publication.frozen.report.data.package.version } });
+            const output = resolve(options.output);
+            await writeConfirmedReport({ publication, repository, resolution, output, run, summary: options.summary === undefined ? undefined : resolve(options.summary) });
+            await emit({ value: { output, artifactCommit: publication.commit, sourceCommit: publication.frozen.sourceCommit }, output: undefined });
+          },
+        });
+      }), () => {})
     .command('validation', 'Validate saved runtime packages', command => command
       .demandCommand(1)
       .command('runtime', 'Validate a saved package with its browser fixture', command => command
         .option('runtime', runtimeOption)
         .option('checkout-root', checkoutRootOption)
         .option('package', requiredString)
-        .option('receipt', requiredString), async options => measured({
+        .option('receipt', requiredString)
+        .option('phase', { type: 'string', choices: ['startup', 'regression', 'full'] as const }), async options => measured({
         phase: 'cli.validation.runtime',
         packageKind: runtimePackageKind({ runtime: options.runtime }),
         operation: async () => {
           const { validateSavedRuntimePackage } = await tools.validation();
-          const receipt = await validateSavedRuntimePackage({ checkoutRoot: resolve(options['checkout-root']), runtime: options.runtime, packageDirectory: resolve(options.package), receiptPath: resolve(options.receipt), settings: { selectedSourceCommit: READ_ENV_LCB_SOURCE_COMMIT(), runId: READ_ENV_GITHUB_RUN_ID(), runAttempt: READ_ENV_GITHUB_RUN_ATTEMPT(), job: READ_ENV_GITHUB_JOB(), testWebGpu: READ_ENV_SDCB_TEST_WEBGPU() }, childEnvironment: undefined, runProcess });
+          const receipt = await validateSavedRuntimePackage({ checkoutRoot: resolve(options['checkout-root']), runtime: options.runtime, packageDirectory: resolve(options.package), receiptPath: resolve(options.receipt), settings: { selectedSourceCommit: READ_ENV_LCB_SOURCE_COMMIT(), runId: READ_ENV_GITHUB_RUN_ID(), runAttempt: READ_ENV_GITHUB_RUN_ATTEMPT(), job: READ_ENV_GITHUB_JOB(), testWebGpu: READ_ENV_SDCB_TEST_WEBGPU() }, childEnvironment: undefined, runProcess, ...(options.phase === undefined ? {} : { phase: options.phase }) });
           await emit({ value: receipt, output: undefined });
         },
       })), () => {});

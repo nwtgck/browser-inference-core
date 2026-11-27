@@ -12,7 +12,7 @@ import { decodeLlamaProvenance } from '#dto/llama-cpp';
 import { verifyRuntimePackage as verifyLlama } from '#runtimes/llama-cpp/tools/verify';
 import { verifyRuntimePackage as verifySpeech } from '#runtimes/speech-cpp/tools/verify';
 import { verifyRuntimePackage as verifyImage } from '#runtimes/stable-diffusion-cpp/tools/verify';
-import { freezePackage } from '#tools/publication/artifacts';
+import { assembleAndFreezePackage, freezePackage, type VerifySource } from '#tools/publication/artifacts';
 import { assemblePackage, validatePackage } from '#tools/package/aggregate';
 import { artifactDirectories } from '#tools/shared/contracts';
 import { decodePackageMetadata } from '#dto/shared';
@@ -149,24 +149,38 @@ child.on('close', code => { process.exitCode = code === null ? 1 : code; });
   await verifyImage({ sourceRoot, directory: join(fixture.root, 'package-inputs/stable-diffusion-cpp'), requireClean: true, checkNpmPack: true });
   await verifySpeech({ sourceRoot, directory: join(fixture.root, 'package-inputs/speech-cpp'), requireClean: true, checkNpmPack: true });
   let sourceChecks = 0;
-  await freezePackage({
-    sourceRoot,
+  const verifySource: VerifySource = async ({ sourceCommit, manifests }) => {
+    sourceChecks++;
+    const image = Object.values(Object.values(manifests['stable-diffusion-cpp'].profiles)[0]!.variants)[0]!;
+    // Explicit synthetic report facts; this test counts package boundaries, not source correctness.
+    return { sourceCommit, treeFingerprint: fixtureTreeFingerprint, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: manifests['speech-cpp'].upstreams, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
+  };
+  const common = { sourceRoot, branch: 'artifacts', expectedSource: fixtureSource, repository: 'fixture/browser-inference-core', verifySource };
+  const saved = await freezePackage({
+    ...common,
     packageDirectory: fixture.directory,
     work: join(fixture.root, 'publication'),
     receipt: join(fixture.root, 'frozen.json'),
-    branch: 'artifacts',
-    expectedSource: fixtureSource,
-    repository: 'fixture/browser-inference-core',
-    verifySource: async ({ sourceCommit, manifests }) => {
-      sourceChecks++;
-      const image = Object.values(Object.values(manifests['stable-diffusion-cpp'].profiles)[0]!.variants)[0]!;
-      // Explicit synthetic report facts; this test counts package boundaries, not source correctness.
-      return { sourceCommit, treeFingerprint: fixtureTreeFingerprint, runtimes: { 'llama-cpp': { upstream: manifests['llama-cpp'].llamaCommit, preparations: {}, verifiedVariants: [] }, 'stable-diffusion-cpp': { upstreams: manifests['stable-diffusion-cpp'].upstreams, preparation: image.preparedSources, patches: [], verifiedVariants: [] }, 'speech-cpp': { upstreams: manifests['speech-cpp'].upstreams, preparation: { files: 0, sha256: '0'.repeat(64) }, patches: [], verifiedVariants: [] } } };
-    },
   });
   const handoff = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { name: string });
   assert.deepEqual(handoff.map(item => item.name), ['llama-cpp-browser-core', 'stable-diffusion-cpp-browser-core', 'speech-cpp-browser-core', 'browser-inference-core']);
   assert.equal(sourceChecks, 1);
+  await write({ path: log, data: '' });
+  const phases: string[] = [];
+  const direct = await assembleAndFreezePackage({
+    ...common,
+    inputs: join(fixture.root, 'package-inputs'),
+    work: join(fixture.root, 'direct-publication'),
+    receipt: join(fixture.root, 'direct-frozen.json'),
+    measure: async ({ phase, operation }) => {
+      phases.push(phase);
+      return operation();
+    },
+  });
+  assert.deepEqual(direct, saved);
+  assert.equal(sourceChecks, 2);
+  assert.deepEqual((await readFile(log, 'utf8')).trim().split('\n').map(line => (JSON.parse(line) as { name: string }).name), ['browser-inference-core']);
+  assert.deepEqual(phases, ['publication.freeze.validate-inputs', 'publication.freeze.copy', 'publication.freeze.public-exports', 'publication.freeze.npm-pack', 'publication.freeze.git-stage', 'publication.freeze.git-verify']);
   const root = join(fixture.directory, artifactDirectories['llama-cpp']);
   const metadata = decodePackageMetadata({ input: JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) });
   await write({ path: join(root, 'package.json'), data: JSON.stringify({ ...metadata, private: true, files: ['api/'] }) });

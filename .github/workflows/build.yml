@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  host-and-publication-checks:
     name: Test host and publication code
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
@@ -54,7 +54,8 @@ jobs:
     env:
       BIC_METRICS_RUNTIME: llama-cpp
     steps:
-      - uses: actions/checkout@v7.0.1
+      - &checkout-source
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
@@ -96,13 +97,16 @@ jobs:
           OFFLINE
           fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
           printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
-      - name: Check out only this runtime's pinned upstreams
+      - &llama-cpp-upstream
+        name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: git submodule update --init --recursive --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v7.1.0
+      - &setup-node-22
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: '22.16.0'
-      - name: Acquire locked development dependencies (online)
+      - &install-tooling
+        name: Acquire locked development dependencies (online)
         shell: bash
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
@@ -117,7 +121,8 @@ jobs:
             "https://github.com/google/dawn/releases/download/${tag}/emdawnwebgpu_pkg-${tag}.zip" \
             --output "$archive"
           printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check -
-      - name: Emit the checked-out tools and verify source identity
+      - &emit-check-tools
+        name: Emit the checked-out tools and verify source identity
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
@@ -125,14 +130,21 @@ jobs:
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
             npm run tooling:build
           OFFLINE
+      - name: Prepare pinned Dawn for the host and SDK checks
+        id: host-dawn
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/cli.js toolchain prepare \
+              --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
+          OFFLINE
       - name: Test host, tooling and current native contracts
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
             node build/tooling/runtimes/llama-cpp/tools/cli.js check-notices --checkout-root "$GITHUB_WORKSPACE"
-            node build/tooling/tools/cli.js toolchain prepare \
-              --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools" --dawn-only
             export LCB_TEST_DAWN_PACKAGE="$GITHUB_WORKSPACE/.tools/emdawnwebgpu_pkg"
             npm run lint -- 00-dto tools runtimes/llama-cpp/tools runtimes/stable-diffusion-cpp/tools tests/tools tests/runtimes/llama-cpp tests/runtimes/stable-diffusion-cpp .github/tests
             npm run test:lint
@@ -148,6 +160,49 @@ jobs:
               tests.runtimes.llama_cpp.test_cmake_property_snapshot
             node --test build/tooling/tests/runtimes/llama-cpp/native-validation.test.js
           OFFLINE
+      - name: Read the pinned compiler settings
+        id: plan
+        if: "!cancelled() && steps.host-dawn.outcome == 'success'"
+        shell: bash
+        run: |
+          jq -er '
+            if (.emsdkVersion | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+               (.emscriptenRelease | test("^[a-f0-9]{40}$"))
+            then "emsdk-version=\(.emsdkVersion)\nemscripten-release=\(.emscriptenRelease)"
+            else error("Invalid pinned compiler settings") end
+          ' toolchain/config.json >> "$GITHUB_OUTPUT"
+      - name: Acquire pinned compiler (online)
+        id: host-sdk
+        if: "!cancelled() && steps.plan.outcome == 'success'"
+        shell: bash
+        working-directory: .
+        env:
+          EMSDK_VERSION: ${{ steps.plan.outputs.emsdk-version }}
+          EMSCRIPTEN_RELEASE: ${{ steps.plan.outputs.emscripten-release }}
+        run: &acquire-llama-sdk |
+          if [[ ! -d .tools/emsdk ]]; then
+            git clone --depth 1 --branch "$EMSDK_VERSION" \
+              https://github.com/emscripten-core/emsdk.git .tools/emsdk
+          fi
+          actual_release="$(jq -er --arg version "$EMSDK_VERSION" '.releases[$version]' .tools/emsdk/emscripten-releases-tags.json)"
+          test "$actual_release" = "$EMSCRIPTEN_RELEASE"
+          cd .tools/emsdk
+          ./emsdk install "$EMSDK_VERSION"
+          ./emsdk activate "$EMSDK_VERSION"
+          npm ci --prefix "$PWD/upstream/emscripten" --include=dev --ignore-scripts --no-audit --no-fund
+      - name: Test the pinned SDK Wasm and generated declarations
+        if: "!cancelled() && steps.host-sdk.outcome == 'success'"
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/cli.js toolchain prepare --checkout-root "$GITHUB_WORKSPACE" --tools-root "$GITHUB_WORKSPACE/.tools"
+            source .tools/emsdk/emsdk_env.sh
+            BICORE_EMSDK_ROOT="$GITHUB_WORKSPACE/.tools/emsdk" BICORE_EMSDK_NODE="$EMSDK_NODE" \
+              EM_CONFIG="$GITHUB_WORKSPACE/.tools/emsdk/.emscripten" \
+              node --test build/tooling/tests/tools/abi/wasm.test.js \
+                build/tooling/tests/tools/toolchain/tsd-sdk.test.js
+          OFFLINE
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
@@ -162,121 +217,13 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-test
+          name: pipeline-metrics-${{ github.run_attempt }}-host-and-publication-checks
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  qsa-native:
-    name: Compare QSA all-pools native graphs
-    if: >-
-      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
-      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    env:
-      BIC_METRICS_RUNTIME: llama-cpp
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ env.LCB_SOURCE_COMMIT }}
-          submodules: false
-          persist-credentials: false
-      - name: Acquire offline execution image (online)
-        # Public base images and apt packages are acquired without repository source.
-        # The final build image ID includes timestamps; cache identity uses actual
-        # base identities, recipe bytes and installed package versions instead.
-        working-directory: .
-        shell: bash
-        run: |
-          image_context="$(mktemp -d "$RUNNER_TEMP/bicore-image.XXXXXX")"
-          cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
-          FROM node:22.16.0-bookworm AS node
-          FROM ubuntu:24.04
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
-          COPY --from=node /usr/local/ /usr/local/
-          BICORE_DOCKERFILE
-          docker pull node:22.16.0-bookworm
-          docker pull ubuntu:24.04
-          docker build --tag "bicore-offline:$GITHUB_JOB" "$image_context"
-          export BIC_OFFLINE_IMAGE="bicore-offline:$GITHUB_JOB"
-          printf 'BIC_OFFLINE_IMAGE=bicore-offline:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
-          docker image inspect --format '{{.Id}}' node:22.16.0-bookworm ubuntu:24.04 > "$image_context/environment"
-          cat "$image_context/Dockerfile" >> "$image_context/environment"
-          offline_docker_args=(
-            -e HOME=/tmp
-          )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
-            dpkg-query -W
-            node --version
-            npm --version
-            python3 --version
-          OFFLINE
-          fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
-          printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
-      - name: Check out only this runtime's pinned upstreams
-        working-directory: .
-        run: git submodule update --init --recursive --depth=1 -- runtimes/llama-cpp/vendor/llama.cpp
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version: '22.16.0'
-      - name: Acquire locked development dependencies (online)
-        shell: bash
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-      - name: Emit the checked-out tools and verify source identity
-        shell: bash
-        run: |
-          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
-            mkdir -p "$HOME"
-            test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
-            npm run tooling:build
-          OFFLINE
-      - name: Compare separate reference and optimized native builds
-        shell: bash
-        run: |
-          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
-            mkdir -p "$HOME"
-            node build/tooling/tests/runtimes/llama-cpp/tools/qsa.test-support.js \
-              --checkout-root "$GITHUB_WORKSPACE" --tooling-root "$GITHUB_WORKSPACE/build/tooling" \
-              --output-root "$GITHUB_WORKSPACE/build/qsa-regression" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
-              --expected-commit "$LCB_SOURCE_COMMIT" --jobs 2
-          OFFLINE
-      - name: Upload native comparison traces and logs
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: qsa-native-${{ github.run_attempt }}
-          path: build/qsa-regression/qsa-results/
-          if-no-files-found: warn
-          retention-days: 14
-          compression-level: 1
-      - name: Summarize optional pipeline timings
-        if: always() && env.BIC_METRICS_MODE == 'basic'
-        continue-on-error: true
-        shell: bash
-        run: |
-          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
-            mkdir -p "$HOME"
-            node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
-          OFFLINE
-      - name: Upload optional pipeline timings
-        if: always() && env.BIC_METRICS_MODE == 'basic'
-        continue-on-error: true
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: pipeline-metrics-${{ github.run_attempt }}-qsa-native
-          path: ${{ runner.temp }}/bic-pipeline-metrics/
-          if-no-files-found: ignore
-          retention-days: 14
-          compression-level: 1
-  compile:
-    name: Build llama.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
+  llama-cpp-compile:
+    name: Compile llama.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
@@ -318,11 +265,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip && rm -rf /var/lib/apt/lists/*
           COPY --from=node /usr/local/ /usr/local/
           BICORE_DOCKERFILE
           docker pull node:22.16.0-bookworm
@@ -336,7 +279,7 @@ jobs:
             -e HOME=/tmp
           )
           .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
-            dpkg-query -W
+            dpkg-query -W | awk '$1 !~ /^ccache(:[^[:space:]]+)?$/'
             node --version
             npm --version
             python3 --version
@@ -365,7 +308,7 @@ jobs:
             node build/tooling/runtimes/llama-cpp/tools/cli.js cache-plan \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
               --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \
-              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1)" \
+              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1) $(sha256sum "$(command -v ccache)" | cut -d ' ' -f 1)" \
               --environment "$BIC_OFFLINE_ENVIRONMENT" --os "$RUNNER_OS" --arch "$RUNNER_ARCH" \
               --output "$GITHUB_WORKSPACE/build/cache-plan.json"
             jq -r '"dawn-key=\(.dawnKey)\nem-key=\(.emKey)\nem-prefix=\(.emRestorePrefix)\ncc-key=\(.ccKey)\ncc-prefix=\(.ccRestorePrefix)\nem-staging=\(.emStagingPath)\ncc-staging=\(.ccStagingPath)"' build/cache-plan.json >> "$GITHUB_OUTPUT"
@@ -408,17 +351,7 @@ jobs:
         env:
           EMSDK_VERSION: ${{ steps.plan.outputs.emsdk-version }}
           EMSCRIPTEN_RELEASE: ${{ steps.plan.outputs.emscripten-release }}
-        run: |
-          if [[ ! -d .tools/emsdk ]]; then
-            git clone --depth 1 --branch "$EMSDK_VERSION" \
-              https://github.com/emscripten-core/emsdk.git .tools/emsdk
-          fi
-          actual_release="$(jq -er --arg version "$EMSDK_VERSION" '.releases[$version]' .tools/emsdk/emscripten-releases-tags.json)"
-          test "$actual_release" = "$EMSCRIPTEN_RELEASE"
-          cd .tools/emsdk
-          ./emsdk install "$EMSDK_VERSION"
-          ./emsdk activate "$EMSDK_VERSION"
-          npm ci --prefix "$PWD/upstream/emscripten" --include=dev --ignore-scripts --no-audit --no-fund
+        run: *acquire-llama-sdk
       - name: Acquire pinned Dawn archive (online on cache miss)
         env:
           DAWN_TAG: ${{ steps.plan.outputs.dawn-tag }}
@@ -517,16 +450,6 @@ jobs:
               --output-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
               --expected-commit "$LCB_SOURCE_COMMIT" --kind wasm --fresh \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" --jobs 4 "${extra[@]}"
-            if [[ "$BIC_METRICS_PROFILE" == cpu-wasm32 && "$BIC_METRICS_VARIANT" == browser ]]; then
-              BICORE_EMSDK_ROOT="$GITHUB_WORKSPACE/.tools/emsdk" BICORE_EMSDK_NODE="$EMSDK_NODE" \
-                EM_CONFIG="$GITHUB_WORKSPACE/.tools/emsdk/.emscripten" \
-                node --test build/tooling/tests/tools/abi/wasm.test.js \
-                  build/tooling/tests/tools/toolchain/tsd-sdk.test.js
-            fi
-            if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
-              BICORE_LLAMA_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/llama-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \
-                node --test build/tooling/tests/tools/abi/current-api.test.js
-            fi
             ccache --show-stats
             if [[ "$SAVE_CACHES" == true ]]; then
               node --input-type=module <<'STAGE_CACHES'
@@ -545,7 +468,7 @@ jobs:
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: profile-build-${{ matrix.profile }}-${{ matrix.variant }}
+          name: llama-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: |
             build/runtimes/llama-cpp/stage/
             build/runtimes/llama-cpp/toolchain-licenses/
@@ -591,14 +514,14 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          name: pipeline-metrics-${{ github.run_attempt }}-llama-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  build:
-    name: Package and validate llama.cpp
-    needs: [test, qsa-native, compile]
+  llama-cpp-package:
+    name: Package and verify llama.cpp
+    needs: [llama-cpp-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -609,7 +532,8 @@ jobs:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
           persist-credentials: false
-      - name: Acquire offline execution image (online)
+      - &browser-image
+        name: Acquire offline execution image (online)
         # Public base images and apt packages are acquired without repository source.
         # The final build image ID includes timestamps; cache identity uses actual
         # base identities, recipe bytes and installed package versions instead.
@@ -662,11 +586,11 @@ jobs:
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
-            npm run tooling:build
+            npm run tooling:build:production
           OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
-          pattern: profile-build-*
+          pattern: llama-cpp-compile-*
           path: build/runtimes/llama-cpp/
           merge-multiple: true
       - name: Assemble runtime-only package
@@ -681,26 +605,28 @@ jobs:
               --license-root "$GITHUB_WORKSPACE/build/runtimes/llama-cpp/toolchain-licenses/emdawnwebgpu_pkg" \
               --license-root "$GITHUB_WORKSPACE/runtimes/llama-cpp/vendor/llama.cpp"
           OFFLINE
-      - name: Install browser test harness (online)
+      - &install-browser-harness
+        name: Install browser test harness (online)
         shell: bash
         run: |
           npm install --prefix .tools/browser --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
-      - name: Prepare Chromium (online)
+      - &prepare-chromium
+        name: Prepare Chromium (online)
         shell: bash
         run: |
           PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" .tools/browser/node_modules/.bin/playwright install chromium
-      - name: Test and finalize the same runtime snapshot
+      - name: Test packaged browser startup
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js validation runtime --runtime llama-cpp \
+            node build/tooling/tools/cli.js validation runtime --phase startup --runtime llama-cpp \
               --checkout-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/build/runtime-packages/llama-cpp" \
               --receipt "$GITHUB_WORKSPACE/build/runtime-validation/llama-cpp.json"
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: llama-runtime-package
+          name: llama-cpp-package
           path: build/runtime-packages/llama-cpp/
           if-no-files-found: error
           include-hidden-files: true
@@ -719,12 +645,13 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-build
+          name: pipeline-metrics-${{ github.run_attempt }}-llama-cpp-package
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  image-native:
+  stable-diffusion-cpp-checks:
+    name: Check stable-diffusion.cpp native and host contracts
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
@@ -830,16 +757,16 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-image-native
+          name: pipeline-metrics-${{ github.run_attempt }}-stable-diffusion-cpp-checks
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  image-compile:
+  stable-diffusion-cpp-compile:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
-    name: Image ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: Compile stable-diffusion.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -874,11 +801,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip && rm -rf /var/lib/apt/lists/*
           COPY --from=node /usr/local/ /usr/local/
           BICORE_DOCKERFILE
           docker pull node:22.16.0-bookworm
@@ -892,7 +815,7 @@ jobs:
             -e HOME=/tmp
           )
           .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
-            dpkg-query -W
+            dpkg-query -W | awk '$1 !~ /^ccache(:[^[:space:]]+)?$/'
             node --version
             npm --version
             python3 --version
@@ -920,7 +843,7 @@ jobs:
             node build/tooling/runtimes/stable-diffusion-cpp/tools/cli.js cache-plan \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
               --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \
-              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1)" \
+              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1) $(sha256sum "$(command -v ccache)" | cut -d ' ' -f 1)" \
               --environment "$BIC_OFFLINE_ENVIRONMENT" --os "$RUNNER_OS" --arch "$RUNNER_ARCH" \
               --output "$GITHUB_WORKSPACE/build/cache-plan.json"
             jq -r '"dawn-key=\(.dawnKey)\nem-key=\(.emKey)\nem-prefix=\(.emRestorePrefix)\ncc-key=\(.ccKey)\ncc-prefix=\(.ccRestorePrefix)\nem-staging=\(.emStagingPath)\ncc-staging=\(.ccStagingPath)"' build/cache-plan.json >> "$GITHUB_OUTPUT"
@@ -1071,10 +994,6 @@ jobs:
               --output-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
               --expected-commit "$LCB_SOURCE_COMMIT" --kind wasm --fresh \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" --jobs 4 "${extra[@]}"
-            if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
-              BICORE_SD_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \
-                node --test build/tooling/tests/tools/abi/current-api.test.js
-            fi
             ccache --show-stats
             if [[ "$SAVE_CACHES" == true ]]; then
               node --input-type=module <<'STAGE_CACHES'
@@ -1093,7 +1012,7 @@ jobs:
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: image-build-${{ matrix.profile }}-${{ matrix.variant }}
+          name: stable-diffusion-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: |
             build/runtimes/stable-diffusion-cpp/stage/
             build/runtimes/stable-diffusion-cpp/toolchain-licenses/
@@ -1139,14 +1058,14 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-image-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          name: pipeline-metrics-${{ github.run_attempt }}-stable-diffusion-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  image-build:
-    name: Package and validate stable-diffusion.cpp
-    needs: [image-native, image-compile]
+  stable-diffusion-cpp-package:
+    name: Package and verify stable-diffusion.cpp
+    needs: [stable-diffusion-cpp-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1157,44 +1076,9 @@ jobs:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
           persist-credentials: false
-      - name: Acquire offline execution image (online)
-        # Public base images and apt packages are acquired without repository source.
-        # The final build image ID includes timestamps; cache identity uses actual
-        # base identities, recipe bytes and installed package versions instead.
-        working-directory: .
-        shell: bash
-        run: |
-          image_context="$(mktemp -d "$RUNNER_TEMP/bicore-image.XXXXXX")"
-          cat > "$image_context/Dockerfile" <<'BICORE_DOCKERFILE'
-          FROM node:22.16.0-bookworm AS node
-          FROM ubuntu:24.04
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
-          COPY --from=node /usr/local/ /usr/local/
-          BICORE_DOCKERFILE
-          docker pull node:22.16.0-bookworm
-          docker pull ubuntu:24.04
-          docker build --tag "bicore-offline:$GITHUB_JOB" "$image_context"
-          export BIC_OFFLINE_IMAGE="bicore-offline:$GITHUB_JOB"
-          printf 'BIC_OFFLINE_IMAGE=bicore-offline:%s\n' "$GITHUB_JOB" >> "$GITHUB_ENV"
-          docker image inspect --format '{{.Id}}' node:22.16.0-bookworm ubuntu:24.04 > "$image_context/environment"
-          cat "$image_context/Dockerfile" >> "$image_context/environment"
-          offline_docker_args=(
-            -e HOME=/tmp
-          )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
-            dpkg-query -W
-            node --version
-            npm --version
-            python3 --version
-          OFFLINE
-          fingerprint="$(sha256sum "$image_context/environment" | cut -d ' ' -f 1)"
-          printf 'BIC_OFFLINE_ENVIRONMENT=%s\n' "$fingerprint" >> "$GITHUB_ENV"
-      - name: Check out only this runtime's pinned upstreams
+      - *browser-image
+      - &stable-diffusion-upstream
+        name: Check out only this runtime's pinned upstreams
         working-directory: .
         run: git submodule update --init --recursive --depth=1 -- runtimes/stable-diffusion-cpp/vendor/stable-diffusion.cpp runtimes/stable-diffusion-cpp/vendor/ggml-webgpu-source
       - uses: actions/setup-node@v7.1.0
@@ -1210,11 +1094,11 @@ jobs:
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
-            npm run tooling:build
+            npm run tooling:build:production
           OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
-          pattern: image-build-*
+          pattern: stable-diffusion-cpp-compile-*
           path: build/runtimes/stable-diffusion-cpp/
           merge-multiple: true
       - name: Assemble runtime-only package
@@ -1228,26 +1112,20 @@ jobs:
               --license-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/toolchain-licenses/emscripten" \
               --license-root "$GITHUB_WORKSPACE/build/runtimes/stable-diffusion-cpp/toolchain-licenses/emdawnwebgpu_pkg"
           OFFLINE
-      - name: Install browser test harness (online)
-        shell: bash
-        run: |
-          npm install --prefix .tools/browser --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
-      - name: Prepare Chromium (online)
-        shell: bash
-        run: |
-          PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/.tools/browser-binaries" .tools/browser/node_modules/.bin/playwright install chromium
-      - name: Test and finalize the same runtime snapshot
+      - *install-browser-harness
+      - *prepare-chromium
+      - name: Test packaged browser startup
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js validation runtime --runtime stable-diffusion-cpp \
+            node build/tooling/tools/cli.js validation runtime --phase startup --runtime stable-diffusion-cpp \
               --checkout-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/build/runtime-packages/stable-diffusion-cpp" \
               --receipt "$GITHUB_WORKSPACE/build/runtime-validation/stable-diffusion-cpp.json"
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: image-runtime-package
+          name: stable-diffusion-cpp-package
           path: build/runtime-packages/stable-diffusion-cpp/
           if-no-files-found: error
           include-hidden-files: true
@@ -1266,16 +1144,18 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-image-build
+          name: pipeline-metrics-${{ github.run_attempt }}-stable-diffusion-cpp-package
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  speech-native:
-    name: Test speech.cpp native and host contracts
+  speech-cpp-checks:
+    name: Check speech.cpp native and host contracts
     if: >-
-      (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
-      (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
+       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/')))
+    needs: [speech-cpp-package]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -1334,6 +1214,7 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
       - name: Emit the checked-out tools and verify source identity
+        id: speech-check-tools
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
@@ -1358,6 +1239,21 @@ jobs:
               BIC_METRICS_MODE=off node --test build/tooling/tests/runtimes/speech-cpp/tools/**/*.test.js
             node --test tests/runtimes/speech-cpp/*.test.mjs
           OFFLINE
+      - uses: actions/download-artifact@v8.0.2
+        id: speech-api-input
+        if: "!cancelled() && steps.speech-check-tools.outcome == 'success' && needs.speech-cpp-package.result == 'success'"
+        with:
+          name: speech-cpp-package
+          path: build/runtime-packages/speech-cpp/
+      - name: Test the packaged speech public API
+        if: "!cancelled() && steps.speech-api-input.outcome == 'success'"
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            BICORE_SPEECH_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtime-packages/speech-cpp/profiles/webgpu-wasm32-jspi/browser/abi.json" \
+              node --test build/tooling/tests/runtimes/speech-cpp/tools/current-api.test.js
+          OFFLINE
       - name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
@@ -1372,16 +1268,16 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-speech-native
+          name: pipeline-metrics-${{ github.run_attempt }}-speech-cpp-checks
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  speech-compile:
+  speech-cpp-compile:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
-    name: Build speech.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: Compile speech.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -1414,11 +1310,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
+              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip && rm -rf /var/lib/apt/lists/*
           COPY --from=node /usr/local/ /usr/local/
           BICORE_DOCKERFILE
           docker pull node:22.16.0-bookworm
@@ -1432,7 +1324,7 @@ jobs:
             -e HOME=/tmp
           )
           .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE' >> "$image_context/environment"
-            dpkg-query -W
+            dpkg-query -W | awk '$1 !~ /^ccache(:[^[:space:]]+)?$/'
             node --version
             npm --version
             python3 --version
@@ -1460,7 +1352,7 @@ jobs:
             node build/tooling/runtimes/speech-cpp/tools/cli.js cache-plan \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" \
               --checkout-root "$GITHUB_WORKSPACE" --work-root "$GITHUB_WORKSPACE" \
-              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1)" \
+              --source-commit "$LCB_SOURCE_COMMIT" --ccache-version "$(ccache --version | head -n 1) $(sha256sum "$(command -v ccache)" | cut -d ' ' -f 1)" \
               --environment "$BIC_OFFLINE_ENVIRONMENT" --os "$RUNNER_OS" --arch "$RUNNER_ARCH" \
               --output "$GITHUB_WORKSPACE/build/cache-plan.json"
             jq -r '"dawn-key=\(.dawnKey)\nem-key=\(.emKey)\nem-prefix=\(.emRestorePrefix)\ncc-key=\(.ccKey)\ncc-prefix=\(.ccRestorePrefix)\nem-staging=\(.emStagingPath)\ncc-staging=\(.ccStagingPath)"' build/cache-plan.json >> "$GITHUB_OUTPUT"
@@ -1611,10 +1503,6 @@ jobs:
               --output-root "$GITHUB_WORKSPACE/build/runtimes/speech-cpp" --toolchain-root "$GITHUB_WORKSPACE/.tools" \
               --expected-commit "$LCB_SOURCE_COMMIT" --kind wasm --fresh \
               --profile "$BIC_METRICS_PROFILE" --variant "$BIC_METRICS_VARIANT" --jobs 4 "${extra[@]}"
-            if [[ "$BIC_METRICS_PROFILE" == webgpu-wasm32-jspi && "$BIC_METRICS_VARIANT" == browser ]]; then
-              BICORE_SPEECH_ABI_SCHEMA="$GITHUB_WORKSPACE/build/runtimes/speech-cpp/build/wasm/$BIC_METRICS_PROFILE/$BIC_METRICS_VARIANT/generated/schema.json" \
-                node --test build/tooling/tests/runtimes/speech-cpp/tools/current-api.test.js
-            fi
             ccache --show-stats
             if [[ "$SAVE_CACHES" == true ]]; then
               node --input-type=module <<'STAGE_CACHES'
@@ -1633,7 +1521,7 @@ jobs:
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: speech-build-${{ matrix.profile }}-${{ matrix.variant }}
+          name: speech-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: |
             build/runtimes/speech-cpp/stage/
             build/runtimes/speech-cpp/toolchain-licenses/
@@ -1679,14 +1567,14 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-speech-compile-${{ matrix.profile }}-${{ matrix.variant }}
+          name: pipeline-metrics-${{ github.run_attempt }}-speech-cpp-compile-${{ matrix.profile }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
-  speech-build:
+  speech-cpp-package:
     name: Package and verify speech.cpp
-    needs: [speech-native, speech-compile]
+    needs: [speech-cpp-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1751,11 +1639,11 @@ jobs:
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
-            npm run tooling:build
+            npm run tooling:build:production
           OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
-          pattern: speech-build-*
+          pattern: speech-cpp-compile-*
           path: build/runtimes/speech-cpp/
           merge-multiple: true
       - name: Assemble runtime-only package
@@ -1769,13 +1657,16 @@ jobs:
               --license-root "$GITHUB_WORKSPACE/build/runtimes/speech-cpp/toolchain-licenses/emscripten" \
               --license-root "$GITHUB_WORKSPACE/build/runtimes/speech-cpp/toolchain-licenses/emdawnwebgpu_pkg"
           OFFLINE
-      - name: Verify runtime-only package
+      - *install-browser-harness
+      - *prepare-chromium
+      - name: Test packaged browser startup
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js package verify --runtime speech-cpp \
-              --checkout-root "$GITHUB_WORKSPACE" --directory "$GITHUB_WORKSPACE/build/runtime-packages/speech-cpp"
+            node build/tooling/tools/cli.js validation runtime --phase startup --runtime speech-cpp \
+              --checkout-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/build/runtime-packages/speech-cpp" \
+              --receipt "$GITHUB_WORKSPACE/build/runtime-validation/speech-cpp.json"
           OFFLINE
       - name: Test the actual Node Wasm boundary
         shell: bash
@@ -1787,7 +1678,7 @@ jobs:
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: speech-runtime-package
+          name: speech-cpp-package
           path: build/runtime-packages/speech-cpp/
           if-no-files-found: error
           include-hidden-files: true
@@ -1806,13 +1697,133 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pipeline-metrics-${{ github.run_attempt }}-speech-build
+          name: pipeline-metrics-${{ github.run_attempt }}-speech-cpp-package
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
+  llama-cpp-validate:
+    name: Validate packaged llama.cpp regressions
+    needs: [llama-cpp-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BIC_METRICS_RUNTIME: llama-cpp
+    steps:
+      - *checkout-source
+      - *browser-image
+      - *llama-cpp-upstream
+      - *setup-node-22
+      - *install-tooling
+      - *emit-check-tools
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: llama-cpp-package
+          path: build/runtime-packages/llama-cpp/
+      - *install-browser-harness
+      - *prepare-chromium
+      - name: Validate the saved runtime package
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            package="$GITHUB_WORKSPACE/build/runtime-packages/llama-cpp"
+            failed=0
+            BICORE_LLAMA_ABI_SCHEMA="$package/profiles/webgpu-wasm32-jspi/browser/abi.json" \
+              node --test build/tooling/tests/tools/abi/current-api.test.js || failed=1
+            node build/tooling/tools/cli.js validation runtime --phase regression --runtime llama-cpp \
+              --checkout-root "$GITHUB_WORKSPACE" --package "$package" \
+              --receipt "$GITHUB_WORKSPACE/build/runtime-validation/llama-cpp.json" || failed=1
+            exit "$failed"
+          OFFLINE
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: llama-cpp-regression-${{ github.run_attempt }}
+          path: build/runtime-validation/llama-cpp.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          OFFLINE
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-llama-cpp-validate
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
+  stable-diffusion-cpp-validate:
+    name: Validate packaged stable-diffusion.cpp regressions
+    needs: [stable-diffusion-cpp-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BIC_METRICS_RUNTIME: stable-diffusion-cpp
+    steps:
+      - *checkout-source
+      - *browser-image
+      - *stable-diffusion-upstream
+      - *setup-node-22
+      - *install-tooling
+      - *emit-check-tools
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: stable-diffusion-cpp-package
+          path: build/runtime-packages/stable-diffusion-cpp/
+      - *install-browser-harness
+      - *prepare-chromium
+      - name: Validate the saved runtime package
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            package="$GITHUB_WORKSPACE/build/runtime-packages/stable-diffusion-cpp"
+            failed=0
+            BICORE_SD_ABI_SCHEMA="$package/profiles/webgpu-wasm32-jspi/browser/abi.json" \
+              node --test build/tooling/tests/tools/abi/current-api.test.js || failed=1
+            node build/tooling/tools/cli.js validation runtime --phase regression --runtime stable-diffusion-cpp \
+              --checkout-root "$GITHUB_WORKSPACE" --package "$package" \
+              --receipt "$GITHUB_WORKSPACE/build/runtime-validation/stable-diffusion-cpp.json" || failed=1
+            exit "$failed"
+          OFFLINE
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: stable-diffusion-cpp-regression-${{ github.run_attempt }}
+          path: build/runtime-validation/stable-diffusion-cpp.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Summarize optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/ci/cli.js summary --directory "$RUNNER_TEMP/bic-pipeline-metrics"
+          OFFLINE
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-stable-diffusion-cpp-validate
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1
           retention-days: 14
   publish:
-    needs: [build, image-build, speech-build]
+    needs: [llama-cpp-package, stable-diffusion-cpp-package, speech-cpp-package]
     # Ordinary same-repository PR heads have the same publication trust as
     # source pushes. Fork PRs and Dependabot runs never receive write credentials.
     if: >-
@@ -1824,6 +1835,9 @@ jobs:
       contents: write
       attestations: write
       id-token: write
+    outputs:
+      artifact-commit: ${{ steps.publish.outputs.commit }}
+      published-attempt: ${{ steps.publication-guide.outputs.attempt }}
     env:
       BIC_METRICS_RUNTIME: root
     steps:
@@ -1832,7 +1846,8 @@ jobs:
           ref: ${{ env.LCB_SOURCE_COMMIT }}
           submodules: false
           persist-credentials: false
-      - name: Acquire offline execution image (online)
+      - &publication-image
+        name: Acquire offline execution image (online)
         # Public base images and apt packages are acquired without repository source.
         # The final build image ID includes timestamps; cache identity uses actual
         # base identities, recipe bytes and installed package versions instead.
@@ -1844,11 +1859,7 @@ jobs:
           FROM node:22.16.0-bookworm AS node
           FROM ubuntu:24.04
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates git python3 build-essential cmake ninja-build clang ccache jq unzip \
-              libglib2.0-0t64 libnss3 libnspr4 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-              libatspi2.0-0t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-              libgbm1 libxcb1 libxkbcommon0 libasound2t64 libcups2t64 libdrm2 libpango-1.0-0 \
-              libcairo2 fonts-liberation && rm -rf /var/lib/apt/lists/*
+              ca-certificates git python3 jq && rm -rf /var/lib/apt/lists/*
           COPY --from=node /usr/local/ /usr/local/
           BICORE_DOCKERFILE
           docker pull node:22.16.0-bookworm
@@ -1878,25 +1889,26 @@ jobs:
         shell: bash
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-      - name: Emit the checked-out tools and verify source identity
+      - &emit-production-tools
+        name: Emit the checked-out tools and verify source identity
         shell: bash
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
             test "$(git rev-parse HEAD)" = "$LCB_SOURCE_COMMIT"
-            npm run tooling:build
+            npm run tooling:build:production
           OFFLINE
       - uses: actions/download-artifact@v8.0.2
         with:
-          name: llama-runtime-package
+          name: llama-cpp-package
           path: build/package-inputs/llama-cpp/
       - uses: actions/download-artifact@v8.0.2
         with:
-          name: image-runtime-package
+          name: stable-diffusion-cpp-package
           path: build/package-inputs/stable-diffusion-cpp/
       - uses: actions/download-artifact@v8.0.2
         with:
-          name: speech-runtime-package
+          name: speech-cpp-package
           path: build/package-inputs/speech-cpp/
       - name: Assemble and freeze the source-bound publication tree
         id: freeze
@@ -1904,10 +1916,8 @@ jobs:
         run: |
           .github/scripts/run-offline.sh "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js package assemble --checkout-root "$GITHUB_WORKSPACE" \
-              --inputs "$GITHUB_WORKSPACE/build/package-inputs" --output "$GITHUB_WORKSPACE/dist/package" --defer-npm-pack
-            node build/tooling/tools/cli.js publication freeze --checkout-root "$GITHUB_WORKSPACE" \
-              --directory "$GITHUB_WORKSPACE/dist/package" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
+            node build/tooling/tools/cli.js publication assemble-freeze --checkout-root "$GITHUB_WORKSPACE" \
+              --inputs "$GITHUB_WORKSPACE/build/package-inputs" --work-root "$GITHUB_WORKSPACE/build/publication/package" \
               --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --branch artifacts \
               --repository "$GITHUB_REPOSITORY" \
               --source-commit "$LCB_SOURCE_COMMIT" --source-work-root "$GITHUB_WORKSPACE/build/publication/sources" --python python3 > /dev/null
@@ -1994,79 +2004,45 @@ jobs:
           done
           echo 'Publication conflicted repeatedly; rerun this job. No history was overwritten.' >&2
           exit 1
-      - name: Confirm publication and prepare a fresh npm fixture
+      - name: Show install commands for the published artifact
         env:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
         shell: bash
         run: |
-          offline_docker_args=(
-            -e ARTIFACT_COMMIT
-          )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
-            mkdir -p "$HOME"
-            {
-              printf '## Runtime artifact commit\n\n`%s`\n\n**Source commit:** `%s`\n\n' "$ARTIFACT_COMMIT" "$LCB_SOURCE_COMMIT"
-              if source_title="$(git -C "$GITHUB_WORKSPACE" show -s --format=%s "$LCB_SOURCE_COMMIT" | jq -Rr @html)"; then
-                printf '**Source commit title:** <code>%s</code>\n\n' "$source_title"
-              fi
-              printf '```sh\nnpm install github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
-              printf '**Install with explicit package names:**\n\n'
-              printf '```sh\nnpm install llama-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
-              printf '```sh\nnpm install stable-diffusion-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
-              printf '```sh\nnpm install speech-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            node build/tooling/tools/cli.js publication confirm --work-root "$GITHUB_WORKSPACE/build/publication/package" \
-              --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT"
-            version="$(jq -er '.report.data.package.version' build/publication/frozen.json)"
-            node build/tooling/tools/cli.js publication npm-fixture --directory "$GITHUB_WORKSPACE/build/consumer-lock" \
-              --repository "$GITHUB_REPOSITORY" --commit "$ARTIFACT_COMMIT" --version "$version"
-          OFFLINE
-      - name: Resolve the published npm dependency (online)
-        shell: bash
-        run: |
-
-          # Resolve only this published, dependency-free package. No lifecycle hooks,
-          # consumer configuration, shared cache, registry audit or funding requests.
-          cd build/consumer-lock
-          export NPM_CONFIG_CACHE="$PWD/cache" NPM_CONFIG_USERCONFIG="$PWD/empty.npmrc"
-          export NPM_CONFIG_GLOBALCONFIG="$PWD/empty-global.npmrc" GIT_TERMINAL_PROMPT=0
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3
-      - name: Generate consumer integration metadata from the confirmed receipt
+          test -n "$ARTIFACT_COMMIT"
+          {
+            printf '## Runtime artifact commit\n\n`%s`\n\n**Source commit:** `%s`\n\n' "$ARTIFACT_COMMIT" "$LCB_SOURCE_COMMIT"
+            if source_title="$(git -C "$GITHUB_WORKSPACE" show -s --format=%s "$LCB_SOURCE_COMMIT" | jq -Rr @html)"; then
+              printf '**Source commit title:** <code>%s</code>\n\n' "$source_title"
+            fi
+            printf '```sh\nnpm install github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+            printf '**Install with explicit package names:**\n\n'
+            printf '```sh\nnpm install llama-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+            printf '```sh\nnpm install stable-diffusion-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+            printf '```sh\nnpm install speech-cpp-browser-core@github:%s#%s\n```\n\n' "$GITHUB_REPOSITORY" "$ARTIFACT_COMMIT"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Record the published installation guide
+        id: publication-guide
         env:
           ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
         shell: bash
         run: |
-          offline_docker_args=(
-            -e ARTIFACT_COMMIT
-          )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+          .github/scripts/run-offline.sh -e ARTIFACT_COMMIT "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
             mkdir -p "$HOME"
-            node build/tooling/tools/cli.js publication report --work-root "$GITHUB_WORKSPACE/build/publication/package" \
+            node build/tooling/tools/cli.js publication guide --work-root "$GITHUB_WORKSPACE/build/publication/package" \
               --receipt "$GITHUB_WORKSPACE/build/publication/frozen.json" --commit "$ARTIFACT_COMMIT" \
-              --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
-              --repository "$GITHUB_REPOSITORY" --npm-fixture "$GITHUB_WORKSPACE/build/consumer-lock" \
-              --output "$GITHUB_WORKSPACE/build/consumer-update" --summary "$GITHUB_STEP_SUMMARY"
+              --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+              --output "$GITHUB_WORKSPACE/build/publication-guide"
+            printf 'attempt=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           OFFLINE
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: consumer-update-${{ github.run_attempt }}
-          path: build/consumer-update/
+          name: publication-guide-${{ github.run_attempt }}
+          path: build/publication-guide/
           if-no-files-found: error
           retention-days: 90
-      - name: Preserve publication status after a reporting failure
-        if: failure() && steps.publish.outputs.commit != ''
-        env:
-          ARTIFACT_COMMIT: ${{ steps.publish.outputs.commit }}
-        shell: bash
-        run: |
-          offline_docker_args=(
-            -e ARTIFACT_COMMIT
-          )
-          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
-            mkdir -p "$HOME"
-            echo "Runtime artifact $ARTIFACT_COMMIT is already published; consumer reporting failed." >> "$GITHUB_STEP_SUMMARY"
-          OFFLINE
-      - name: Summarize optional pipeline timings
+      - &summarize-publication-metrics
+        name: Summarize optional pipeline timings
         if: always() && env.BIC_METRICS_MODE == 'basic'
         continue-on-error: true
         shell: bash
@@ -2081,6 +2057,95 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: pipeline-metrics-${{ github.run_attempt }}-publish
+          path: ${{ runner.temp }}/bic-pipeline-metrics/
+          if-no-files-found: ignore
+          compression-level: 1
+          retention-days: 14
+
+  consumer-report:
+    name: Generate optional consumer report
+    needs: [publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BIC_METRICS_RUNTIME: root
+      ARTIFACT_COMMIT: ${{ needs.publish.outputs.artifact-commit }}
+      PUBLISHED_ATTEMPT: ${{ needs.publish.outputs.published-attempt }}
+    steps:
+      - *checkout-source
+      - *publication-image
+      - *setup-node-22
+      - *install-tooling
+      - *emit-production-tools
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: publication-guide-${{ needs.publish.outputs.published-attempt }}
+          path: build/publication-guide/
+      - name: Prepare the optional npm fixture
+        id: npm-fixture
+        continue-on-error: true
+        shell: bash
+        run: |
+          .github/scripts/run-offline.sh -e ARTIFACT_COMMIT "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            version="$(jq -er '.report.data.package.version' build/publication-guide/frozen.json)"
+            node build/tooling/tools/cli.js publication npm-fixture --directory "$GITHUB_WORKSPACE/build/consumer-lock" \
+              --repository "$GITHUB_REPOSITORY" --commit "$ARTIFACT_COMMIT" --version "$version"
+          OFFLINE
+      - name: Resolve the published npm dependency (online)
+        id: npm-resolution
+        if: steps.npm-fixture.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+
+          # Resolve only this published, dependency-free package. No lifecycle hooks,
+          # consumer configuration, shared cache, registry audit or funding requests.
+          cd build/consumer-lock
+          export NPM_CONFIG_CACHE="$PWD/cache" NPM_CONFIG_USERCONFIG="$PWD/empty.npmrc"
+          export NPM_CONFIG_GLOBALCONFIG="$PWD/empty-global.npmrc" GIT_TERMINAL_PROMPT=0
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3
+      - name: Generate consumer integration metadata from the publication guide
+        id: consumer-report
+        if: steps.npm-resolution.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          offline_docker_args=(
+            -e ARTIFACT_COMMIT -e PUBLISHED_ATTEMPT
+          )
+          .github/scripts/run-offline.sh "${offline_docker_args[@]}" "$BIC_OFFLINE_IMAGE" <<'OFFLINE'
+            mkdir -p "$HOME"
+            node build/tooling/tools/cli.js publication report --guide "$GITHUB_WORKSPACE/build/publication-guide" \
+              --source-commit "$LCB_SOURCE_COMMIT" --commit "$ARTIFACT_COMMIT" \
+              --run-id "$GITHUB_RUN_ID" --run-attempt "$PUBLISHED_ATTEMPT" \
+              --repository "$GITHUB_REPOSITORY" --npm-fixture "$GITHUB_WORKSPACE/build/consumer-lock" \
+              --output "$GITHUB_WORKSPACE/build/consumer-update" --summary "$GITHUB_STEP_SUMMARY"
+          OFFLINE
+      - uses: actions/upload-artifact@v7.0.2
+        id: upload-consumer-report
+        if: steps.consumer-report.outcome == 'success'
+        continue-on-error: true
+        with:
+          name: consumer-update-${{ needs.publish.outputs.published-attempt }}
+          path: build/consumer-update/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Preserve publication status after a reporting failure
+        if: >-
+          !cancelled() && needs.publish.outputs.artifact-commit != '' &&
+          (failure() || steps.npm-fixture.outcome == 'failure' || steps.npm-resolution.outcome == 'failure' ||
+           steps.consumer-report.outcome == 'failure' || steps.upload-consumer-report.outcome == 'failure')
+        shell: bash
+        run: |
+          echo "Runtime artifact $ARTIFACT_COMMIT is already published; consumer reporting failed." >> "$GITHUB_STEP_SUMMARY"
+      - *summarize-publication-metrics
+      - name: Upload optional pipeline timings
+        if: always() && env.BIC_METRICS_MODE == 'basic'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: pipeline-metrics-${{ github.run_attempt }}-consumer-report
           path: ${{ runner.temp }}/bic-pipeline-metrics/
           if-no-files-found: ignore
           compression-level: 1

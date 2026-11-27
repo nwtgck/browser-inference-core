@@ -84,7 +84,7 @@ upstream; successful patch application or a recorded digest cannot prove them.
 The longer-context WebGPU LIGHTNING_INDEXER prototype is separate. Its isolated
 shader tests do not establish integration into the distributed C++ backend.
 
-## Reproducible required native gate
+## Reproducible native comparison
 
 On Linux with the pinned submodule, Node dependencies and native compiler
 already available, run from the repository root:
@@ -110,10 +110,10 @@ requires fewer final selection masks, proving that graph-local sharing executes
 rather than merely being present in source code. An independent F32 arithmetic
 test exhibits the rounding counterexample beyond the exact-index range.
 
-The `qsa-native` workflow job runs independently of WebAssembly compilation and
-is required before packaging. It uploads comparison results even on failure,
-not the native build trees. This gate is native CPU correctness coverage, not
-WebGPU numerical validation or a throughput claim.
+Run the comparison when updating the relevant upstream or changing the QSA
+path. The comparison exercises native CPU correctness and keeps its results in
+the selected work directory. Production Wasm compilation and package assembly
+remain independent of the comparison.
 
 ## Composed-source provenance
 

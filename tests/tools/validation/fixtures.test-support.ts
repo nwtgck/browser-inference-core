@@ -13,8 +13,8 @@ import type { runProcess } from '#tools/shared/process';
 import { runtimeTestInputs, testFilesForRuntime } from '#tools/validation/runtime';
 import { clearValidationReceipt, validateSnapshot, type ExecutionSettings, type ValidationReceipt } from '#tools/validation/snapshot';
 import { manifestIo, type ManifestIo } from '#tools/validation/manifest';
-import { checkedImageResults, addImageValidation } from '#tools/validation/image-results';
-import { checkedLlamaResults, addLlamaValidation } from '#tools/validation/llama-results';
+import { checkedStableDiffusionResults, addStableDiffusionValidation } from '#tools/validation/stable-diffusion-cpp-results';
+import { checkedLlamaResults, addLlamaValidation } from '#tools/validation/llama-cpp-results';
 import { createSyntheticModel } from '#tools/validation/synthetic-model';
 import { makeRuntime, fixtureSource } from '#tests/tools/package/fixtures.test-support';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
@@ -43,7 +43,7 @@ export function imageResults({ profiles, variants, gpu }: { profiles: readonly s
         profile,
         variant,
         passed: true,
-        scope: imageSmokeScope({ testWebGpu: gpu }),
+        scope: imageSmokeScope({ variant, testWebGpu: gpu }),
         timestep: variant === 'test' ? backends.map((backend) => ({ backend, passed: true })) : [],
         bf16Weights: variant === 'test' ? backends.map((backend) => ({ backend, passed: true })) : [],
         ...(variant === 'test' ? { graphWalk: true, conv3dBias: backends.map((backend) => ({ backend, passed: true })), webgpuPerformance: backends.map((backend) => ({ backend, passed: true })) } : {}),
@@ -85,7 +85,7 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
       receiptPath: path.join(temporary.root, 'receipt.json'),
       profiles: Object.keys(configuration.profiles),
       variants: Object.keys(configuration.variants),
-      testFiles: testFilesForRuntime({ checkoutRoot, runtime }),
+      testFiles: testFilesForRuntime({ checkoutRoot, runtime, phase: 'full' }),
       settings: { selectedSourceCommit: fixtureSource, runId: '123', runAttempt: '2', job: 'fixture', testWebGpu: '0' },
       commands: [],
       finalCalls: 0,
@@ -148,6 +148,8 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
             io: state.io,
             plan: {
               validated,
+              phase: 'full',
+              browserHarness: 'tests/runtimes/llama_cpp/browser-smoke.mjs',
               profiles: state.profiles,
               variants: state.variants,
               testFiles: state.testFiles,
@@ -181,6 +183,8 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
             io: state.io,
             plan: {
               validated,
+              phase: 'full',
+              browserHarness: 'tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs',
               profiles: state.profiles,
               variants: state.variants,
               testFiles: state.testFiles,
@@ -188,8 +192,8 @@ export async function validationFixture({ runtime }: { runtime: RuntimeName }): 
               nodeAsyncify: false,
               testWebGpu: gpu,
               decodeEnvelope: decodeStableDiffusionBrowserEnvelope,
-              checkedResults: ({ results }) => checkedImageResults({ profiles: state.profiles, variants: state.variants, results, testWebGpu: gpu }),
-              updateManifest: addImageValidation,
+              checkedResults: ({ results }) => checkedStableDiffusionResults({ profiles: state.profiles, variants: state.variants, results, testWebGpu: gpu }),
+              updateManifest: addStableDiffusionValidation,
               finalVerify: async ({ input }) => {
                 state.finalCalls++;
                 if (state.finalFailure !== undefined) {

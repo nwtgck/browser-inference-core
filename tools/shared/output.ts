@@ -27,8 +27,8 @@ async function checkOriginal({ output }: { output: Output }): Promise<void> {
   }
 }
 
-/** Ordinary failures roll back the whole group. This is not a concurrent-reader transaction. */
-export async function withOutputDirectories<T>({ destinations, replace, preserveUnchanged, prepare }: { destinations: readonly string[]; replace: boolean; preserveUnchanged?: boolean; prepare: ({ paths }: { paths: readonly string[] }) => Promise<T> }): Promise<T> {
+/** Roll back the whole directory group if installation or finalization fails. */
+export async function withOutputDirectories<T>({ destinations, replace, preserveUnchanged, prepare, finalize }: { destinations: readonly string[]; replace: boolean; preserveUnchanged?: boolean; prepare: ({ paths }: { paths: readonly string[] }) => Promise<T>; finalize?: () => Promise<void> }): Promise<T> {
   const paths = destinations.map((path) => resolve(path));
   if (!paths.length || paths.some((path, index) => paths.slice(index + 1).some((other) => isContained({ root: path, path: other }) || isContained({ root: other, path })))) {
     throw new Error('Output destinations must be nonempty, distinct and non-overlapping');
@@ -77,6 +77,7 @@ export async function withOutputDirectories<T>({ destinations, replace, preserve
         await rename(prepared, output.destination);
         output.installed = candidate;
       }
+      await finalize?.();
     } catch (error) {
       const retained: string[] = [];
       for (const output of [...outputs].reverse()) {

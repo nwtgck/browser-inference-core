@@ -32,26 +32,27 @@ export function cachePlan({ runtime, profile, variant, profileConfiguration, var
   if (!ccacheVersion || !platform.os || !platform.arch || !platform.environment || !workspace) {
     throw new Error('Incomplete cache partition');
   }
-  const identity = digest({
-    value: {
-      emsdkVersion: toolchain.emsdkVersion,
-      emscriptenRelease: toolchain.emscriptenRelease,
-      emscriptenAsyncifyBigIntPatch: toolchain.emscriptenAsyncifyBigIntPatch,
-      emscriptenTypeScriptPatch: toolchain.emscriptenTypeScriptPatch,
-      dawnSha256: toolchain.dawnSha256,
-      ccacheVersion,
-      platform,
-      workspace,
-      runtime,
-      profile,
-      variant,
-      profileConfiguration,
-      variantConfiguration,
-    },
-  }).slice(0, 32);
-  const partition = `${cachePolicy}-${runtime}-${profile}-${variant}-${identity}`;
-  const emRestorePrefix = `${partition}-em-`;
-  const ccRestorePrefix = `${partition}-cc-`;
+  // CI identifies the compile image before SDK acquisition. Keep that exact
+  // environment in both partitions, including the host tools used by ports.
+  const compilation = {
+    emsdkVersion: toolchain.emsdkVersion,
+    emscriptenRelease: toolchain.emscriptenRelease,
+    emscriptenAsyncifyBigIntPatch: toolchain.emscriptenAsyncifyBigIntPatch,
+    emscriptenTypeScriptPatch: toolchain.emscriptenTypeScriptPatch,
+    dawnSha256: toolchain.dawnSha256,
+    platform,
+    workspace,
+    runtime,
+    profile,
+    variant,
+    profileConfiguration,
+    variantConfiguration,
+  };
+  const emIdentity = digest({ value: compilation }).slice(0, 32);
+  const identity = digest({ value: { compilation, ccacheVersion } }).slice(0, 32);
+  const partition = `${cachePolicy}-${runtime}-${profile}-${variant}`;
+  const emRestorePrefix = `${partition}-${emIdentity}-em-`;
+  const ccRestorePrefix = `${partition}-${identity}-cc-`;
   return {
     identity,
     dawnKey: `${cachePolicy}-dawn-${toolchain.dawnSha256}`,

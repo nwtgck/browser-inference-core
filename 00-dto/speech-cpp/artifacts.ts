@@ -1,5 +1,23 @@
 import { z } from 'zod';
 import { buildCacheSchema, compilerInputsSchema, fileEntrySchema, jsonObjectSchema, jsonSchema, patchReceiptSchema, sourceInputsSchema, treeIdentitySchema, validationSchema } from '#dto-internal/shared/artifacts';
+import { browserSessionSchema } from '#dto-internal/shared/external';
+
+const speechBrowserResultSchema = z.object({
+  profile: z.string(),
+  variant: z.literal('browser'),
+  passed: z.boolean(),
+  pointerBytes: z.number(),
+  apiVersionMajor: z.number(),
+  apiVersionMinor: z.number(),
+  version: z.string(),
+});
+export type SpeechBrowserResult = z.infer<typeof speechBrowserResultSchema>;
+const speechBrowserEnvelopeSchema = z.object({ session: browserSessionSchema.extend({ runtime: z.literal('speech-cpp') }), results: z.array(speechBrowserResultSchema) });
+export type SpeechBrowserEnvelope = z.infer<typeof speechBrowserEnvelopeSchema>;
+
+export function decodeSpeechBrowserEnvelope({ input }: { input: unknown }): SpeechBrowserEnvelope {
+  return speechBrowserEnvelopeSchema.parse(input);
+}
 
 export const upstreamsSchema = z.object({
   speech: z.object({ path: z.string(), repository: z.string(), commit: z.string() }).catchall(jsonSchema),

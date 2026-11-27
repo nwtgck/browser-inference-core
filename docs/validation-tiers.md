@@ -78,6 +78,13 @@ binds the validated tree to immutable Git objects and the resolved consumer
 package. Independent saved input is decoded at its entry; validated typed values
 are then passed directly through internal functions.
 
+A readable upstream `LICENSE`, `COPYING` or `COPYRIGHT` document with no owner
+mapping is included byte for byte. The native license index displays its owner
+as unclassified and identifies the notice by its source root and relative path.
+Source preflight and package assembly warn about each missing owner mapping.
+Missing required files, unsafe paths, invalid notice data and discrepancies
+between the package and the index still fail their checks.
+
 Tests cover missing or altered payloads, failed copies and rollback, source and
 Git identity mismatches, publication conflicts, and consumer-resolution errors.
 Repeated decoding or rescanning is not a substitute for keeping these operations

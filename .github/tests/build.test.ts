@@ -18,22 +18,39 @@ import { actionSteps, checkoutRoot, executable, executeShell, jobs, jobSteps, li
 // These assertions exercise orchestration, isolation and actual acquisition and
 // publication shell. Native/model behavior belongs to the runtime tests.
 test('the runtime matrices stay independent until their package gates join', () => {
-  const expected = ['test', 'qsa-native', 'compile', 'build', 'image-native', 'image-compile', 'image-build', 'speech-native', 'speech-compile', 'speech-build', 'publish'];
-  assert.deepEqual(Object.keys(jobs), expected);
-  const dependencies = { test: [], 'qsa-native': [], compile: [], build: ['test', 'qsa-native', 'compile'], 'image-native': [], 'image-compile': [], 'image-build': ['image-native', 'image-compile'], 'speech-native': [], 'speech-compile': [], 'speech-build': ['speech-native', 'speech-compile'], publish: ['build', 'image-build', 'speech-build'] };
+  const dependencies = {
+    'host-and-publication-checks': [],
+    'llama-cpp-compile': [],
+    'llama-cpp-package': ['llama-cpp-compile'],
+    'stable-diffusion-cpp-checks': [],
+    'stable-diffusion-cpp-compile': [],
+    'stable-diffusion-cpp-package': ['stable-diffusion-cpp-compile'],
+    'speech-cpp-checks': ['speech-cpp-package'],
+    'speech-cpp-compile': [],
+    'speech-cpp-package': ['speech-cpp-compile'],
+    'llama-cpp-validate': ['llama-cpp-package'],
+    'stable-diffusion-cpp-validate': ['stable-diffusion-cpp-package'],
+    publish: ['llama-cpp-package', 'stable-diffusion-cpp-package', 'speech-cpp-package'],
+    'consumer-report': ['publish'],
+  };
+  assert.deepEqual(Object.keys(jobs).sort(), Object.keys(dependencies).sort());
   for (const [name, needs] of Object.entries(dependencies)) {
     const job = object({ value: jobs[name] });
     assert.deepEqual(job.needs ?? [], needs);
     assert.equal(job.concurrency, undefined);
     assert.equal(object({ value: job.strategy ?? {} })['max-parallel'], undefined);
   }
-  for (const [name, profiles, count] of [['compile', llamaProfiles, 5], ['image-compile', imageProfiles, 3], ['speech-compile', speechProfiles, 1]] as const) {
+  for (const [name, profiles, count] of [['llama-cpp-compile', llamaProfiles, 5], ['stable-diffusion-cpp-compile', imageProfiles, 3], ['speech-cpp-compile', speechProfiles, 1]] as const) {
     const strategy = object({ value: object({ value: jobs[name] }).strategy });
     const matrix = object({ value: strategy.matrix });
     assert.equal(strategy['fail-fast'], false);
     assert.deepEqual(list({ value: matrix.profile }).sort(), Object.keys(profiles).sort());
     assert.equal(list({ value: matrix.profile }).length, count);
     assert.deepEqual(matrix.variant, ['browser', 'test']);
+  }
+  for (const runtime of ['llama', 'stable-diffusion', 'speech']) {
+    assert.equal(object({ value: jobs[`${runtime}-cpp-compile`] }).name, `Compile ${runtime}.cpp / ` + '${{ matrix.profile }} / ${{ matrix.variant }}');
+    assert.equal(object({ value: jobs[`${runtime}-cpp-package`] }).name, `Package and verify ${runtime}.cpp`);
   }
   assert.equal(workflow.concurrency, undefined);
   const events = object({ value: workflow.on });
@@ -50,7 +67,7 @@ test('jobs use the immutable source head, locked dependencies and one strict emi
     assert.deepEqual(object({ value: checkout[0] }).with, { ref: '${{ env.LCB_SOURCE_COMMIT }}', submodules: false, 'persist-credentials': false });
     const setup = actionSteps({ job: name, action: 'actions/setup-node' });
     assert.equal(setup.length, 1);
-    assert.equal(object({ value: object({ value: setup[0] }).with })['node-version'], name === 'speech-build' ? '24.13.1' : '22.16.0');
+    assert.equal(object({ value: object({ value: setup[0] }).with })['node-version'], name === 'speech-cpp-package' ? '24.13.1' : '22.16.0');
   }
   assert.equal(object({ value: workflow.env }).LCB_SOURCE_COMMIT, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.deepEqual(workflow.permissions, { contents: 'read' });
@@ -126,7 +143,7 @@ if(command==='node'&&args[1]==='cache-plan'){
     await mkdir(join(root, 'toolchain'));
     await cp(join(checkoutRoot, 'toolchain/config.json'), join(root, 'toolchain/config.json'));
     const runtime = text({ value: object({ value: object({ value: jobs[name] }).env }).BIC_METRICS_RUNTIME });
-    const compile = name === 'compile' || name.endsWith('-compile');
+    const compile = name.endsWith('-compile');
     const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: join(root, 'output'), GITHUB_ENV: join(root, 'env'), LCB_SOURCE_COMMIT: 'a'.repeat(40), BIC_METRICS_RUNTIME: runtime, BIC_METRICS_PROFILE: runtime === 'speech-cpp' ? 'webgpu-wasm32-jspi' : runtime === 'stable-diffusion-cpp' ? 'webgpu-wasm32-jspi' : 'cpu-wasm32', BIC_METRICS_VARIANT: 'browser', BIC_OFFLINE_ENVIRONMENT: 'fixture', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', CALLS: join(root, 'calls.jsonl') };
     const acquisition = namedStep({ job: name, name: 'Acquire locked development dependencies (online)' });
     await executeShell({ root, script: text({ value: acquisition.run }), environment });
@@ -137,7 +154,7 @@ if(command==='node'&&args[1]==='cache-plan'){
     assert.ok(npm.every(call => call.environment?.cwd === root));
     const compiler = calls.filter(call => call.command === 'node' && call.args[0] === 'node_modules/typescript/bin/tsc');
     const noticeChecks = calls.filter(call => call.command === 'node' && call.args[1] === 'check-notices');
-    assert.deepEqual(noticeChecks.map(call => call.args), name === 'compile' ? [['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root]] : []);
+    assert.deepEqual(noticeChecks.map(call => call.args), name === 'llama-cpp-compile' ? [['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root]] : []);
     if (compile) {
       assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund']]);
       assert.deepEqual(compiler.map(call => call.args), [['node_modules/typescript/bin/tsc', '--project', `tsconfig.${runtime}.json`]]);
@@ -155,7 +172,7 @@ if(command==='node'&&args[1]==='cache-plan'){
       assert.equal(planned.emKey, text({ value: planned.emRestorePrefix }) + environment.LCB_SOURCE_COMMIT);
       assert.ok((await readFile(join(root, 'output'), 'utf8')).split('\n').includes('em-prefix=em-prefix'));
     } else {
-      assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund'], ['run', 'tooling:build']]);
+      assert.deepEqual(npm.map(call => call.args), [['ci', '--ignore-scripts', '--no-audit', '--no-fund'], ['run', name.endsWith('-package') || name === 'publish' || name === 'consumer-report' ? 'tooling:build:production' : 'tooling:build']]);
       assert.deepEqual(compiler, []);
     }
   }
@@ -192,7 +209,7 @@ test('cache policy and publication trust are evaluated independently', () => {
     assert.equal(typeof value, 'boolean');
     return value === true;
   }
-  for (const name of ['compile', 'image-compile', 'speech-compile']) {
+  for (const name of ['llama-cpp-compile', 'stable-diffusion-cpp-compile', 'speech-cpp-compile']) {
     const saves = actionSteps({ job: name, action: 'actions/cache/save' });
     const restores = actionSteps({ job: name, action: 'actions/cache/restore' });
     const build = namedStep({ job: name, name: 'Prepare, build and stage the selected runtime' });
@@ -242,34 +259,31 @@ test('cache policy and publication trust are evaluated independently', () => {
 });
 
 test('profile artifacts transfer staged runtimes and notices to the matching package only', () => {
-  for (const [compile, build, runtime, pattern] of [['compile', 'build', 'llama-cpp', 'profile-build-*'], ['image-compile', 'image-build', 'stable-diffusion-cpp', 'image-build-*'], ['speech-compile', 'speech-build', 'speech-cpp', 'speech-build-*']] as const) {
+  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp', 'speech-cpp']) {
+    const compile = `${runtime}-compile`;
+    const build = `${runtime}-package`;
     const upload = actionSteps({ job: compile, action: 'actions/upload-artifact' }).filter(step => object({ value: step.with })['if-no-files-found'] === 'error');
     assert.equal(upload.length, 1);
-    const paths = text({ value: object({ value: object({ value: upload[0] }).with }).path }).trim().split('\n');
+    const options = object({ value: object({ value: upload[0] }).with });
+    assert.equal(options.name, compile + '-${{ matrix.profile }}-${{ matrix.variant }}');
+    const paths = text({ value: options.path }).trim().split('\n');
     assert.deepEqual(paths, [`build/runtimes/${runtime}/stage/`, `build/runtimes/${runtime}/toolchain-licenses/`]);
     const download = actionSteps({ job: build, action: 'actions/download-artifact' });
     assert.equal(download.length, 1);
-    assert.deepEqual(object({ value: download[0] }).with, { pattern, path: `build/runtimes/${runtime}/`, 'merge-multiple': true });
+    assert.deepEqual(object({ value: download[0] }).with, { pattern: `${compile}-*`, path: `build/runtimes/${runtime}/`, 'merge-multiple': true });
+    const packaged = actionSteps({ job: build, action: 'actions/upload-artifact' }).find(step => object({ value: step.with })['if-no-files-found'] === 'error');
+    assert.equal(object({ value: packaged?.with }).name, build);
     const names = jobSteps({ name: build }).map(step => step.name);
-    if (runtime === 'speech-cpp') {
-      assert.ok(names.indexOf('Assemble runtime-only package') < names.indexOf('Verify runtime-only package'));
-      assert.ok(!names.includes('Prepare Chromium (online)'));
-      assert.ok(!names.includes('Install browser test harness (online)'));
-      assert.ok(names.indexOf('Verify runtime-only package') < names.indexOf('Test the actual Node Wasm boundary'));
-      const finalizer = namedStep({ job: build, name: 'Test the actual Node Wasm boundary' });
-      assert.equal(finalizer.if, undefined);
-      assert.equal(finalizer['continue-on-error'], undefined);
-      continue;
-    }
     assert.ok(names.indexOf('Assemble runtime-only package') < names.indexOf('Prepare Chromium (online)'));
-    assert.ok(names.indexOf('Prepare Chromium (online)') < names.indexOf('Test and finalize the same runtime snapshot'));
-    const finalizer = namedStep({ job: build, name: 'Test and finalize the same runtime snapshot' });
+    assert.ok(names.indexOf('Prepare Chromium (online)') < names.indexOf('Test packaged browser startup'));
+    const finalizer = namedStep({ job: build, name: 'Test packaged browser startup' });
+    assert.match(offlineScript({ step: finalizer }), /validation runtime --phase startup --runtime /u);
     assert.equal(finalizer.if, undefined);
     assert.equal(finalizer['continue-on-error'], undefined);
   }
 });
 
-test('speech native contracts and packaged Node interop remain required publication gates', async () => {
+test('speech native checks consume the package and Node interop gates publication', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
   const recorder = `\
@@ -283,11 +297,16 @@ if(command==='node'&&args.includes('tests/runtimes/speech-cpp/node-core-contract
   for (const command of ['node', 'npm', 'ctest', 'git']) {
     await executable({ root, name: command, source: recorder });
   }
-  const native = namedStep({ job: 'speech-native', name: 'Test speech tooling, host and current native contracts' });
+  const native = namedStep({ job: 'speech-cpp-checks', name: 'Test speech tooling, host and current native contracts' });
+  const packaged = namedStep({ job: 'speech-cpp-checks', name: 'Test the packaged speech public API' });
+  const download = actionSteps({ job: 'speech-cpp-checks', action: 'actions/download-artifact' })[0];
+  assert.match(text({ value: object({ value: jobs['speech-cpp-checks'] }).if }), /^!cancelled\(\)/u);
+  assert.equal(download?.if, "!cancelled() && steps.speech-check-tools.outcome == 'success' && needs.speech-cpp-package.result == 'success'");
+  assert.equal(packaged.if, "!cancelled() && steps.speech-api-input.outcome == 'success'");
   assert.equal(native.if, undefined);
   assert.equal(native['continue-on-error'], undefined);
   const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, LCB_SOURCE_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), PROBE_EXIT: '0' };
-  for (const job of ['speech-native', 'speech-compile', 'speech-build']) {
+  for (const job of ['speech-cpp-checks', 'speech-cpp-compile', 'speech-cpp-package']) {
     const checkout = namedStep({ job, name: 'Check out only this runtime\'s pinned upstreams' });
     await executeShell({ root, script: text({ value: checkout.run }), environment });
   }
@@ -296,6 +315,7 @@ if(command==='node'&&args.includes('tests/runtimes/speech-cpp/node-core-contract
     args: ['submodule', 'update', '--init', '--checkout', '--depth=1', '--', 'runtimes/speech-cpp/vendor/speech.cpp', 'runtimes/speech-cpp/vendor/ggml'],
   })));
   await executeShell({ root, script: offlineScript({ step: native }), environment });
+  await executeShell({ root, script: offlineScript({ step: packaged }), environment });
   const calls = await readCalls({ root });
   const build = calls.find(call => call.command === 'node' && call.args[1] === 'build');
   assert.ok(build);
@@ -310,47 +330,70 @@ if(command==='node'&&args.includes('tests/runtimes/speech-cpp/node-core-contract
   assert.ok(contracts);
   assert.equal(contracts.environment?.BICORE_SPEECH_ABI_SCHEMA, join(root, 'build/runtimes/speech-cpp/build/native/webgpu-wasm32-jspi/test/generated/schema.json'));
   assert.ok(calls.indexOf(build) < calls.indexOf(ctest) && calls.indexOf(ctest) < calls.indexOf(contracts));
+  const packagedApi = calls.find(call => call.args[1]?.endsWith('/current-api.test.js'));
+  assert.equal(packagedApi?.environment?.BICORE_SPEECH_ABI_SCHEMA, join(root, 'build/runtime-packages/speech-cpp/profiles/webgpu-wasm32-jspi/browser/abi.json'));
 
-  const assemble = namedStep({ job: 'speech-build', name: 'Assemble runtime-only package' });
-  const verify = namedStep({ job: 'speech-build', name: 'Verify runtime-only package' });
-  const probe = namedStep({ job: 'speech-build', name: 'Test the actual Node Wasm boundary' });
+  const assemble = namedStep({ job: 'speech-cpp-package', name: 'Assemble runtime-only package' });
+  const startup = namedStep({ job: 'speech-cpp-package', name: 'Test packaged browser startup' });
+  const probe = namedStep({ job: 'speech-cpp-package', name: 'Test the actual Node Wasm boundary' });
   await executeShell({ root, script: offlineScript({ step: assemble }), environment });
-  await executeShell({ root, script: offlineScript({ step: verify }), environment });
+  await executeShell({ root, script: offlineScript({ step: startup }), environment });
   await executeShell({ root, script: offlineScript({ step: probe }), environment });
   const packaging = (await readCalls({ root })).slice(calls.length);
   const assembly = packaging[0];
   assert.ok(assembly);
   assert.deepEqual(assembly.args.slice(0, 5), ['build/tooling/tools/cli.js', 'package', 'runtime', '--runtime', 'speech-cpp']);
   assert.deepEqual(assembly.args.flatMap((arg, index) => arg === '--license-root' ? [assembly.args[index + 1]] : []), [join(root, 'build/runtimes/speech-cpp/toolchain-licenses/emscripten'), join(root, 'build/runtimes/speech-cpp/toolchain-licenses/emdawnwebgpu_pkg')]);
-  assert.deepEqual(packaging[1]?.args, ['build/tooling/tools/cli.js', 'package', 'verify', '--runtime', 'speech-cpp', '--checkout-root', root, '--directory', join(root, 'build/runtime-packages/speech-cpp')]);
+  assert.deepEqual(packaging[1]?.args, ['build/tooling/tools/cli.js', 'validation', 'runtime', '--phase', 'startup', '--runtime', 'speech-cpp', '--checkout-root', root, '--package', join(root, 'build/runtime-packages/speech-cpp'), '--receipt', join(root, 'build/runtime-validation/speech-cpp.json')]);
   assert.deepEqual(packaging[2]?.args, ['--experimental-wasm-jspi', 'tests/runtimes/speech-cpp/node-core-contract.mjs', join(root, 'build/runtime-packages/speech-cpp')]);
   await assert.rejects(executeShell({ root, script: offlineScript({ step: probe }), environment: { ...environment, PROBE_EXIT: '7' } }));
 
   const downloads = actionSteps({ job: 'publish', action: 'actions/download-artifact' }).map(step => step.with);
   assert.deepEqual(downloads, [
-    { name: 'llama-runtime-package', path: 'build/package-inputs/llama-cpp/' },
-    { name: 'image-runtime-package', path: 'build/package-inputs/stable-diffusion-cpp/' },
-    { name: 'speech-runtime-package', path: 'build/package-inputs/speech-cpp/' },
+    { name: 'llama-cpp-package', path: 'build/package-inputs/llama-cpp/' },
+    { name: 'stable-diffusion-cpp-package', path: 'build/package-inputs/stable-diffusion-cpp/' },
+    { name: 'speech-cpp-package', path: 'build/package-inputs/speech-cpp/' },
   ]);
 });
 
-test('the host phase checks upstream notices first and runs the four retained independent Python modules once', async () => {
+test('host checks run with Dawn alone and the SDK checks can still run after a host test failure', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
   const recorder = `\
 const fs=require('node:fs');
 const path=require('node:path');
-fs.appendFileSync(process.env.CALLS,JSON.stringify({command:path.basename(process.argv[1]),args:process.argv.slice(2)})+'\\n');
+fs.appendFileSync(process.env.CALLS,JSON.stringify({command:path.basename(process.argv[1]),args:process.argv.slice(2),environment:process.env.BICORE_EMSDK_ROOT?{sdk:process.env.BICORE_EMSDK_ROOT,node:process.env.BICORE_EMSDK_NODE,config:process.env.EM_CONFIG}:{}})+'\\n');
 `;
   for (const command of ['node', 'npm', 'python3']) {
     await executable({ root, name: command, source: recorder });
   }
-  const step = namedStep({ job: 'test', name: 'Test host, tooling and current native contracts' });
+  const job = 'host-and-publication-checks';
+  const step = namedStep({ job, name: 'Test host, tooling and current native contracts' });
+  const prepare = namedStep({ job, name: 'Prepare pinned Dawn for the host and SDK checks' });
+  const readSdk = namedStep({ job, name: 'Read the pinned compiler settings' });
+  const acquireSdk = namedStep({ job, name: 'Acquire pinned compiler (online)' });
+  const checkSdk = namedStep({ job, name: 'Test the pinned SDK Wasm and generated declarations' });
   assert.equal(step.if, undefined);
   assert.equal(step['continue-on-error'], undefined);
-  await executeShell({ root, script: offlineScript({ step }), environment: { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, CALLS: join(root, 'calls.jsonl') } });
+  assert.equal(prepare.id, 'host-dawn');
+  const ordered = jobSteps({ name: job });
+  const positions = [prepare, step, readSdk, acquireSdk, checkSdk].map(phase => ordered.indexOf(phase));
+  assert.ok(positions.every((position, index) => position >= 0 && (index === 0 || position > (positions[index - 1] ?? -1))));
+  assert.equal(readSdk.if, "!cancelled() && steps.host-dawn.outcome == 'success'");
+  assert.equal(acquireSdk.if, "!cancelled() && steps.plan.outcome == 'success'");
+  assert.equal(checkSdk.if, "!cancelled() && steps.host-sdk.outcome == 'success'");
+  assert.equal(acquireSdk.run, namedStep({ job: 'llama-cpp-compile', name: 'Acquire pinned compiler (online)' }).run);
+  const sdk = join(root, '.tools/emsdk');
+  await mkdir(sdk, { recursive: true });
+  await writeFile(join(sdk, 'emsdk_env.sh'), 'export EMSDK_NODE="$FIXTURE_NODE"\n');
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, CALLS: join(root, 'calls.jsonl'), FIXTURE_NODE: process.execPath };
+  for (const phase of [prepare, step, checkSdk]) {
+    await executeShell({ root, script: offlineScript({ step: phase }), environment });
+  }
   const calls = await readCalls({ root });
-  assert.deepEqual(calls[0], { command: 'node', args: ['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root], environment: {} });
+  assert.deepEqual(calls[1], { command: 'node', args: ['build/tooling/runtimes/llama-cpp/tools/cli.js', 'check-notices', '--checkout-root', root], environment: {} });
+  const preparation = ['build/tooling/tools/cli.js', 'toolchain', 'prepare', '--checkout-root', root, '--tools-root', join(root, '.tools')];
+  assert.deepEqual(calls.filter(call => call.args[1] === 'toolchain').map(call => call.args), [[...preparation, '--dawn-only'], preparation]);
   const python = calls.filter(call => call.command === 'python3');
   assert.deepEqual(python.map(call => call.args), [[
     '-m', 'unittest',
@@ -359,15 +402,44 @@ fs.appendFileSync(process.env.CALLS,JSON.stringify({command:path.basename(proces
     'tests.runtimes.llama_cpp.source.test_iq3_fixtures',
     'tests.runtimes.llama_cpp.test_cmake_property_snapshot',
   ]]);
+  const sdkTests = calls.filter(call => call.args.includes('build/tooling/tests/tools/toolchain/tsd-sdk.test.js'));
+  assert.deepEqual(sdkTests, [{ command: 'node', args: ['--test', 'build/tooling/tests/tools/abi/wasm.test.js', 'build/tooling/tests/tools/toolchain/tsd-sdk.test.js'], environment: { sdk, node: process.execPath, config: join(sdk, '.emscripten') } }]);
 });
 
-test('QSA comparison and browser finalization are required gates while telemetry is best effort', () => {
-  const comparison = namedStep({ job: 'qsa-native', name: 'Compare separate reference and optimized native builds' });
-  assert.equal(comparison.if, undefined);
-  assert.equal(comparison['continue-on-error'], undefined);
-  const logs = namedStep({ job: 'qsa-native', name: 'Upload native comparison traces and logs' });
-  assert.equal(logs.if, 'always()');
-  assert.equal(object({ value: logs.with }).path, 'build/qsa-regression/qsa-results/');
+test('detailed regressions download the startup-checked package for the same runtime', async () => {
+  for (const [runtime, schemaVariable] of [['llama-cpp', 'BICORE_LLAMA_ABI_SCHEMA'], ['stable-diffusion-cpp', 'BICORE_SD_ABI_SCHEMA']] as const) {
+    await using temporary = await temporaryDirectory();
+    const root = temporary.root;
+    const job = `${runtime}-validate`;
+    const step = namedStep({ job, name: 'Validate the saved runtime package' });
+    const packagePath = join(root, 'build/runtime-packages', runtime);
+    assert.deepEqual(actionSteps({ job, action: 'actions/download-artifact' }).map(download => download.with), [{ name: `${runtime}-package`, path: `build/runtime-packages/${runtime}/` }]);
+    assert.equal(step['continue-on-error'], undefined);
+    await executable({
+      root,
+      name: 'node',
+      source: `\
+const args = process.argv.slice(2);
+const schema = process.env.SCHEMA_VARIABLE;
+const environment = process.env[schema] ? { [schema]: process.env[schema] } : {};
+require('node:fs').appendFileSync(process.env.CALLS, JSON.stringify({ command: 'node', args, environment }) + '\\n');
+if (args.includes('build/tooling/tests/tools/abi/current-api.test.js') && process.env.FAIL_ABI === 'true') process.exit(7);
+`,
+    });
+    const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, CALLS: join(root, 'calls.jsonl'), SCHEMA_VARIABLE: schemaVariable };
+    await executeShell({ root, script: offlineScript({ step }), environment });
+    const expected = [
+      { command: 'node', args: ['--test', 'build/tooling/tests/tools/abi/current-api.test.js'], environment: { [schemaVariable]: join(packagePath, 'profiles/webgpu-wasm32-jspi/browser/abi.json') } },
+      { command: 'node', args: ['build/tooling/tools/cli.js', 'validation', 'runtime', '--phase', 'regression', '--runtime', runtime, '--checkout-root', root, '--package', packagePath, '--receipt', join(root, `build/runtime-validation/${runtime}.json`)], environment: {} },
+    ];
+    assert.deepEqual(await readCalls({ root }), expected);
+    await writeFile(environment.CALLS, '');
+    await assert.rejects(executeShell({ root, script: offlineScript({ step }), environment: { ...environment, FAIL_ABI: 'true' } }));
+    assert.deepEqual(await readCalls({ root }), expected);
+  }
+});
+
+test('workflow telemetry is best effort and has a report for each job', () => {
   for (const name of Object.keys(jobs)) {
     const summary = namedStep({ job: name, name: 'Summarize optional pipeline timings' });
     assert.equal(summary.if, "always() && env.BIC_METRICS_MODE == 'basic'");
@@ -376,7 +448,7 @@ test('QSA comparison and browser finalization are required gates while telemetry
     assert.equal(upload['continue-on-error'], true);
     const options = object({ value: upload.with });
     assert.equal(options.path, '${{ runner.temp }}/bic-pipeline-metrics/');
-    const suffix = name === 'compile' || name.endsWith('-compile') ? '-${{ matrix.profile }}-${{ matrix.variant }}' : '';
+    const suffix = name.endsWith('-compile') ? '-${{ matrix.profile }}-${{ matrix.variant }}' : '';
     assert.equal(options.name, `pipeline-metrics-\${{ github.run_attempt }}-${name}${suffix}`);
     assert.equal(options['include-hidden-files'], undefined);
     assert.equal(options['retention-days'], 14);
@@ -395,6 +467,7 @@ const fs = require('node:fs');
 fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:process.argv.slice(2)})+'\\n');
 `,
   });
+  const hostSteps = new Set(['Read the pinned compiler settings', 'Show install commands for the published artifact', 'Preserve publication status after a reporting failure']);
   const online = new Set(['Acquire offline execution image (online)', 'Acquire locked development dependencies (online)', 'Acquire pinned Dawn headers for native contracts (online)', 'Acquire pinned compiler (online)', 'Acquire pinned Dawn archive (online on cache miss)', 'Install browser test harness (online)', 'Prepare Chromium (online)', 'Publish append-only artifact commit', 'Resolve the published npm dependency (online)']);
   for (const filename of await readdir(join(checkoutRoot, '.github/workflows'))) {
     if (!filename.endsWith('.yml')) {
@@ -416,7 +489,7 @@ fs.appendFileSync(process.env.CALLS, JSON.stringify({command:'docker',args:proce
   }
   for (const [name] of Object.entries(jobs)) {
     for (const step of jobSteps({ name })) {
-      if (step.run === undefined || online.has(text({ value: step.name })) || text({ value: step.name }).startsWith('Check out')) {
+      if (step.run === undefined || hostSteps.has(text({ value: step.name })) || online.has(text({ value: step.name })) || text({ value: step.name }).startsWith('Check out')) {
         continue;
       }
       await executeShell({ root, script: text({ value: step.run }), environment: { CALLS: join(root, 'calls.jsonl'), GITHUB_WORKSPACE: root, RUNNER_TEMP: root, BIC_OFFLINE_IMAGE: 'fixture' } });
@@ -473,7 +546,7 @@ if(args[0]==='run') process.stdout.write('installed-package-fixture\\nnode-versi
       assert.ok(words[1]?.startsWith('--from='), 'Only an acquired base image supplies copied files');
     }
     const commands = await readCalls({ root });
-    const nodeImage = name === 'speech-build' ? 'node:24.13.1-bookworm' : 'node:22.16.0-bookworm';
+    const nodeImage = name === 'speech-cpp-package' ? 'node:24.13.1-bookworm' : 'node:22.16.0-bookworm';
     const bases = recipe.split('\n').map(line => line.trim().split(/\s+/u)).filter(words => words[0] === 'FROM').map(words => words[1]);
     assert.deepEqual(bases, [nodeImage, 'ubuntu:24.04']);
     assert.deepEqual(commands.filter(call => call.args[0] === 'pull').map(call => call.args[1]), bases);
@@ -493,7 +566,7 @@ if(args[0]==='run') process.stdout.write('installed-package-fixture\\nnode-versi
 });
 
 test('Dawn acquisition verifies restored bytes, recovers failed restores and never installs a bad download', async () => {
-  const script = text({ value: namedStep({ job: 'compile', name: 'Acquire pinned Dawn archive (online on cache miss)' }).run });
+  const script = text({ value: namedStep({ job: 'llama-cpp-compile', name: 'Acquire pinned Dawn archive (online on cache miss)' }).run });
   for (const scenario of [
     { outcome: 'success', matched: 'exact', cached: 'archive', checksum: 'good', downloads: 0, succeeds: true },
     { outcome: 'failure', matched: 'exact', cached: 'archive', checksum: 'good', downloads: 1, succeeds: true },
@@ -536,13 +609,13 @@ fs.writeFileSync(args[args.indexOf('--output')+1],'archive');
 
 test('SDK acquisition checks the release, installs LL SDK development dependencies and precedes offline builds', async () => {
   for (const scenario of [
-    { job: 'compile', matches: true, npmExit: 0 },
-    { job: 'compile', matches: false, npmExit: 0 },
-    { job: 'compile', matches: true, npmExit: 7 },
-    { job: 'image-compile', matches: true, npmExit: 0 },
-    { job: 'image-compile', matches: false, npmExit: 0 },
-    { job: 'speech-compile', matches: true, npmExit: 0 },
-    { job: 'speech-compile', matches: false, npmExit: 0 },
+    { job: 'llama-cpp-compile', matches: true, npmExit: 0 },
+    { job: 'llama-cpp-compile', matches: false, npmExit: 0 },
+    { job: 'llama-cpp-compile', matches: true, npmExit: 7 },
+    { job: 'stable-diffusion-cpp-compile', matches: true, npmExit: 0 },
+    { job: 'stable-diffusion-cpp-compile', matches: false, npmExit: 0 },
+    { job: 'speech-cpp-compile', matches: true, npmExit: 0 },
+    { job: 'speech-cpp-compile', matches: false, npmExit: 0 },
   ]) {
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
@@ -589,7 +662,7 @@ if(command==='npm') process.exit(Number(process.env.NPM_EXIT));
     const calls = await readCalls({ root });
     const buildCall = scenario.npmExit === 0 ? calls.pop() : undefined;
     assert.deepEqual(calls.slice(0, 2).map(({ command, args }) => ({ command, args })), [{ command: 'emsdk', args: ['install', '6.0.9'] }, { command: 'emsdk', args: ['activate', '6.0.9'] }]);
-    assert.deepEqual(calls.slice(2), scenario.job === 'compile' ? [{ command: 'npm', args: ['ci', '--prefix', join(sdk, 'upstream/emscripten'), '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'], environment: { cwd: sdk } }] : []);
+    assert.deepEqual(calls.slice(2), scenario.job === 'llama-cpp-compile' ? [{ command: 'npm', args: ['ci', '--prefix', join(sdk, 'upstream/emscripten'), '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'], environment: { cwd: sdk } }] : []);
     if (scenario.npmExit === 0) {
       assert.ok(buildCall);
       assert.equal(buildCall.command, 'docker');
@@ -614,7 +687,7 @@ test('the actual build shell adopts complete cache restores and keeps fresh cach
     { outcome: 'success', restored: true, save: true, expected: 'restored', mode: 'off', runtime: 'speech-cpp', profile: 'webgpu-wasm32-jspi', variant: 'browser', emMatch: 'prefix' },
     { outcome: 'failure', restored: true, save: false, expected: 'fresh', mode: 'basic', runtime: 'speech-cpp', profile: 'webgpu-wasm32-jspi', variant: 'test', emMatch: 'exact' },
   ]) {
-    const script = offlineScript({ step: namedStep({ job: scenario.runtime === 'llama-cpp' ? 'compile' : scenario.runtime === 'speech-cpp' ? 'speech-compile' : 'image-compile', name: 'Prepare, build and stage the selected runtime' }) });
+    const script = offlineScript({ step: namedStep({ job: `${scenario.runtime}-compile`, name: 'Prepare, build and stage the selected runtime' }) });
     await using temporary = await temporaryDirectory();
     const root = temporary.root;
     const emCachePath = '.tools/emsdk/upstream/emscripten/cache';
@@ -680,28 +753,7 @@ require('node:fs').appendFileSync(process.env.CALLS,JSON.stringify({command:'cca
     assert.equal(build.args[build.args.indexOf('--variant') + 1], scenario.variant);
     assert.equal(build.args[build.args.indexOf('--expected-commit') + 1], 'a'.repeat(40));
     assert.ok(build.args.includes('--fresh'));
-    const sdkChecks = calls.filter(call => call.args[0] === '--test' && call.args.includes('build/tooling/tests/tools/toolchain/tsd-sdk.test.js'));
-    assert.equal(sdkChecks.length, scenario.runtime === 'llama-cpp' && scenario.profile === 'cpu-wasm32' && scenario.variant === 'browser' ? 1 : 0);
-    if (sdkChecks.length) {
-      const check = sdkChecks[0];
-      assert.ok(check);
-      assert.ok(check.args.includes('build/tooling/tests/tools/abi/wasm.test.js'));
-      assert.equal(check.environment?.BICORE_EMSDK_ROOT, join(root, '.tools/emsdk'));
-      assert.equal(check.environment?.BICORE_EMSDK_NODE, process.execPath);
-      assert.equal(check.environment?.EM_CONFIG, join(root, '.tools/emsdk/.emscripten'));
-    }
-    const apiChecks = calls.filter(call => call.args[0] === '--test' && call.args[1]?.endsWith('/current-api.test.js'));
-    const checksApi = scenario.profile === 'webgpu-wasm32-jspi' && scenario.variant === 'browser';
-    assert.equal(apiChecks.length, checksApi ? 1 : 0);
-    if (checksApi) {
-      const check = apiChecks[0];
-      assert.ok(check);
-      const selected = scenario.runtime === 'llama-cpp' ? 'BICORE_LLAMA_ABI_SCHEMA' : scenario.runtime === 'speech-cpp' ? 'BICORE_SPEECH_ABI_SCHEMA' : 'BICORE_SD_ABI_SCHEMA';
-      const other = scenario.runtime === 'llama-cpp' ? 'BICORE_SD_ABI_SCHEMA' : 'BICORE_LLAMA_ABI_SCHEMA';
-      assert.equal(check.environment?.[selected], join(root, `build/runtimes/${scenario.runtime}/build/wasm/${scenario.profile}/browser/generated/schema.json`));
-      assert.equal(check.environment?.[other], '');
-      assert.equal(check.args[1], scenario.runtime === 'speech-cpp' ? 'build/tooling/tests/runtimes/speech-cpp/tools/current-api.test.js' : 'build/tooling/tests/tools/abi/current-api.test.js');
-    }
+    assert.ok(calls.every(call => call.args[0] !== '--test'));
   }
 });
 
@@ -721,7 +773,7 @@ test('publication freezing keeps its saved receipt and errors without echoing th
 const fs=require('node:fs');
 const path=require('node:path');
 const args=process.argv.slice(2);
-if(args[1]==='publication'&&args[2]==='freeze'){
+if(args[1]==='publication'&&args[2]==='assemble-freeze'){
   const receipt=args[args.indexOf('--receipt')+1];
   fs.mkdirSync(path.dirname(receipt),{recursive:true});
   fs.writeFileSync(receipt,JSON.stringify({tree:process.env.TREE,sourceCommit:process.env.LCB_SOURCE_COMMIT,integrity:{sha256:process.env.INTEGRITY}}));
@@ -729,17 +781,17 @@ if(args[1]==='publication'&&args[2]==='freeze'){
   process.stderr.write('freeze diagnostic\\n');
   process.exit(Number(process.env.FREEZE_EXIT));
 }
-process.stdout.write('assembly ready\\n');
+process.exit(8);
 `,
     });
     const operation = runProcess({ command: 'bash', args: ['-euo', 'pipefail', '-c', offlineScript({ step })], cwd: root, capture: 'file', env: { kind: 'inherit', removePrefixes: [], overrides: { PATH: `${join(root, 'bin')}:${READ_ENV_PATH() ?? ''}`, HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_OUTPUT: output, GITHUB_REPOSITORY: 'owner/repo', LCB_SOURCE_COMMIT: source, TREE: tree, INTEGRITY: integrity, FREEZE_EXIT: String(code) } } });
     if (code === 0) {
       const result = await operation;
-      assert.equal(result.stdout.toString(), 'assembly ready\n');
+      assert.equal(result.stdout.toString(), '');
       assert.equal(result.stderr.toString(), 'freeze diagnostic\n');
       assert.equal(await readFile(output, 'utf8'), `tree=${tree}\nsource-commit=${source}\nintegrity-sha256=${integrity}\n`);
     } else {
-      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === 'assembly ready\n');
+      await assert.rejects(operation, (error: unknown) => error instanceof ProcessError && error.exitCode === code && error.stderr.toString() === 'freeze diagnostic\n' && error.stdout.toString() === '');
       await assert.rejects(readFile(output));
     }
     assert.deepEqual(JSON.parse(await readFile(join(root, 'build/publication/frozen.json'), 'utf8')), { tree, sourceCommit: source, integrity: { sha256: integrity } });
@@ -800,7 +852,7 @@ process.exit(result.status??1);
   await writeFile(join(fixture, 'package.json'), JSON.stringify({ name: 'local-artifact-consumer', version: '0.0.0', private: true, dependencies: { 'browser-inference-core': `git+${pathToFileURL(remote).href}#${first}` } }));
   await writeFile(join(fixture, 'empty.npmrc'), '');
   await writeFile(join(fixture, 'empty-global.npmrc'), '');
-  await executeShell({ root, script: text({ value: namedStep({ job: 'publish', name: 'Resolve the published npm dependency (online)' }).run }), environment: { HOME: join(root, 'home'), NPM_CONFIG_OFFLINE: 'true', REAL_GIT: gitExecutable, LOST_RESPONSE: join(root, 'resolved-response') } });
+  await executeShell({ root, script: text({ value: namedStep({ job: 'consumer-report', name: 'Resolve the published npm dependency (online)' }).run }), environment: { HOME: join(root, 'home'), NPM_CONFIG_OFFLINE: 'true', REAL_GIT: gitExecutable, LOST_RESPONSE: join(root, 'resolved-response') } });
   const lock = object({ value: JSON.parse(await readFile(join(fixture, 'package-lock.json'), 'utf8')) });
   const packages = object({ value: lock.packages });
   assert.deepEqual(Object.keys(packages).sort(), ['', 'node_modules/browser-inference-core']);
@@ -823,11 +875,14 @@ if (process.env.FAIL_TITLE === 'true') process.exit(8);
 process.stdout.write('feat: runtime <one> & "two"\\n');
 `,
   });
-  const step = namedStep({ job: 'publish', name: 'Confirm publication and prepare a fresh npm fixture' });
-  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), LCB_SOURCE_COMMIT: 'b'.repeat(40) };
+  const step = namedStep({ job: 'publish', name: 'Show install commands for the published artifact' });
+  const guide = namedStep({ job: 'publish', name: 'Record the published installation guide' });
+  assert.ok(jobSteps({ name: 'publish' }).every(entry => entry.name !== 'Resolve the published npm dependency (online)' && entry.name !== 'Generate consumer integration metadata from the publication guide'));
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), LCB_SOURCE_COMMIT: 'b'.repeat(40), GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_OUTPUT: join(root, 'output') };
   for (const failsTitle of ['false', 'true']) {
     await writeFile(summary, previousSummary);
-    await assert.rejects(executeShell({ root, script: offlineScript({ step }), environment: { ...environment, FAIL_TITLE: failsTitle } }));
+    await executeShell({ root, script: text({ value: step.run }), environment: { ...environment, FAIL_TITLE: failsTitle } });
+    await assert.rejects(executeShell({ root, script: offlineScript({ step: guide }), environment }));
     const displayed = await readFile(summary, 'utf8');
     assert.ok(displayed.startsWith(previousSummary));
     assert.ok(displayed.includes(`npm install github:owner/repo#${environment.ARTIFACT_COMMIT}`));
@@ -842,7 +897,7 @@ process.stdout.write('feat: runtime <one> & "two"\\n');
   }
 });
 
-test('the publication report forwards its run identity and appends only integration details to the job summary', async () => {
+test('the separate consumer job reports the original publication attempt and only adds integration details to the summary', async () => {
   await using temporary = await temporaryDirectory();
   const root = temporary.root;
   const summary = join(root, 'job summary.md');
@@ -877,8 +932,13 @@ fs.writeFileSync(path.join(output, 'report.md'), process.env.REPORT_MARKDOWN);
 fs.appendFileSync(args[args.indexOf('--summary') + 1], process.env.INTEGRATION_DETAILS);
 `,
   });
-  const step = namedStep({ job: 'publish', name: 'Generate consumer integration metadata from the confirmed receipt' });
-  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), CALLS: join(root, 'calls.jsonl'), REPORT_MARKDOWN: markdown, INTEGRATION_DETAILS: integrationDetails };
+  const job = 'consumer-report';
+  const step = namedStep({ job, name: 'Generate consumer integration metadata from the publication guide' });
+  const publisher = object({ value: jobs.publish });
+  assert.deepEqual(publisher.outputs, { 'artifact-commit': '${{ steps.publish.outputs.commit }}', 'published-attempt': '${{ steps.publication-guide.outputs.attempt }}' });
+  assert.deepEqual(actionSteps({ job, action: 'actions/download-artifact' }).map(download => download.with), [{ name: 'publication-guide-${{ needs.publish.outputs.published-attempt }}', path: 'build/publication-guide/' }]);
+  assert.equal(object({ value: jobSteps({ name: job }).find(entry => entry.id === 'upload-consumer-report')?.with }).name, 'consumer-update-${{ needs.publish.outputs.published-attempt }}');
+  const environment = { HOME: join(root, 'home'), GITHUB_WORKSPACE: root, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '12', PUBLISHED_ATTEMPT: '7', GITHUB_REPOSITORY: 'owner/repo', ARTIFACT_COMMIT: 'a'.repeat(40), LCB_SOURCE_COMMIT: 'b'.repeat(40), CALLS: join(root, 'calls.jsonl'), REPORT_MARKDOWN: markdown, INTEGRATION_DETAILS: integrationDetails };
   await executeShell({ root, script: offlineScript({ step }), environment });
   const calls = await readCalls({ root });
   assert.equal(calls.length, 1);
@@ -888,6 +948,8 @@ fs.appendFileSync(args[args.indexOf('--summary') + 1], process.env.INTEGRATION_D
   assert.equal(args[args.indexOf('--run-id') + 1], '1234');
   assert.equal(args[args.indexOf('--run-attempt') + 1], '7');
   assert.equal(args[args.indexOf('--commit') + 1], 'a'.repeat(40));
+  assert.equal(args[args.indexOf('--guide') + 1], join(root, 'build/publication-guide'));
+  assert.equal(args[args.indexOf('--source-commit') + 1], 'b'.repeat(40));
   assert.equal(args[args.indexOf('--summary') + 1], summary);
   assert.equal(await readFile(summary, 'utf8'), previousSummary + integrationDetails);
   assert.equal(await readFile(join(root, 'build/consumer-update/report.md'), 'utf8'), markdown);

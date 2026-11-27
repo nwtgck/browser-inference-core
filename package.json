@@ -56,6 +56,7 @@
     "pretest:workflows": "tsc --project tsconfig.github-tests.json",
     "test:workflows": "node --test build/tooling/.github/tests/*.test.js",
     "tooling:build": "tsc --project tsconfig.tools.json",
+    "tooling:build:production": "tsc --project tsconfig.production.json",
     "tooling:check": "tsc --project tsconfig.tools.json --noEmit",
     "lint": "eslint",
     "test:lint": "node --test tests/tools/lint/*.test.mjs"

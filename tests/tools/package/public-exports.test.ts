@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdir, access, writeFile } from 'node:fs/promises';
+import { cp, mkdir, access, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import ts from 'typescript';
+import { checkPublicExports } from '#tools/package/public-exports';
 import { packageFixture } from './fixtures.test-support.js';
 
 test('generated package exports resolve in a real browser consumer and reject wrong profiles and signatures', async () => {
@@ -85,4 +86,58 @@ const wrongDiagnostic: number = diagnostic.runV1(1n, 2n, 3n, 4n, 128);
   const failures = compile({ file: negative });
   assert(failures.every(item => item.file?.fileName === negative), ts.formatDiagnosticsWithColorAndContext(failures, { getCanonicalFileName: file => file, getCurrentDirectory: () => consumer, getNewLine: () => '\n' }));
   assert.deepEqual(failures.map(item => item.code).sort(), [2322, 2322, 2322, 2322, 2339, 2339, 2345, 2554].sort());
+});
+
+test('publication rejects missing common and profile-specific public declaration bindings', async () => {
+  await using fixture = await packageFixture();
+  const packageJson = join(fixture.directory, 'package.json');
+  const broken = (await readFile(packageJson, 'utf8'))
+    .replace('/host/abi.d.ts', '/host/missing.d.ts')
+    .replace('*/model-graph-v1.functions.d.ts', '*/missing-graph.functions.d.ts');
+  await writeFile(packageJson, broken);
+  await assert.rejects(checkPublicExports({ directory: fixture.directory, runtimes: fixture.validated.runtimes }), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Could not find a declaration file for module 'browser-inference-core\/llama-cpp\/host\/abi'/u);
+    assert.match(error.message, /Cannot find module 'browser-inference-core\/llama-cpp\/profiles\/cpu-wasm32\/browser\/model-graph-v1.functions'/u);
+    return true;
+  });
+});
+
+test('publication verifies exactly the runtime files exposed by Node import conditions', async () => {
+  await using fixture = await packageFixture();
+  const packageJson = join(fixture.directory, 'package.json');
+  const original = await readFile(packageJson, 'utf8');
+  const check = () => checkPublicExports({ directory: fixture.directory, runtimes: fixture.validated.runtimes });
+  await check();
+
+  const mutations = [
+    {
+      original: 'llama-cpp-browser-core/host/index.mjs',
+      replacement: 'llama-cpp-browser-core/host/missing.mjs',
+      error: /Public runtime import browser-inference-core\/llama-cpp\/host resolved to .*host\/missing\.mjs/u,
+    },
+    {
+      original: 'stable-diffusion-cpp-browser-core/profiles/*/core.mjs',
+      replacement: 'stable-diffusion-cpp-browser-core/profiles/webgpu-wasm64-jspi/browser/core.mjs',
+      error: /Public runtime import browser-inference-core\/stable-diffusion-cpp\/profiles\/.*\/core\.mjs resolved to .*webgpu-wasm64-jspi\/browser\/core\.mjs/u,
+    },
+    {
+      original: 'llama-cpp-browser-core/profiles/*/core.mjs',
+      replacement: 'llama-cpp-browser-core/profiles/*/missing.mjs',
+      error: /Public runtime import browser-inference-core\/llama-cpp\/profiles\/.*\/core\.mjs resolved to .*missing\.mjs/u,
+    },
+    {
+      original: 'speech-cpp-browser-core/profiles/*/core.wasm',
+      replacement: 'speech-cpp-browser-core/profiles/*/missing.wasm',
+      error: /Public runtime import browser-inference-core\/speech-cpp\/profiles\/.*\/core\.wasm resolved to .*missing\.wasm/u,
+    },
+  ];
+  for (const mutation of mutations) {
+    await writeFile(packageJson, original.replace(mutation.original, mutation.replacement));
+    await assert.rejects(check(), mutation.error);
+  }
+
+  await writeFile(packageJson, original);
+  await rm(join(fixture.directory, 'runtimes/llama-cpp-browser-core/profiles/cpu-wasm32/browser/core.wasm'));
+  await assert.rejects(check(), /Public runtime import browser-inference-core\/llama-cpp\/profiles\/cpu-wasm32\/browser\/core\.wasm is missing its packaged file/u);
 });

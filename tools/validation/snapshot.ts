@@ -13,19 +13,25 @@ import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { withValidationManifest, manifestIo, type ManifestIo } from './manifest.js';
 
 export type SmokeResult = { profile: string; variant: string; passed: boolean };
+export type ValidationPhase = 'startup' | 'regression' | 'full';
 export type ExecutionSettings = { selectedSourceCommit?: string | undefined; runId?: string | undefined; runAttempt?: string | undefined; job?: string | undefined };
 type TestIdentity = FileIdentity & { executable: boolean };
 type TreeMetadata = Record<string, { kind: 'directory' } | { kind: 'file'; executable: boolean }>;
 export type ValidationReceipt<Runtime extends RuntimeName, Result extends SmokeResult> = BrowserSession & {
   runtime: Runtime;
+  phase: ValidationPhase;
   status: 'complete';
+  inputManifestSha256: string;
   finalSnapshotSha256: string;
   finalManifestSha256: string;
+  testInputs: Record<string, TestIdentity>;
   nodeAsyncifyPassed?: boolean;
   results: Result[];
 };
 export type SmokePlan<Manifest extends RuntimeManifest, Result extends SmokeResult> = {
   validated: RuntimeValidation<Manifest>;
+  phase: ValidationPhase;
+  browserHarness: string;
   profiles: readonly string[];
   variants: readonly string[];
   testFiles: Readonly<Record<string, string>>;
@@ -35,7 +41,7 @@ export type SmokePlan<Manifest extends RuntimeManifest, Result extends SmokeResu
   decodeEnvelope: ({ input }: { input: unknown }) => { session: BrowserSession; results: Result[] };
   checkedResults: ({ results }: { results: readonly Result[] }) => void;
   updateManifest: ({ manifest, results }: { manifest: Manifest; results: readonly Result[] }) => Manifest;
-  finalVerify: ({ input }: { input: RuntimePackageInput<Manifest> }) => Promise<RuntimeValidation<Manifest>>;
+  finalVerify: (({ input }: { input: RuntimePackageInput<Manifest> }) => Promise<RuntimeValidation<Manifest>>) | undefined;
 };
 
 function snapshotDigest({ files, metadata }: { files: ReadonlyMap<string, FileEntry>; metadata: TreeMetadata }): string {
@@ -153,7 +159,11 @@ export async function validateSnapshot<Manifest extends RuntimeManifest, Result 
   };
   await assertSnapshot({ expected: snapshot });
   const resultsPath = path.join(temporary, 'results.json');
-  const overrides = { BIC_BROWSER_RESULTS_FILE: resultsPath, BIC_BROWSER_SESSION_JSON: JSON.stringify(session) };
+  const overrides = {
+    BIC_BROWSER_RESULTS_FILE: resultsPath,
+    BIC_BROWSER_SESSION_JSON: JSON.stringify(session),
+    SDCB_TEST_WEBGPU: plan.testWebGpu ? '1' : '0',
+  };
   let env: ChildEnvironment;
   switch (childEnvironment?.kind) {
   case undefined: env = { kind: 'inherit', removePrefixes: [], overrides };
@@ -173,32 +183,55 @@ export async function validateSnapshot<Manifest extends RuntimeManifest, Result 
     await run({ command: process.execPath, args: [path.join(harness, 'asyncify-rewind.mjs'), path.join(directory, 'profiles/webgpu-wasm32-asyncify/test')], cwd, env, capture: 'file' });
     await assertSnapshot({ expected: snapshot });
   }
-  await run({ command: process.execPath, args: [path.join(harness, 'browser-smoke.mjs'), directory, ...(fixturePath === undefined ? [] : [fixturePath])], cwd, env, capture: 'file' });
+  await run({ command: process.execPath, args: [path.join(checkoutRoot, plan.browserHarness), directory, ...(fixturePath === undefined ? [] : [fixturePath]), plan.phase], cwd, env, capture: 'file' });
   await assertSnapshot({ expected: snapshot });
   const envelope = parseJson({ text: (await readMetadataBytes({ path: resultsPath })).toString('utf8'), decode: plan.decodeEnvelope });
   assertSame({ actual: envelope.session, expected: session, message: 'Browser result is not bound to this test session' });
   plan.checkedResults({ results: envelope.results });
-  const manifest = plan.updateManifest({ manifest: input.manifest, results: envelope.results });
-  const finalBytes = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
-  const manifestIdentity = bytesIdentity({ data: finalBytes });
   const expected = new Map(snapshot);
-  expected.set('manifest.json', { path: 'manifest.json', ...manifestIdentity });
-  await withValidationManifest({
-    manifestPath,
-    before,
-    after: finalBytes,
-    io,
-    finish: async () => {
+  let manifestIdentity = input.manifestIdentity;
+  switch (plan.phase) {
+  case 'regression':
+    if (plan.finalVerify !== undefined) {
+      await plan.finalVerify({ input });
       await assertSnapshot({ expected });
-      await plan.finalVerify({ input: { ...input, manifest, manifestIdentity } });
-      await assertSnapshot({ expected });
-    },
-  });
+    }
+    break;
+  case 'startup':
+  case 'full': {
+    const manifest = plan.updateManifest({ manifest: input.manifest, results: envelope.results });
+    const finalBytes = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
+    const finalIdentity = bytesIdentity({ data: finalBytes });
+    expected.set('manifest.json', { path: 'manifest.json', ...finalIdentity });
+    await withValidationManifest({
+      manifestPath,
+      before,
+      after: finalBytes,
+      io,
+      finish: async () => {
+        await assertSnapshot({ expected });
+        if (plan.finalVerify !== undefined) {
+          await plan.finalVerify({ input: { ...input, manifest, manifestIdentity: finalIdentity } });
+          await assertSnapshot({ expected });
+        }
+      },
+    });
+    manifestIdentity = finalIdentity;
+    break;
+  }
+  default: {
+    const exhaustive: never = plan.phase;
+    throw new Error(String(exhaustive));
+  }
+  }
   const receipt: ValidationReceipt<Manifest['runtime'], Result> = {
     ...session,
+    phase: plan.phase,
     status: 'complete',
+    inputManifestSha256: input.manifestIdentity.sha256,
     finalSnapshotSha256: snapshotDigest({ files: expected, metadata }),
     finalManifestSha256: manifestIdentity.sha256,
+    testInputs: tests,
     ...(plan.nodeAsyncify ? { nodeAsyncifyPassed: true } : {}),
     results: envelope.results,
   };

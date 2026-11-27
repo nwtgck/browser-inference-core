@@ -15,7 +15,7 @@ checking and emitting unchanged inputs twice is unnecessary.
 | Browser host helpers | `npm test` | JavaScript helpers and ABI adapters using the suites' declared native doubles |
 | CLI adapters | `node --test tests/tools/cli/*.test.mjs` | Typed dispatch, argument validation, metrics and exit-status handling with command stubs |
 | Local lint rules | `npm run test:lint` | Parser/configuration behavior and protected formatting boundaries |
-| Generated package consumers | `node --test build/tooling/tests/tools/package/public-types.test.js` | Type resolution through a real assembled package's public exports |
+| Generated package consumers | `node --test build/tooling/tests/tools/package/public-exports.test.js` | TypeScript declarations and Node ESM paths for an assembled package's public exports |
 | Current native integration | `node --test build/tooling/tests/runtimes/<runtime>/native-validation.test.js` | Prepared C/C++ sources and complete native fixtures |
 | Independent CPU and CMake checks | The explicit unittest command below | Real quantization arithmetic, fixture boundaries and target-property snapshots |
 | Native QSA parity | The [QSA runner](../runtimes/llama-cpp/docs/qsa-all-pools-selection.md) | Independent reference/optimized synthetic model traces and graph coverage |

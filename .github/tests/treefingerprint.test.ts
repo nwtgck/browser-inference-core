@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { chmod, mkdir, readFile, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { gitEnvironment } from '#tools/source/capture';
+import { captureTreeFingerprint } from '#tools/source/fingerprint';
 import { ProcessError, runProcess } from '#tools/shared/process';
+import { READ_ENV_PATH } from '#tools/shared/node-env';
 import { commitFiles, git, initializeRepository, temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
+import { stubEnvironment } from '#tests/tools/shared/node-env.test-support';
 
-const script = resolve('.github/scripts/treefingerprint.sh');
+const scriptPath = '.github/scripts/treefingerprint.sh';
+const script = resolve(scriptPath);
 
 function sha256({ bytes }: { bytes: Uint8Array | string }): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -16,6 +20,20 @@ function sha256({ bytes }: { bytes: Uint8Array | string }): string {
 async function repository({ root }: { root: string }): Promise<void> {
   await initializeRepository({ root });
   await commitFiles({ root });
+}
+
+async function installRecipe({ root }: { root: string }): Promise<Buffer> {
+  const bytes = await readFile(script);
+  const path = join(root, scriptPath);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, bytes);
+  return bytes;
+}
+
+async function publicationRepository({ root }: { root: string }): Promise<string> {
+  await initializeRepository({ root });
+  await installRecipe({ root });
+  return commitFiles({ root });
 }
 
 async function fingerprint({ root, invocation }: { root: string; invocation: 'standalone' | 'conditional' }) {
@@ -29,13 +47,21 @@ async function fingerprint({ root, invocation }: { root: string; invocation: 'st
   });
 }
 
-async function digest({ root }: { root: string }): Promise<string> {
+async function bashDigest({ root }: { root: string }): Promise<string> {
   const result = await fingerprint({ root, invocation: 'standalone' });
   assert.match(result.stdout.toString(), /^[0-9a-f]{64}\n$/u);
   return result.stdout.toString().trim();
 }
 
-async function mustFail({ root }: { root: string }): Promise<void> {
+async function digest({ root }: { root: string }): Promise<string> {
+  const sourceCommit = await git({ root, args: ['rev-parse', 'HEAD'] });
+  const expected = await bashDigest({ root });
+  const captured = await captureTreeFingerprint({ sourceRoot: root, sourceCommit });
+  assert.equal(captured.value, expected);
+  return captured.value;
+}
+
+async function mustFail({ root, sourceCommit }: { root: string; sourceCommit: string }): Promise<void> {
   for (const invocation of ['standalone', 'conditional'] as const) {
     await assert.rejects(fingerprint({ root, invocation }), (error: unknown) => {
       assert.ok(error instanceof ProcessError);
@@ -44,17 +70,25 @@ async function mustFail({ root }: { root: string }): Promise<void> {
       return true;
     });
   }
+  await assert.rejects(captureTreeFingerprint({ sourceRoot: root, sourceCommit }));
 }
 
-test('tree fingerprints match independent empty-tree and file/mode/symlink vectors', async () => {
+test('tree fingerprints match independent empty-tree and binary blob, mode and symlink vectors', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
   await repository({ root });
-  assert.equal(await digest({ root }), sha256({ bytes: '' }));
+  assert.equal(await bashDigest({ root }), sha256({ bytes: '' }));
+  const sourceCommit = await git({ root, args: ['rev-parse', 'HEAD'] });
+  await assert.rejects(captureTreeFingerprint({ sourceRoot: root, sourceCommit }));
+  const recipe = await installRecipe({ root });
+  const large = Buffer.alloc(2 * 1024 * 1024 + 3, Buffer.from([0, 10, 255, 11]));
   const files = [
     { mode: '100644', name: 'a', bytes: Buffer.from([104, 101, 108, 108, 111, 0, 255, 10]) },
     { mode: '100755', name: 'b', bytes: Buffer.from('exec\n') },
     { mode: '120000', name: 'c', bytes: Buffer.from('a\n') },
+    { mode: '100644', name: 'empty', bytes: Buffer.alloc(0) },
+    { mode: '100644', name: 'large', bytes: large },
+    { mode: '100644', name: 'last', bytes: Buffer.from('after large blob') },
   ];
   for (const file of files) {
     if (file.mode === '120000') {
@@ -64,14 +98,17 @@ test('tree fingerprints match independent empty-tree and file/mode/symlink vecto
     }
   }
   await commitFiles({ root });
-  const records = files.map(({ mode, name, bytes }) => Buffer.from(`${mode}\0${name}\0${sha256({ bytes })}\0`));
+  const records = [
+    { mode: '100644', name: scriptPath, bytes: recipe },
+    ...files,
+  ].map(({ mode, name, bytes }) => Buffer.from(`${mode}\0${name}\0${sha256({ bytes })}\0`));
   assert.equal(await digest({ root }), sha256({ bytes: Buffer.concat(records) }));
 });
 
 test('raw pathnames reproduce across clones and different commits with the same tree', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
-  await repository({ root });
+  await publicationRepository({ root });
   for (const name of [' space', '-dash', 'tab\tfile', 'new\nline', 'quotes\'"', '日本語', 'a.b', 'a/leaf']) {
     await mkdir(dirname(join(root, name)), { recursive: true });
     await writeFile(join(root, name), name);
@@ -88,10 +125,24 @@ test('raw pathnames reproduce across clones and different commits with the same 
   assert.equal((await fingerprint({ root, invocation: 'conditional' })).stdout.toString(), `${original}\n`);
 });
 
+test('ordinary Git paths are hashed without executing the published reproduction recipe', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = join(temporary.root, 'repo');
+  const sourceCommit = await publicationRepository({ root });
+  const expected = await bashDigest({ root });
+  const bin = join(temporary.root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'bash'), '#!/bin/sh\nexit 99\n', { mode: 0o755 });
+  using environment = stubEnvironment({ values: { PATH: bin + delimiter + (READ_ENV_PATH() ?? '') } });
+  const captured = await captureTreeFingerprint({ sourceRoot: root, sourceCommit });
+  assert.equal(captured.value, expected);
+  assert.equal(captured.reproduce, await readFile(script, 'utf8'));
+});
+
 test('committed bytes, paths, executable modes and symlink targets all affect the fingerprint', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
-  await repository({ root });
+  await publicationRepository({ root });
   const file = join(root, 'file');
   await writeFile(file, 'first');
   await commitFiles({ root });
@@ -117,7 +168,7 @@ test('committed bytes, paths, executable modes and symlink targets all affect th
 test('committed fingerprints ignore worktree/index changes, checkout conversion, and replacement refs', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
-  await repository({ root });
+  await publicationRepository({ root });
   await writeFile(join(root, 'file'), 'committed\n');
   await commitFiles({ root });
   const original = await digest({ root });
@@ -139,21 +190,22 @@ test('committed fingerprints ignore worktree/index changes, checkout conversion,
 test('wrong directories and missing Git objects fail without emitting a digest even under a conditional', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
-  await repository({ root });
+  const sourceCommit = await publicationRepository({ root });
   const inner = join(root, 'inner');
   const elsewhere = join(temporary.root, 'elsewhere');
   await mkdir(inner);
   await mkdir(elsewhere);
-  await mustFail({ root: inner });
-  await mustFail({ root: elsewhere });
-  for (const object of ['HEAD:file', 'HEAD^{tree}']) {
+  await mustFail({ root: inner, sourceCommit });
+  await mustFail({ root: elsewhere, sourceCommit });
+  for (const object of ['HEAD:inner/file', 'HEAD:inner', 'HEAD^{tree}']) {
     await using broken = await temporaryDirectory();
-    await repository({ root: broken.root });
-    await writeFile(join(broken.root, 'file'), 'unique nonempty tree');
-    await commitFiles({ root: broken.root });
+    await publicationRepository({ root: broken.root });
+    await mkdir(join(broken.root, 'inner'));
+    await writeFile(join(broken.root, 'inner/file'), 'unique nonempty tree');
+    const brokenCommit = await commitFiles({ root: broken.root });
     const oid = await git({ root: broken.root, args: ['rev-parse', object] });
     await unlink(join(broken.root, '.git/objects', oid.slice(0, 2), oid.slice(2)));
-    await mustFail({ root: broken.root });
+    await mustFail({ root: broken.root, sourceCommit: brokenCommit });
   }
 });
 
@@ -169,10 +221,10 @@ async function addSubmodule({ root, source, path }: { root: string; source: stri
 test('recursive submodules bind content and require the recorded Git link at every level', async () => {
   await using temporary = await temporaryDirectory();
   const root = join(temporary.root, 'repo');
-  await repository({ root });
+  await publicationRepository({ root });
   const child = await addSubmodule({ root, source: join(temporary.root, 'child'), path: 'vendor/child' });
   const nested = await addSubmodule({ root: child, source: join(temporary.root, 'grandchild'), path: 'nested' });
-  await commitFiles({ root });
+  const originalCommit = await commitFiles({ root });
   const expected = await digest({ root });
   const clone = join(temporary.root, 'clone');
   await git({ root, args: ['clone', '-q', '--no-hardlinks', root, clone] });
@@ -181,18 +233,35 @@ test('recursive submodules bind content and require the recorded Git link at eve
   assert.equal(await digest({ root: clone }), expected);
   await writeFile(join(nested, 'source'), 'changed grandchild');
   await commitFiles({ root: nested });
-  await mustFail({ root });
+  await mustFail({ root, sourceCommit: originalCommit });
   await commitFiles({ root: child });
-  await mustFail({ root });
-  await commitFiles({ root });
+  await mustFail({ root, sourceCommit: originalCommit });
+  const sourceCommit = await commitFiles({ root });
   assert.notEqual(await digest({ root }), expected);
   const blob = await git({ root: nested, args: ['rev-parse', 'HEAD:source'] });
   const gitDir = await git({ root: nested, args: ['rev-parse', '--absolute-git-dir'] });
   await unlink(join(gitDir, 'objects', blob.slice(0, 2), blob.slice(2)));
-  await mustFail({ root });
+  await mustFail({ root, sourceCommit });
   await rm(child, { recursive: true });
   await mkdir(child);
-  await mustFail({ root });
+  await mustFail({ root, sourceCommit });
+});
+
+test('non-UTF-8 gitlink paths remain reproducible and still require the recorded checkout', async () => {
+  await using temporary = await temporaryDirectory();
+  const root = join(temporary.root, 'repo');
+  await publicationRepository({ root });
+  const child = join(temporary.root, 'child');
+  await repository({ root: child });
+  await writeFile(join(child, 'content'), 'committed child input');
+  await commitFiles({ root: child });
+  const rawPath = Buffer.concat([Buffer.from(`${root}/child-`), Buffer.from([255, 254])]);
+  await rename(child, rawPath);
+  const sourceCommit = await commitFiles({ root });
+  await digest({ root });
+  await rename(rawPath, child);
+  await symlink(child, rawPath);
+  await mustFail({ root, sourceCommit });
 });
 
 test('the inline subshell leaves caller directory, options, variables and functions unchanged', async () => {

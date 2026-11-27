@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decodeLlamaBrowserEnvelope } from '#dto/llama-cpp';
 import { decodeStableDiffusionBrowserEnvelope } from '#dto/stable-diffusion-cpp';
-import { checkedImageResults, addImageValidation } from '#tools/validation/image-results';
-import { checkedLlamaResults, addLlamaValidation } from '#tools/validation/llama-results';
+import { checkedStableDiffusionResults, addStableDiffusionValidation } from '#tools/validation/stable-diffusion-cpp-results';
+import { checkedLlamaResults, addLlamaValidation } from '#tools/validation/llama-cpp-results';
 import { executionIdentity } from '#tools/validation/snapshot';
 import { imageResults, llamaResults, readFixtureManifest, validationFixture } from './fixtures.test-support.js';
 
@@ -14,11 +14,11 @@ const session = { ...executionIdentity({ runtime: 'llama-cpp', sourceCommit: 'a'
 test('image evidence requires every arithmetic probe on each backend in execution order', () => {
   for (const gpu of [false, true]) {
     const valid = imageResults({ profiles, variants, gpu });
-    checkedImageResults({ profiles, variants, results: valid, testWebGpu: gpu });
+    checkedStableDiffusionResults({ profiles, variants, results: valid, testWebGpu: gpu });
     for (const key of ['timestep', 'bf16Weights', 'conv3dBias', 'webgpuPerformance'] as const) {
       for (const evidence of [[], [{ backend: 'WebGPU' as const, passed: true }], [{ backend: 'CPU' as const, passed: false }]]) {
         const results = valid.map((result) => result.variant === 'test' ? { ...result, [key]: evidence } : result);
-        assert.throws(() => checkedImageResults({ profiles, variants, results, testWebGpu: gpu }), /evidence/u);
+        assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results, testWebGpu: gpu }), /evidence/u);
       }
       if (gpu) {
         const reversed = structuredClone(valid);
@@ -27,21 +27,21 @@ test('image evidence requires every arithmetic probe on each backend in executio
             result[key]?.reverse();
           }
         }
-        assert.throws(() => checkedImageResults({ profiles, variants, results: reversed, testWebGpu: gpu }), /evidence/u);
+        assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results: reversed, testWebGpu: gpu }), /evidence/u);
       }
     }
     const wrongScope = structuredClone(valid);
     for (const result of wrongScope) {
       result.scope = 'old scope';
     }
-    assert.throws(() => checkedImageResults({ profiles, variants, results: wrongScope, testWebGpu: gpu }), /scope/u);
+    assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results: wrongScope, testWebGpu: gpu }), /scope/u);
     const wrongGraph = structuredClone(valid);
     for (const result of wrongGraph) {
       if (result.variant === 'test') {
         result.graphWalk = false;
       }
     }
-    assert.throws(() => checkedImageResults({ profiles, variants, results: wrongGraph, testWebGpu: gpu }), /graph walk/u);
+    assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results: wrongGraph, testWebGpu: gpu }), /graph walk/u);
     for (const key of ['graphWalk', 'conv3dBias', 'webgpuPerformance'] as const) {
       const results = structuredClone(valid);
       for (const result of results) {
@@ -60,7 +60,7 @@ test('image evidence requires every arithmetic probe on each backend in executio
           }
         }
       }
-      assert.throws(() => checkedImageResults({ profiles, variants, results, testWebGpu: gpu }), /evidence/u);
+      assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results, testWebGpu: gpu }), /evidence/u);
     }
     const wrongBrowser = structuredClone(valid);
     for (const result of wrongBrowser) {
@@ -68,7 +68,7 @@ test('image evidence requires every arithmetic probe on each backend in executio
         result.timestep = [{ backend: 'CPU', passed: true }];
       }
     }
-    assert.throws(() => checkedImageResults({ profiles, variants, results: wrongBrowser, testWebGpu: gpu }), /evidence/u);
+    assert.throws(() => checkedStableDiffusionResults({ profiles, variants, results: wrongBrowser, testWebGpu: gpu }), /evidence/u);
   }
 });
 
@@ -123,7 +123,7 @@ test('validation records clone verified evidence and preserve dirty and unrelate
   provenance.sourceDirty = true;
   provenance.validation.realModelInference = true;
   manifest.futureMetadata = { nested: ['preserve'] };
-  const updated = addImageValidation({ manifest, results: evidence });
+  const updated = addStableDiffusionValidation({ manifest, results: evidence });
   const result = evidence.find((item) => item.variant === 'test');
   assert.ok(result);
   result.timestep[0]!.passed = false;

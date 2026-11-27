@@ -58,14 +58,13 @@ test('runtime, profile and variant isolate compiler caches while the Dawn archiv
   assert.equal(new Set(plans.map(plan => plan.dawnKey)).size, 1);
 });
 
-test('toolchain, compiler, image, workspace and selected configuration changes partition compiler caches', () => {
+test('SDK, compile image, workspace and selected configuration changes partition Wasm caches', () => {
   const base = cachePlan(options);
   const changed = [
     cachePlan({ ...options, toolchain: { ...toolchain, emsdkVersion: '6.0.10' } }),
     cachePlan({ ...options, toolchain: { ...toolchain, emscriptenRelease: '0'.repeat(40) } }),
     cachePlan({ ...options, toolchain: { ...toolchain, emscriptenAsyncifyBigIntPatch: { ...toolchain.emscriptenAsyncifyBigIntPatch, sha256: '0'.repeat(64) } } }),
     cachePlan({ ...options, toolchain: { ...toolchain, emscriptenTypeScriptPatch: { ...toolchain.emscriptenTypeScriptPatch, sha256: '0'.repeat(64) } } }),
-    cachePlan({ ...options, ccacheVersion: 'ccache 5' }),
     cachePlan({ ...options, platform: { ...options.platform, environment: 'another-image' } }),
     cachePlan({ ...options, platform: { ...options.platform, arch: 'ARM64' } }),
     cachePlan({ ...options, platform: { ...options.platform, os: 'another-os' } }),
@@ -85,6 +84,16 @@ test('toolchain, compiler, image, workspace and selected configuration changes p
   assert.notEqual(dawn.emKey, base.emKey);
   assert.notEqual(dawn.emRestorePrefix, base.emRestorePrefix);
   assert.notEqual(dawn.ccRestorePrefix, base.ccRestorePrefix);
+});
+
+test('a ccache version change partitions objects while leaving the sysroot reusable', () => {
+  const base = cachePlan(options);
+  const updated = cachePlan({ ...options, ccacheVersion: 'ccache 5' });
+  assert.notEqual(updated.identity, base.identity);
+  assert.notEqual(updated.ccRestorePrefix, base.ccRestorePrefix);
+  assert.equal(updated.emKey, base.emKey);
+  assert.equal(updated.emRestorePrefix, base.emRestorePrefix);
+  assert.equal(updated.dawnKey, base.dawnKey);
 });
 
 test('cache keys reject path injection and incomplete partition identity', () => {
