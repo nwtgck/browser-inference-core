@@ -2,7 +2,8 @@
   "formatVersion": 2,
   "runtime": "speech-cpp",
   "abiVersion": 3,
-  "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+  "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
+  "schemaSha256": "7e57ea606a8d6795f8452c8d4f4644329cdcc4d1092e5ebd0fed3c18d125d914",
   "upstreams": {
     "speech": {
       "path": "vendor/speech.cpp",
@@ -21,7 +22,473 @@
     "callerOwnedRandomAccess": true,
     "upstreamApi": true
   },
-  "schemaSha256": "7e57ea606a8d6795f8452c8d4f4644329cdcc4d1092e5ebd0fed3c18d125d914",
+  "files": [
+    {
+      "bytes": 1064,
+      "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4",
+      "path": "LICENSE"
+    },
+    {
+      "bytes": 6626,
+      "sha256": "1a78adda6e3620baabc21b13792902c561cc4fa92a0a835bfb6ef5895f47eb40",
+      "path": "README.md"
+    },
+    {
+      "bytes": 4579,
+      "sha256": "e80fd02558f52f6a1b6d7a9718ab259a2ef842c1c1178a4217c75c7549c5f59e",
+      "path": "api/exports.json"
+    },
+    {
+      "bytes": 10477,
+      "sha256": "35479c7fe35d47b8b92cfbe229ad90e0e92816ff074bb579bab7162187d51d40",
+      "path": "api/functions.d.ts"
+    },
+    {
+      "bytes": 17177,
+      "sha256": "db928b4458649a7c9d1f6c744d93e00da6cd6b8b116ea4ad62a8ed903b59be70",
+      "path": "api/functions.mjs"
+    },
+    {
+      "bytes": 229,
+      "sha256": "081efe9f7406b2cbb1b9cf0e11926976d4a9b26d078487a8195459a74d4e93b9",
+      "path": "api/schema.d.ts"
+    },
+    {
+      "bytes": 399761,
+      "sha256": "ff6b1931ec1aa7509e2650f1f0296a7e8128e129a5905d2db93ca76f2e9596ae",
+      "path": "api/schema.json"
+    },
+    {
+      "bytes": 216916,
+      "sha256": "f257b735d3a581a73abe0e81a34e7bcae0bb7eab8c63f43f2655c614c78e471e",
+      "path": "api/schema.mjs"
+    },
+    {
+      "bytes": 5748,
+      "sha256": "116cdc2ec68687cc5264e78c8e3e2bf4285309bdd51d6d293a1f4d0e10cbe233",
+      "path": "host/README.md"
+    },
+    {
+      "bytes": 4145,
+      "sha256": "96ac8d1463b27b7eb1cb63abe3fb88232a9287b49b9668fa1ff581b690bafb5d",
+      "path": "host/abi.d.ts"
+    },
+    {
+      "bytes": 22363,
+      "sha256": "e2918a67ecc22cd6708116253b065f6c5d3d22658812a1fcfe59cd90d76481fc",
+      "path": "host/abi.mjs"
+    },
+    {
+      "bytes": 185,
+      "sha256": "a219d68732831faac745500cd35a167d8c73658af271a7983eecaeba8f6a3ec8",
+      "path": "host/bindings.mjs"
+    },
+    {
+      "bytes": 914,
+      "sha256": "becefe105630b94e7aaf93177c559381c75aad8bc8fc881be87eadaa54a1a59a",
+      "path": "host/index.d.ts"
+    },
+    {
+      "bytes": 622,
+      "sha256": "04b12ba6b7a330823e97a06f8e73f7da5836392af2375c7f83785a115770eb76",
+      "path": "host/index.mjs"
+    },
+    {
+      "bytes": 775,
+      "sha256": "8ba3d07985b258313d3740c5ccfe93feaac4afe06122d7c43134019ccf3dfba6",
+      "path": "host/profiles.d.ts"
+    },
+    {
+      "bytes": 3982,
+      "sha256": "78dd105828391f6f5cd7c28f96b1766df8a8fa217ca0b4b8383d8067aaebf8b2",
+      "path": "host/read-only-file.mjs"
+    },
+    {
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "path": "licenses/ggml/LICENSE"
+    },
+    {
+      "bytes": 1067,
+      "sha256": "688f8aca0abe167966d277ed00bd594a5a51b028a4fbc1516ff9de7ef05c521a",
+      "path": "licenses/speech/LICENSE"
+    },
+    {
+      "bytes": 3291,
+      "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7",
+      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE"
+    },
+    {
+      "bytes": 1561,
+      "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0",
+      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE"
+    },
+    {
+      "bytes": 5093,
+      "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86",
+      "path": "licenses/toolchain/emscripten/LICENSE"
+    },
+    {
+      "bytes": 1031,
+      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae",
+      "path": "licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING"
+    },
+    {
+      "bytes": 1080,
+      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c",
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab",
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab",
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE"
+    },
+    {
+      "bytes": 1072,
+      "sha256": "1c632a84f7ba5a7b32d9c15e707f419b2393e7ad7de362bd9c837b5e435a197b",
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE"
+    },
+    {
+      "bytes": 1080,
+      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c",
+      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE"
+    },
+    {
+      "bytes": 1099,
+      "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7",
+      "path": "licenses/toolchain/emscripten/node_modules/acorn/LICENSE"
+    },
+    {
+      "bytes": 1072,
+      "sha256": "3e4463779450389b73c530449c4e7ee29f83cb47343c1f2584c6f49de76584da",
+      "path": "licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE"
+    },
+    {
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+      "path": "licenses/toolchain/emscripten/node_modules/ansi-styles/license"
+    },
+    {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "path": "licenses/toolchain/emscripten/node_modules/b4a/LICENSE"
+    },
+    {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "path": "licenses/toolchain/emscripten/node_modules/bare-events/LICENSE"
+    },
+    {
+      "bytes": 1078,
+      "sha256": "14275f5c8139d02054c5259d52a88ccbba662a86af18c30f071c8d082dc6004c",
+      "path": "licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/camel-case/LICENSE"
+    },
+    {
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+      "path": "licenses/toolchain/emscripten/node_modules/chalk/license"
+    },
+    {
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+      "path": "licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license"
+    },
+    {
+      "bytes": 1062,
+      "sha256": "7b43b9a9057033055cf8a6b4e032f932727e0576db2426303c800d73c2ac733f",
+      "path": "licenses/toolchain/emscripten/node_modules/clean-css/LICENSE"
+    },
+    {
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd",
+      "path": "licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE"
+    },
+    {
+      "bytes": 1070,
+      "sha256": "3fb0857ef0133928cf72c88dfc464e931486e88778961eedec25585e2321507f",
+      "path": "licenses/toolchain/emscripten/node_modules/clone/LICENSE"
+    },
+    {
+      "bytes": 1087,
+      "sha256": "693866fc419c6f61c8570438ec00659d156ec2b4d4a4d04091711f5f11a365d4",
+      "path": "licenses/toolchain/emscripten/node_modules/color-convert/LICENSE"
+    },
+    {
+      "bytes": 1085,
+      "sha256": "c064f7a3e353bc1bc977f3c897941c75ef763f44f41677e0a15370ca0853d6e2",
+      "path": "licenses/toolchain/emscripten/node_modules/color-name/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/dot-case/LICENSE"
+    },
+    {
+      "bytes": 1260,
+      "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164",
+      "path": "licenses/toolchain/emscripten/node_modules/entities/LICENSE"
+    },
+    {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "path": "licenses/toolchain/emscripten/node_modules/events-universal/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48",
+      "path": "licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE"
+    },
+    {
+      "bytes": 1109,
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+      "path": "licenses/toolchain/emscripten/node_modules/has-flag/license"
+    },
+    {
+      "bytes": 1071,
+      "sha256": "20cc01510a65e1d0dfdf4e2b8c81528b84bbc5b8103796a4d9ad5c1e19cb2e5a",
+      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE"
+    },
+    {
+      "bytes": 1098,
+      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b",
+      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/lower-case/LICENSE"
+    },
+    {
+      "bytes": 1073,
+      "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b",
+      "path": "licenses/toolchain/emscripten/node_modules/minimist/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/no-case/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/param-case/LICENSE"
+    },
+    {
+      "bytes": 1103,
+      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25",
+      "path": "licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE"
+    },
+    {
+      "bytes": 1111,
+      "sha256": "4c97d11c3d10ddede28b756f4d834e660bc49d67d9a8aae16bda5e59efcd479f",
+      "path": "licenses/toolchain/emscripten/node_modules/relateurl/license"
+    },
+    {
+      "bytes": 696,
+      "sha256": "aff6a0eab5763020fd4b179927f918152be1f9b6bfec360cffda972e6adf73e7",
+      "path": "licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license"
+    },
+    {
+      "bytes": 1169,
+      "sha256": "287229fb1c78f51e413ab4c7625bf447356c7c1208417b92e03a1ad6ec9585d6",
+      "path": "licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "3a7d3bb198e909ed642bd68bd29a7d7c09a636d27a51ec663d35f00c4760ec42",
+      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md"
+    },
+    {
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd",
+      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48",
+      "path": "licenses/toolchain/emscripten/node_modules/streamx/LICENSE"
+    },
+    {
+      "bytes": 1079,
+      "sha256": "69b1ce578ad0aa97ce5302c7cb8d507c2fbe5a670712b02f0b4a2b95cae3184a",
+      "path": "licenses/toolchain/emscripten/node_modules/teex/LICENSE"
+    },
+    {
+      "bytes": 1303,
+      "sha256": "901d0a7fcaccaae9917d165039c0473c354e5da2e0e94140dde67aad9ffb19da",
+      "path": "licenses/toolchain/emscripten/node_modules/terser/LICENSE"
+    },
+    {
+      "bytes": 1098,
+      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b",
+      "path": "licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE"
+    },
+    {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "path": "licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE"
+    },
+    {
+      "bytes": 822,
+      "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b",
+      "path": "licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt"
+    },
+    {
+      "bytes": 655,
+      "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+      "path": "licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt"
+    },
+    {
+      "bytes": 1155,
+      "sha256": "d21ca3ba63e7c2b9452d3d455fcfac84ab89e3333fa7eb600e33e5e63a439887",
+      "path": "licenses/toolchain/emscripten/node_modules/vinyl/LICENSE"
+    },
+    {
+      "bytes": 1526,
+      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd",
+      "path": "licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE"
+    },
+    {
+      "bytes": 1031,
+      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae",
+      "path": "licenses/toolchain/emscripten/system/include/SDL/COPYING"
+    },
+    {
+      "bytes": 16708,
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "path": "licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT"
+    },
+    {
+      "bytes": 6196,
+      "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b",
+      "path": "licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT"
+    },
+    {
+      "bytes": 16703,
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+      "path": "licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT"
+    },
+    {
+      "bytes": 16706,
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+      "path": "licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT"
+    },
+    {
+      "bytes": 16706,
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+      "path": "licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT"
+    },
+    {
+      "bytes": 15140,
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+      "path": "licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT"
+    },
+    {
+      "bytes": 1096,
+      "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9",
+      "path": "licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE"
+    },
+    {
+      "bytes": 19741,
+      "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4",
+      "path": "licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT"
+    },
+    {
+      "bytes": 1485,
+      "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a",
+      "path": "licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt"
+    },
+    {
+      "bytes": 836,
+      "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537",
+      "path": "licenses/toolchain/emscripten/test/sounds/LICENSE.txt"
+    },
+    {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "path": "licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE"
+    },
+    {
+      "bytes": 1065,
+      "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208",
+      "path": "licenses/toolchain/emscripten/third_party/leb128/LICENSE"
+    },
+    {
+      "bytes": 1348,
+      "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f",
+      "path": "licenses/toolchain/emscripten/third_party/terser/LICENSE"
+    },
+    {
+      "bytes": 17483,
+      "sha256": "4105a309efcaab855daba2a4e1a3fbf8a6747c216d259a4659e596243a124290",
+      "path": "native-license-index.json"
+    },
+    {
+      "bytes": 1116,
+      "sha256": "f505c5d17326ef289e51a8563420c6933eff79ef3eec731603e80256b30dcd83",
+      "path": "package.json"
+    },
+    {
+      "bytes": 119596,
+      "sha256": "362e4496f2009fad14e8edea9469c2071a0844a22552fa70a9d6f51b1ebdc4c2",
+      "path": "profiles/webgpu-wasm32-jspi/browser/abi.json"
+    },
+    {
+      "bytes": 12239,
+      "sha256": "e9753c122540d4ceabe65c7981b7838c62b938836aeeecc8127aa2da3db5bf04",
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts"
+    },
+    {
+      "bytes": 131182,
+      "sha256": "d40da925b59f27fd15bc337855ae077d5f61eb692e9bac418ee0dcb8cb822380",
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs"
+    },
+    {
+      "bytes": 4969623,
+      "sha256": "f90813dfde4c77620267d544ae1fad6c0cfeb62355d80adb96fbb0b0aa321e76",
+      "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm"
+    },
+    {
+      "bytes": 499,
+      "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043",
+      "path": "profiles/webgpu-wasm32-jspi/browser/module-options.d.ts"
+    },
+    {
+      "bytes": 120220,
+      "sha256": "af0af13a863f3ce329589dbd5c9e3b3d746c778418e88cd1b7b3986ca3bc53cb",
+      "path": "profiles/webgpu-wasm32-jspi/test/abi.json"
+    },
+    {
+      "bytes": 12308,
+      "sha256": "4fb58cde6a7f047d1dbd297c329c0837ba0d4a764f02ce674f01341911974b3f",
+      "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts"
+    },
+    {
+      "bytes": 212843,
+      "sha256": "d2600696a07f653b1e2461d35610411a53b7981f7d70918faafb8f30527927f3",
+      "path": "profiles/webgpu-wasm32-jspi/test/core.mjs"
+    },
+    {
+      "bytes": 5121616,
+      "sha256": "679f4b728d1871db898bbd86e783d1583750736240df3e78e94d03ad15ccb634",
+      "path": "profiles/webgpu-wasm32-jspi/test/core.wasm"
+    },
+    {
+      "bytes": 499,
+      "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043",
+      "path": "profiles/webgpu-wasm32-jspi/test/module-options.d.ts"
+    }
+  ],
   "profiles": {
     "webgpu-wasm32-jspi": {
       "variants": {
@@ -29,7 +496,7 @@
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -177,7 +644,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
@@ -2196,20 +2663,21 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "242af5ae7a6dd5f5588c9ec4fbcaa2cd",
+            "identity": "5be72369f4fc0e9a20fbf288f421b2dd",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": false,
-            "realModelInference": false
+            "browserSmoke": true,
+            "realModelInference": false,
+            "browserSmokeScope": "Real Wasm in a Worker, pointer width and public speech API version"
           }
         },
         "test": {
           "runtime": "speech-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "speech": {
@@ -2357,7 +2825,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/speech-cpp/CMakeLists.txt": {
                 "bytes": 7888,
@@ -4392,7 +4860,7 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "2a3138c3d341f473eccc561ada67dd7a",
+            "identity": "95953de61aa25eee6d4f7d9f6d46a13e",
             "compilerWrapper": "ccache"
           },
           "validation": {
@@ -4403,472 +4871,5 @@
         }
       }
     }
-  },
-  "files": [
-    {
-      "path": "LICENSE",
-      "bytes": 1064,
-      "sha256": "358468b51dbde61ad9690b9af4ff509f9a54d4ee252a1d7c424b49bf5a2cd7c4"
-    },
-    {
-      "path": "README.md",
-      "bytes": 6626,
-      "sha256": "1a78adda6e3620baabc21b13792902c561cc4fa92a0a835bfb6ef5895f47eb40"
-    },
-    {
-      "path": "api/exports.json",
-      "bytes": 4579,
-      "sha256": "e80fd02558f52f6a1b6d7a9718ab259a2ef842c1c1178a4217c75c7549c5f59e"
-    },
-    {
-      "path": "api/functions.d.ts",
-      "bytes": 10477,
-      "sha256": "35479c7fe35d47b8b92cfbe229ad90e0e92816ff074bb579bab7162187d51d40"
-    },
-    {
-      "path": "api/functions.mjs",
-      "bytes": 17177,
-      "sha256": "db928b4458649a7c9d1f6c744d93e00da6cd6b8b116ea4ad62a8ed903b59be70"
-    },
-    {
-      "path": "api/schema.d.ts",
-      "bytes": 229,
-      "sha256": "081efe9f7406b2cbb1b9cf0e11926976d4a9b26d078487a8195459a74d4e93b9"
-    },
-    {
-      "path": "api/schema.json",
-      "bytes": 399761,
-      "sha256": "ff6b1931ec1aa7509e2650f1f0296a7e8128e129a5905d2db93ca76f2e9596ae"
-    },
-    {
-      "path": "api/schema.mjs",
-      "bytes": 216916,
-      "sha256": "f257b735d3a581a73abe0e81a34e7bcae0bb7eab8c63f43f2655c614c78e471e"
-    },
-    {
-      "path": "host/README.md",
-      "bytes": 5748,
-      "sha256": "116cdc2ec68687cc5264e78c8e3e2bf4285309bdd51d6d293a1f4d0e10cbe233"
-    },
-    {
-      "path": "host/abi.d.ts",
-      "bytes": 4145,
-      "sha256": "96ac8d1463b27b7eb1cb63abe3fb88232a9287b49b9668fa1ff581b690bafb5d"
-    },
-    {
-      "path": "host/abi.mjs",
-      "bytes": 22363,
-      "sha256": "e2918a67ecc22cd6708116253b065f6c5d3d22658812a1fcfe59cd90d76481fc"
-    },
-    {
-      "path": "host/bindings.mjs",
-      "bytes": 185,
-      "sha256": "a219d68732831faac745500cd35a167d8c73658af271a7983eecaeba8f6a3ec8"
-    },
-    {
-      "path": "host/index.d.ts",
-      "bytes": 914,
-      "sha256": "becefe105630b94e7aaf93177c559381c75aad8bc8fc881be87eadaa54a1a59a"
-    },
-    {
-      "path": "host/index.mjs",
-      "bytes": 622,
-      "sha256": "04b12ba6b7a330823e97a06f8e73f7da5836392af2375c7f83785a115770eb76"
-    },
-    {
-      "path": "host/profiles.d.ts",
-      "bytes": 775,
-      "sha256": "8ba3d07985b258313d3740c5ccfe93feaac4afe06122d7c43134019ccf3dfba6"
-    },
-    {
-      "path": "host/read-only-file.mjs",
-      "bytes": 3982,
-      "sha256": "78dd105828391f6f5cd7c28f96b1766df8a8fa217ca0b4b8383d8067aaebf8b2"
-    },
-    {
-      "path": "licenses/ggml/LICENSE",
-      "bytes": 1078,
-      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
-    },
-    {
-      "path": "licenses/speech/LICENSE",
-      "bytes": 1067,
-      "sha256": "688f8aca0abe167966d277ed00bd594a5a51b028a4fbc1516ff9de7ef05c521a"
-    },
-    {
-      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu/src/LICENSE",
-      "bytes": 3291,
-      "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
-    },
-    {
-      "path": "licenses/toolchain/emdawnwebgpu_pkg/webgpu_cpp/LICENSE",
-      "bytes": 1561,
-      "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/LICENSE",
-      "bytes": 5093,
-      "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/cache/sysroot/include/SDL/COPYING",
-      "bytes": 1031,
-      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/gen-mapping/LICENSE",
-      "bytes": 1080,
-      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/resolve-uri/LICENSE",
-      "bytes": 1079,
-      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/source-map/LICENSE",
-      "bytes": 1079,
-      "sha256": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/sourcemap-codec/LICENSE",
-      "bytes": 1072,
-      "sha256": "1c632a84f7ba5a7b32d9c15e707f419b2393e7ad7de362bd9c837b5e435a197b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/@jridgewell/trace-mapping/LICENSE",
-      "bytes": 1080,
-      "sha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/acorn/LICENSE",
-      "bytes": 1099,
-      "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/acorn-import-phases/LICENSE",
-      "bytes": 1072,
-      "sha256": "3e4463779450389b73c530449c4e7ee29f83cb47343c1f2584c6f49de76584da"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/ansi-styles/license",
-      "bytes": 1109,
-      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/b4a/LICENSE",
-      "bytes": 11357,
-      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/bare-events/LICENSE",
-      "bytes": 11357,
-      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/buffer-from/LICENSE",
-      "bytes": 1078,
-      "sha256": "14275f5c8139d02054c5259d52a88ccbba662a86af18c30f071c8d082dc6004c"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/camel-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/chalk/license",
-      "bytes": 1109,
-      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/chalk/node_modules/supports-color/license",
-      "bytes": 1109,
-      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/clean-css/LICENSE",
-      "bytes": 1062,
-      "sha256": "7b43b9a9057033055cf8a6b4e032f932727e0576db2426303c800d73c2ac733f"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/clean-css/node_modules/source-map/LICENSE",
-      "bytes": 1526,
-      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/clone/LICENSE",
-      "bytes": 1070,
-      "sha256": "3fb0857ef0133928cf72c88dfc464e931486e88778961eedec25585e2321507f"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/color-convert/LICENSE",
-      "bytes": 1087,
-      "sha256": "693866fc419c6f61c8570438ec00659d156ec2b4d4a4d04091711f5f11a365d4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/color-name/LICENSE",
-      "bytes": 1085,
-      "sha256": "c064f7a3e353bc1bc977f3c897941c75ef763f44f41677e0a15370ca0853d6e2"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/dot-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/entities/LICENSE",
-      "bytes": 1260,
-      "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/events-universal/LICENSE",
-      "bytes": 11357,
-      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/fast-fifo/LICENSE",
-      "bytes": 1079,
-      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/has-flag/license",
-      "bytes": 1109,
-      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/LICENSE",
-      "bytes": 1071,
-      "sha256": "20cc01510a65e1d0dfdf4e2b8c81528b84bbc5b8103796a4d9ad5c1e19cb2e5a"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/html-minifier-terser/node_modules/commander/LICENSE",
-      "bytes": 1098,
-      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/lower-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/minimist/LICENSE",
-      "bytes": 1073,
-      "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/no-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/param-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/pascal-case/LICENSE",
-      "bytes": 1103,
-      "sha256": "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/relateurl/license",
-      "bytes": 1111,
-      "sha256": "4c97d11c3d10ddede28b756f4d834e660bc49d67d9a8aae16bda5e59efcd479f"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/remove-trailing-separator/license",
-      "bytes": 696,
-      "sha256": "aff6a0eab5763020fd4b179927f918152be1f9b6bfec360cffda972e6adf73e7"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/replace-ext/LICENSE",
-      "bytes": 1169,
-      "sha256": "287229fb1c78f51e413ab4c7625bf447356c7c1208417b92e03a1ad6ec9585d6"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/LICENSE.md",
-      "bytes": 1079,
-      "sha256": "3a7d3bb198e909ed642bd68bd29a7d7c09a636d27a51ec663d35f00c4760ec42"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/source-map-support/node_modules/source-map/LICENSE",
-      "bytes": 1526,
-      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/streamx/LICENSE",
-      "bytes": 1079,
-      "sha256": "41a2aa55a9ebad3df900cf37fded512714a127f4300ef54b978f834a11ec4d48"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/teex/LICENSE",
-      "bytes": 1079,
-      "sha256": "69b1ce578ad0aa97ce5302c7cb8d507c2fbe5a670712b02f0b4a2b95cae3184a"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/terser/LICENSE",
-      "bytes": 1303,
-      "sha256": "901d0a7fcaccaae9917d165039c0473c354e5da2e0e94140dde67aad9ffb19da"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/terser/node_modules/commander/LICENSE",
-      "bytes": 1098,
-      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/text-decoder/LICENSE",
-      "bytes": 11357,
-      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/tslib/CopyrightNotice.txt",
-      "bytes": 822,
-      "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/tslib/LICENSE.txt",
-      "bytes": 655,
-      "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/vinyl/LICENSE",
-      "bytes": 1155,
-      "sha256": "d21ca3ba63e7c2b9452d3d455fcfac84ab89e3333fa7eb600e33e5e63a439887"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/node_modules/vinyl-sourcemaps-apply/node_modules/source-map/LICENSE",
-      "bytes": 1526,
-      "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/include/SDL/COPYING",
-      "bytes": 1031,
-      "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/compiler-rt/LICENSE.TXT",
-      "bytes": 16708,
-      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/libc/musl/COPYRIGHT",
-      "bytes": 6196,
-      "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/libcxx/LICENSE.TXT",
-      "bytes": 16703,
-      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/libcxxabi/LICENSE.TXT",
-      "bytes": 16706,
-      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/libunwind/LICENSE.TXT",
-      "bytes": 16706,
-      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/llvm-libc/LICENSE.TXT",
-      "bytes": 15140,
-      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/mimalloc/LICENSE",
-      "bytes": 1096,
-      "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/openmp/LICENSE.TXT",
-      "bytes": 19741,
-      "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/system/lib/openmp/src/thirdparty/ittnotify/LICENSE.txt",
-      "bytes": 1485,
-      "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/test/sounds/LICENSE.txt",
-      "bytes": 836,
-      "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/third_party/closure-compiler/node-externs/LICENSE",
-      "bytes": 11358,
-      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/third_party/leb128/LICENSE",
-      "bytes": 1065,
-      "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208"
-    },
-    {
-      "path": "licenses/toolchain/emscripten/third_party/terser/LICENSE",
-      "bytes": 1348,
-      "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f"
-    },
-    {
-      "path": "native-license-index.json",
-      "bytes": 17483,
-      "sha256": "4105a309efcaab855daba2a4e1a3fbf8a6747c216d259a4659e596243a124290"
-    },
-    {
-      "path": "package.json",
-      "bytes": 1116,
-      "sha256": "f505c5d17326ef289e51a8563420c6933eff79ef3eec731603e80256b30dcd83"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/browser/abi.json",
-      "bytes": 119596,
-      "sha256": "362e4496f2009fad14e8edea9469c2071a0844a22552fa70a9d6f51b1ebdc4c2"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/browser/core.d.ts",
-      "bytes": 12239,
-      "sha256": "e9753c122540d4ceabe65c7981b7838c62b938836aeeecc8127aa2da3db5bf04"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/browser/core.mjs",
-      "bytes": 131182,
-      "sha256": "d40da925b59f27fd15bc337855ae077d5f61eb692e9bac418ee0dcb8cb822380"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/browser/core.wasm",
-      "bytes": 4969623,
-      "sha256": "f90813dfde4c77620267d544ae1fad6c0cfeb62355d80adb96fbb0b0aa321e76"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/browser/module-options.d.ts",
-      "bytes": 499,
-      "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/test/abi.json",
-      "bytes": 120220,
-      "sha256": "af0af13a863f3ce329589dbd5c9e3b3d746c778418e88cd1b7b3986ca3bc53cb"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/test/core.d.ts",
-      "bytes": 12308,
-      "sha256": "4fb58cde6a7f047d1dbd297c329c0837ba0d4a764f02ce674f01341911974b3f"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/test/core.mjs",
-      "bytes": 212843,
-      "sha256": "d2600696a07f653b1e2461d35610411a53b7981f7d70918faafb8f30527927f3"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/test/core.wasm",
-      "bytes": 5121616,
-      "sha256": "679f4b728d1871db898bbd86e783d1583750736240df3e78e94d03ad15ccb634"
-    },
-    {
-      "path": "profiles/webgpu-wasm32-jspi/test/module-options.d.ts",
-      "bytes": 499,
-      "sha256": "bbd8ab6d86dae83e5872ac97089860e38b3c2bb283cb95087862dfe17a117043"
-    }
-  ]
+  }
 }

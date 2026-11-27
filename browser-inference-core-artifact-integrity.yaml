@@ -13,11 +13,11 @@ schema_version: 1
 kind: browser_inference_core_artifact_integrity
 source:
   repository: https://github.com/nwtgck/browser-inference-core
-  commit: 8db6922a42354c7320b566c2d02fdab03c827087
+  commit: a402946679055202118a29ea6169a1f36678f5fd
   tree_fingerprint:
     algorithm: sha256
     scheme: git-committed-tree-sha256-v1
-    value: c62bfc89bd64328243d13859dab174c081033992425fc7a2b0c4d20e937d607c
+    value: 5414dcf261114086f0ca04e0734dd62fd63f493b12823cd095d22e420882e9b4
     reproduce: |
       # Run with Bash from the repository root after initializing recursive submodules.
       # Hashes committed objects only; changed and untracked worktree files are excluded.
@@ -64,11 +64,11 @@ source:
 manifest:
   path: manifest.json
   size: 1520
-  sha256: d4828e0bfba14694947ce84f26e92274e17dfa3c4ee2678d8f3491b54d4e98b8
+  sha256: 106dafd17135ce712e539a35ab299f9c2906d47af9d8e9f93b3910ee3bb499b3
   contents: |
     {
       "formatVersion": 6,
-      "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+      "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
       "runtimes": {
         "llama-cpp": {
           "manifest": "runtimes/llama-cpp-browser-core/manifest.json",
@@ -101,18 +101,18 @@ manifest:
         },
         {
           "path": "runtimes/llama-cpp-browser-core/manifest.json",
-          "bytes": 22216603,
-          "sha256": "bd678bf07ba235262a66469e31d005c2fcb70db989bca55cb9ac4a13b6d120d0"
+          "bytes": 22213091,
+          "sha256": "ed84b860697560f1cc5a4a1e1a57cea425c2e0c71eb1deb1614562161eff9302"
         },
         {
           "path": "runtimes/speech-cpp-browser-core/manifest.json",
-          "bytes": 246344,
-          "sha256": "61db298078c63660994faf69e247e6a9d1f133c7a804c9ee16094490e9fca1f2"
+          "bytes": 246446,
+          "sha256": "2d3d7ed2ae9eb97924a9b90602ad1781f0d5065d393617acd0e9e5d8fdbf4c02"
         },
         {
           "path": "runtimes/stable-diffusion-cpp-browser-core/manifest.json",
-          "bytes": 1172295,
-          "sha256": "4f7cfa72c15ba9fbc99525977b8f32d90c5123b98e6a9eb700c27482f7cae8ab"
+          "bytes": 1167936,
+          "sha256": "91aa8355cbefc5185937be948d183b9d8d886b71d31020b1151c8b87026435c2"
         }
       ]
     }

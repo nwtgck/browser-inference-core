@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "llama-cpp",
   "abiVersion": 3,
-  "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+  "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
   "schemaSha256": "990cd301bb1d138d589f0a604e8097ef62d7799b169c7fb5d9a8f7323c74b337",
   "llamaCommit": "07ba74babd586c6b5f558d196e3cf7cc1eea26f4",
   "licenseRoots": [
@@ -1989,7 +1989,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -2028,7 +2028,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -42635,9 +42635,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1795736365,
+          "builtAtUnix": 1795767539,
           "buildCache": {
-            "identity": "43f94a20eee68601249eededc826d4e3",
+            "identity": "2b425ca4beb8ad094c25aa73292493ca",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -42669,24 +42669,7 @@
               "passed": true,
               "syntheticModel": true,
               "fileRowsVersion": 0,
-              "sampledToken": 71,
-              "stateBytes": "197",
-              "chatSurface": {
-                "directGeneratedModule": true,
-                "nativeChatToolsAndHistory": true,
-                "reusedParser": true,
-                "nativeEnumsAndDefaults": true,
-                "reasoningSampler": true,
-                "multimodalBitmaps": true,
-                "trainedModelTools": false,
-                "multimodalModelInference": false
-              },
-              "fileMountLifetime": {
-                "duplicateDepth": 2,
-                "logicalFileBytes": 50000000000,
-                "largeOffsetReads": 4,
-                "passed": true
-              }
+              "sampledToken": 71
             }
           }
         },
@@ -42694,7 +42677,7 @@
           "runtime": "llama-cpp",
           "profile": "cpu-wasm32",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -42733,7 +42716,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -83340,9 +83323,9 @@
             "-DLCB_ASYNCIFY=OFF",
             "-DLCB_MAXIMUM_MEMORY=4294967296"
           ],
-          "builtAtUnix": 1795736380,
+          "builtAtUnix": 1795767358,
           "buildCache": {
-            "identity": "8819827087b261b115a72f76623baccc",
+            "identity": "348061d17d468d44913151238de89431",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -83355,33 +83338,8 @@
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "syntheticUntrainedModel": {
-              "profile": "cpu-wasm32",
-              "variant": "test",
-              "passed": true,
-              "syntheticModel": true,
-              "fileRowsVersion": 0,
-              "sampledToken": 71,
-              "stateBytes": "197",
-              "chatSurface": {
-                "directGeneratedModule": true,
-                "nativeChatToolsAndHistory": true,
-                "reusedParser": true,
-                "nativeEnumsAndDefaults": true,
-                "reasoningSampler": true,
-                "multimodalBitmaps": true,
-                "trainedModelTools": false,
-                "multimodalModelInference": false
-              },
-              "fileMountLifetime": {
-                "duplicateDepth": 2,
-                "logicalFileBytes": 50000000000,
-                "largeOffsetReads": 4,
-                "passed": true
-              }
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -83392,7 +83350,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -83431,7 +83389,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -126869,9 +126827,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736572,
+          "builtAtUnix": 1795767894,
           "buildCache": {
-            "identity": "6bdf4c59148acac2c71d0ce2eef27ccf",
+            "identity": "97605ae810f36780cf55c15ab94ce8e3",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -126916,7 +126874,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -126955,7 +126913,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -170393,9 +170351,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736447,
+          "builtAtUnix": 1795767459,
           "buildCache": {
-            "identity": "b6e716ad2caa5869b6a3eb4e10dd2599",
+            "identity": "dc8575d99e3024cdc2e1a2aa1c1adf02",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -170408,21 +170366,8 @@
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "mockedAdapterSuspension": {
-              "profile": "webgpu-wasm32-asyncify",
-              "variant": "test",
-              "passed": true,
-              "mockedAdapter": true,
-              "suspension": true,
-              "defaultNavigatorFallback": true,
-              "hostNavigatorInjection": false,
-              "independentFactories": false,
-              "pointerBytes": 4,
-              "fileRowsVersion": 0,
-              "adapterRequests": 1
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -170433,7 +170378,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -170472,7 +170417,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -213910,9 +213855,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736603,
+          "builtAtUnix": 1795768056,
           "buildCache": {
-            "identity": "2e1616917468aa859b69fd2f9756bb64",
+            "identity": "8088d2e255d66c434a52c4a96dfc2187",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -213957,7 +213902,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": false,
@@ -213996,7 +213941,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -257434,9 +257379,9 @@
             "-DLCB_MAXIMUM_MEMORY=4294967296",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736421,
+          "builtAtUnix": 1795767764,
           "buildCache": {
-            "identity": "4e86e43bcd5dcdb18984d885a79bbb6f",
+            "identity": "eac638d7b9a540371b717d72f8b53a5e",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -257449,21 +257394,8 @@
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "mockedAdapterSuspension": {
-              "profile": "webgpu-wasm32-jspi",
-              "variant": "test",
-              "passed": true,
-              "mockedAdapter": true,
-              "suspension": true,
-              "defaultNavigatorFallback": true,
-              "hostNavigatorInjection": false,
-              "independentFactories": false,
-              "pointerBytes": 4,
-              "fileRowsVersion": 0,
-              "adapterRequests": 1
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -257474,7 +257406,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -257513,7 +257445,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -300988,9 +300920,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736407,
+          "builtAtUnix": 1795767612,
           "buildCache": {
-            "identity": "072c6375d449986c53aa86e42823f574",
+            "identity": "2d787fa740a5a07b5bd8b85aaf7b8126",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -301035,7 +300967,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -301074,7 +301006,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -344549,9 +344481,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736571,
+          "builtAtUnix": 1795767504,
           "buildCache": {
-            "identity": "4a3134095657d84d15602d2b59bd0202",
+            "identity": "acd435f80fb72ac7712aa3e622276144",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -344564,21 +344496,8 @@
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "mockedAdapterSuspension": {
-              "profile": "webgpu-wasm64-jspi",
-              "variant": "test",
-              "passed": true,
-              "mockedAdapter": true,
-              "suspension": true,
-              "defaultNavigatorFallback": true,
-              "hostNavigatorInjection": false,
-              "independentFactories": false,
-              "pointerBytes": 8,
-              "fileRowsVersion": 1,
-              "adapterRequests": 1
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -344589,7 +344508,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -344629,7 +344548,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -388139,9 +388058,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736438,
+          "builtAtUnix": 1795767651,
           "buildCache": {
-            "identity": "a2a3a92b1f4bc61926fad18fd70031eb",
+            "identity": "df461303c884052e29dff22300d77247",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -388186,7 +388105,7 @@
           "runtime": "llama-cpp",
           "profile": "webgpu-wasm64-jspi-gpu-profile",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "configuration": {
             "memory64": true,
@@ -388226,7 +388145,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/llama-cpp/CMakeLists.txt": {
                 "bytes": 14808,
@@ -431736,9 +431655,9 @@
             "-DLCB_MAXIMUM_MEMORY=17179869184",
             "-DEMDAWNWEBGPU_DIR=/home/runner/work/browser-inference-core/browser-inference-core/.tools/emdawnwebgpu_pkg"
           ],
-          "builtAtUnix": 1795736458,
+          "builtAtUnix": 1795767382,
           "buildCache": {
-            "identity": "80a4cc7c5633f976384249fa43a109c9",
+            "identity": "1e07aa1ed7fef78c26513f37434254c4",
             "compilerWrapper": "ccache"
           },
           "visionBf16Storage": {
@@ -431751,21 +431670,8 @@
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "mockedAdapterSuspension": {
-              "profile": "webgpu-wasm64-jspi-gpu-profile",
-              "variant": "test",
-              "passed": true,
-              "mockedAdapter": true,
-              "suspension": true,
-              "defaultNavigatorFallback": true,
-              "hostNavigatorInjection": false,
-              "independentFactories": false,
-              "pointerBytes": 8,
-              "fileRowsVersion": 1,
-              "adapterRequests": 1
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }

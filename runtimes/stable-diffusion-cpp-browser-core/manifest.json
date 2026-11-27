@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "runtime": "stable-diffusion-cpp",
   "abiVersion": 3,
-  "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+  "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
   "schemaSha256": "5dbd61cc33911c2d66ebbc0bc928341e6193544fc44190dbdbf03bf43cb41fff",
   "upstreams": {
     "stable-diffusion": {
@@ -691,7 +691,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -1584,7 +1584,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -1887,12 +1887,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -4035,14 +4035,14 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "05d3948f12285f73bc32e4551ee21af1",
+            "identity": "5a4afdae99d43fec91acd097f15808db",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks and sparse GGUF reads at large offsets through the Wasm filesystem; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -4053,7 +4053,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-asyncify",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -4946,7 +4946,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -5249,12 +5249,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -7445,41 +7445,13 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "51600296795a9f5ae4a60fb58ee774ba",
+            "identity": "8026ffe7512e18831e2b0520e33ba08e",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
-            "browserSmokeEvidence": {
-              "timestep": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "bf16Weights": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "graphWalk": true,
-              "conv3dBias": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "webgpuPerformance": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ]
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -7490,7 +7462,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -8383,7 +8355,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -8686,12 +8658,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -10834,14 +10806,14 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "37bb1525ee6620a0c900136e5d2e7137",
+            "identity": "b87a327534f421851873a03e337829fa",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks and sparse GGUF reads at large offsets through the Wasm filesystem; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -10852,7 +10824,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm32-jspi",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -11745,7 +11717,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -12048,12 +12020,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -14244,41 +14216,13 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "75cdcb594bcbeadbef1f7e469a0617ec",
+            "identity": "ab703c5c793f7cfd7333865e8f7d74fa",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
-            "browserSmokeEvidence": {
-              "timestep": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "bf16Weights": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "graphWalk": true,
-              "conv3dBias": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "webgpuPerformance": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ]
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
@@ -14289,7 +14233,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "browser",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -15182,7 +15126,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -15485,12 +15429,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -17633,14 +17577,14 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "9ff522ea8c8c5a6f5173f75981fd3058",
+            "identity": "0bb4c708a5473b7b66120f5d71e27b32",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
             "browserSmoke": true,
             "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
+            "browserSmokeScope": "real-Wasm Worker, public records/callbacks and sparse GGUF reads at large offsets through the Wasm filesystem; no trained-model image generation",
             "browserSmokeEvidence": {
               "timestep": [],
               "bf16Weights": []
@@ -17651,7 +17595,7 @@
           "runtime": "stable-diffusion-cpp",
           "profile": "webgpu-wasm64-jspi",
           "variant": "test",
-          "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+          "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
           "sourceDirty": false,
           "upstreams": {
             "stable-diffusion": {
@@ -18544,7 +18488,7 @@
           "sourceInputs": {
             "mode": "release",
             "publishable": true,
-            "sourceCommit": "8db6922a42354c7320b566c2d02fdab03c827087",
+            "sourceCommit": "a402946679055202118a29ea6169a1f36678f5fd",
             "files": {
               "runtimes/stable-diffusion-cpp/CMakeLists.txt": {
                 "bytes": 9419,
@@ -18847,12 +18791,12 @@
                 "sha256": "46b25ae4543c8f0e1010b6a805b9039fe44919209f7062c47ca1caca06b5d064"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke-contract.test.mjs": {
-                "bytes": 1485,
-                "sha256": "6a03b437bf093cea8030ffa00ddfebc30bb7355891b07be691a41e2cecb19f28"
+                "bytes": 1872,
+                "sha256": "0dcb2c02888bf17bcfca58bac245d7f4d76a800732562fa14d670eacd0879566"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-smoke.mjs": {
-                "bytes": 18691,
-                "sha256": "a813a21a598add144600758e12dfca5e3bd054b92f34a04f7d268482bbeac6b8"
+                "bytes": 17590,
+                "sha256": "a3403fa0c5bace55235fc9de6a9cd979d9bf5e46cace4c5e76c4ae5206cef957"
               },
               "tests/runtimes/stable_diffusion_cpp/browser-weight-reader-integration.cpp": {
                 "bytes": 10444,
@@ -21043,41 +20987,13 @@
           },
           "emccVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.9 (4e4223852a0835923411059a3929907d7df1232e)",
           "buildCache": {
-            "identity": "e2e21fe9d23159d270e6463b2d394b44",
+            "identity": "cdcb018a88f09e6c5a2cac953387d01a",
             "compilerWrapper": "ccache"
           },
           "validation": {
             "compiled": true,
-            "browserSmoke": true,
-            "realModelInference": false,
-            "browserSmokeScope": "real-Wasm Worker, public records/callbacks, sparse GGUF/safetensors/shard I/O; test variants also check synthetic Qwen BF16 timestep and 3D convolution bias, bounded convolution/attention, softmax/RoPE, Qwen modulation/SwiGLU and cache-copy graph arithmetic on CPU (no GPU inference), plus large-row arithmetic and deep graph construction/selection (WebGPU mode also checks live-registry queries); no trained-model image generation",
-            "browserSmokeEvidence": {
-              "timestep": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "bf16Weights": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "graphWalk": true,
-              "conv3dBias": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ],
-              "webgpuPerformance": [
-                {
-                  "backend": "CPU",
-                  "passed": true
-                }
-              ]
-            }
+            "browserSmoke": false,
+            "realModelInference": false
           }
         }
       }
