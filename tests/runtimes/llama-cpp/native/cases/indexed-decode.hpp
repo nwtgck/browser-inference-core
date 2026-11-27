@@ -99,11 +99,11 @@ static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint3
     ggml_backend_synchronize(&gpu.backend);
     BICORE_CHECK(commands.dispatches.size() == 1);
     const auto & dispatch = commands.dispatches.front();
-    const uint32_t rows_per_group = independent ? 4 * (128 / sg_min) : 4;
+    const uint32_t rows_per_group = independent ? 4 * (128 / sg_max) : 4;
     BICORE_CHECK(dispatch.x == CEIL_DIV(rows, rows_per_group) * selected && dispatch.y == 1 && dispatch.z == 1);
     const auto & cached = gpu.context->bind_group_cache.slots.front();
     const auto & pipeline = *cached.pipeline.Get();
-    BICORE_CHECK((pipeline.name.find("_independent_sg" + std::to_string(sg_min)) != std::string::npos) == independent);
+    BICORE_CHECK((pipeline.name.find("_independent_sg" + std::to_string(sg_max)) != std::string::npos) == independent);
     BICORE_CHECK(cached.bindings.size() == 5);
     for (size_t i = 0; i < tensors.size(); ++i) {
         const auto & view = cached.bindings[i];
@@ -120,19 +120,25 @@ static void all() {
             const int64_t input_rows = k == 1152 ? 8 : 1;
             check_provider(quant, k, input_rows, 16, 16, true);
             check_provider(quant, k, input_rows, 32, 32, true);
-            check_provider(quant, k, input_rows, 16, 32, false);
+            check_provider(quant, k, input_rows, 8, 32, true);
+            check_provider(quant, k, input_rows, 4, 32, false);
             check_provider(quant, k, input_rows, 64, 64, false);
         }
     }
     for (uint32_t sg : {16, 32, 64})
         check_provider(GGML_TYPE_IQ3_S, 2048, 1, sg, sg, true);
+    check_provider(GGML_TYPE_IQ3_S, 2048, 1, 8, 32, true);
+    check_provider(GGML_TYPE_IQ3_S, 2048, 1, 8, 64, false);
     for (const auto quant : {GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S, GGML_TYPE_IQ3_XXS}) {
         check_provider(quant, 2304, 1, 16, 16, true);
         check_provider(quant, 2304, 1, 32, 32, true);
-        check_provider(quant, 2304, 1, 16, 32, false);
+        check_provider(quant, 2304, 1, 8, 16, true);
+        check_provider(quant, 2304, 1, 8, 32, true);
+        check_provider(quant, 2304, 1, 4, 32, false);
         check_provider(quant, 2304, 1, 64, 64, false);
         check_provider(quant, 2560, 1, 16, 16, true, 640, 10);
         check_provider(quant, 2560, 1, 32, 32, true, 640, 10);
+        check_provider(quant, 2560, 1, 16, 32, true, 640, 10);
     }
 }
 } // namespace indexed_decode_cases

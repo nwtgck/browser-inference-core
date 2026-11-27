@@ -563,7 +563,7 @@ not establish target-device speed.
 ## Fixed-subgroup indexed IQ3_S matvec
 
 - **Patch:** `ggml-webgpu-iq3s-id-subgroup.patch`.
-- **Scope:** assign rows of eligible single-token IQ3_S indexed matvecs to independent fixed-width subgroups. Shape, strides, complete blocks, binding ranges, device limits and subgroup width are checked; unsupported cases retain the upstream path. The upstream quantization loaders and accumulator are reused, and selection is independent of model identity.
+- **Scope:** assign rows of eligible single-token IQ3_S indexed matvecs to independent subgroups. Shape, strides, complete blocks, binding ranges, device limits and subgroup width are checked; unsupported cases retain the upstream path. The upstream quantization loaders and accumulator are reused, and selection is independent of model identity.
 - **Integration:** compose the checked WebGPU host and shader overlays after the other WebGPU changes. Embed the dedicated shader with the pinned upstream include expander; retain canonical upstream shader sources for other paths. Upstream contracts require review; the applied patch and generated header identities are recorded. CPU profiles and upstream source are unchanged.
 - **Partial subgroups:** even with a fixed reported width, a subgroup can be partial. Active invocations cover additional logical lanes; the full-packed path retains its previous calculation without extra shared scratch. Geometry probing and readback are test-only and add no production CPU readback.
 - **Validation and limits:** source-bound selector, cache and dispatch checks and software GPU numerical fixtures cover accepted and rejected cases, including partial geometries at reported widths 32/64. A full-packed width 16 matched the previous subgroup shader bit for bit in the tested cases. Reduction order differs from the upstream baseline; production model quality and target-device speed are not established.
@@ -579,10 +579,10 @@ not establish target-device speed.
 - **No-patch alternative:** retain the existing independent indexed matvec or wait for upstream equivalent field loads.
 - **Removal:** upstream equivalent support, withdrawal of this optimization, or removal of its parent indexed IQ3 implementation; remove this stage, patch, build dependencies, tests and provenance together.
 
-## Fixed-subgroup indexed IQ4_NL and NVFP4 decode
+## Independent-subgroup indexed IQ4_NL and NVFP4 decode
 
 - **Patch:** `ggml-webgpu-quantized-expert-subgroup-decode.patch`.
-- **Scope:** use independent 16- or 32-lane subgroups for single-token IQ4_NL or NVFP4 indexed matvec with F32 activations, K1152 or K2304, M2304 and eight selected experts. Select by tensor shape, physical binding bounds and device limits. Preserve the existing IQ3_S scope and the canonical fallback.
+- **Scope:** use independent logical subgroups of 16 or 32 lanes for single-token IQ4_NL or NVFP4 indexed matvec with F32 activations, K1152 or K2304, M2304 and eight selected experts. Select by tensor shape, physical binding bounds and device limits. Preserve the existing IQ3_S scope and the canonical fallback.
 - **Integration:** both WebGPU modes share the existing independent subgroup shader, quantization loaders and partial-subgroup arithmetic. This stage reuses its buffer and dispatch checks with the corresponding GGML block traits. The upstream revision and applied patch remain in the preparation receipt.
 - **Validation and limits:** complete provider tests cover fixed and varying widths, boundary binding limits and unchanged IQ3_S selection. Software WebGPU replay of representative packed tensors covers the two K sizes and fixed widths. Independent reductions change F32 addition order. Physical-device throughput and model-level quality require measurement.
 - **No-patch alternative:** retain the existing cooperative indexed decode path.
@@ -954,7 +954,7 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Scope** Use the existing four-row independent subgroup kernel with
   IQ2_XXS, IQ2_XS, IQ2_S and IQ3_XXS weights, broadcast F32 activation,
   I32 IDs, F32 output, and either K2304/M2304/top-8 or K2560/M640/top-10.
-  Require one token and fixed subgroup widths of 16 or 32. The existing
+  Require one token and logical subgroup widths of 16 or 32. The existing
   shape, buffer-range, and device-limit checks remain authoritative.
 - **Contract** Keep the GGUF layouts, per-format lookup tables, five bindings,
   and parameters. Use the existing accumulators with 16 logical lanes or
@@ -964,8 +964,29 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation and removal** Record actual dispatches and compare the emitted
   shaders with GGML's CPU dequantizers on both shapes, including repeated IDs
   and skipped slots. Remove the extension when upstream supports equivalent
-  indexed subgroup execution. Recheck each format's template and the fixed
+  indexed subgroup execution. Recheck each format's template and the
   subgroup mapping after upstream updates.
+
+## Portable subgroup widths for indexed decode
+
+- **Patch** `ggml-webgpu-indexed-portable-subgroups.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Use the advertised maximum as the logical width when it is 16
+  or 32 and the advertised minimum is at least 8. Apply the existing
+  tensor-shape, precision, physical binding, and dispatch limits for the
+  independent indexed matvec. Fixed widths keep their existing choices.
+- **Contract** A 128-lane workgroup owns four rows per logical subgroup. The
+  existing shader distributes virtual lane IDs across active physical
+  lanes when a subgroup is smaller. Additional physical subgroups leave the
+  output untouched. Pipeline keys and dispatch geometry use the logical
+  width. The device uses its ordinary subgroup feature and can choose the
+  actual width. Bindings, formats, and GPU allocations are unchanged.
+- **Validation and removal** Check dispatch, binding caps, and unsupported
+  subgroup ranges in both providers. Replay the emitted shaders at physical
+  widths 8, 16, and 32 and compare each output with GGML dequantization and
+  an independent dot product. Remove the overlay when upstream can choose
+  the independent path over the same ranges. Recheck the virtual-lane
+  mapping and active-lane reduction after upstream updates.
 
 ## Packed bytes for wide Q6_K decoding
 
@@ -1521,13 +1542,13 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   `07ba74babd`.
 - **Scope** Select the existing independent subgroup shader for indexed
   Q2_0 K1152/M2304, eight selected experts, F32 activations and output, and
-  one token. Require a single checked weight binding and fixed subgroup
+  one token. Require a single checked weight binding and logical subgroup
   width 16 or 32. The ordinary cooperative shader can use 128 invocations
   for this shape when the subgroup limits allow it.
 - **Contract** Reuse the existing indexed kernel factory, binding and dispatch
   checks, and decoder for 18-byte GGML blocks. Each independent subgroup
   reduces four rows. The reduction order can change. Retain the cooperative
-  shader for split weights and subgroup ranges, and 256 invocations when
+  shader for split weights and unsupported subgroup ranges, and 256 invocations when
   optimized geometry is unavailable. Keep placement and prefill paths.
 - **Validation and removal** Verify encoded geometry and binding ranges for
   both providers. Compare factory shaders against independent FP64 results
@@ -1729,12 +1750,12 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   or limits. Remove this patch when upstream supports an equivalent
   epilogue with the same lifetime, layout, and subgroup guarantees.
 
-## Fixed-subgroup indexed Q8_0 and Q5_K decode
+## Independent-subgroup indexed Q8_0 and Q5_K decode
 
 - **Patch** `ggml-webgpu-indexed-q8-q5-subgroup.patch` against llama.cpp `c212d25ad`.
-- **Scope** Extend the fixed-subgroup indexed matvec to Q8_0 at K1152 or
+- **Scope** Extend the independent-subgroup indexed matvec to Q8_0 at K1152 or
   K2304 and Q5_K at K2304. Require M2304, eight selected experts, one input
-  token, F32 activations and outputs, and fixed subgroup width 16 or 32.
+  token, F32 activations and outputs, and logical subgroup width 16 or 32.
 - **Contract** Use the existing quantization loaders, packed weight layout,
   and physical binding checks. Select the 128-wide workgroup only when it
   fits the X dimension. The independent shader writes the same output

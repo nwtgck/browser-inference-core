@@ -1,0 +1,41 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -327,14 +327,17 @@
+     return 16;
+ }
+ 
+-// The independent shader assigns four rows to each fixed-width subgroup.
++// Plan one four-row slice per logical subgroup of the maximum advertised width.
++// The shader schedules all logical lanes even on smaller physical subgroups.
+ // IQ2 and IQ3 formats need at least sixteen logical lanes per block.
+ inline bool ggml_webgpu_id_subgroup_shape(const ggml_webgpu_shader_lib_context & context) {
+     const auto * a = context.src0;
+     const auto * x = context.src1;
+     const auto * ids = context.src2;
+     const auto * dst = context.dst;
+-    const uint32_t sg = context.min_subgroup_size;
++    const uint32_t sg = context.max_subgroup_size;
++    const uint32_t sg_min = context.min_subgroup_size;
++    const bool portable_width = sg_min >= 8 && sg_min < sg && (sg == 16 || sg == 32);
+     if (!a || !x || !ids || !dst) {
+         return false;
+     }
+@@ -344,7 +347,7 @@
+          a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K && a->type != GGML_TYPE_Q2_0) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+         !context.supports_subgroups || context.max_wg_size < 128 ||
+-        sg != context.max_subgroup_size ||
++        (sg_min != sg && !portable_width) ||
+         a->ne[2] <= 0 || a->ne[2] > UINT32_MAX || dst->ne[1] <= 0 || dst->ne[1] > a->ne[2] ||
+         x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || ids->ne[0] != dst->ne[1] ||
+         (x->ne[1] != 1 && x->ne[1] != dst->ne[1]) ||
+@@ -380,7 +383,7 @@
+     const auto * x = context.src1;
+     const auto * ids = context.src2;
+     const auto * dst = context.dst;
+-    const uint32_t sg = context.min_subgroup_size;
++    const uint32_t sg = context.max_subgroup_size;
+     const uint64_t a_block_bytes = ggml_type_size(a->type);
+     const uint64_t k = static_cast<uint64_t>(a->ne[0]);
+     const uint64_t a_row_bytes = k / ggml_blck_size(a->type) * a_block_bytes;

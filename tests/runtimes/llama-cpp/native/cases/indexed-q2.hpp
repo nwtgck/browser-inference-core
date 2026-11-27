@@ -143,8 +143,11 @@ static void all() {
     check_encoded(small, 5, true, 16, 16, 0, 0);
     check_encoded(down, 1, false, 16, 16, 128, 32);
     check_encoded(down, 1, false, 32, 32, 128, 16);
-    check_encoded(down, 1, false, 16, 32, 128, 4);
+    check_encoded(down, 1, false, 8, 16, 128, 32);
+    check_encoded(down, 1, false, 8, 32, 128, 16);
+    check_encoded(down, 1, false, 4, 32, 128, 4);
     check_encoded(down, 1, true, 16, 16, 128, 4);
+    check_encoded(down, 1, true, 8, 32, 128, 4);
     check_encoded(down, 1, false, 0, 0, 256, 4);
     check_encoded(down, 128, false, 16, 16, 0, 0);
 }
