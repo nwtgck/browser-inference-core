@@ -1246,6 +1246,20 @@ export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
 }
 
 export const modelPatches = {
+  webgpuExpertStorageRetry: {
+    file: 'ggml-webgpu-expert-storage-retry.patch',
+    target: 'llama-webgpu',
+    reason: 'Allocate automatically placed large expert weights under a checked error scope and retry the file loader on GPU memory exhaustion.',
+    files: [
+      'ggml/include/ggml-webgpu-expert-storage.h',
+      'ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'src/llama-model-loader.cpp',
+      'src/llama-model-loader.h',
+      'src/llama-model.cpp',
+      'src/llama.cpp',
+    ],
+  },
   inklingLoopMix: {
     file: 'inkling-loop-shared-mix-state.patch',
     target: 'llama',

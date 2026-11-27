@@ -1041,6 +1041,24 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   matrix and vector execution. Remove when the underlying backend supports
   equivalent indexed operands larger than the storage binding limit.
 
+## Checked allocation for automatically placed expert weights
+
+- **Patch** `ggml-webgpu-expert-storage-retry.patch` against llama.cpp
+  `07ba74babd`, after indexed weight windows and the optional file-backed
+  rows overlay.
+- **Scope** Only file and shard loads may automatically choose extra WebGPU
+  expert storage. Resolve the real model buffer allocations before mapping
+  or reading weights. Retry once with ordinary placement on a live device
+  when the allocation reports only out-of-memory.
+- **Contract** Successful allocations are reused directly. Scope status
+  takes precedence over Dawn's buffer handle. Release provisional buffers
+  before reopening files. Keep resident split encoding, explicit placement,
+  Q2 policy, and cancellation behavior.
+- **Validation and removal** Exercise bounded cumulative allocation with a
+  non-null failing handle, rollback, other error scopes, and device loss.
+  Remove when upstream can recover from cumulative placement exhaustion
+  before uploading weights.
+
 ## Wider indexed prefill for low-bit expert projections
 
 - **Patch** `ggml-webgpu-indexed-low-bit-wide-prefill.patch` against llama.cpp

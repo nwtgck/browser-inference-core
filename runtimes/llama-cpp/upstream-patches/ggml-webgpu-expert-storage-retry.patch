@@ -1,0 +1,436 @@
+diff --git a/ggml/include/ggml-webgpu-expert-storage.h b/ggml/include/ggml-webgpu-expert-storage.h
+new file mode 100644
+--- /dev/null
++++ b/ggml/include/ggml-webgpu-expert-storage.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++#include "ggml-backend.h"
++
++// Private registry contract between the file loader and the WebGPU backend.
++// The caller allocates a context selected by supports() before uploading weights.
++struct ggml_webgpu_expert_storage_v1 {
++    struct allocation {
++        ggml_backend_buffer_t buffer;
++        bool out_of_memory;
++    };
++
++    bool (*supports)(ggml_backend_dev_t, const ggml_tensor *);
++    allocation (*allocate)(ggml_backend_buffer_type_t, ggml_context *);
++};
++
++#define GGML_WEBGPU_EXPERT_STORAGE_V1 "ggml_backend_webgpu_expert_storage_v1"
++using ggml_webgpu_get_expert_storage_v1_t = const ggml_webgpu_expert_storage_v1 * (*)();
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp
+@@ -15,6 +15,7 @@
+ namespace ggml_webgpu_optional {
+ 
+ enum class Outcome { ready, rejected, terminal, pending };
++enum class WaitBudget { whole_attempt, after_issue };
+ enum class Fatal {
+     none,
+     device_lost,
+@@ -138,10 +139,11 @@
+ template<class Ops>
+ Attempt<typename Ops::Pipeline> create_optional(Ops& ops, DeviceState& device,
+                                                 std::uint64_t timeout_ns,
+-                                                bool defer = false) {
++                                                bool defer = false,
++                                                WaitBudget budget = WaitBudget::whole_attempt) {
+     using Result = Attempt<typename Ops::Pipeline>;
+     Result result;
+-    const auto started_ns = ops.now_ns();
++    auto started_ns = budget == WaitBudget::whole_attempt ? ops.now_ns() : 0;
+     const auto unusable_reason = [&] {
+         return device.lost.load(std::memory_order_acquire) ? Fatal::device_lost : Fatal::device_terminal;
+     };
+@@ -231,6 +233,9 @@
+         return result;
+     }
+ 
++    if (budget == WaitBudget::after_issue) {
++        started_ns = ops.now_ns();
++    }
+     // WaitAny Success need only complete one future. Each count-1 wait and each
+     // callback's done bit are checked independently; array Success is not enough.
+     try {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -18,6 +18,9 @@
+ #include "ggml-webgpu-situ.hpp"
+ 
+ #include "ggml-backend-impl.h"
++#include "ggml-alloc.h"
++#include "ggml-cpp.h"
++#include "ggml-webgpu-expert-storage.h"
+ #include "ggml-webgpu-short-conv-residual.hpp"
+ #include "ggml-webgpu-short-conv-dynamic.hpp"
+ #include "ggml-webgpu-short-conv-state.hpp"
+@@ -7504,6 +7507,24 @@
+     return true;
+ }
+ 
++static bool ggml_webgpu_indexed_weight_needs_windows(const ggml_tensor * weight, const wgpu::Limits & limits) {
++    return ggml_webgpu_indexed_window_type(weight) &&
++           ggml_nbytes(weight) > (limits.maxStorageBufferBindingSize & ~UINT64_C(3));
++}
++
++static bool ggml_webgpu_expert_storage_supports(ggml_backend_dev_t dev, const ggml_tensor * op) {
++    const auto * weight = op->src[0];
++    const auto * allocation = weight ? weight->buffer : nullptr;
++    // Only the file loader may choose to move an unallocated oversized bank.
++    if (op->op != GGML_OP_MUL_MAT_ID || !weight || weight->data || !allocation ||
++        !ggml_webgpu_empty_backend_probe(allocation) || allocation->buft != ggml_backend_dev_buffer_type(dev)) {
++        return false;
++    }
++    const auto * ctx = static_cast<ggml_backend_webgpu_device_context *>(dev->context);
++    return ggml_webgpu_indexed_weight_needs_windows(weight, ctx->webgpu_global_ctx->capabilities.limits) &&
++           ggml_webgpu_indexed_weight_windows_supported(dev, op, ctx->webgpu_global_ctx);
++}
++
+ static bool ggml_backend_webgpu_device_supports_op(ggml_backend_dev_t dev, const ggml_tensor * op) {
+     ggml_backend_webgpu_device_context * ctx = static_cast<ggml_backend_webgpu_device_context *>(dev->context);
+ 
+@@ -7523,20 +7544,10 @@
+     if (op->op == GGML_OP_MUL_MAT_ID && src0) {
+         const auto & limits = ctx->webgpu_global_ctx->capabilities.limits;
+         const bool q2 = src0->type == GGML_TYPE_Q2_0;
+-        const bool split = ggml_webgpu_indexed_window_type(src0) &&
+-                           ggml_nbytes(src0) > (limits.maxStorageBufferBindingSize & ~UINT64_C(3));
++        const bool split = ggml_webgpu_indexed_weight_needs_windows(src0, limits);
+         if (q2 || split) {
+-            // Q2_0 remains opt-in. For other packed types, admit the loader's
+-            // empty WebGPU allocation, but do not transfer CPU-resident weights
+-            // into oversized storage allocations while scheduling a graph.
+-            const bool resident = src0->buffer &&
+-                                  src0->buffer->iface.get_base == ggml_backend_webgpu_buffer_get_base;
+-            if ((q2 && !src0->data) || ((src0->data || q2) && !resident)) {
+-                return false;
+-            }
+-            if (const auto * allocation = src0->buffer; allocation && !resident &&
+-                (!ggml_webgpu_empty_backend_probe(allocation) || !allocation->buft ||
+-                 allocation->buft->device != dev || !ggml_backend_webgpu_device_supports_buft(dev, allocation->buft))) {
++            if (!src0->data || !src0->buffer ||
++                src0->buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base) {
+                 return false;
+             }
+             return ggml_webgpu_indexed_weight_windows_supported(dev, op, ctx->webgpu_global_ctx);
+@@ -8056,8 +8067,87 @@
+     return 1;
+ }
+ 
++static ggml_webgpu_expert_storage_v1::allocation ggml_webgpu_allocate_expert_storage(
++        ggml_backend_buffer_type_t buft, ggml_context * context) {
++    auto * ctx = static_cast<ggml_backend_webgpu_device_context *>(buft->device->context);
++    auto & global = *ctx->webgpu_global_ctx;
++    // Buffer creation is synchronous inside the issue interval. Resolve every
++    // scope before the loader can upload to a non-null Dawn error buffer.
++    struct ops {
++        using Pipeline = ggml_backend_buffer_ptr;
++        ggml_backend_buffer_type_t buft;
++        ggml_context * context;
++        wgpu::Device & device;
++        wgpu::Instance & instance;
++        std::exception_ptr allocation_exception{};
++
++        uint64_t now_ns() const noexcept {
++            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                std::chrono::steady_clock::now().time_since_epoch()).count());
++        }
++        void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
++        Pipeline create() {
++            // Close the scopes even if host allocation fails inside GGML.
++            try {
++                return Pipeline(ggml_backend_alloc_ctx_tensors_from_buft(context, buft));
++            } catch (...) {
++                allocation_exception = std::current_exception();
++                return {};
++            }
++        }
++        wgpu::Future pop(wgpu::CallbackMode mode,
++                        void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView,
++                                         ggml_webgpu_optional::Ticket *) noexcept,
++                        ggml_webgpu_optional::Ticket * ticket) {
++            return device.PopErrorScope(mode, callback, ticket);
++        }
++        wgpu::WaitStatus wait(wgpu::Future future, uint64_t timeout) { return instance.WaitAny(future, timeout); }
++        // A null GGML allocation can have an ordinary host-side cause. Pass it
++        // through the loader's normal failure path if the scopes are clean.
++        bool valid(const Pipeline &) { return true; }
++    } api{buft, context, global.device, global.instance};
++
++    using namespace ggml_webgpu_optional;
++    auto result = create_optional(api, global.optional_device->control, WEBGPU_RUNTIME_WAIT_TIMEOUT_NS,
++                                  false, WaitBudget::after_issue);
++    if (api.allocation_exception) {
++        std::rethrow_exception(api.allocation_exception);
++    }
++    if (result.outcome == Outcome::ready) {
++        return {result.pipeline.release(), false};
++    }
++    if (result.host_exception) {
++        std::rethrow_exception(result.host_exception);
++    }
++    if (result.outcome == Outcome::rejected) {
++        const auto & validation = result.scopes[0];
++        const auto & internal = result.scopes[1];
++        const auto & memory = result.scopes[2];
++        if (validation->error == wgpu::ErrorType::NoError && internal->error == wgpu::ErrorType::NoError &&
++            memory->error == wgpu::ErrorType::OutOfMemory) {
++            return {nullptr, true};
++        }
++        const auto & failure = validation->error != wgpu::ErrorType::NoError ? validation : internal;
++        GGML_LOG_ERROR("ggml_webgpu: model buffer creation rejected: %s\n", failure->message.data());
++    } else {
++        GGML_LOG_ERROR("ggml_webgpu: model buffer creation failed (reason %d)\n", int(result.fatal));
++    }
++    return {nullptr, false};
++}
++
++static const ggml_webgpu_expert_storage_v1 * ggml_webgpu_expert_storage() {
++    static const ggml_webgpu_expert_storage_v1 functions{
++        ggml_webgpu_expert_storage_supports, ggml_webgpu_allocate_expert_storage,
++    };
++    return &functions;
++}
++
+ static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
++    if (name && strcmp(name, GGML_WEBGPU_EXPERT_STORAGE_V1) == 0) {
++        ggml_webgpu_get_expert_storage_v1_t get = ggml_webgpu_expert_storage;
++        return reinterpret_cast<void *>(get);
++    }
+     if (name && strcmp(name, "ggml_backend_webgpu_indexed_q2_placement_v1") == 0) {
+         return reinterpret_cast<void *>(ggml_backend_webgpu_indexed_q2_placement_v1);
+     }
+diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
+--- a/src/llama-model-loader.cpp
++++ b/src/llama-model-loader.cpp
+@@ -1012,7 +1012,9 @@
+ }
+ 
+ // checks if the weight tensor can be used with the specified buffer type and device
+-static bool weight_buft_supported(const llama_hparams & hparams, ggml_tensor * w, ggml_op op, ggml_backend_buffer_type_t buft, ggml_backend_dev_t dev) {
++static bool weight_buft_supported(const llama_hparams & hparams, ggml_tensor * w, ggml_op op,
++                                  ggml_backend_buffer_type_t buft, ggml_backend_dev_t dev,
++                                  llama_expert_storage_map * expert_storage) {
+     GGML_ASSERT(w != nullptr);
+ 
+     if (op == GGML_OP_NONE) {
+@@ -1150,21 +1152,37 @@
+ 
+     // create a temporary dummy buffer for the weight so that supports_op can check the buffer type
+     GGML_ASSERT(w->buffer == nullptr);
+-    w->buffer = ggml_backend_buft_alloc_buffer(buft, 0);
+-    bool op_supported = ggml_backend_dev_supports_op(dev, op_tensor);
+-    ggml_backend_buffer_free(w->buffer);
++    ggml_backend_buffer_ptr probe(ggml_backend_buft_alloc_buffer(buft, 0));
++    w->buffer = probe.get();
++    const bool op_supported = ggml_backend_dev_supports_op(dev, op_tensor);
++    const ggml_webgpu_expert_storage_v1 * optional = nullptr;
++    if (!op_supported && expert_storage && op == GGML_OP_MUL_MAT_ID) {
++        if (auto * reg = ggml_backend_dev_backend_reg(dev)) {
++            const auto get = reinterpret_cast<ggml_webgpu_get_expert_storage_v1_t>(
++                ggml_backend_reg_get_proc_address(reg, GGML_WEBGPU_EXPERT_STORAGE_V1));
++            if (get) {
++                const auto * api = get();
++                if (api->supports(dev, op_tensor)) {
++                    optional = api;
++                }
++            }
++        }
++    }
+     w->buffer = nullptr;
+-
+-    return op_supported;
++    if (optional) {
++        expert_storage->try_emplace(buft, optional);
++    }
++    return op_supported || optional;
+ }
+ 
+ // find the first buffer type in the list that can use the tensor
+-static ggml_backend_buffer_type_t select_weight_buft(const llama_hparams & hparams, ggml_tensor * tensor, ggml_op op, const buft_list_t * buft_list) {
++static ggml_backend_buffer_type_t select_weight_buft(const llama_hparams & hparams, ggml_tensor * tensor, ggml_op op,
++                                                     const buft_list_t * buft_list, llama_expert_storage_map * expert_storage) {
+     GGML_ASSERT(!buft_list->empty());
+     for (const auto & cur : *buft_list) {
+         ggml_backend_dev_t cur_dev = cur.first;
+         ggml_backend_buffer_type_t cur_buft = cur.second;
+-        if (weight_buft_supported(hparams, tensor, op, cur_buft, cur_dev)) {
++        if (weight_buft_supported(hparams, tensor, op, cur_buft, cur_dev, expert_storage)) {
+             return cur_buft;
+         }
+     }
+@@ -1334,7 +1352,7 @@
+                 if (std::regex_search(tensor_name, pattern)) {
+                     if (overrides->buft == ggml_backend_cpu_buffer_type()) {
+                         // when overriding to a CPU buffer, consider the extra buffer types
+-                        buft = select_weight_buft(hparams, t_meta, op, buft_list_cpu);
++                        buft = select_weight_buft(hparams, t_meta, op, buft_list_cpu, nullptr);
+                         if (use_mmap) {
+                             static std::once_flag once;
+                             std::call_once(once, [] {
+@@ -1355,7 +1373,8 @@
+         }
+ 
+         if (!buft) {
+-            buft = select_weight_buft(hparams, t_meta, op, buft_list);
++            buft = select_weight_buft(hparams, t_meta, op, buft_list,
++                                      try_expert_storage ? &expert_storage : nullptr);
+             if (!buft) {
+                 throw std::runtime_error(format("failed to find a compatible buffer type for tensor %s", tn.str().c_str()));
+             }
+diff --git a/src/llama-model-loader.h b/src/llama-model-loader.h
+--- a/src/llama-model-loader.h
++++ b/src/llama-model-loader.h
+@@ -8,6 +8,7 @@
+ #include "llama-mmap.h"
+ 
+ #include "ggml-cpp.h"
++#include "ggml-webgpu-expert-storage.h"
+ 
+ #include <cstddef>
+ #include <cstring>
+@@ -26,6 +27,9 @@
+ };
+ 
+ const char * llama_file_version_name(llama_fver version);
++
++struct llama_expert_storage_oom {};
++using llama_expert_storage_map = std::map<ggml_backend_buffer_type_t, const ggml_webgpu_expert_storage_v1 *>;
+ 
+ struct llama_model_loader {
+     // Holds information on a model weight
+@@ -81,6 +85,8 @@
+     bool check_tensors;
+     bool no_alloc;
+     bool load_mtp;
++    bool try_expert_storage = false;
++    llama_expert_storage_map expert_storage;
+ 
+     // handle TENSOR_READ_LAZY
+     // use case: keep PLE / engrams embd tensors on disk, read them on demand
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -2173,6 +2173,28 @@
+ 
+     load_prec_policy(ml);
+ 
++    // WebGPU uses one non-lazy context per device buffer type and cannot map
++    // host ranges as GPU weights. Resolve its optional allocation before
++    // mappings, CPU buffers, or uploads can grow the failed attempt's footprint.
++    std::map<ggml_context *, ggml_backend_buffer_ptr> checked_buffers;
++    if (!ml.no_alloc && !ml.expert_storage.empty()) {
++        for (const auto & [key, context] : ml.ctx_map) {
++            const auto found = ml.expert_storage.find(key.buft);
++            if (key.lazy || found == ml.expert_storage.end() || !ggml_get_first_tensor(context.get())) {
++                continue;
++            }
++            const auto result = found->second->allocate(key.buft, context.get());
++            ggml_backend_buffer_ptr buffer(result.buffer);
++            if (result.out_of_memory) {
++                throw llama_expert_storage_oom{};
++            }
++            if (!buffer) {
++                throw std::runtime_error(format("unable to allocate %s buffer", ggml_backend_buft_name(key.buft)));
++            }
++            checked_buffers.emplace(context.get(), std::move(buffer));
++        }
++    }
++
+     ml.init_mappings(true, use_mlock ? &pimpl->mlock_mmaps : nullptr);
+     pimpl->mappings.reserve(ml.mappings.size());
+ 
+@@ -2235,20 +2257,22 @@
+                 }
+             }
+         } else {
+-            ggml_backend_buffer_t buf;
++            ggml_backend_buffer_ptr buf;
+             if (ml.no_alloc) {
+-                buf = ggml_backend_buft_alloc_buffer(buft, /*size =*/ 0); // dummy buffer
++                buf.reset(ggml_backend_buft_alloc_buffer(buft, /*size =*/ 0)); // dummy buffer
+                 for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != nullptr; t = ggml_get_next_tensor(ctx, t)) {
+-                    t->buffer = buf; // set dummy buffer for weights so that the backend scheduler won't try to allocate them
+-                }
++                    t->buffer = buf.get(); // set dummy buffer for weights so that the backend scheduler won't try to allocate them
++                }
++            } else if (auto found = checked_buffers.find(ctx); found != checked_buffers.end()) {
++                buf = std::move(found->second);
+             } else {
+-                buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx, buft); // real buffer
++                buf.reset(ggml_backend_alloc_ctx_tensors_from_buft(ctx, buft)); // real buffer
+             }
+             if (buf == nullptr) {
+                 throw std::runtime_error(format("unable to allocate %s buffer", ggml_backend_buft_name(buft)));
+             }
+             // lock the buffers that hold the tensors: a multi_buffer has no base, and its parts are pageable memory when pinning fails
+-            if (use_mlock && !ml.no_alloc && ggml_backend_buffer_is_host(buf)) {
++            if (use_mlock && !ml.no_alloc && ggml_backend_buffer_is_host(buf.get())) {
+                 std::vector<ggml_backend_buffer_t> lock_bufs;
+                 for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != nullptr; t = ggml_get_next_tensor(ctx, t)) {
+                     if (t->buffer != nullptr && std::find(lock_bufs.begin(), lock_bufs.end(), t->buffer) == lock_bufs.end()) {
+@@ -2262,7 +2286,7 @@
+                     mlock_buf->grow_to(ggml_backend_buffer_get_size(lock_buf));
+                 }
+             }
+-            bufs.emplace_back(buf);
++            bufs.emplace_back(std::move(buf));
+         }
+ 
+         std::vector<ggml_backend_buffer_t> buf_ptrs;
+diff --git a/src/llama.cpp b/src/llama.cpp
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -314,5 +314,9 @@
+ 
+-// Returns 0 on success, -1 on error, and -2 on cancellation via llama_progress_callback
++static constexpr int llama_model_load_optional_storage_oom = -3;
++
++// Returns 0 on success, -1 on error, and -2 on cancellation via llama_progress_callback.
++// An exhausted optional WebGPU allocation has its own retryable status.
+ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * metadata, llama_model_set_tensor_data_t set_tensor_data, void * set_tensor_data_ud,
+-        const std::string & fname, std::vector<std::string> & splits, FILE * file, llama_model_params & params) {
++        const std::string & fname, std::vector<std::string> & splits, FILE * file, llama_model_params & params,
++        bool try_expert_storage) {
+     try {
+@@ -322,2 +326,3 @@
+         ml.lazy.mode = params.lazy_mode;
++        ml.try_expert_storage = try_expert_storage;
+ 
+@@ -372,2 +377,4 @@
+         return {0, model_ptr.release()};
++    } catch (const llama_expert_storage_oom &) {
++        return {llama_model_load_optional_storage_oom, nullptr};
+     } catch (const std::exception & err) {
+@@ -427,3 +434,24 @@
+ 
+-    const auto [status, model] = llama_model_load(metadata, set_tensor_data, set_tensor_data_ud, path_model, splits, file, params);
++    // Memory-fit probes estimate ordinary placement without making allocations.
++    const bool try_expert_storage = !path_model.empty() && !params.no_alloc;
++    auto [status, model] = llama_model_load(metadata, set_tensor_data, set_tensor_data_ud, path_model, splits, file,
++                                           params, try_expert_storage);
++    if (status == llama_model_load_optional_storage_oom) {
++        // The first model and its provisional buffers have already unwound.
++        // Reopen the same files with the ordinary placement policy.
++        try {
++            if (params.progress_callback(0.0f, params.progress_callback_user_data)) {
++                LLAMA_LOG_WARN("%s: insufficient WebGPU memory for optional expert weights; retrying model load\n", __func__);
++                const auto retry = llama_model_load(metadata, set_tensor_data, set_tensor_data_ud, path_model, splits, file,
++                                                    params, false);
++                status = retry.first;
++                model = retry.second;
++            } else {
++                status = -2;
++            }
++        } catch (const std::exception & err) {
++            LLAMA_LOG_ERROR("%s: error loading model: %s\n", __func__, err.what());
++            status = -1;
++        }
++    }
+     GGML_ASSERT(status <= 0);

@@ -67,7 +67,12 @@ static void check_encoded(const Shape & shape, int64_t tokens, bool subgroups = 
     transfer_cases::Buffer dummy(ggml_backend_buft_alloc_buffer(&gpu.type, 0), ggml_backend_buffer_free);
     for (auto * operand : {weights, load_input, load_ids})
         operand->buffer = dummy.get();
-    BICORE_CHECK(!weights->data && ggml_backend_dev_supports_op(&gpu.device, load_op));
+    const auto get_storage = reinterpret_cast<ggml_webgpu_get_expert_storage_v1_t>(
+        ggml_backend_reg_get_proc_address(&gpu.registry, GGML_WEBGPU_EXPERT_STORAGE_V1));
+    BICORE_CHECK(get_storage);
+    const auto & storage_policy = *get_storage();
+    BICORE_CHECK(!weights->data && !ggml_backend_dev_supports_op(&gpu.device, load_op));
+    BICORE_CHECK(storage_policy.supports(&gpu.device, load_op));
     {
         transfer_cases::Backend foreign(transfer_cases::BackendKind::webgpu);
         foreign.type.iface.get_name = ggml_backend_webgpu_buffer_type_get_name;
@@ -75,19 +80,23 @@ static void check_encoded(const Shape & shape, int64_t tokens, bool subgroups = 
                                              ggml_backend_buffer_free);
         weights->buffer = foreign_dummy.get();
         BICORE_CHECK(!ggml_backend_dev_supports_op(&gpu.device, load_op));
+        BICORE_CHECK(!storage_policy.supports(&gpu.device, load_op));
     }
     weights->buffer = nullptr;
     weights->data = webgpu_ptr_base;
     BICORE_CHECK(!ggml_backend_dev_supports_op(&gpu.device, load_op));
+    BICORE_CHECK(!storage_policy.supports(&gpu.device, load_op));
     weights->data = nullptr;
+    weights->buffer = dummy.get();
     const uint32_t old_storage_count = limits.maxStorageBuffersPerShaderStage;
     limits.maxStorageBuffersPerShaderStage = 4 + shape.extra_bindings;
-    BICORE_CHECK(!ggml_backend_dev_supports_op(&gpu.device, load_op));
+    BICORE_CHECK(!storage_policy.supports(&gpu.device, load_op));
     limits.maxStorageBuffersPerShaderStage = old_storage_count;
     const uint64_t old_max = limits.maxBufferSize;
     limits.maxBufferSize = plan->total() - 1;
-    BICORE_CHECK(!ggml_backend_dev_supports_op(&gpu.device, load_op));
+    BICORE_CHECK(!storage_policy.supports(&gpu.device, load_op));
     limits.maxBufferSize = old_max;
+    weights->buffer = nullptr;
 
     std::vector<transfer_cases::Buffer> storage;
     for (auto * tensor : operands) {

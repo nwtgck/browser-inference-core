@@ -157,6 +157,7 @@ struct ResourceObserver {
     std::function<void(WGPUBuffer)> before_buffer_destroy;
     GroupFailure group_failure = GroupFailure::none;
     bool reject_indirect_buffer = false;
+    std::function<WGPUErrorType(uint64_t)> buffer_error;
 };
 static ResourceObserver resources;
 struct Future {
@@ -196,7 +197,20 @@ WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device, const WGPUBufferDescriptor 
     BICORE_CHECK(descriptor != nullptr && descriptor->nextInChain == nullptr && !descriptor->mappedAtCreation);
     auto * result = new WGPUBufferImpl;
     ++commands.buffers_created;
-    result->bytes.resize(descriptor->size);
+    const auto error = resources.buffer_error ? resources.buffer_error(descriptor->size) : WGPUErrorType_NoError;
+    if (error == WGPUErrorType_NoError) {
+        result->bytes.resize(descriptor->size);
+    } else {
+        const auto filter = error == WGPUErrorType_OutOfMemory  ? WGPUErrorFilter_OutOfMemory
+                            : error == WGPUErrorType_Validation ? WGPUErrorFilter_Validation
+                                                                : WGPUErrorFilter_Internal;
+        const auto scope = std::find_if(device->scopes.rbegin(), device->scopes.rend(),
+                                        [&](const auto & entry) { return entry.first == filter; });
+        BICORE_CHECK(scope != device->scopes.rend());
+        scope->second = error;
+        // Dawn can report the scope error while returning a non-null handle.
+        result->logical_size = descriptor->size;
+    }
     result->usage = descriptor->usage;
     result->queue = device->queue;
     if ((descriptor->usage & WGPUBufferUsage_Indirect) && resources.reject_indirect_buffer) {
