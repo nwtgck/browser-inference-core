@@ -1,0 +1,55 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -190,7 +190,7 @@
+     return 128;
+ }
+ 
+-// Q2_0 K640 uses four lanes for each of its ten 64-element blocks.
++// Indexed Q2_0 uses four lanes for each 64-element block.
+ // A smaller workgroup preserves each lane's block and each group's output rows.
+ inline uint32_t ggml_webgpu_q2_indexed_short_workgroup(const ggml_webgpu_shader_lib_context & context) {
+     constexpr uint32_t fallback = WEBGPU_MUL_MAT_VEC_WG_SIZE;
+@@ -202,7 +202,7 @@
+     const uint32_t sg_max = context.max_subgroup_size;
+     if (!a || !x || !ids || !dst || !context.supports_subgroups ||
+         a->type != GGML_TYPE_Q2_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+-        a->ne[0] != 640 || a->ne[1] != 2560 || x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] ||
++        x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] ||
+         a->ne[2] <= 0 || a->ne[2] > UINT32_MAX || dst->ne[1] <= 0 || dst->ne[1] > a->ne[2] ||
+         ids->ne[0] != dst->ne[1] || (x->ne[1] != 1 && x->ne[1] != dst->ne[1]) ||
+         x->ne[2] != 1 || dst->ne[2] != 1 || ids->ne[1] != 1 || ids->ne[2] != 1 ||
+@@ -211,7 +211,13 @@
+         (sg_min & (sg_min - 1)) != 0 || (sg_max & (sg_max - 1)) != 0) {
+         return fallback;
+     }
+-    const uint32_t workgroup = std::max(64u, sg_max);
++    const bool short_projection = a->ne[0] == 640 && a->ne[1] == 2560;
++    const bool down_projection = a->ne[0] == 1152 && a->ne[1] == 2304 && dst->ne[1] == 8;
++    if (!short_projection && !down_projection) {
++        return fallback;
++    }
++    const uint32_t useful_lanes = static_cast<uint32_t>(a->ne[0] / 16);
++    const uint32_t workgroup = std::max(std::bit_ceil(useful_lanes), sg_max);
+     return workgroup <= context.max_wg_size ? workgroup : fallback;
+ }
+ 
+@@ -332,7 +338,7 @@
+     const uint32_t sg = context.min_subgroup_size;
+     if (!a || !x || !ids || !dst ||
+         (a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
+-         a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K) ||
++         a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K && a->type != GGML_TYPE_Q2_0) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+         !context.supports_subgroups || context.max_wg_size < 128 ||
+         sg != context.max_subgroup_size ||
+@@ -347,6 +353,10 @@
+         return (sg == 16 || sg == 32 || sg == 64) &&
+                a->ne[0] >= 2048 && a->ne[0] <= 4096 && a->ne[0] % 256 == 0 &&
+                a->ne[1] >= 256 && a->ne[1] <= UINT32_MAX - 31u;
++    }
++    if (a->type == GGML_TYPE_Q2_0) {
++        return !context.indexed_split_weights && (sg == 16 || sg == 32) && a->ne[0] == 1152 &&
++               a->ne[1] == 2304 && dst->ne[1] == 8;
+     }
+     const bool matched_k = a->ne[0] == 2304 || (a->ne[0] == 1152 && a->type != GGML_TYPE_Q5_K);
+     return (sg == 16 || sg == 32) && matched_k &&

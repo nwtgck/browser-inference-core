@@ -1,8 +1,13 @@
 namespace indexed_q2_cases {
 
-constexpr int64_t width = 640;
-constexpr int64_t rows = 2560;
-constexpr int64_t selected = 10;
+struct Shape {
+    int64_t width;
+    int64_t rows;
+    int64_t experts;
+    int64_t selected;
+};
+constexpr Shape small{640, 2560, 16, 10};
+constexpr Shape down{1152, 2304, 128, 8};
 constexpr uint64_t alignment = 256;
 
 static void check_registry() {
@@ -14,38 +19,54 @@ static void check_registry() {
     BICORE_CHECK(!ggml_backend_reg_get_proc_address(&registry, "ggml_backend_webgpu_indexed_q2_placement_v2"));
 }
 
-static void check_encoded(int64_t tokens, bool split) {
-    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+static void check_weight_windows() {
     transfer_cases::Memory memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
-    auto & caps = gpu.context->global_ctx->capabilities;
-    auto & limits = caps.limits;
-    const auto * large = ggml_new_tensor_3d(memory.get(), GGML_TYPE_Q2_0, width, rows, 512);
+    wgpu::Limits limits{};
+    const auto * large = ggml_new_tensor_3d(memory.get(), GGML_TYPE_Q2_0, small.width, small.rows, 512);
+    limits.minStorageBufferOffsetAlignment = alignment;
     limits.maxBufferSize = 256 * 1024 * 1024;
     limits.maxStorageBufferBindingSize = 128 * 1024 * 1024;
     const auto large_windows = ggml_webgpu_q2_weight_windows(large, limits);
     BICORE_CHECK(large_windows && large_windows->first == 117964800 && large_windows->second == large_windows->first);
     limits.maxStorageBufferBindingSize = large_windows->first - 4;
     BICORE_CHECK(!ggml_webgpu_q2_weight_windows(large, limits));
+}
 
-    auto * weights = ggml_new_tensor_3d(memory.get(), GGML_TYPE_Q2_0, width, rows, 16);
+static void check_encoded(const Shape & shape, int64_t tokens, bool split, uint32_t subgroup_min, uint32_t subgroup_max,
+                          uint32_t vector_width, uint32_t vector_rows) {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    transfer_cases::Memory memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
+    BICORE_CHECK(memory);
+    auto & caps = gpu.context->global_ctx->capabilities;
+    auto & limits = caps.limits;
+    const auto [width, rows, experts, selected] = shape;
+    auto * weights = ggml_new_tensor_3d(memory.get(), GGML_TYPE_Q2_0, width, rows, experts);
     auto * input = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, width, selected, tokens);
     auto * ids = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, selected, tokens);
     auto * result = ggml_mul_mat_id(memory.get(), weights, input, ids);
     const uint64_t packed = ggml_nbytes(weights);
     const uint64_t low_bytes = split ? packed / 2 : packed;
+    limits.maxBufferSize = 256 * 1024 * 1024;
     limits.maxStorageBufferBindingSize = low_bytes;
-    caps.supports_subgroups = true;
-    caps.min_subgroup_size = caps.max_subgroup_size = 16;
+    caps.supports_subgroups = subgroup_min != 0;
+    caps.min_subgroup_size = subgroup_min;
+    caps.max_subgroup_size = subgroup_max;
     auto dummy = transfer_cases::Buffer(ggml_backend_buft_alloc_buffer(&gpu.type, 0), ggml_backend_buffer_free);
     weights->buffer = dummy.get();
     BICORE_CHECK(!weights->data && !ggml_backend_dev_supports_op(&gpu.device, result));
     weights->buffer = nullptr;
 
-    const auto place = [&](ggml_tensor * tensor) {
-        const size_t bytes = ggml_backend_buft_get_alloc_size(&gpu.type, tensor);
-        transfer_cases::Buffer buffer(ggml_backend_buft_alloc_buffer(&gpu.type, bytes + alignment),
-                                      ggml_backend_buffer_free);
+    const auto place = [&](ggml_tensor * tensor) -> transfer_cases::Buffer {
+        const size_t size = ggml_backend_buft_get_alloc_size(&gpu.type, tensor) + alignment;
+        auto * handle = new WGPUBufferImpl;
+        handle->logical_size = size;
+        handle->usage = WGPUBufferUsage_Storage;
+        auto * backing = new ggml_backend_webgpu_buffer_context(wgpu::Buffer::Acquire(handle), "indexed Q2 operand",
+                                                                gpu.context->global_ctx);
+        transfer_cases::Buffer buffer(
+            ggml_backend_buffer_init(&gpu.type, ggml_backend_webgpu_buffer_interface, backing, size),
+            ggml_backend_buffer_free);
         BICORE_CHECK(buffer);
         auto * addr = static_cast<uint8_t *>(ggml_backend_buffer_get_base(buffer.get())) + alignment;
         BICORE_CHECK(ggml_backend_tensor_alloc(buffer.get(), tensor, addr) == GGML_STATUS_SUCCESS);
@@ -104,17 +125,28 @@ static void check_encoded(int64_t tokens, bool split) {
     const size_t offset = (count - 1) * arena.slot_stride + 13 * sizeof(uint32_t);
     std::memcpy(&split_words, arena.upload_data.data() + offset, sizeof(split_words));
     BICORE_CHECK(split_words == (split ? low_bytes / sizeof(uint32_t) : 0));
-    const auto & name = slot.pipeline.Get()->name;
-    BICORE_CHECK((name.find("_split_weights") != std::string::npos) == split);
-    BICORE_CHECK((name.find("_wg64") != std::string::npos) == (tokens == 1));
+    const auto & pipeline = *slot.pipeline.Get();
+    BICORE_CHECK((pipeline.name.find("_split_weights") != std::string::npos) == split);
+    if (tokens == 1) {
+        const auto & dispatch = commands.dispatches.front();
+        BICORE_CHECK(dispatch.x == rows / vector_rows * selected && dispatch.y == 1);
+        BICORE_CHECK(pipeline.code.find("@workgroup_size(" + std::to_string(vector_width) + ")") != std::string::npos);
+    }
 }
 
 static void all() {
     check_registry();
-    check_encoded(1, false);
-    check_encoded(1, true);
-    check_encoded(5, false);
-    check_encoded(5, true);
+    check_weight_windows();
+    check_encoded(small, 1, false, 16, 16, 64, 4);
+    check_encoded(small, 1, true, 16, 16, 64, 4);
+    check_encoded(small, 5, false, 16, 16, 0, 0);
+    check_encoded(small, 5, true, 16, 16, 0, 0);
+    check_encoded(down, 1, false, 16, 16, 128, 32);
+    check_encoded(down, 1, false, 32, 32, 128, 16);
+    check_encoded(down, 1, false, 16, 32, 128, 4);
+    check_encoded(down, 1, true, 16, 16, 128, 4);
+    check_encoded(down, 1, false, 0, 0, 256, 4);
+    check_encoded(down, 128, false, 16, 16, 0, 0);
 }
 
 } // namespace indexed_q2_cases

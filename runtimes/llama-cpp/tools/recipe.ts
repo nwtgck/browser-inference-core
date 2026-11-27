@@ -1076,6 +1076,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-q2-subgroup-matvec.patch',
+    target: 'llama-webgpu',
+    reason: 'reduce indexed Q2_0 decode rows in independent subgroups on checked single bindings',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-vector-attention-mask-bitset.patch',
     target: 'llama-webgpu',
     reason: 'Skip masked KV tiles in long F16 vector attention without visiting the inner loop.',

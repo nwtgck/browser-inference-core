@@ -1458,6 +1458,26 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   with equivalent layout and device checks. Review Q2_0 packing, matrix scratch,
   view ownership and indexed cache keys when updating upstream.
 
+## Indexed Q2_0 decode subgroups
+
+- **Patch** `ggml-webgpu-indexed-q2-subgroup-matvec.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Select the existing independent subgroup shader for indexed
+  Q2_0 K1152/M2304, eight selected experts, F32 activations and output, and
+  one token. Require a single checked weight binding and fixed subgroup
+  width 16 or 32. The ordinary cooperative shader can use 128 invocations
+  for this shape when the subgroup limits allow it.
+- **Contract** Reuse the existing indexed kernel factory, binding and dispatch
+  checks, and decoder for 18-byte GGML blocks. Each independent subgroup
+  reduces four rows. The reduction order can change. Retain the cooperative
+  shader for split weights and subgroup ranges, and 256 invocations when
+  optimized geometry is unavailable. Keep placement and prefill paths.
+- **Validation and removal** Verify encoded geometry and binding ranges for
+  both providers. Compare factory shaders against independent FP64 results
+  on packed weights with repeated, missing, and boundary expert IDs.
+  Remove the overlay when upstream provides equivalent checked indexed
+  Q2_0 specialization and fallback.
+
 ## BF16 small-M prefill register tiles
 
 - **Patch:** `ggml-webgpu-bf16-small-m.patch`, against llama.cpp `c212d25`.
