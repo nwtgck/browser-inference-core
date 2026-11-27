@@ -9,7 +9,7 @@ import { temporaryDirectory } from '#tools/shared/temporary-directory';
 import { applyPatch, type PatchReceipt } from '#tools/source/patches';
 import { generateWgsl } from '#tools/source/wgsl';
 import { loadConfiguration, runtimePath } from '#runtimes/llama-cpp/tools/config';
-import { modelPatches, mtmdPatches, patchDirectory, wasmQ2DotPatch, webgpuPatches, type SourceMode } from '#runtimes/llama-cpp/tools/recipe';
+import { modelPatches, mtmdPatches, patchDirectory, wasmCpuPatches, webgpuPatches, type SourceMode } from '#runtimes/llama-cpp/tools/recipe';
 
 const webgpuBase = 'ggml/src/ggml-webgpu';
 const shaderBase = `${webgpuBase}/wgsl-shaders`;
@@ -213,7 +213,9 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingLoopMix }));
       switch (target) {
       case 'wasm':
-        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: wasmQ2DotPatch }));
+        for (const patch of wasmCpuPatches) {
+          patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch }));
+        }
         break;
       case 'native': break;
       default: {

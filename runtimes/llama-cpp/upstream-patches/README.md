@@ -1473,6 +1473,25 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove the overlay when upstream provides an equivalent standard SIMD
   implementation on the CPU backend used by Wasm.
 
+## Wasm SIMD Q2_0 indexed CPU prefill
+
+- **Patch** `ggml-wasm-indexed-q2-multicol.patch` against llama.cpp
+  `07ba74babd`, after `ggml-wasm-q2-dot-simd.patch`.
+- **Scope** In a CPU `MUL_MAT_ID` chunk with at least two input rows for the
+  same expert, use groups of eight, four, or two to share the unpacked Q2_0
+  block. Requires standard Wasm SIMD128. Single input rows and reference
+  execution use the ordinary dot path.
+- **Contract** Reuse the scheduler's expert assignments and Q8_0 activation
+  storage. Respect both packed and strided activation layouts and scatter
+  each result to its original slot and token. Share the unpack across a row
+  group while preserving each output's scale and accumulation order. The
+  result tile is at most 512 bytes on the stack.
+- **Validation and removal** Run the indexed GGML graph with per-slot and
+  broadcast input, strided Q8_0 views, skipped routes, uneven expert groups,
+  and single-token inference. Compare complete outputs with the one-row
+  path in both Wasm widths. Remove when upstream provides equivalent
+  grouped Q2_0 CPU prefill with bounded workspace.
+
 ## Indexed Q2_0 decode subgroups
 
 - **Patch** `ggml-webgpu-indexed-q2-subgroup-matvec.patch` against llama.cpp

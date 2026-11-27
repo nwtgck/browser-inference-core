@@ -1143,12 +1143,17 @@ export const modelPatches = {
   },
 } satisfies Record<string, Patch>;
 
-export const wasmQ2DotPatch: Patch = {
+export const wasmCpuPatches: readonly Patch[] = [{
   file: 'ggml-wasm-q2-dot-simd.patch',
   target: 'llama',
   reason: 'Vectorize packed Q2_0 CPU dots with standard Wasm SIMD.',
   files: ['ggml/src/ggml-cpu/quants.c'],
-};
+}, {
+  file: 'ggml-wasm-indexed-q2-multicol.patch',
+  target: 'llama',
+  reason: 'Share the packed Q2_0 weight decode among routed rows in each indexed CPU chunk.',
+  files: ['ggml/src/ggml-cpu/quants.c', 'ggml/src/ggml-cpu/quants.h', 'ggml/src/ggml-cpu/ggml-cpu.c'],
+}];
 
 export function mtmdPatches({ mode }: { mode: 'cpu' | 'webgpu' }): Patch[] {
   const patches: Patch[] = [{
