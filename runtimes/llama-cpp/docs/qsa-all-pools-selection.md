@@ -20,6 +20,12 @@ it no longer takes a separate base attention mask. Flash attention uses an F16
 selection, while the other path uses F32. The selected rows become one contiguous
 two-dimensional mask before upstream reshapes it for the K/V cache streams.
 
+For single-token decode with at most 8,192 KV cells, the host fills one shared
+mask from the pool visibility and tail tables it already builds. All QSA layers
+consume the same input tensor. The scheduler can stage a single copy per device,
+bounded to 16 KiB for F16 or 32 KiB for F32. Larger inputs and multi-token
+prefill keep the graph-built mask.
+
 It does **not** replace sparse masking with an unconditional dense mask. The
 original live/dead redirection, unique dump rows, sequence visibility, cell holes,
 incomplete tail and upstream mask layout remain. Every layer still
@@ -64,13 +70,15 @@ that graph-coverage requirement.
 The runner checks both the native fused mask and an explicitly forced unfused
 mode in each independently built implementation. The census observes the actual
 CONT or TOP_K_MASK selection rather than its per-stream reshape aliases. It
+also observes attention reading the host input during single-token decode and
+checks that multi-token prefill still computes its selection within the graph. It
 requires fused execution in the fused reference and ranked phases, rejects it in
 the unfused mode, and also requires byte-identical fused/unfused output traces.
 The forced mode uses the pinned context only inside the test executable before
 its first decode; it adds no production setting.
+The ordinary trace explicitly disables flash attention and requires F32 masks.
 An additional F16-weight control explicitly enables flash attention, requires
-observed selection masks to be F16, and repeats both comparisons. Native AUTO
-policy alone is not evidence that the F16 mask path ran.
+observed selection masks to be F16, and repeats both comparisons.
 
 The recorded node census is not an individual-operation timing. Do not use its
 run time as a clean performance benchmark. `benchmark` omits the census; even that

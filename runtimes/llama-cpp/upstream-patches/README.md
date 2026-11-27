@@ -447,7 +447,8 @@ commit with different bytes or invent a future artifact identity.
 
 ## QSA all-pools selection
 
-- **Patch:** `qwen4exp-all-pools-selection.patch`.
+- **Patches:** `qwen4exp-all-pools-selection.patch` and
+  `qwen4exp-host-all-pools-mask.patch`.
 - **Accepted scope:** skip redundant ranking when every padded candidate pool
   fits the selection budget, preserving the exact visibility and index-range
   guards. No model repository, quantization-name or device-name branch is used;
@@ -461,6 +462,9 @@ commit with different bytes or invent a future artifact identity.
   selection are required. Raw/pooled key updates and the ranked path stay intact.
   Selection sharing requires the same graph-local pool input and mask type;
   upstream's F16/F32 selection, fused ranked mask and scatter fallback are retained.
+  Single-token decode with up to 8,192 KV cells fills the shared input mask
+  directly from the host pool and tail tables. The per-device upload is bounded
+  to 32 KiB and the mask remains one scheduler input across attention layers.
 - **Integration:** `LCB_QSA_ALL_POOLS` is independent of file-backed PLE. A single
   private `qwen4exp.cpp` is composed after that optional overlay, keeping its
   model header layout. Source is not edited in the vendor checkout. Build commands,

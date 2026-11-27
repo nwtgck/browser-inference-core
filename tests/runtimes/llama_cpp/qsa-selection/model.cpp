@@ -86,7 +86,8 @@ struct capture {
     size_t raw_key_projections = 0;
     size_t selection_masks = 0;
     size_t fused_masks = 0;
-    bool require_f16_masks = false;
+    size_t host_masks = 0;
+    ggml_type mask_type = GGML_TYPE_F32;
     bool invalid_mask_type = false;
     static bool callback(ggml_tensor * t, bool ask, void * opaque) {
         if (!ask)
@@ -108,19 +109,30 @@ struct capture {
             ++self.selection_masks;
             if (t->op == GGML_OP_TOP_K_MASK)
                 ++self.fused_masks;
-            if (self.require_f16_masks && t->type != GGML_TYPE_F16)
+            if (t->type != self.mask_type)
+                self.invalid_mask_type = true;
+        }
+        const auto * mask = t->op == GGML_OP_FLASH_ATTN_EXT ? t->src[3]
+                            : t->op == GGML_OP_SOFT_MAX     ? t->src[1]
+                                                            : nullptr;
+        if (mask && std::strcmp(mask->name, "qsa_host_selection") == 0) {
+            require(mask->op == GGML_OP_NONE && (mask->flags & GGML_TENSOR_FLAG_INPUT),
+                    "selection is not a host input");
+            require(mask->ne[1] == 1 && mask->ne[2] == 1 && mask->ne[3] == 1, "host selection is not single-token");
+            ++self.host_masks;
+            if (mask->type != self.mask_type)
                 self.invalid_mask_type = true;
         }
         return false; // metadata only; never request a node's completion
     }
     void record(std::ostream & out, const std::string & phase) {
-        require(!invalid_mask_type, "explicit flash-attention trace did not use F16 selection masks");
+        require(!invalid_mask_type, "trace used an unexpected selection mask type");
         out << phase << ',' << ops["LIGHTNING_INDEXER"] << ',' << top_k_selections << ',' << query_projections << ','
             << raw_key_projections << ',' << selection_masks << ',' << fused_masks << ',' << pools[64] << ','
-            << pools[128] << '\n';
+            << pools[128] << ',' << host_masks << '\n';
         ops.clear();
         pools.clear();
-        top_k_selections = query_projections = raw_key_projections = selection_masks = fused_masks = 0;
+        top_k_selections = query_projections = raw_key_projections = selection_masks = fused_masks = host_masks = 0;
     }
 };
 
@@ -139,7 +151,7 @@ static void trace(const std::string & path, const std::filesystem::path & direct
     std::filesystem::create_directories(directory);
     std::ofstream values(directory / "logits.f32", std::ios::binary);
     std::ofstream counts(directory / "nodes.csv");
-    counts << "phase,indexer,top_k,query,raw_key,selection_mask,fused_mask,pools64,pools128\n";
+    counts << "phase,indexer,top_k,query,raw_key,selection_mask,fused_mask,pools64,pools128,host_mask\n";
     auto mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
     mp.load_mode = LLAMA_LOAD_MODE_NONE;
@@ -147,15 +159,14 @@ static void trace(const std::string & path, const std::filesystem::path & direct
     llama_model_ptr model(llama_model_load_from_file(path.c_str(), mp));
     require(bool(model), "load fixture");
     capture seen;
-    seen.require_f16_masks = flash_attention;
+    seen.mask_type = flash_attention ? GGML_TYPE_F16 : GGML_TYPE_F32;
     auto cp = llama_context_default_params();
     cp.n_ctx = 1024;
     cp.n_seq_max = 2;
     cp.n_batch = 128;
     cp.n_ubatch = 32;
     cp.n_threads = cp.n_threads_batch = 1;
-    if (flash_attention)
-        cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    cp.flash_attn_type = flash_attention ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
     if (observe) {
         cp.cb_eval = capture::callback;
         cp.cb_eval_user_data = &seen;
@@ -173,23 +184,27 @@ static void trace(const std::string & path, const std::filesystem::path & direct
         values.write(reinterpret_cast<const char *>(data), size * sizeof(float));
         require(bool(values), "trace write");
     };
-    auto decode = [&](int from, int to, int sequence, const std::string & phase) {
+    auto decode = [&](int from, int to, int sequence, const std::string & phase, bool output = true) {
         common_batch batch(context.get());
         for (int pos = from; pos < to; ++pos) {
             // Include EOS and repeated n-grams without using model-generated
             // tokens: later inputs must be identical in the two implementations.
             const llama_token token = pos % 127 == 0 ? 0 : 1 + (pos * 37 + 13 + sequence * 11) % 127;
-            batch.add(token, pos, sequence, true);
+            batch.add(token, pos, sequence, output);
         }
         require(llama_process(context.get(), LLAMA_PROCESS_TYPE_DECODE, batch.get()) == 0, "decode fixture");
-        for (int i = 0; i < to - from; ++i)
-            write(llama_get_logits_ith(context.get(), i), vocabulary);
+        if (output) {
+            for (int i = 0; i < to - from; ++i)
+                write(llama_get_logits_ith(context.get(), i), vocabulary);
+        }
         seen.record(counts, phase);
     };
     const auto started = std::chrono::steady_clock::now();
     decode(0, 8, 0, "short-prefill");
-    for (int pos = 8; pos < 32; ++pos)
-        decode(pos, pos + 1, 0, "short-reused");
+    for (int pos = 8; pos < 32; ++pos) {
+        // An output-free decode must still update the caches for the next token.
+        decode(pos, pos + 1, 0, "short-reused", pos != 20);
+    }
     for (int pos = 32; pos < 224; pos += 32)
         decode(pos, pos + 32, 0, "prefill");
     decode(224, 248, 0, "before-threshold");

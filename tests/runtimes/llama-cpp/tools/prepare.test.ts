@@ -95,6 +95,9 @@ test('coherent source preparation preserves previous output and unchanged mtimes
   const args = { inputs: { compileRoot: ownedSource, upstreamRoots: { llama: upstream } }, output: join(temporary, 'prepared'), options: { target: 'native' as const, webgpu: false, gpuProfile: false, fileRows: true, qsa: true, mtmdMode: 'cpu' as const }, python: 'python3' };
   const first = await prepareSources(args);
   await verifyPreparedSources({ prepared: first });
+  assert.deepEqual(first.receipt.patches.filter(entry => entry.file.startsWith('qwen4exp-')).map(entry => entry.file), [
+    'qwen4exp-file-backed-rows.patch', 'qwen4exp-all-pools-selection.patch', 'qwen4exp-host-all-pools-mask.patch',
+  ]);
   const modelIdentity = first.receipt.outputs['src/models/qwen4exp.cpp'];
   assert.ok(modelIdentity);
   await verifyPreparedSources({ prepared: { ...first, receipt: { ...first.receipt, outputs: { ...first.receipt.outputs, 'src/models/qwen4exp.cpp': { ...modelIdentity, note: 'unrelated future metadata' } } } } });

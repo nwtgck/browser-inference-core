@@ -276,6 +276,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       }
       if (qsa) {
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.qsa }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.qsaHostSelection }));
       }
       patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.chat }));
       for (const patch of mtmdPatches({ mode: mtmdMode })) {

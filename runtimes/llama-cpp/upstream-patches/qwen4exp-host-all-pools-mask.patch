@@ -1,0 +1,96 @@
+--- a/src/models/qwen4exp.cpp
++++ b/src/models/qwen4exp.cpp
+@@ -725,6 +725,15 @@
+         mctx->get_idx()->set_input_k_idxs(k_idxs, ubatch);
+         mctx->set_input_kpool(pool_cells, pool_idxs, pool_mask, tail_idxs, nullptr, new_pool_idxs, new_pool_rep,
+                               ubatch, new_pool_pos);
++        if (host_selection) {
++            GGML_ASSERT(ubatch->n_tokens == 1 && ggml_backend_buffer_is_host(host_selection->buffer));
++            if (host_selection->type == GGML_TYPE_F16) {
++                fill_host_selection(static_cast<ggml_fp16_t *>(host_selection->data), ggml_fp32_to_fp16(-INFINITY));
++            } else {
++                GGML_ASSERT(host_selection->type == GGML_TYPE_F32);
++                fill_host_selection(static_cast<float *>(host_selection->data), -INFINITY);
++            }
++        }
+     }
+ 
+     bool can_reuse(const llm_graph_params & params) override {
+@@ -756,6 +765,7 @@
+     // Graph-local selection shared by layers using these same pool inputs.
+     // The mask type is fixed by the graph's flash-attention configuration.
+     ggml_tensor * all_pool_selection = nullptr;
++    ggml_tensor * host_selection = nullptr;
+     ggml_tensor * new_pool_idxs = nullptr; // I32 [kpool, n_new]   members of the blocks to re-pool this ubatch
+     ggml_tensor * new_pool_flat = nullptr; // I32 [kpool*n_new]    view of new_pool_idxs, shared by the QSA layers
+     ggml_tensor * new_pool_rep  = nullptr; // I64 [n_new]          cell to write each new pooled key into
+@@ -766,6 +776,32 @@
+     uint32_t n_new = 0; // padded to a stable bound, never below 1
+     uint32_t n_sel = 0;
+     uint32_t n_kv  = 0;
++
++private:
++    template <typename T>
++    void fill_host_selection(T * dst, T drop) const {
++        std::fill_n(dst, n_kv, drop);
++        const auto keep = [&](int32_t cell) {
++            if (cell >= 0 && uint32_t(cell) < n_kv) {
++                dst[cell] = T(0);
++            }
++        };
++        const auto * pool = static_cast<const int32_t *>(pool_idxs->data);
++        const auto * visibility = static_cast<const ggml_fp16_t *>(pool_mask->data);
++        const auto * tail = static_cast<const int32_t *>(tail_idxs->data);
++        // The input tables encode visible pools as half zero and all other
++        // pools as negative infinity. The sentinel is outside the KV range.
++        for (int64_t p = 0; p < pool_idxs->ne[1]; ++p) {
++            if (visibility[p] == 0) {
++                for (uint32_t i = 0; i < kpool; ++i) {
++                    keep(pool[p*kpool + i]);
++                }
++            }
++        }
++        for (uint32_t i = 0; i + 1 < kpool; ++i) {
++            keep(tail[i]);
++        }
++    }
+ };
+ 
+ llama_model_qwen4exp::llm_graph_input_kpool * llama_model_qwen4exp::graph::build_inp_kpool(const llama_memory_hybrid_idx_context * mctx_hyb) {
+@@ -875,6 +911,19 @@
+         return inp_kpool->all_pool_selection;
+     }
+ 
++    // A single small mask can be filled from the host tables already made
++    // for this decode. Bound the per-device upload to 32 KiB.
++    if (all_pools && n_tokens == 1 && inp_kpool->n_kv > 0 && inp_kpool->n_kv <= 8192) {
++        GGML_ASSERT(!inp_kpool->host_selection);
++        auto * sel = ggml_new_tensor_2d(ctx0, type_mask, inp_kpool->n_kv, 1);
++        ggml_set_input(sel);
++        ggml_set_name(sel, "qsa_host_selection");
++        ggml_build_forward_expand(gf, sel);
++        inp_kpool->host_selection = sel;
++        inp_kpool->all_pool_selection = sel;
++        return sel;
++    }
++
+     ggml_tensor * score;
+     if (all_pools) {
+         // Ranking cannot exclude a pool. Keep visibility, sentinel and scatter
+@@ -1024,8 +1073,14 @@
+     // the selection replaces the kq_mask: split it into the streams of the K view
+     const int64_t n_stream = k->ne[3];
+     GGML_ASSERT(sel->ne[0] == k->ne[2] && sel->ne[1] % n_stream == 0);
+-    sel = ggml_reshape_4d(ctx0, sel, sel->ne[0], sel->ne[1]/n_stream, 1, n_stream);
+-    cb(sel, "kq_mask_qsa", il);
++    if (!(sel->flags & GGML_TENSOR_FLAG_INPUT)) {
++        sel = ggml_reshape_4d(ctx0, sel, sel->ne[0], sel->ne[1]/n_stream, 1, n_stream);
++        cb(sel, "kq_mask_qsa", il);
++    } else {
++        // All layers consume the same single-stream input so the scheduler
++        // can reuse one backend copy instead of uploading a view per layer.
++        GGML_ASSERT(n_stream == 1 && sel->ne[1] == 1);
++    }
+ 
+     ggml_tensor * cur = build_attn_mha(q, k, v, nullptr, sel, nullptr, nullptr, nullptr, n_sel, kq_scale, il);
+     cb(cur, "kqv_out", il);

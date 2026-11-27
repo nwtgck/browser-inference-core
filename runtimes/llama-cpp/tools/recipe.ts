@@ -1343,6 +1343,12 @@ export const modelPatches = {
     reason: 'Skip ranking only when every pool is selected.',
     files: ['src/models/qwen4exp.cpp'],
   },
+  qsaHostSelection: {
+    file: 'qwen4exp-host-all-pools-mask.patch',
+    target: 'llama',
+    reason: 'Build one shared all-pools attention mask for small single-token decode on the host.',
+    files: ['src/models/qwen4exp.cpp'],
+  },
   inklingRowViews: {
     file: 'inkling-packed-row-views.patch',
     target: 'llama',

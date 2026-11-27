@@ -14,9 +14,9 @@ import { buildPrepared, prepareBuildInputs, type BuildContext } from '#runtimes/
 import { loadConfiguration } from '#runtimes/llama-cpp/tools/config';
 import { prepareSources } from '#runtimes/llama-cpp/tools/prepare';
 
-const countFields = ['indexer', 'top_k', 'query', 'raw_key', 'selection_mask', 'fused_mask', 'pools64', 'pools128'] as const;
+const countFields = ['indexer', 'top_k', 'query', 'raw_key', 'selection_mask', 'fused_mask', 'pools64', 'pools128', 'host_mask'] as const;
 type Counts = Record<typeof countFields[number], number>;
-const zeroCounts: Counts = { indexer: 0, top_k: 0, query: 0, raw_key: 0, selection_mask: 0, fused_mask: 0, pools64: 0, pools128: 0 };
+const zeroCounts: Counts = { indexer: 0, top_k: 0, query: 0, raw_key: 0, selection_mask: 0, fused_mask: 0, pools64: 0, pools128: 0, host_mask: 0 };
 const shortPhases = ['short-prefill', 'short-reused', 'prefill', 'before-threshold', 'shared-prefix', 'sequence-zero-divergence', 'sequence-one-divergence', 'after-sequence-removal', 'mixed', 'embedding-chunks', 'unified-prefix', 'parallel-sequences'];
 const crossPhases = ['cross-threshold', 'restore-cross-threshold'];
 const phases = [...shortPhases, ...crossPhases, 'reserve', 'parallel-reserve', 'ranked-prefill'];
@@ -138,6 +138,7 @@ export async function compareQsaTraces({ reference, optimized, maskMode }: { ref
     }
     }
     assert.ok(a.selection_mask > 0 && a.selection_mask === a.top_k, `Reference selection mask coverage differs: ${phase}`);
+    assert.equal(a.host_mask, 0, `Reference unexpectedly uses a host selection: ${phase}`);
     assert.ok(a.raw_key > 0 && b.raw_key === a.raw_key, `Per-layer key-cache write coverage differs: ${phase}`);
   }
   for (const phase of shortPhases) {
@@ -146,8 +147,12 @@ export async function compareQsaTraces({ reference, optimized, maskMode }: { ref
     for (const operation of ['indexer', 'top_k', 'query'] as const) {
       assert.ok(a[operation] > 0 && b[operation] === 0, `All-pools bypass not exercised: ${phase}/${operation}`);
     }
-    assert.ok(b.selection_mask > 0 && b.selection_mask < a.selection_mask, `Graph-local mask sharing not exercised: ${phase}`);
+    assert.ok(b.selection_mask + b.host_mask > 0 && b.selection_mask < a.selection_mask, `Graph-local mask sharing not exercised: ${phase}`);
   }
+  const decode = countsFor({ nodes: after.totals, phase: 'short-reused' });
+  assert.ok(decode.host_mask > 0 && decode.selection_mask === 0, 'Single-token all-pools host mask was not exercised');
+  const prefill = countsFor({ nodes: after.totals, phase: 'short-prefill' });
+  assert.ok(prefill.host_mask === 0 && prefill.selection_mask > 0, 'Multi-token all-pools graph mask was not exercised');
   for (const phase of crossPhases) {
     const a = countsFor({ nodes: before.totals, phase });
     const b = countsFor({ nodes: after.totals, phase });

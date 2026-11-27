@@ -7,7 +7,7 @@ import { compareQsaTraces, readQsaNodes, runQsaCli, type MaskMode } from '#tests
 
 const short = ['short-prefill', 'short-reused', 'prefill', 'before-threshold', 'shared-prefix', 'sequence-zero-divergence', 'sequence-one-divergence', 'after-sequence-removal', 'mixed', 'embedding-chunks', 'unified-prefix', 'parallel-sequences'];
 const phases = [...short, 'cross-threshold', 'restore-cross-threshold', 'reserve', 'parallel-reserve', 'ranked-prefill'];
-const header = 'phase,indexer,top_k,query,raw_key,selection_mask,fused_mask,pools64,pools128';
+const header = 'phase,indexer,top_k,query,raw_key,selection_mask,fused_mask,pools64,pools128,host_mask';
 
 async function writeTraces({ root, maskMode }: { root: string; maskMode: MaskMode }): Promise<{ reference: string; optimized: string }> {
   const paths = { reference: join(root, 'reference'), optimized: join(root, 'optimized') };
@@ -28,14 +28,16 @@ async function writeTraces({ root, maskMode }: { root: string; maskMode: MaskMod
     for (const phase of phases) {
       let ranked = 4;
       let selection = 4;
+      let hostMask = 0;
       if (name === 'optimized' && short.includes(phase)) {
         ranked = 0;
-        selection = 1;
+        selection = phase === 'short-reused' ? 0 : 1;
+        hostMask = phase === 'short-reused' ? 4 : 0;
       } else if (name === 'optimized' && ['cross-threshold', 'restore-cross-threshold'].includes(phase)) {
         ranked = 2;
         selection = 2;
       }
-      rows.push([phase, ranked, ranked, ranked, 4, selection, fused ? ranked : 0, 1, 1].join(','));
+      rows.push([phase, ranked, ranked, ranked, 4, selection, fused ? ranked : 0, 1, 1, hostMask].join(','));
     }
     await writeFile(join(path, 'nodes.csv'), `${rows.join('\n')}\n`);
     const bytes = Buffer.alloc(12);
@@ -64,6 +66,13 @@ test('QSA comparison requires real branch coverage and exact finite output parit
     const paths = await writeTraces({ root: temporary.path, maskMode: 'fused' });
     await copyFile(join(paths.reference, 'nodes.csv'), join(paths.optimized, 'nodes.csv'));
     await assert.rejects(compareQsaTraces({ ...paths, maskMode: 'fused' }), /All-pools/u);
+  });
+  await context.test('requires the host mask on all-pools single-token decode', async () => {
+    const paths = await writeTraces({ root: temporary.path, maskMode: 'fused' });
+    const nodes = join(paths.optimized, 'nodes.csv');
+    const original = await readFile(nodes, 'utf8');
+    await writeFile(nodes, original.replace('short-reused,0,0,0,4,0,0,1,1,4', 'short-reused,0,0,0,4,1,0,1,1,0'));
+    await assert.rejects(compareQsaTraces({ ...paths, maskMode: 'fused' }), /host mask was not exercised/u);
   });
   for (const invalid of ['empty', 'malformed', 'nonfinite', 'constant', 'different'] as const) {
     await context.test(`rejects ${invalid} output`, async () => {
