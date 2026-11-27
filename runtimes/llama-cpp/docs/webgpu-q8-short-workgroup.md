@@ -25,10 +25,21 @@ The output-row threshold is deliberately conservative, not a universal tuning
 claim. At K=320 the common 32-lane-subgroup device uses 64 lanes; at K=640 it uses
 128. All useful lanes still visit exactly the same one block as before.
 
+## Independent subgroups for K640 × M2560
+
+For the unbatched single-column Q8_0 × F32 projection with K640 and M2560,
+fixed subgroup widths of 16 or 32 can use the existing independent-subgroup
+shader. A 128-lane workgroup covers 32 rows at width 16 or 16 rows at width 32.
+The dispatch uses 80 or 160 workgroups instead of 640. The shader accumulates
+rows in a different order. Both paths issue one dispatch with the same weight
+storage and bindings. The independent shader shares its pipeline cache entry
+with the corresponding long-input shader.
+The ordinary and GPU-profile runtime select this path under the same conditions.
+
 ## Cache and profiling identity
 
 The compiled workgroup size is part of both the pipeline key equality and hash.
-A K=320 pipeline must never be reused as the K=640 or long-input pipeline.
+A cooperative K=320 pipeline is distinct from K=640 and long-input pipelines.
 The name adds `_wg32`, `_wg64` or `_wg128` only on a tuned path. Application
 GPU-profile collection can see these names without a consumer API change.
 

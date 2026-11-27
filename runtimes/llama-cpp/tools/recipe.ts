@@ -1052,6 +1052,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-q8-independent-k640.patch',
+    target: 'llama-webgpu',
+    reason: 'Reuse the independent subgroup shader for a short single-token Q8 projection.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-single-dispatch-storage.patch',
     target: 'llama-webgpu',
     reason: 'Keep the bounded single-dispatch staging entries on the stack.',

@@ -508,6 +508,18 @@ not establish target-device speed.
   the goal, or target-device measurements reject the change. Remove preparation,
   CMake inputs, provenance and this exception together.
 
+### Independent short Q8 projection
+
+- **Patch** `ggml-webgpu-q8-independent-k640.patch`.
+- **Scope** Admit the existing independent subgroup pipeline for the unbatched
+  K640 × M2560 single-column Q8_0 projection with fixed subgroup width 16 or 32.
+  Packed integer dot products, source overlap and fused epilogues keep their
+  existing selection. The shader and quantized layout stay the same.
+- **Validation and removal** Check the actual dispatch and long-K pipeline cache
+  reuse in the normal and profile providers. Compare emitted shaders numerically
+  before extending admission. Remove when upstream supplies equivalent selection
+  or target-adapter timings reject it.
+
 ## Ordered expert-output sums
 
 - Patch: `ggml-webgpu-moe-expert-sum.patch`.

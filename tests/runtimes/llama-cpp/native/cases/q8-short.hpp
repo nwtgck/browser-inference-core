@@ -139,12 +139,43 @@ static int run_q8_short_cases(int argc, char ** argv) {
                 "factory other quant exclusion");
         a.type = GGML_TYPE_Q8_0;
         require(get(320).pipeline.Get()->id == p64.pipeline.Get()->id, "type fallback must not pollute Q8 cache");
+        for (const uint32_t sg : {16u, 32u}) {
+            c.min_subgroup_size = c.max_subgroup_size = sg;
+            const auto independent = get(640, 2560);
+            const auto & decision =
+                *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(independent.context.get());
+            const uint32_t rows = 4 * 128 / sg;
+            require(decision.wg_size == 128 && decision.logical_subgroup_size == sg && decision.outputs_per_wg == rows,
+                    "short independent workgroup and output tiling");
+            const std::array<uint32_t, 2> grid{2560 / rows, 1};
+            require(production_dispatch(c, 65535, false, true, 34) == grid, "short independent production grid");
+            require(get(2560, 2560).pipeline.Get() == independent.pipeline.Get(), "reuse the existing long-K shader");
+            require(get(640, 2561).pipeline.Get() == p128.pipeline.Get(), "other row counts keep the cooperative path");
+            require(get(320).pipeline.Get() == p64.pipeline.Get(), "K320 keeps the cooperative path");
+            c.max_subgroup_size = sg * 2;
+            require(get(640, 2560).pipeline.Get() == p128.pipeline.Get(), "variable width keeps the cooperative path");
+            c.max_subgroup_size = sg;
+            a.ne[2] = b.ne[2] = dst.ne[2] = 2;
+            require(get(640, 2560).pipeline.Get() == p128.pipeline.Get(), "batched inputs keep the cooperative path");
+            a.ne[2] = b.ne[2] = dst.ne[2] = 1;
+            require(get(640, 2560, 1, true).pipeline.Get() != independent.pipeline.Get(), "source overlap excluded");
+            using post_op = ggml_webgpu_shader_lib_context::matvec_post_op;
+            c.matvec_epilogue = post_op::q8_sigmoid_mul;
+            require(ggml_webgpu_q8_matvec_subgroup_size(c, false, false) == 0, "fused epilogues excluded");
+            c.matvec_epilogue = post_op::none;
+            if (argc == 2) {
+                std::filesystem::create_directories(argv[1]);
+                std::ofstream(std::filesystem::path(argv[1]) / ("q8-independent-sg" + std::to_string(sg) + ".wgsl"))
+                    << independent.pipeline.Get()->code;
+            }
+        }
         c.vendor = "nvidia";
         c.supports_dot_product = true;
-        const auto integer_dot = get(320);
-        require(static_cast<ggml_webgpu_mul_mat_vec_shader_decisions *>(integer_dot.context.get())->wg_size == 256,
-                "factory integer-dot exclusion");
-        require(integer_dot.pipeline.Get()->id != p64.pipeline.Get()->id, "integer-dot cache distinction");
+        const auto integer_dot = get(640, 2560);
+        const auto & integer_decision =
+            *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(integer_dot.context.get());
+        require(integer_decision.wg_size == 256 && integer_decision.logical_subgroup_size == 0,
+                "short independent excludes integer dot");
         if (argc == 2) {
             std::filesystem::create_directories(argv[1]);
             for (const auto & p : {p32, p64, p128, p256}) {

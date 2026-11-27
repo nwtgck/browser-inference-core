@@ -1,7 +1,6 @@
 #include "support/webgpu-recorder.hpp"
 #include "ggml-webgpu.cpp"
 #include "support/provider-context.hpp"
-#include "cases/q8-short.hpp"
 
 static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_context & input, uint32_t dimension,
                                                    bool overlap, std::optional<bool> expected_matvec = std::nullopt,
@@ -62,6 +61,7 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
     return {dispatch.x, dispatch.y};
 }
 
+#include "cases/q8-short.hpp"
 #include "cases/quant-matvec.hpp"
 
 static void fixed_f32_projection() {

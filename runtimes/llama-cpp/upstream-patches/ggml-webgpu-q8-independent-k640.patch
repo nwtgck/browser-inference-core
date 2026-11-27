@@ -1,0 +1,24 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -283,11 +283,20 @@
+         context.max_wg_size < 128 || use_mmvq || src_overlap ||
+         sg != context.max_subgroup_size || sg < 4 || sg > 64 || (sg & (sg - 1)) != 0 ||
+         a->type != GGML_TYPE_Q8_0 || x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 ||
+-        a->ne[0] < 2048 || a->ne[0] > 8192 || a->ne[0] % 32 != 0 ||
++        a->ne[0] % 32 != 0 ||
+         a->ne[1] < 1024 || a->ne[1] > UINT32_MAX - 127u ||
+         x->ne[0] != a->ne[0] || dst->ne[0] != a->ne[1] || x->ne[1] != 1 || dst->ne[1] != 1) {
+         return 0;
+     }
++    if (a->ne[0] < 2048 || a->ne[0] > 8192) {
++        // In this short projection, independent subgroups cover more rows
++        // per workgroup. Retain the cooperative path for other short shapes.
++        const bool short_projection = (sg == 16 || sg == 32) && a->ne[0] == 640 && a->ne[1] == 2560 &&
++            context.matvec_epilogue == ggml_webgpu_shader_lib_context::matvec_post_op::none &&
++            a->ne[2] == 1 && a->ne[3] == 1 && x->ne[2] == 1 && x->ne[3] == 1 &&
++            dst->ne[2] == 1 && dst->ne[3] == 1;
++        return short_projection ? sg : 0;
++    }
+     uint64_t output_elements = static_cast<uint64_t>(dst->ne[0]);
+     for (int axis = 2; axis < 4; ++axis) {
+         if (a->ne[axis] <= 0 || a->ne[axis] > UINT32_MAX ||
