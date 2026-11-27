@@ -1041,6 +1041,22 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   matrix and vector execution. Remove when the underlying backend supports
   equivalent indexed operands larger than the storage binding limit.
 
+## Wider indexed prefill for low-bit expert projections
+
+- **Patch** `ggml-webgpu-indexed-low-bit-wide-prefill.patch` against llama.cpp
+  `07ba74babd`, after the indexed weight windows and live-grid patches.
+- **Scope** Apply the existing wider output row tiles and live grid to the
+  K2304/M2304 broadcast IQ1, IQ2 and IQ3 layouts with 128 experts and eight
+  routes. Extend the existing NVFP4 F32-accumulating path to 2–127 tokens.
+- **Contract** Keep the existing packed representation, inner K traversal,
+  activation staging, accumulator precision, and gather descriptor format.
+  The row tile follows the device's workgroup storage limit. The existing
+  device-written argument permits indirect dispatch when its maximum grid fits.
+- **Validation and removal** Exercise the usual direct and indirect setup,
+  workgroup storage limits, and NVFP4 F16 fallback in the native provider.
+  Remove when upstream provides comparable row tiling and dispatch for these
+  indexed layouts.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

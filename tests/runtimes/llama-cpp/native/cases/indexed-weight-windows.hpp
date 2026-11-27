@@ -178,6 +178,7 @@ static void all() {
     check_encoded(iq4_down, 1, false);
     check_encoded(nvfp4_down, 1, false);
     check_encoded(iq4_gate, 19, true, true);
+    check_encoded(nvfp4_gate, 19, true, true);
     check_encoded(nvfp4_gate, 128, true, true);
     check_encoded(iq4_gate, 19, true, true, 16384);
     check_encoded(nvfp4_gate, 128, true, true, 16384);

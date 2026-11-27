@@ -37,9 +37,8 @@ struct Graph {
         global.vendor = vendor;
         global.command_submit_batch_size = 32;
         auto & limits = global.capabilities.limits;
-        const bool large_binding = matrix.type == GGML_TYPE_IQ4_NL || matrix.type == GGML_TYPE_NVFP4;
-        limits.maxBufferSize = (large_binding ? 512 : 256) * 1024 * 1024;
-        limits.maxStorageBufferBindingSize = (large_binding ? 512 : 128) * 1024 * 1024;
+        limits.maxBufferSize = (split ? 256 : 512) * 1024 * 1024;
+        limits.maxStorageBufferBindingSize = (split ? 128 : 512) * 1024 * 1024;
         auto * weights = ggml_new_tensor_3d(memory.get(), matrix.type, matrix.k, matrix.m, matrix.experts);
         auto * inputs = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, matrix.k, matrix.input_rows, matrix.tokens);
         auto * ids_a = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, matrix.tokens);
@@ -202,11 +201,27 @@ static void check_partial_iq4() {
     larger.row_tile = 32;
     Graph direct_larger(larger);
     direct_larger.run(Grid::direct);
+}
 
+static void check_wider_quantized_prefill() {
+    for (const auto type : {GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S,
+                            GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ3_S}) {
+        const Matrix full{type, 2304, 2304, 128, 8, 1, 128, 156, GGML_PREC_UNDEFINED};
+        check_activation(full, "apple", 10496);
+        auto tail = full;
+        tail.tokens = 19;
+        tail.max_tiles = 128;
+        check_activation(tail, "nvidia", 16384);
+    }
     Matrix short_nv = nvfp4_broadcast;
-    short_nv.tokens = 19;
-    short_nv.max_tiles = 128;
+    short_nv.tokens = 58;
+    short_nv.max_tiles = 138;
+    short_nv.row_tile = 128;
+    check_activation(short_nv, "apple", 16384);
+    short_nv.row_tile = 80;
+    check_activation(short_nv, "nvidia", 16384);
     short_nv.row_tile = 32;
+    short_nv.accumulator = GGML_PREC_F16;
     Graph direct_nv(short_nv);
     direct_nv.run(Grid::direct);
     BICORE_CHECK(spontaneous_scopes.empty());
@@ -272,6 +287,7 @@ static void all() {
     unchanged.run(Grid::direct);
     BICORE_CHECK(spontaneous_scopes.empty());
     check_partial_iq4();
+    check_wider_quantized_prefill();
     check_rejection();
     check_teardown();
 }
