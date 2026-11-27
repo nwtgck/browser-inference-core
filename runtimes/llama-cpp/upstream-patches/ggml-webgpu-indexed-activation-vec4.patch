@@ -41,7 +41,7 @@
 +        // together, with no guarded partial reads or partial M rows.
 +        key.activation_vec4 = eligible_type && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
 +                              context.indexed_src1_vec4_aligned && key.tile_m == double_row_tile_m &&
-+                              key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT && k % key.tile_k == 0 && m % output_rows == 0;
++                              key.tile_k % 4u == 0 && k % key.tile_k == 0 && m % output_rows == 0;
  
          auto it = mul_mat_id_pipelines.find(key);
          if (it != mul_mat_id_pipelines.end()) {

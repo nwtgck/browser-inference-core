@@ -1403,7 +1403,7 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 - **Patch** `ggml-webgpu-indexed-activation-vec4.patch`.
 - **Scope** Use aligned F32 activation loads of four elements in complete
-  K32, 128-row IQ4_NL and F32-accumulating NVFP4 prefill tiles. Require the
+  K32 and K64 tiles, with 128 rows, for IQ4_NL and F32-accumulating NVFP4 prefill. Require the
   binding-relative activation offset and all active row strides to be divisible
   by 16 bytes. Other layouts use the scalar staging pipeline.
 - **Contract** Preserve F16 activation staging, the K accumulation order,

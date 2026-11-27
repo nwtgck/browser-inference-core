@@ -141,13 +141,20 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             const auto k64_rows128 = select(20736, 128, 64);
             BICORE_CHECK(k64_rows128.pipeline.Get() != k64_rows96.pipeline.Get());
             BICORE_CHECK(select(32768, 128, 64).pipeline.Get() == k64_rows128.pipeline.Get());
+            context.indexed_src1_vec4_aligned = true;
+            const auto k64_vector_rows = select(20736, 128, 64);
+            BICORE_CHECK(k64_vector_rows.name.find("_activation_vec4_tk64_tm16") != std::string::npos);
+            BICORE_CHECK(k64_vector_rows.pipeline.Get() != k64_rows128.pipeline.Get());
+            BICORE_CHECK(select(20735, 96, 64).pipeline.Get() == k64_rows96.pipeline.Get());
+            context.indexed_src1_vec4_aligned = false;
             context.indexed_src0_aligned = false;
             BICORE_CHECK(select(32768, 64, 64).pipeline.Get() == k64_wide.pipeline.Get());
             dispatches.push_back({k64_narrow, 12543, 32});
             dispatches.push_back({k64_wide, 12544, 64});
             dispatches.push_back({k64_rows80, 14592, 80});
             dispatches.push_back({k64_rows96, 16640, 96});
-            dispatches.push_back({k64_rows128, 20736, 128});
+            dispatches.push_back({k64_vector_rows, 20736, 128});
+            dispatches.push_back({k64_rows128, 20736, 128, false, 4});
         }
 
         ggml_backend_webgpu_device_context device_context{};
