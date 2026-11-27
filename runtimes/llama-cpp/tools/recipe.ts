@@ -1075,6 +1075,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-vector-attention-mask-bitset.patch',
+    target: 'llama-webgpu',
+    reason: 'Skip masked KV tiles in long F16 vector attention without visiting the inner loop.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_vec_split.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

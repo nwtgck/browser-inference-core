@@ -126,6 +126,7 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   canonical['common_decls.tmpl'] = join(words, shaderBase, 'common_decls.tmpl');
   canonical['flash_attn_decls.tmpl'] = join(source, shaderBase, 'flash_attn_decls.tmpl');
   canonical['flash_attn_tile.wgsl'] = join(source, shaderBase, 'flash_attn_tile.wgsl');
+  canonical['flash_attn_vec_split.wgsl'] = join(source, shaderBase, 'flash_attn_vec_split.wgsl');
   canonical['mul_mat_id_vec.wgsl'] = join(source, shaderBase, 'mul_mat_id_vec.wgsl');
   canonical['mul_mat_vec.wgsl'] = join(source, shaderBase, 'mul_mat_vec.wgsl');
   canonical['mul_mat_reg_tile.wgsl'] = join(source, shaderBase, 'mul_mat_reg_tile.wgsl');

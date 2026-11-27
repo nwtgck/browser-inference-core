@@ -82,12 +82,21 @@ static void vector_mask_dispatch(const std::filesystem::path & output) {
     device.context = &bridge;
     ggml_backend_buffer_type buffer_type{};
     buffer_type.device = &device;
-    for (const bool masked : {true, false}) {
+    struct Panel {
+        uint32_t keys;
+        bool masked;
+        bool bitset;
+    };
+    uint64_t short_pipeline = 0;
+    uint64_t bitset_pipeline = 0;
+    for (const auto [keys, masked, bitset] :
+         {Panel{256, true, false}, Panel{256, false, false}, Panel{16128, true, false}, Panel{16384, true, true},
+          Panel{16384, false, false}, Panel{32768, true, true}}) {
         std::unique_ptr<ggml_context, decltype(&ggml_free)> metadata(ggml_init({32768, nullptr, true}), ggml_free);
         auto * q = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F32, 128, 1, 24, 1);
-        auto * k = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, 256, 8, 1);
-        auto * v = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, 256, 8, 1);
-        auto * mask = masked ? ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 256, 1, 24, 1) : nullptr;
+        auto * k = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, keys, 8, 1);
+        auto * v = ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, 128, keys, 8, 1);
+        auto * mask = masked ? ggml_new_tensor_4d(metadata.get(), GGML_TYPE_F16, keys, 1, 24, 1) : nullptr;
         auto * dst = ggml_flash_attn_ext(metadata.get(), q, k, v, mask, 1.0f, 0.0f, 0.0f);
         const auto operands = std::array{q, k, v, mask, dst};
         std::array<ggml_backend_buffer, operands.size()> buffers{};
@@ -102,6 +111,24 @@ static void vector_mask_dispatch(const std::filesystem::path & output) {
             operands[i]->data = webgpu_ptr_base;
             operands[i]->buffer = &buffers[i];
         }
+        const auto op = ggml_webgpu_flash_attn_prepare(ctx, q, k, v, mask, nullptr, dst);
+        const auto split = ctx->shader_lib->get_flash_attn_vec_pipeline(op.shader_lib_ctx, op.kv_overlap);
+        BICORE_CHECK(split.name.ends_with("_block_bitset") == bitset);
+        BICORE_CHECK((split.pipeline.Get()->code.find("workgroupUniformLoad(&block_states)") != std::string::npos) ==
+                     bitset);
+        if (keys == 256 && masked) {
+            short_pipeline = split.pipeline.Get()->id;
+        }
+        if (keys == 16128) {
+            BICORE_CHECK(split.pipeline.Get()->id == short_pipeline);
+        }
+        if (keys == 16384 && bitset) {
+            bitset_pipeline = split.pipeline.Get()->id;
+            BICORE_CHECK(bitset_pipeline != short_pipeline);
+        }
+        if (keys == 32768) {
+            BICORE_CHECK(split.pipeline.Get()->id == bitset_pipeline);
+        }
         ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
         commands = {};
 #ifndef GGML_WEBGPU_GPU_PROFILE
@@ -114,14 +141,19 @@ static void vector_mask_dispatch(const std::filesystem::path & output) {
         ctx->active_compute_pass = nullptr;
 #endif
         BICORE_CHECK(encoded.num_kernels == (masked ? 3u : 2u) && commands.dispatches.size() == encoded.num_kernels);
+        const auto & split_dispatch = commands.dispatches[masked ? 1u : 0u];
+        BICORE_CHECK(split_dispatch.pipeline == split.pipeline.Get()->id);
+        BICORE_CHECK(split_dispatch.x == 24u * ggml_webgpu_flash_attn_vec_nwg(32u, 32u, keys) &&
+                     split_dispatch.y == 1u);
         ctx->param_arena.flush(ctx->global_ctx->queue);
         if (masked) {
             const auto & dispatch = commands.dispatches[0];
-            BICORE_CHECK(dispatch.pipeline == chosen.pipeline.Get()->id && dispatch.x == 8 && dispatch.y == 24);
+            BICORE_CHECK(dispatch.pipeline == chosen.pipeline.Get()->id && dispatch.x == keys / 32u &&
+                         dispatch.y == 24);
             BICORE_CHECK(commands.writes.size() == 1 && commands.writes[0].bytes.size() >= 32);
             std::array<uint32_t, 8> params{};
             std::memcpy(params.data(), commands.writes[0].bytes.data(), sizeof(params));
-            BICORE_CHECK((params == std::array<uint32_t, 8>{0, 1, 256, 6144, 256, 24, 8, 1}));
+            BICORE_CHECK((params == std::array<uint32_t, 8>{0, 1, keys, keys * 24u, keys, 24, keys / 32u, 1}));
         } else {
             BICORE_CHECK(commands.dispatches[0].pipeline != chosen.pipeline.Get()->id);
         }

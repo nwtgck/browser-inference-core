@@ -1,0 +1,114 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1190,14 +1190,18 @@
+ 
+ struct ggml_webgpu_flash_attn_vec_pipeline_key {
+     ggml_webgpu_flash_attn_common_pipeline_key common;
+-
+-    bool operator==(const ggml_webgpu_flash_attn_vec_pipeline_key & other) const { return common == other.common; }
++    bool mask_block_bitset = false;
++
++    bool operator==(const ggml_webgpu_flash_attn_vec_pipeline_key & other) const {
++        return common == other.common && mask_block_bitset == other.mask_block_bitset;
++    }
+ };
+ 
+ struct ggml_webgpu_flash_attn_vec_pipeline_key_hash {
+     size_t operator()(const ggml_webgpu_flash_attn_vec_pipeline_key & key) const {
+         size_t seed = 0;
+         ggml_webgpu_flash_attn_hash_common_pipeline_key(seed, key.common);
++        ggml_webgpu_hash_combine(seed, key.mask_block_bitset);
+         return seed;
+     }
+ };
+@@ -4596,6 +4600,15 @@
+         ggml_webgpu_flash_attn_vec_pipeline_key key = {};
+         key.common = ggml_webgpu_flash_attn_make_common_pipeline_key(context, GGML_WEBGPU_FLASH_ATTN_TILE_KV_VEC_WIDTH,
+                                                                      kv_overlap);
++        // Keep the verified 32-row tile and reserve the extra workgroup
++        // allocation for a pair of u32 masks, rounded up to 16 bytes.
++        key.mask_block_bitset = key.common.has_mask && key.common.k_direct && key.common.v_direct &&
++            key.common.q_type == GGML_TYPE_F32 && key.common.dst_type == GGML_TYPE_F32 &&
++            key.common.k_type == GGML_TYPE_F16 && key.common.v_type == GGML_TYPE_F16 &&
++            key.common.head_dim_qk == 128u && key.common.head_dim_v == 128u &&
++            context.src0->ne[1] == 1 && context.src1->ne[1] >= 16384 &&
++            context.wg_mem_limit_bytes >= 16u + ggml_webgpu_flash_attn_wg_mem_bytes(
++                1u, GGML_WEBGPU_FLASH_ATTN_VEC_MAX_KV_TILE, key.common.head_dim_qk, key.common.head_dim_v, true, true);
+ 
+         auto it = flash_attn_vec_pipelines.find(key);
+         if (it != flash_attn_vec_pipelines.end()) {
+@@ -4624,6 +4637,10 @@
+ 
+         defines.push_back(std::string("D_SPLIT=") + std::to_string(d_split));
+         variant += "_dsplit" + std::to_string(d_split);
++        if (key.mask_block_bitset) {
++            defines.push_back("BICORE_MASK_BLOCK_BITSET");
++            variant += "_block_bitset";
++        }
+ 
+         auto            pipeline_decisions = std::make_shared<ggml_webgpu_flash_attn_vec_decisions>(decisions);
+         webgpu_pipeline pipeline =
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_vec_split.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_vec_split.wgsl
+@@ -31,6 +31,10 @@
+ #include "flash_attn_staging.tmpl"
+ // we can reuse the same shmem for K and V since we only need one at a time
+ var<workgroup> kv_shmem: array<f32, kv_shmem_size>;
++#endif
++
++#ifdef BICORE_MASK_BLOCK_BITSET
++var<workgroup> block_states: vec2<u32>;
+ #endif
+ 
+ var<workgroup> q_shmem: array<f32, HEAD_DIM_QK>;
+@@ -123,9 +127,39 @@
+             q_row_start < params.seq_len_q);
+     }
+ 
++#ifdef BICORE_MASK_BLOCK_BITSET
++    // Keep the original split stride and visit live tiles in ascending order.
++    // The states buffer shares storage with output scratch, so publish the
++    // mutable-storage reads through a uniform workgroup load before skipping.
++    let row_blk_base = params.blk_base
++        + ((((batch_idx % params.mask_ne3) * params.mask_ne2 + head_idx % params.mask_ne2)
++        * params.blk_nblk1) + q_row_start) * params.blk_nblk0;
++    let remaining = params.blk_nblk0 - min(params.blk_nblk0, iwg);
++    let count = remaining / params.nwg + select(0u, 1u, remaining % params.nwg != 0u);
++    for (var chunk = 0u; chunk < count; chunk += 32u) {
++        if (local_id.x == 0u) {
++            var live = 0u;
++            var masked = 0u;
++            for (var bit = 0u; bit < min(32u, count - chunk); bit += 1u) {
++                let state = blk[row_blk_base + iwg + (chunk + bit) * params.nwg];
++                live |= select(0u, 1u << bit, state != 0u);
++                masked |= select(0u, 1u << bit, state != 2u);
++            }
++            block_states = vec2<u32>(live, masked);
++        }
++        let states = workgroupUniformLoad(&block_states);
++        var live = states.x;
++        while (live != 0u) {
++            let bit = firstTrailingBit(live);
++            live &= live - 1u;
++            let kv_tile = (iwg + (chunk + bit) * params.nwg) * KV_TILE;
++#else
+     for (var kv_tile = iwg * KV_TILE; kv_tile < params.seq_len_kv; kv_tile += KV_TILE * params.nwg) {
++#endif
+         let kv_count = min(KV_TILE, params.seq_len_kv - kv_tile);
+-#ifdef BLK
++#ifdef BICORE_MASK_BLOCK_BITSET
++        let blk_state_local = select(2u, 1u, (states.y & (1u << bit)) != 0u);
++#elif defined(BLK)
+         let q_blk = q_row_start;
+         let kv_blk = kv_tile / KV_TILE;
+         let blk_batch = batch_idx % params.mask_ne3;
+@@ -437,6 +471,9 @@
+ 
+         workgroupBarrier();
+     }
++#ifdef BICORE_MASK_BLOCK_BITSET
++    }
++#endif
+ 
+ 
+ #ifdef SINKS

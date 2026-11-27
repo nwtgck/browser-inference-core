@@ -1605,6 +1605,25 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   width in the absence of the overlay. Remove the patch when upstream bounds
   classifier work by the tile width with equivalent outputs.
 
+## Long vector Flash Attention masked tiles
+
+- **Patch** `ggml-webgpu-vector-attention-mask-bitset.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Specialize masked single-query vector attention at 16,384 or more
+  KV rows, with F32 query and output, direct F16 K and V, and both head
+  dimensions equal to 128. Require space for the original 32-row tile and the
+  new workgroup masks. Cache the specialization separately.
+- **Contract** Read the existing three-state tile classification in batches of
+  up to 32 candidate tiles per split. Skip fully blocked tiles and visit the
+  others in their original order. Keep partial masks, sinks, split geometry,
+  softmax accumulation, buffers, and bindings. The workgroup masks require
+  eight bytes of shared storage, with a 16-byte allowance in admission.
+- **Validation and removal** Check selection and emitted WGSL in both
+  providers and replay the compiled kernels with dense, partial, and wrapped
+  masks. Use the original loop for other layouts and lengths. Remove the patch
+  when upstream vector attention skips fully masked tiles with equivalent
+  layout and arithmetic guarantees.
+
 ## Q8_0 matvec sigmoid gate
 
 - **Patch** `ggml-webgpu-q8-sigmoid-mul.patch` against llama.cpp `c212d25ad`.

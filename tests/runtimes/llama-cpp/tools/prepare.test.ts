@@ -37,7 +37,7 @@ test('WebGPU embeds use the prepared canonical and dedicated shaders', { timeout
     options: { target: 'native', webgpu: true, gpuProfile: false, fileRows: false, qsa: false, mtmdMode: 'cpu' },
     python: 'python3',
   });
-  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_decls.tmpl',
+  for (const name of ['argsort.wgsl', 'mul_mat_fwht_1024.wgsl', 'flash_attn_tile.wgsl', 'flash_attn_vec_split.wgsl', 'flash_attn_decls.tmpl',
     'row_norm.wgsl', 'mul_mat_reg_tile.wgsl', 'mul_mat_decls.tmpl', 'mul_mat_vec.wgsl']) {
     const shader = `ggml/src/ggml-webgpu/wgsl-shaders/${name}`;
     const prepared = receipt.outputs[shader];
