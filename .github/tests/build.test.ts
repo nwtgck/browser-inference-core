@@ -48,6 +48,10 @@ test('the runtime matrices stay independent until their package gates join', () 
     assert.equal(list({ value: matrix.profile }).length, count);
     assert.deepEqual(matrix.variant, ['browser', 'test']);
   }
+  for (const runtime of ['llama', 'stable-diffusion', 'speech']) {
+    assert.equal(object({ value: jobs[`${runtime}-cpp-compile`] }).name, `Compile ${runtime}.cpp / ` + '${{ matrix.profile }} / ${{ matrix.variant }}');
+    assert.equal(object({ value: jobs[`${runtime}-cpp-package`] }).name, `Package and verify ${runtime}.cpp`);
+  }
   assert.equal(workflow.concurrency, undefined);
   const events = object({ value: workflow.on });
   assert.deepEqual(object({ value: events.pull_request }).types, ['opened', 'reopened', 'synchronize']);

@@ -223,7 +223,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   llama-cpp-compile:
-    name: Build llama.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: Compile llama.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
@@ -520,7 +520,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   llama-cpp-package:
-    name: Package and validate llama.cpp
+    name: Package and verify llama.cpp
     needs: [llama-cpp-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -651,6 +651,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   stable-diffusion-cpp-checks:
+    name: Check stable-diffusion.cpp native and host contracts
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
@@ -765,7 +766,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
-    name: Image ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: Compile stable-diffusion.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -1063,7 +1064,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   stable-diffusion-cpp-package:
-    name: Package and validate stable-diffusion.cpp
+    name: Package and verify stable-diffusion.cpp
     needs: [stable-diffusion-cpp-compile]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -1149,7 +1150,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   speech-cpp-checks:
-    name: Test speech.cpp native and host contracts
+    name: Check speech.cpp native and host contracts
     if: >-
       !cancelled() &&
       ((github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
@@ -1276,7 +1277,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && github.head_ref != 'artifacts' && !startsWith(github.head_ref, 'artifacts/')) ||
       (github.event_name != 'pull_request' && github.ref_type == 'branch' && github.ref_name != 'artifacts' && !startsWith(github.ref_name, 'artifacts/'))
-    name: Build speech.cpp ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: Compile speech.cpp / ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -1702,7 +1703,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   llama-cpp-validate:
-    name: Validate packaged llama-cpp regressions
+    name: Validate packaged llama.cpp regressions
     needs: [llama-cpp-package]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -1762,7 +1763,7 @@ jobs:
           compression-level: 1
           retention-days: 14
   stable-diffusion-cpp-validate:
-    name: Validate packaged stable-diffusion-cpp regressions
+    name: Validate packaged stable-diffusion.cpp regressions
     needs: [stable-diffusion-cpp-package]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
