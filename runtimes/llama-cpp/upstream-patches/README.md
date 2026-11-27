@@ -1077,9 +1077,10 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 ## Checked allocation for automatically placed expert weights
 
-- **Patch** `ggml-webgpu-expert-storage-retry.patch` against llama.cpp
-  `07ba74babd`, after indexed weight windows and the optional file-backed
-  rows overlay.
+- **Patches** `llama-model-expert-storage-retry.patch` for the shared loader
+  and registry declarations, and `ggml-webgpu-expert-storage-retry.patch`
+  for the WebGPU provider, against llama.cpp `07ba74babd`.
+  Apply after indexed weight windows and the optional file-backed rows overlay.
 - **Scope** Only file and shard loads may automatically choose extra WebGPU
   expert storage. Resolve the real model buffer allocations before mapping
   or reading weights. Retry once with ordinary placement on a live device
@@ -1095,8 +1096,9 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 ### Context memory after automatic placement
 
-- **Patch** `ggml-webgpu-context-storage-retry.patch` against `07ba74babd`,
-  after the model-load retry.
+- **Patches** `llama-context-expert-storage-retry.patch` for the shared
+  context and public declarations, and `ggml-webgpu-context-storage-retry.patch`
+  for the WebGPU provider, against `07ba74babd` after the model-load retry.
 - **Scope** While initializing a context for a file model with optional
   expert placement, check allocations on the promoted device. Resolve
   WebGPU errors before admitting each new backend context or tensor buffer.
@@ -1110,6 +1112,8 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   terminal allocation result. Explicit placement overrides, load options, context parameters,
   split order, and existing entry-point signatures remain available.
   The caller owns the model and must free it before retrying.
+  CPU profiles expose the same ABI and use ordinary loading and context
+  initialization because they have no registered WebGPU allocation hooks.
 - **Validation and removal** Exercise native allocation and cleanup
   with non-null error buffers. Check model loading and context
   construction under the same simulated device budget, including

@@ -1368,11 +1368,18 @@ export const modelPatches = {
   webgpuExpertStorageRetry: {
     file: 'ggml-webgpu-expert-storage-retry.patch',
     target: 'llama-webgpu',
-    reason: 'Allocate automatically placed large expert weights under a checked error scope and retry the file loader on GPU memory exhaustion.',
+    reason: 'Allocate automatically placed expert weights under a checked WebGPU error scope.',
     files: [
-      'ggml/include/ggml-webgpu-expert-storage.h',
       'ggml/src/ggml-webgpu/ggml-webgpu-optional-pipeline.hpp',
       'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+    ],
+  },
+  modelExpertStorageRetry: {
+    file: 'llama-model-expert-storage-retry.patch',
+    target: 'llama',
+    reason: 'Retry file loading without optional expert placement when a registered device runs out of memory.',
+    files: [
+      'ggml/include/ggml-webgpu-expert-storage.h',
       'src/llama-model-loader.cpp',
       'src/llama-model-loader.h',
       'src/llama-model.cpp',
@@ -1382,10 +1389,15 @@ export const modelPatches = {
   webgpuContextStorageRetry: {
     file: 'ggml-webgpu-context-storage-retry.patch',
     target: 'llama-webgpu',
-    reason: 'Identify context allocation exhaustion after optional expert placement and expose a compatible reload path.',
+    reason: 'Report context allocation exhaustion and drain queued WebGPU work before retry.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+  },
+  contextExpertStorageRetry: {
+    file: 'llama-context-expert-storage-retry.patch',
+    target: 'llama',
+    reason: 'Expose the same context allocation status and reload ABI on all profiles.',
     files: [
       'ggml/include/ggml-webgpu-expert-storage.h',
-      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
       'include/llama.h',
       'src/llama-context.cpp',
       'src/llama-context.h',

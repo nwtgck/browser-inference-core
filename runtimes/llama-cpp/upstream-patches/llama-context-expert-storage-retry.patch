@@ -1,0 +1,355 @@
+--- a/ggml/include/ggml-webgpu-expert-storage.h
++++ b/ggml/include/ggml-webgpu-expert-storage.h
+@@ -16,3 +16,18 @@
+ 
+ #define GGML_WEBGPU_EXPERT_STORAGE_V1 "ggml_backend_webgpu_expert_storage_v1"
+ using ggml_webgpu_get_expert_storage_v1_t = const ggml_webgpu_expert_storage_v1 * (*)();
++
++// Active only while constructing a context for a model with optional weights.
++// A checked allocation resolves errors before publishing the GGML buffer.
++struct ggml_webgpu_context_storage_status {
++    ggml_backend_dev_t device;
++    bool out_of_memory = false;
++    bool other_failure = false;
++};
++
++#define GGML_WEBGPU_CONTEXT_STORAGE_V1 "ggml_backend_webgpu_context_storage_v1"
++struct ggml_webgpu_context_storage_v1 {
++    ggml_webgpu_context_storage_status * (*exchange)(ggml_webgpu_context_storage_status *);
++    bool (*drain)(ggml_backend_dev_t);
++};
++using ggml_webgpu_get_context_storage_v1_t = const ggml_webgpu_context_storage_v1 * (*)();
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -555,6 +555,13 @@
+                                  size_t    n_paths,
+               struct llama_model_params    params);
+ 
++    // Reload after optional WebGPU expert placement exhausted context memory.
++    // The model and its other placements use the same ordinary file-load rules.
++    LLAMA_API struct llama_model * llama_model_load_without_optional_expert_storage(
++                             const char ** paths,
++                                 size_t    n_paths,
++        const struct llama_model_params * params);
++
+     LLAMA_API void llama_model_save_to_file(
+             const struct llama_model * model,
+                         const char * path_model);
+@@ -565,6 +572,20 @@
+                      struct llama_model * model,
+             struct llama_context_params   params);
+ 
++    enum llama_context_init_status {
++        LLAMA_CONTEXT_INIT_OK = 0,
++        LLAMA_CONTEXT_INIT_FAILED = 1,
++        LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE = 2,
++        LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED = 3,
++    };
++
++    // On a retry result, release the original model before reloading without
++    // optional storage. Other initialization failures retain the usual result.
++    LLAMA_API struct llama_context * llama_init_from_model_with_allocation_status(
++                           struct llama_model * model,
++            const struct llama_context_params * params,
++                                       int32_t * status);
++
+     // Frees all allocated memory
+     LLAMA_API void llama_free(struct llama_context * ctx);
+ 
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -11,6 +11,7 @@
+ #include "llama-model.h"
+ #include "llama-moe-cache.h"
+ #include "llama-ext.h"
++#include "ggml-webgpu-expert-storage.h"
+ #include "llama-sampler.h"
+ #include "llama.h"
+ 
+@@ -162,7 +163,8 @@
+ 
+ llama_context::llama_context(
+         const llama_model & model,
+-              llama_context_params params) :
++              llama_context_params params,
++        ggml_webgpu_context_storage_status * storage) :
+     model(model),
+     cvec(std::make_unique<llama_adapter_cvec>()),
+     loras(std::make_unique<llama_adapter_loras>()),
+@@ -556,6 +558,9 @@
+         };
+ 
+         memory.reset(model.create_memory(params_mem, cparams));
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+     }
+ 
+     // init backends
+@@ -626,7 +631,10 @@
+             moe_cache = std::make_unique<llama_moe_cache>(model, model.no_alloc(), backend_ptrs, backend_buft, cparams.moe_cache_size, cparams.moe_cache_cpu_share);
+         }
+ 
+-        sched_reserve();
++        if (storage) {
++            storage->out_of_memory = false;
++        }
++        sched_reserve(storage);
+ 
+         if (!cparams.flash_attn) {
+             if (ggml_is_quantized(params.type_v)) {
+@@ -795,7 +803,7 @@
+     sched_params_cur = params;
+ }
+ 
+-void llama_context::sched_reserve() {
++void llama_context::sched_reserve(ggml_webgpu_context_storage_status * storage) {
+     if (!sched_need_reserve) {
+         return;
+     }
+@@ -872,12 +880,18 @@
+                     /*.parallel   =*/ false,
+                     /*.op_offload =*/ cparams.op_offload,
+                 });
++                if (storage) {
++                    storage->out_of_memory = false;
++                }
+                 gf = graph_reserve(n_tokens, n_seqs, n_outputs_pp, mctx.get());
+             }
+             if (!gf) {
+                 throw std::runtime_error("failed to allocate compute pp buffers");
+             }
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+ 
+         n_splits_pp        = ggml_backend_sched_get_n_splits(sched.get());
+         n_nodes_pp         = ggml_graph_n_nodes(gf);
+@@ -897,6 +911,9 @@
+         if (!gf) {
+             throw std::runtime_error("failed to allocate compute tg buffers");
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+ 
+         n_splits_tg        = ggml_backend_sched_get_n_splits(sched.get());
+         n_nodes_tg         = ggml_graph_n_nodes(gf);
+@@ -924,6 +941,9 @@
+         if (!gf) {
+             throw std::runtime_error("failed to allocate compute pp buffers");
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+     }
+ 
+     for (size_t i = 0; i < backend_ptrs.size(); ++i) {
+@@ -4450,9 +4470,10 @@
+     return result;
+ }
+ 
+-llama_context * llama_init_from_model(
++static llama_context * llama_init_from_model_impl(
+                  llama_model * model,
+-        llama_context_params   params) {
++        llama_context_params   params,
++        int32_t * status) {
+     if (!model) {
+         LLAMA_LOG_ERROR("%s: model cannot be NULL\n", __func__);
+         return nullptr;
+@@ -4578,8 +4599,32 @@
+         return nullptr;
+     }
+ 
++    struct context_storage_check {
++        const ggml_webgpu_context_storage_v1 * api = nullptr;
++        ggml_webgpu_context_storage_status current;
++        ggml_webgpu_context_storage_status * previous = nullptr;
++
++        explicit context_storage_check(ggml_backend_dev_t device) : current{device} {
++            if (device) {
++                auto * reg = ggml_backend_dev_backend_reg(device);
++                if (reg) {
++                    const auto get = reinterpret_cast<ggml_webgpu_get_context_storage_v1_t>(
++                        ggml_backend_reg_get_proc_address(reg, GGML_WEBGPU_CONTEXT_STORAGE_V1));
++                    api = get ? get() : nullptr;
++                }
++                if (api) {
++                    previous = api->exchange(&current);
++                }
++            }
++        }
++        ~context_storage_check() {
++            if (api) {
++                api->exchange(previous);
++            }
++        }
++    } storage(model->optional_expert_device);
+     try {
+-        auto * ctx = new llama_context(*model, params);
++        auto * ctx = new llama_context(*model, params, storage.api ? &storage.current : nullptr);
+         const auto & cparams = ctx->get_cparams();
+ 
+         if (cparams.rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN && cparams.rope_freq_scale != model->hparams.rope_freq_scale_train) {
+@@ -4588,14 +4633,40 @@
+             LLAMA_LOG_INFO("%s: n_ctx_train adjusted to %u\n", __func__, model->hparams.n_ctx_train);
+         }
+ 
++        if (status) {
++            *status = LLAMA_CONTEXT_INIT_OK;
++        }
+         return ctx;
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: failed to initialize the context: %s\n", __func__, err.what());
+     }
+ 
++    if (status && storage.api) {
++        if (storage.current.other_failure) {
++            *status = LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED;
++        } else if (storage.current.out_of_memory) {
++            // Constructor unwinding released the partial context. Submitted
++            // clears or uploads can still keep those backing allocations live.
++            *status = storage.api->drain(storage.current.device)
++                ? LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE
++                : LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED;
++        }
++    }
+     return nullptr;
+ }
+ 
++llama_context * llama_init_from_model(llama_model * model, llama_context_params params) {
++    return llama_init_from_model_impl(model, params, nullptr);
++}
++
++llama_context * llama_init_from_model_with_allocation_status(
++        llama_model * model, const llama_context_params * params, int32_t * status) {
++    if (status) {
++        *status = LLAMA_CONTEXT_INIT_FAILED;
++    }
++    return params ? llama_init_from_model_impl(model, *params, status) : nullptr;
++}
++
+ void llama_free(llama_context * ctx) {
+     delete ctx;
+ }
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -42,11 +42,14 @@
+ 
+ using llama_memory_buffers = std::map<ggml_backend_buffer_type_t, llama_memory_buffer>;
+ 
++struct ggml_webgpu_context_storage_status;
++
+ struct llama_context {
+     // init scheduler and compute buffers, reserve worst-case graphs
+     llama_context(
+             const llama_model & model,
+-                  llama_context_params params);
++                  llama_context_params params,
++            ggml_webgpu_context_storage_status * storage = nullptr);
+ 
+     ~llama_context();
+ 
+@@ -56,7 +59,7 @@
+     //   - changing samplers
+     //   - changing attention type
+     //   - etc.
+-    void sched_reserve();
++    void sched_reserve(ggml_webgpu_context_storage_status * storage = nullptr);
+ 
+     void synchronize();
+ 
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -2191,6 +2191,7 @@
+             if (!buffer) {
+                 throw std::runtime_error(format("unable to allocate %s buffer", ggml_backend_buft_name(key.buft)));
+             }
++            optional_expert_device = ggml_backend_buft_get_device(key.buft);
+             checked_buffers.emplace(context.get(), std::move(buffer));
+         }
+     }
+--- a/src/llama-model.h
++++ b/src/llama-model.h
+@@ -837,6 +837,8 @@
+ };
+ 
+ struct llama_model {
++    // Only file loads that promoted oversized banks require checked context allocations.
++    ggml_backend_dev_t optional_expert_device = nullptr;
+     llm_type type = LLM_TYPE_UNKNOWN;
+     llm_arch arch = LLM_ARCH_UNKNOWN;
+ 
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -390,7 +390,8 @@
+         const std::string & path_model,
+         std::vector<std::string> & splits,
+         FILE * file,
+-        struct llama_model_params params) {
++        struct llama_model_params params,
++        bool allow_optional_expert_storage = true) {
+     {
+         int n_sources_defined = 0;
+         if (metadata != nullptr) {
+@@ -433,7 +434,7 @@
+     }
+ 
+     // Memory-fit probes estimate ordinary placement without making allocations.
+-    const bool try_expert_storage = !path_model.empty() && !params.no_alloc;
++    const bool try_expert_storage = allow_optional_expert_storage && !path_model.empty() && !params.no_alloc;
+     auto [status, model] = llama_model_load(metadata, set_tensor_data, set_tensor_data_ud, path_model, splits, file,
+                                            params, try_expert_storage);
+     if (status == llama_model_load_optional_storage_oom) {
+@@ -491,10 +492,11 @@
+     return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, path_model, splits, /*file*/ nullptr, params);
+ }
+ 
+-struct llama_model * llama_model_load_from_splits(
++static struct llama_model * llama_model_load_explicit_splits(
+         const char ** paths,
+         size_t n_paths,
+-        struct llama_model_params params) {
++        struct llama_model_params params,
++        bool allow_optional_expert_storage) {
+     std::vector<std::string> splits;
+     if (n_paths == 0) {
+         LLAMA_LOG_ERROR("%s: list of splits is empty\n", __func__);
+@@ -504,7 +506,34 @@
+     for (size_t i = 0; i < n_paths; ++i) {
+         splits.push_back(paths[i]);
+     }
+-    return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, splits.front(), splits, /*file*/ nullptr, params);
++    return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, splits.front(), splits, /*file*/ nullptr, params,
++                                           allow_optional_expert_storage);
++}
++
++struct llama_model * llama_model_load_from_splits(
++        const char ** paths,
++        size_t n_paths,
++        struct llama_model_params params) {
++    return llama_model_load_explicit_splits(paths, n_paths, params, true);
++}
++
++struct llama_model * llama_model_load_without_optional_expert_storage(
++        const char ** paths,
++        size_t n_paths,
++        const struct llama_model_params * params) {
++    if (!paths || !params || n_paths == 0) {
++        return nullptr;
++    }
++    if (n_paths == 1 && paths[0]) {
++        std::vector<std::string> splits;
++        return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, paths[0], splits, /*file*/ nullptr, *params, false);
++    }
++    for (size_t i = 0; i < n_paths; ++i) {
++        if (!paths[i]) {
++            return nullptr;
++        }
++    }
++    return llama_model_load_explicit_splits(paths, n_paths, *params, false);
+ }
+ 
+ struct llama_model * llama_model_load_from_file_ptr(FILE * file, struct llama_model_params params) {

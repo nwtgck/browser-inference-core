@@ -272,6 +272,10 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
           await copyCompanion({ source: join(owned, 'native/io', name), destination: join(root, 'src/models', name) });
         }
       }
+      // Public declarations and the loader are shared. Only a WebGPU device
+      // registers the optional allocation hooks they can call.
+      patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.modelExpertStorageRetry }));
+      patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.contextExpertStorageRetry }));
       if (webgpu) {
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.webgpuExpertStorageRetry }));
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.webgpuContextStorageRetry }));

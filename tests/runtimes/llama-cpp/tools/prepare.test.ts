@@ -87,6 +87,7 @@ test('coherent source preparation preserves previous output and unchanged mtimes
   await cp(join(sourceRoot, runtimePath, 'native'), join(runtime, 'native'), { recursive: true });
   await cp(join(sourceRoot, runtimePath, patchDirectory), join(runtime, patchDirectory), { recursive: true });
   const upstream = join(temporary, 'upstream');
+  await cp(join(sourceRoot, upstreamPath, 'include'), join(upstream, 'include'), { recursive: true });
   await cp(join(sourceRoot, upstreamPath, 'src'), join(upstream, 'src'), { recursive: true });
   await cp(join(sourceRoot, upstreamPath, 'tools/mtmd'), join(upstream, 'tools/mtmd'), { recursive: true });
   await cp(join(sourceRoot, upstreamPath, 'common/chat.cpp'), join(upstream, 'common/chat.cpp'), { recursive: true });

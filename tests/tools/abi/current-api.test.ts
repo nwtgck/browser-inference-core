@@ -49,6 +49,20 @@ test('actual llama metadata preserves current multimodal, batch, callback and re
     assert.ok(fn, name);
     assert.ok(schema.exports.includes(fn.export), name);
   }
+  for (const [name, parameterTypes] of [
+    ['llama_init_from_model_with_allocation_status', ['struct llama_model *', 'const struct llama_context_params *', 'int32_t *']],
+    ['llama_model_load_without_optional_expert_storage', ['const char **', 'size_t', 'const struct llama_model_params *']],
+  ] as const) {
+    const fn = functions.get(name);
+    assert.ok(fn, name);
+    assert.equal(fn.returnKind, 'pointer');
+    assert.deepEqual(fn.parameters.map(parameter => parameter.cType), parameterTypes);
+    assert.ok(schema.exports.includes(fn.export), name);
+    assert.ok(schema.suspendingExports.includes(name), name);
+  }
+  for (const name of ['LLAMA_CONTEXT_INIT_OK', 'LLAMA_CONTEXT_INIT_FAILED', 'LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE', 'LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED']) {
+    assert.ok(schema.constants.includes(name), name);
+  }
   const initializer = functions.get('mtmd_init_from_file_with_vision_bf16_storage');
   assert.ok(initializer);
   assert.equal(initializer.returnKind, 'pointer');

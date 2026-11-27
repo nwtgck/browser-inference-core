@@ -48,9 +48,17 @@ test('current native contracts use the production TypeScript preparation', { tim
         python: 'python3',
       });
       assert.equal(prepared.receipt.options.target, 'native');
-      assert.equal(prepared.receipt.selections[0]?.mode, 'upstream_native_context');
-      assert.deepEqual(await readFile(join(prepared.root, 'src/llama-context.cpp')),
-        await readFile(join(upstream, 'src/llama-context.cpp')));
+      // Check the native rollback of the browser-only context change at its
+      // selection point. Shared patches can still change the final context.
+      const contextFile = 'src/llama-context.cpp';
+      const selection = prepared.receipt.selections.find(entry => entry.file === contextFile);
+      assert.ok(selection);
+      assert.equal(selection.mode, 'upstream_native_context');
+      const checkpointContext = prepared.receipt.patches.find(patch => patch.file === 'ggml-webgpu-checkpoint-batch-readback.patch')
+        ?.files.find(file => file.path === contextFile);
+      assert.ok(checkpointContext, 'missing browser checkpoint context receipt');
+      assert.equal(selection.before.sha256, checkpointContext.afterSha256);
+      assert.equal(selection.after.sha256, checkpointContext.beforeSha256);
       const build = join(work, mode, 'native');
       await runProcess({
         command: 'cmake',
