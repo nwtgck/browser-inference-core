@@ -1,0 +1,67 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4652,8 +4652,7 @@
+         const uint32_t storage_bindings = inplace ? 1 : 2;
+         if (limits.maxStorageBuffersPerShaderStage < storage_bindings ||
+             limits.maxBindingsPerBindGroup < storage_bindings + 1) { continue; }
+-        const bool sigmoid = ggml_get_unary_op(plan.unary) == GGML_UNARY_OP_SIGMOID;
+-        auto pipeline = ctx->shader_lib->get_scale_unary_pipeline(sigmoid, operations == 3, inplace);
++        auto pipeline = ctx->shader_lib->get_scale_unary_pipeline(ggml_get_unary_op(plan.unary), operations == 3, inplace);
+         std::vector<uint32_t> params = {
+             plan.elements, source.element_offset, destination.element_offset, 0,
+             ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.first_scale, 0)),
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-scale-unary.hpp
+@@ -34,8 +34,9 @@
+     ggml_tensor * first = graph->nodes[index];
+     ggml_tensor * unary = graph->nodes[index + 1];
+     ggml_tensor * source = first->src[0];
++    const auto activation = ggml_get_unary_op(unary);
+     if (!scale_unary_dense(source) || !ggml_are_same_shape(source, first) ||
+-        (ggml_get_unary_op(unary) != GGML_UNARY_OP_SILU && ggml_get_unary_op(unary) != GGML_UNARY_OP_SIGMOID)) {
++        (activation != GGML_UNARY_OP_SILU && activation != GGML_UNARY_OP_SIGMOID && activation != GGML_UNARY_OP_TANH)) {
+         return false;
+     }
+     for (int i = 0; i < operations; ++i) {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2946,13 +2946,20 @@
+         return pipeline;
+     }
+ 
+-    webgpu_pipeline get_scale_unary_pipeline(bool sigmoid, bool final_scale, bool inplace) {
+-        const int key = int(sigmoid) | (int(final_scale) << 1) | (int(inplace) << 2);
++    webgpu_pipeline get_scale_unary_pipeline(ggml_unary_op op, bool final_scale, bool inplace) {
++        GGML_ASSERT(op == GGML_UNARY_OP_SILU || op == GGML_UNARY_OP_SIGMOID || op == GGML_UNARY_OP_TANH);
++        const int key = (int(op) << 2) | int(final_scale) | (int(inplace) << 1);
+         auto it = scale_unary_pipelines.find(key);
+         if (it != scale_unary_pipelines.end()) { return it->second; }
+         std::vector<std::string> defines;
+-        std::string label = sigmoid ? "scale_sigmoid" : "scale_silu";
+-        if (sigmoid) { defines.push_back("SIGMOID"); }
++        std::string label = "scale_silu";
++        if (op == GGML_UNARY_OP_SIGMOID) {
++            defines.push_back("SIGMOID");
++            label = "scale_sigmoid";
++        } else if (op == GGML_UNARY_OP_TANH) {
++            defines.push_back("TANH");
++            label = "scale_tanh";
++        }
+         if (final_scale) { defines.push_back("FINAL_SCALE"); label += "_scale"; }
+         if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
+         const auto code = preprocessor.preprocess(wgsl_scale_unary, defines);
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/scale_unary.wgsl
+@@ -29,6 +29,8 @@
+     let scaled = src[params.offset_src + i] * params.scale + params.bias;
+ #ifdef SIGMOID
+     let activated = 1.0 / (1.0 + exp(-scaled));
++#elif defined(TANH)
++    let activated = tanh(clamp(scaled, -9.010913, 9.010913));
+ #else
+     let activated = scaled / (1.0 + exp(-scaled));
+ #endif

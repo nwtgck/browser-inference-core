@@ -1071,6 +1071,19 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   and layouts, and the dispatch grid. Remove when upstream specializes the
   same full tiles or provides equivalent performance.
 
+## F32 logit softcap
+
+- **Patch** `ggml-webgpu-scale-tanh-softcap.patch` against llama.cpp
+  `07ba74babd`, after the scale/unary and graph lifetime overlays.
+- **Scope** Apply the existing scale/unary fusion to consecutive F32
+  scale, TANH, and optional final scale operations. Muse Glimmer's
+  independent output multiplier stays before the softcap.
+- **Contract** Keep the original TANH clamp, affine coefficients, and
+  order of application. Different activation kinds use separate pipelines.
+  The existing guards retain intermediate outputs with other readers.
+- **Validation and removal** Exercise the vocabulary-wide graph and its
+  intermediate consumers. Remove once upstream fuses the same sequence.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

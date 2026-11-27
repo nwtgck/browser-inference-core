@@ -1,7 +1,7 @@
 #pragma once
 
 namespace fusion_cases {
-enum class Family { scale_unary, rms_scale };
+enum class Family { scale_unary, scale_tanh, rms_scale };
 enum class Guard { ordinary, exposed_intermediate, external_consumer, raw_intermediate, raw_output };
 enum class RouterDenominator { clamp, epsilon, other_epsilon, other_scale, exposed };
 enum class RouterAlias { none, sum, result };
@@ -10,14 +10,17 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
-    auto * input = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 64, 2);
+    const bool tanh = family == Family::scale_tanh;
+    const bool unary = family != Family::rms_scale;
+    auto * input = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, tanh ? 202048 : 64, tanh ? 1 : 2);
     ggml_set_input(input);
-    auto * intermediate = family == Family::scale_unary ? ggml_scale(memory.get(), input, 0.5f)
-                                                        : ggml_rms_norm(memory.get(), input, 1e-5f);
-    auto * output = family == Family::scale_unary ? ggml_silu(memory.get(), intermediate)
-                                                  : ggml_scale(memory.get(), intermediate, 0.5f);
+    auto * intermediate =
+        unary ? ggml_scale(memory.get(), input, tanh ? 0.05f : 0.5f) : ggml_rms_norm(memory.get(), input, 1e-5f);
+    auto * output =
+        tanh ? ggml_tanh(memory.get(), intermediate)
+             : (unary ? ggml_silu(memory.get(), intermediate) : ggml_scale(memory.get(), intermediate, 0.5f));
     if (final_scale)
-        output = ggml_scale(memory.get(), output, 0.25f);
+        output = ggml_scale(memory.get(), output, tanh ? 20.0f : 0.25f);
     ggml_set_output(output);
     if (guard == Guard::exposed_intermediate)
         ggml_set_output(intermediate);
@@ -41,9 +44,15 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     if (!fused)
         return;
     const auto pipeline = commands.dispatches[0].pipeline;
+    if (tanh) {
+        const auto & dispatch = commands.dispatches[0];
+        BICORE_CHECK(dispatch.x == 1579 && dispatch.y == 1);
+        const auto & shader = *gpu.context->bind_group_cache.slots[0].pipeline.Get();
+        BICORE_CHECK(shader.name.starts_with(final_scale ? "scale_tanh_scale" : "scale_tanh"));
+    }
     const auto created = ::created, groups = resources.groups_created;
     const float coefficient = 2.5f;
-    auto * scale = family == Family::scale_unary ? intermediate : output;
+    auto * scale = unary ? intermediate : output;
     std::memcpy(scale->op_params, &coefficient, sizeof(coefficient));
     commands = {};
     BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
@@ -70,8 +79,8 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     int consumed = 1;
     const auto before = ::created;
     webgpu_fusion_view_sources views(*graph);
-    const auto result = family == Family::scale_unary ? ggml_webgpu_scale_unary(gpu.context, graph, 0, views, consumed)
-                                                      : ggml_webgpu_rms_scale(gpu.context, graph, 0, views, consumed);
+    const auto result = unary ? ggml_webgpu_scale_unary(gpu.context, graph, 0, views, consumed)
+                              : ggml_webgpu_rms_scale(gpu.context, graph, 0, views, consumed);
     output->data = original_data;
     output->buffer = original_buffer;
     BICORE_CHECK(!result && consumed == 1 && ::created == before && commands.dispatches.empty());
@@ -391,10 +400,11 @@ static void rms_concat() {
 static void all() {
     rms_concat();
     rms_vec4();
-    for (const auto family : {Family::scale_unary, Family::rms_scale})
+    for (const auto family : {Family::scale_unary, Family::scale_tanh, Family::rms_scale})
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})
             graph(family, guard);
     graph(Family::scale_unary, Guard::ordinary, true);
+    graph(Family::scale_tanh, Guard::ordinary, true);
     l2_clip_graph(128, 24, 1, true, Guard::ordinary, true);
     l2_clip_graph(128, 8, 1, false, Guard::ordinary, true);
     l2_clip_graph(16, 24, 1, false, Guard::ordinary, true);
