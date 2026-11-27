@@ -969,6 +969,8 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   prefill paths when the weights are aligned and contiguous. Choose 128
   rows at 10,496 B for K32. For K64 choose 80, 96, or 128 rows at
   14,592, 16,640, or 20,736 B of workgroup storage, respectively.
+  `ggml-webgpu-indexed-iq4-partial-prefill.patch` extends the same IQ4_NL
+  selection to aligned single-binding batches of 2 through 127 tokens.
 - **Contract** Keep 64 lanes, the 32-slot gather descriptors, the K tile and
   accumulation order, and the buffer layout. The direct and indirect grids
   use the chosen row tile, including a partial tile for 2,304 rows at 80
@@ -1566,15 +1568,18 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 ## Indirect dispatch for indexed prefill
 
 - **Patches** `ggml-webgpu-indexed-live-grid.patch` and
-  `ggml-webgpu-indexed-quant-live-grid.patch` against llama.cpp `c212d25ad`.
+  `ggml-webgpu-indexed-quant-live-grid.patch` against llama.cpp `c212d25ad`;
+  `ggml-webgpu-indexed-iq4-partial-prefill.patch` against `07ba74babd`.
 - **Scope** Use the existing 32-slot gather to write an indirect grid for
   K640/M2560/E512 Q2_0 with split bindings and K2816/M1408/E48 or E128 paired
   Q4_0 with a single binding. The second patch covers aligned, contiguous
   IQ4_NL and F32-accumulating NVFP4 with one weight binding, E128, eight
   selected experts, and the existing 64-row grid. It accepts the K2304/M2304
   broadcast and K1152/M2304 per-slot projections with either K tile.
-  Require 128 input tokens, the original F32
-  input and output, and room for the upper grid bound in one dimension.
+  IQ4_NL also uses live dispatch on batches of 2 through 127 tokens,
+  including the original 32-row tile when workgroup storage limits the
+  shader choice. Q2_0, Q4_0, and NVFP4 require 128 tokens.
+  Require F32 input and output and room for the upper grid bound in one dimension.
   Reuse the original matrix shader and its precision and tensor layouts.
 - **Lifetime** Share one 12-byte storage and indirect buffer on one device.
   Every gather overwrites all three arguments before its matrix dispatch.

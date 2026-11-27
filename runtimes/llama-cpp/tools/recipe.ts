@@ -1094,6 +1094,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-iq4-partial-prefill.patch',
+    target: 'llama-webgpu',
+    reason: 'Reuse wider IQ4_NL expert tiles and the live grid on partial prefill batches.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-vector-attention-mask-bitset.patch',
     target: 'llama-webgpu',
     reason: 'Skip masked KV tiles in long F16 vector attention without visiting the inner loop.',

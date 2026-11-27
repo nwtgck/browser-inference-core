@@ -10,6 +10,7 @@ struct Matrix {
     int64_t k, m, experts, used, input_rows;
     uint32_t row_tile, max_tiles;
     ggml_prec accumulator;
+    int64_t tokens = 128;
 };
 
 constexpr Matrix split_q2{GGML_TYPE_Q2_0, 640, 2560, 512, 10, 10, 32, 536, GGML_PREC_UNDEFINED};
@@ -40,9 +41,9 @@ struct Graph {
         limits.maxBufferSize = (large_binding ? 512 : 256) * 1024 * 1024;
         limits.maxStorageBufferBindingSize = (large_binding ? 512 : 128) * 1024 * 1024;
         auto * weights = ggml_new_tensor_3d(memory.get(), matrix.type, matrix.k, matrix.m, matrix.experts);
-        auto * inputs = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, matrix.k, matrix.input_rows, 128);
-        auto * ids_a = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, 128);
-        auto * ids_b = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, 128);
+        auto * inputs = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, matrix.k, matrix.input_rows, matrix.tokens);
+        auto * ids_a = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, matrix.tokens);
+        auto * ids_b = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, matrix.used, matrix.tokens);
         auto * out_a = ggml_mul_mat_id(memory.get(), weights, inputs, ids_a);
         auto * out_b = ggml_mul_mat_id(memory.get(), weights, inputs, ids_b);
         if (matrix.accumulator != GGML_PREC_UNDEFINED) {
@@ -177,6 +178,40 @@ static void check_activation(const Matrix & matrix, std::string_view vendor = {}
     BICORE_CHECK(fixture.run(Grid::capped) == direct && pushes == prior_pushes + 3 && spontaneous_scopes.empty());
 }
 
+static void check_partial_iq4() {
+    Matrix tail = iq4_broadcast;
+    tail.tokens = 19;
+    tail.max_tiles = 128;
+    tail.row_tile = 128;
+    check_activation(tail, "apple", 16384);
+    tail.row_tile = 80;
+    check_activation(tail, "nvidia", 16384);
+    tail.row_tile = 64;
+    check_activation(tail, "nvidia", 8192);
+    tail.row_tile = 32;
+    check_activation(tail, "nvidia", 6144);
+
+    Matrix short_down = iq4_per_slot;
+    short_down.tokens = 2;
+    short_down.max_tiles = 16;
+    short_down.row_tile = 128;
+    check_activation(short_down, "nvidia", 16384);
+
+    Matrix larger = iq4_per_slot;
+    larger.tokens = 129;
+    larger.row_tile = 32;
+    Graph direct_larger(larger);
+    direct_larger.run(Grid::direct);
+
+    Matrix short_nv = nvfp4_broadcast;
+    short_nv.tokens = 19;
+    short_nv.max_tiles = 128;
+    short_nv.row_tile = 32;
+    Graph direct_nv(short_nv);
+    direct_nv.run(Grid::direct);
+    BICORE_CHECK(spontaneous_scopes.empty());
+}
+
 static void check_rejection() {
     Graph fixture(paired_q4);
     resources.reject_indirect_buffer = true;
@@ -236,6 +271,7 @@ static void all() {
     Graph unchanged(half);
     unchanged.run(Grid::direct);
     BICORE_CHECK(spontaneous_scopes.empty());
+    check_partial_iq4();
     check_rejection();
     check_teardown();
 }

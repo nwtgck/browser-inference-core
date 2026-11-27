@@ -1,0 +1,97 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -3852,17 +3852,23 @@
+         const ggml_tensor * ids = context.src2;
+         const bool wide_broadcast = k == 2304 && context.src1->ne[1] == 1;
+         const bool wide_per_slot = k == 1152 && context.src1->ne[1] == 8;
+-        if (eligible_type && (wide_broadcast || wide_per_slot) && m == 2304 && key.n_experts == 128 &&
++        const int64_t tokens = context.dst ? context.dst->ne[2] : 0;
++        const bool partial_iq4 = key.src0_type == GGML_TYPE_IQ4_NL && tokens >= 2 && tokens < 128;
++        if (eligible_type && (tokens == 128 || partial_iq4) &&
++            (wide_broadcast || wide_per_slot) && m == 2304 && key.n_experts == 128 &&
+             key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
+-            context.src0->ne[3] == 1 && context.src1->ne[0] == k && context.src1->ne[2] == 128 &&
++            context.src0->ne[3] == 1 && context.src1->ne[0] == k && context.src1->ne[2] == tokens &&
+             context.src1->ne[3] == 1 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 8 &&
+-            ids->ne[1] == 128 && ids->ne[2] == 1 && ids->ne[3] == 1 && context.dst &&
++            ids->ne[1] == tokens && ids->ne[2] == 1 && ids->ne[3] == 1 &&
+             context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
+-            context.dst->ne[2] == 128 && context.dst->ne[3] == 1 && context.max_wg_size >= grouped_threads &&
++            context.dst->ne[3] == 1 && context.max_wg_size >= grouped_threads &&
+             context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
+-            key.tile_m = wide_tile_m;
+-            if (!key.split_weights && context.indexed_src0_aligned &&
+-                !context.src0->view_src && ggml_is_contiguous(context.src0)) {
++            const bool aligned_weights = !key.split_weights && context.indexed_src0_aligned &&
++                                         !context.src0->view_src && ggml_is_contiguous(context.src0);
++            if (tokens == 128 || aligned_weights) {
++                key.tile_m = wide_tile_m;
++            }
++            if (aligned_weights) {
+                 const uint32_t bytes_per_row = sizeof(ggml_fp16_t) * key.tile_k;
+                 const auto fits = [&](uint32_t tile_m) {
+                     const uint32_t extra_rows = (tile_m - wide_tile_m) * WEBGPU_MUL_MAT_WG_SIZE_M;
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2454,11 +2454,9 @@
+         return;
+     }
+     const auto & limits = global.capabilities.limits;
+-    // Even the smallest reviewed matrix uses 64 threads and at least this many
+-    // direct workgroups. Devices below these bounds use the canonical grid.
++    // Each eligible operation already checks its grid against the device limit.
+     if (!ggml_webgpu_indexed_live_grid_binding_fits(limits) ||
+-        limits.maxComputeInvocationsPerWorkgroup < 64 || limits.maxComputeWorkgroupSizeX < 64 ||
+-        limits.maxComputeWorkgroupsPerDimension < 1716) {
++        limits.maxComputeInvocationsPerWorkgroup < 64 || limits.maxComputeWorkgroupSizeX < 64) {
+         global.indexed_live_grid_state.store(phase::rejected, std::memory_order_release);
+         return;
+     }
+@@ -2546,34 +2544,37 @@
+     const ggml_tensor * input = shader.src1;
+     const ggml_tensor * ids = shader.src2;
+     const ggml_tensor * dst = shader.dst;
++    const int64_t tokens = dst->ne[2];
++    const bool full_batch = tokens == 128;
+     if (!shader.indexed_src0_aligned ||
+         input->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+-        dst->ne[2] != 128 || input->ne[2] != 128 || ids->ne[1] != 128 ||
++        tokens < 2 || tokens > 128 || input->ne[2] != tokens || ids->ne[1] != tokens ||
+         weights->ne[3] != 1 || input->ne[3] != 1 || ids->ne[2] != 1 || ids->ne[3] != 1 || dst->ne[3] != 1) {
+         return false;
+     }
+ 
+     const uint32_t row_tile = main.tile_m * main.wg_size_m;
+-    const bool q2 = weights->type == GGML_TYPE_Q2_0 && shader.indexed_split_weights &&
++    const bool q2 = full_batch && weights->type == GGML_TYPE_Q2_0 && shader.indexed_split_weights &&
+                     weights->ne[0] == 640 && weights->ne[1] == 2560 && weights->ne[2] == 512 &&
+                     input->ne[1] == 10 && dst->ne[1] == 10 && ids->ne[0] == 10 &&
+                     row_tile == 32 && main.tile_k == 32;
+-    const bool q4 = weights->type == GGML_TYPE_Q4_0 && !shader.indexed_split_weights &&
++    const bool q4 = full_batch && weights->type == GGML_TYPE_Q4_0 && !shader.indexed_split_weights &&
+                     weights->ne[0] == 2816 && weights->ne[1] == 1408 &&
+                     (weights->ne[2] == 48 || weights->ne[2] == 128) &&
+                     input->ne[1] == 1 && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+                     row_tile == 64 && main.tile_k == 64;
+-    const auto nv_acc = weights->type == GGML_TYPE_NVFP4 ? ggml_prec_get_acc(dst) : GGML_PREC_UNDEFINED;
++    const auto nv_acc = full_batch && weights->type == GGML_TYPE_NVFP4 ? ggml_prec_get_acc(dst) : GGML_PREC_UNDEFINED;
+     // Match the grouped NVFP4 shader's F32 accumulator selection.
+-    const bool iq4_or_nv = weights->type == GGML_TYPE_IQ4_NL ||
+-                           nv_acc == GGML_PREC_BF16 || nv_acc == GGML_PREC_F32;
++    const bool grouped_type = weights->type == GGML_TYPE_IQ4_NL ||
++                              nv_acc == GGML_PREC_BF16 || nv_acc == GGML_PREC_F32;
+     const bool broadcast_gate = weights->ne[0] == 2304 && input->ne[1] == 1;
+     const bool per_slot_down = weights->ne[0] == 1152 && input->ne[1] == 8;
+-    const bool grouped_quant = iq4_or_nv && !shader.indexed_split_weights &&
++    const bool grouped_quant = grouped_type && !shader.indexed_split_weights &&
+                                !weights->view_src && ggml_is_contiguous(weights) &&
+                                weights->ne[1] == 2304 && weights->ne[2] == 128 &&
+                                (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+-                               (((row_tile == 64 || row_tile == 128) && (main.tile_k == 32 || main.tile_k == 64)) ||
++                               (((row_tile == 64 || row_tile == 128 || (!full_batch && row_tile == 32)) &&
++                                 (main.tile_k == 32 || main.tile_k == 64)) ||
+                                 ((row_tile == 80 || row_tile == 96) && main.tile_k == 64));
+     if (!q2 && !q4 && !grouped_quant) {
+         return false;
