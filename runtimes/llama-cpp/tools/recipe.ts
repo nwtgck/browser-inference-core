@@ -1227,6 +1227,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-short-conv-dynamic.patch',
+    target: 'llama-webgpu',
+    reason: 'Fuse the ordered four-tap dynamic short-convolution suffix in single-token graphs.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-short-conv-dynamic.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/short_conv_dynamic.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

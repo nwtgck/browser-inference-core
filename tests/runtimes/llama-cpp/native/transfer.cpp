@@ -11,6 +11,7 @@
 #include "cases/indexed-q2.hpp"
 #include "cases/indexed-weight-windows.hpp"
 #include "cases/short-conv.hpp"
+#include "cases/short-conv-dynamic.hpp"
 #include "cases/depth-mix.hpp"
 #include "cases/situ.hpp"
 #include "cases/loop-controller.hpp"
@@ -32,6 +33,7 @@ int main() {
     indexed_q2_cases::all();
     indexed_weight_window_cases::all();
     short_conv_cases::all();
+    short_conv_dynamic_cases::all();
     depth_mix_cases::all();
     situ_cases::all();
     loop_controller_cases::all();

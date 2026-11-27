@@ -1,0 +1,335 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -19,6 +19,7 @@
+ 
+ #include "ggml-backend-impl.h"
+ #include "ggml-webgpu-short-conv-residual.hpp"
++#include "ggml-webgpu-short-conv-dynamic.hpp"
+ #include "ggml-webgpu-short-conv-state.hpp"
+ #include "ggml-backend-host-snapshot.h"
+ #include "ggml-impl.h"
+@@ -776,8 +777,8 @@
+ // commands synchronously. Neither the cache nor queued work retains the view.
+ struct webgpu_dispatch_view {
+     const webgpu_pipeline & pipeline;
+-    const std::vector<uint32_t> & params;
+-    const std::vector<wgpu::BindGroupEntry> & bind_group_entries;
++    std::span<const uint32_t> params;
++    std::span<const wgpu::BindGroupEntry> bind_group_entries;
+     std::pair<uint32_t, uint32_t> workgroups;
+ };
+ struct webgpu_dispatch_direct {
+@@ -910,7 +911,7 @@
+     return ggml_backend_webgpu_build_impl(ctx, dispatches.data(), dispatches.size());
+ }
+ static webgpu_encoded_op ggml_backend_webgpu_build(webgpu_context & ctx, const webgpu_pipeline & pipeline,
+-    const std::vector<uint32_t> & params, const std::vector<wgpu::BindGroupEntry> & entries,
++    std::span<const uint32_t> params, std::span<const wgpu::BindGroupEntry> entries,
+     uint32_t wg_x, uint32_t wg_y = 1) {
+     const webgpu_dispatch_view dispatch{pipeline, params, entries, {wg_x, wg_y}};
+     return ggml_backend_webgpu_build_impl(ctx, &dispatch, 1);
+@@ -5234,6 +5235,60 @@
+     return encoded;
+ }
+ 
++static std::optional<webgpu_encoded_op> ggml_webgpu_short_conv_dynamic(
++        webgpu_context & ctx, const ggml_cgraph & graph, int first,
++        webgpu_fusion_view_sources & views, int & consumed) {
++    webgpu_short_conv_dynamic::plan plan{};
++    if (!webgpu_short_conv_dynamic::match(graph, first, views, plan)) { return std::nullopt; }
++    constexpr uint32_t workgroup = 128;
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    const uint32_t channels = uint32_t(plan.output->ne[0]);
++    const uint32_t groups = CEIL_DIV(channels, workgroup);
++    if (limits.maxComputeInvocationsPerWorkgroup < workgroup || limits.maxComputeWorkgroupSizeX < workgroup ||
++        groups > limits.maxComputeWorkgroupsPerDimension || !limits.maxUniformBuffersPerShaderStage ||
++        limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES) { return std::nullopt; }
++    const ggml_tensor * tensors[] = {plan.history, plan.taps, plan.convolution, plan.residual, plan.output};
++    webgpu_rms_scale_binding bindings[5];
++    for (int i = 0; i < 5; ++i) {
++        if (!ggml_webgpu_rms_scale_binding(ctx, tensors[i], ggml_nbytes(tensors[i]), bindings[i])) {
++            return std::nullopt;
++        }
++    }
++    uint32_t inplace = 0;
++    for (uint32_t i : {2u, 3u}) {
++        if (bindings[i].buffer.Get() == bindings[4].buffer.Get() &&
++            bindings[i].tensor_offset == bindings[4].tensor_offset) { inplace = i - 1; }
++    }
++    const uint32_t count = inplace ? 4 : 5;
++    if (limits.maxStorageBuffersPerShaderStage < count || limits.maxBindingsPerBindGroup < count + 1) {
++        return std::nullopt;
++    }
++    for (uint32_t i = 0; i < count; ++i) {
++        for (uint32_t j = i + 1; j < count; ++j) {
++            if (bindings[i].buffer.Get() == bindings[j].buffer.Get() &&
++                !router_tail_disjoint(bindings[i].offset, bindings[i].size, bindings[j].offset, bindings[j].size)) {
++                return std::nullopt;
++            }
++        }
++    }
++    // Exact same-channel output reuse is safe. Shifted reuse, history/tap
++    // overlap and overlapping aligned bindings retain the staged operations.
++    std::array<uint32_t, 9> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset,
++        bindings[3].element_offset, bindings[4].element_offset, channels, plan.channels_per_head,
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 1))
++    };
++    std::array<wgpu::BindGroupEntry, 5> entries;
++    for (uint32_t i = 0; i < count; ++i) {
++        entries[i] = ggml_webgpu_make_bind_group_entry(i, bindings[i].buffer, bindings[i].offset, bindings[i].size);
++    }
++    const auto & pipeline = ctx->shader_lib->get_short_conv_dynamic_pipeline(inplace);
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, {entries.data(), count}, groups, 1);
++    consumed = webgpu_short_conv_dynamic::nodes;
++    return encoded;
++}
++
+ static std::optional<webgpu_encoded_op> ggml_webgpu_short_conv_residual(webgpu_context & ctx, ggml_cgraph * graph,
+                                                                         int index, webgpu_fusion_view_sources & views,
+                                                                         int & consumed) {
+@@ -5740,8 +5795,10 @@
+             }
+             if (auto fused = webgpu_add_cast_f16::encode(ctx, *cgraph, node_idx, false, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_binary_op(ctx, src0, src1, node);
++        case GGML_OP_MUL:
++            if (auto fused = ggml_webgpu_short_conv_dynamic(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            return ggml_webgpu_binary_op(ctx, src0, src1, node);
+         case GGML_OP_SUB:
+-        case GGML_OP_MUL:
+         case GGML_OP_DIV:
+             return ggml_webgpu_binary_op(ctx, src0, src1, node);
+         case GGML_OP_ADD_ID:
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -18,6 +18,7 @@
+ #include "ggml-webgpu-loop-controller-shaders.hpp"
+ #include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
++#include "ggml-webgpu-short-conv-dynamic-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-group-shaders.hpp"
+ #include "ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp"
+ #include "ggml-webgpu-iq3s-id-subgroup-shaders.hpp"
+@@ -2044,6 +2045,7 @@
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+     std::unordered_map<bool, webgpu_pipeline> short_conv_residual_pipelines;
++    std::array<webgpu_pipeline, 3> short_conv_dynamic_pipelines;
+     webgpu_pipeline situ_pipeline;
+     webgpu_pipeline fwht_1024_pipeline;
+     std::array<webgpu_pipeline, 2> add_cast_f16_pipelines;
+@@ -2828,6 +2830,18 @@
+         pipeline.context           = decisions;
+         ssm_scan_pipelines[key]    = pipeline;
+         return ssm_scan_pipelines[key];
++    }
++
++    const webgpu_pipeline & get_short_conv_dynamic_pipeline(uint32_t inplace) {
++        require_healthy_device();
++        GGML_ASSERT(inplace < short_conv_dynamic_pipelines.size());
++        auto & pipeline = short_conv_dynamic_pipelines[inplace];
++        if (!pipeline.pipeline) {
++            const std::vector<std::string> defines = {"INPLACE=" + std::to_string(inplace)};
++            const auto code = preprocessor.preprocess(wgsl_short_conv_dynamic, defines);
++            pipeline = ggml_webgpu_create_pipeline(device, code, "short_conv_dynamic_f32_" + std::to_string(inplace));
++        }
++        return pipeline;
+     }
+ 
+     webgpu_pipeline get_short_conv_residual_pipeline(bool inplace) {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-dynamic.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-dynamic.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-short-conv-dynamic.hpp
+@@ -0,0 +1,132 @@
++#pragma once
++
++#include "ggml-webgpu-fusion-view-sources.hpp"
++
++namespace webgpu_short_conv_dynamic {
++
++constexpr int nodes = 29;
++
++struct plan {
++    const ggml_tensor * history;
++    const ggml_tensor * taps;
++    const ggml_tensor * convolution;
++    const ggml_tensor * residual;
++    ggml_tensor * output;
++    uint32_t channels_per_head;
++};
++
++inline bool dense(const ggml_tensor * tensor, int64_t columns, int64_t rows) {
++    return tensor && tensor->type == GGML_TYPE_F32 && tensor->ne[0] == columns && tensor->ne[1] == rows &&
++           tensor->ne[2] == 1 && tensor->ne[3] == 1 && ggml_is_contiguous(tensor);
++}
++
++inline bool reshape(const ggml_tensor * tensor, const ggml_tensor * source, int64_t columns, int64_t rows) {
++    return dense(tensor, columns, rows) && tensor->op == GGML_OP_RESHAPE && tensor->src[0] == source &&
++           tensor->view_src == source && !tensor->view_offs;
++}
++
++// The first tap projection can be scheduled after SSM_CONV. Keep that producer
++// and the first window copy; fuse only the ordered four-tap residual suffix.
++inline bool match(const ggml_cgraph & graph, int first, webgpu_fusion_view_sources & views, plan & result) {
++    if (first < 0 || first > graph.n_nodes - nodes) { return false; }
++    auto * const * n = graph.nodes + first;
++    if (n[1]->op != GGML_OP_RESHAPE || n[2]->op != GGML_OP_ADD || n[nodes - 1]->op != GGML_OP_SCALE) {
++        return false;
++    }
++    const auto * initial_mul = n[0];
++    const int64_t width = initial_mul->ne[0];
++    const int64_t heads = initial_mul->ne[1];
++    if (initial_mul->op != GGML_OP_MUL || width <= 0 || heads <= 0 ||
++        width > UINT32_MAX / 16u || uint64_t(heads) > UINT32_MAX / (16u * uint64_t(width))) { return false; }
++    const int64_t channels = width * heads;
++    const auto * first_window = initial_mul->src[0];
++    const auto * first_tap = initial_mul->src[1];
++    const auto * taps = first_tap ? first_tap->src[0] : nullptr;
++    if (!taps || !dense(taps, 4, heads) || taps->op != GGML_OP_RESHAPE || taps->view_offs ||
++        taps->view_src != taps->src[0] || !dense(taps->src[0], 4 * heads, 1) || taps->src[0]->view_src) {
++        return false;
++    }
++    const auto * copy = first_window ? first_window->src[0] : nullptr;
++    const auto * transpose = copy ? copy->src[0] : nullptr;
++    const auto * window = transpose ? transpose->src[0] : nullptr;
++    const auto * history = window ? window->src[0] : nullptr;
++    if (!dense(history, 4, channels) || history->view_src) { return false; }
++    const auto * initial = n[2]->src[0];
++    const auto * convolution = initial ? initial->src[0] : nullptr;
++    if (!dense(convolution, channels, 1) || convolution->op != GGML_OP_SSM_CONV || convolution->view_src ||
++        convolution->src[0] != history || !reshape(initial, convolution, channels, 1)) { return false; }
++
++    int indices[20];
++    ggml_op ops[20];
++    int count = 0;
++    const auto include = [&](int relative) {
++        indices[count] = first + relative;
++        ops[count++] = n[relative]->op;
++    };
++    const ggml_tensor * previous = initial;
++    for (int lag = 0; lag < 4; ++lag) {
++        const int at = 8 * lag;
++        const auto * mul = n[at];
++        const auto * term = n[at + 1];
++        const auto * sum = n[at + 2];
++        const auto * shape = mul->src[0];
++        const auto * tap = mul->src[1];
++        const auto * cont = shape ? shape->src[0] : nullptr;
++        const auto * trans = cont ? cont->src[0] : nullptr;
++        const auto * view = trans ? trans->src[0] : nullptr;
++        if (!dense(mul, width, heads) || mul->op != GGML_OP_MUL || mul->view_src ||
++            !reshape(term, mul, channels, 1) || !dense(sum, channels, 1) || sum->op != GGML_OP_ADD ||
++            sum->view_src || sum->src[0] != previous || sum->src[1] != term ||
++            !reshape(shape, cont, width, heads) || !dense(cont, channels, 1) || cont->op != GGML_OP_CONT ||
++            cont->view_src || !trans || trans->op != GGML_OP_TRANSPOSE || trans->src[0] != view ||
++            !view || view->op != GGML_OP_VIEW || view->src[0] != history || view->view_src != history ||
++            view->view_offs != uint64_t(3 - lag) * sizeof(float) || view->type != GGML_TYPE_F32 ||
++            view->ne[0] != 1 || view->ne[1] != channels || view->ne[2] != 1 || view->ne[3] != 1 ||
++            view->nb[0] != 4 || view->nb[1] != 16 || view->nb[2] != uint64_t(channels) * 16 ||
++            view->nb[3] != view->nb[2] || trans->view_src != history || trans->view_offs != view->view_offs ||
++            trans->type != GGML_TYPE_F32 || trans->ne[0] != channels || trans->ne[1] != 1 ||
++            trans->ne[2] != 1 || trans->ne[3] != 1 || trans->nb[0] != 16 || trans->nb[1] != 4 ||
++            trans->nb[2] != view->nb[2] || trans->nb[3] != view->nb[3] ||
++            !tap || tap->op != GGML_OP_VIEW || tap->src[0] != taps || tap->view_src != taps->src[0] ||
++            tap->view_offs != uint64_t(lag) * sizeof(float) || tap->type != GGML_TYPE_F32 ||
++            tap->ne[0] != 1 || tap->ne[1] != heads || tap->ne[2] != 1 || tap->ne[3] != 1 ||
++            tap->nb[0] != 4 || tap->nb[1] != 16 || tap->nb[2] != uint64_t(heads) * 16 ||
++            tap->nb[3] != tap->nb[2]) { return false; }
++        if (lag) {
++            if (n[at - 5] != view || n[at - 4] != trans || n[at - 3] != cont ||
++                n[at - 2] != shape || n[at - 1] != tap) { return false; }
++            include(at - 3);
++            include(at - 2);
++        }
++        include(at);
++        include(at + 1);
++        include(at + 2);
++        previous = sum;
++    }
++    auto * add = n[27];
++    auto * output = n[28];
++    const auto * residual = add->src[0];
++    if (!dense(residual, channels, 1) || !dense(add, channels, 1) || add->op != GGML_OP_ADD || add->view_src ||
++        add->src[1] != previous || !dense(output, channels, 1) || output->op != GGML_OP_SCALE ||
++        output->src[0] != add || output->view_src) { return false; }
++    include(27);
++    include(28);
++    GGML_ASSERT(count == 20);
++    // Borrowed history/tap views remain valid: their inputs are retained and
++    // cannot overlap the output. Only materialized nodes and their own reshapes
++    // are discarded; use the shared closure and raw-view observer checks.
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices, count, ops, indices + count - 1, 1)) { return false; }
++    for (int i = 0; i < count - 1; ++i) {
++        if (views.contains(graph.nodes[indices[i]])) { return false; }
++    }
++    const ggml_tensor * inputs[] = {history, taps->src[0], convolution, residual};
++    for (const auto * input : inputs) {
++        for (int i = 0; i < nodes; ++i) {
++            if (input == n[i] || input->view_src == n[i]) { return false; }
++        }
++    }
++    result = {history, taps->src[0], convolution, residual, output, uint32_t(width)};
++    return true;
++}
++
++} // namespace webgpu_short_conv_dynamic
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_dynamic.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_dynamic.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/short_conv_dynamic.wgsl
+@@ -0,0 +1,51 @@
++struct Params {
++    history_offset: u32,
++    taps_offset: u32,
++    convolution_offset: u32,
++    residual_offset: u32,
++    output_offset: u32,
++    channels: u32,
++    channels_per_head: u32,
++    scale: f32,
++    bias: f32,
++};
++
++// All bindings use the same storage usage even when disjoint ranges share an allocation.
++@group(0) @binding(0) var<storage, read_write> history: array<f32>;
++@group(0) @binding(1) var<storage, read_write> taps: array<f32>;
++@group(0) @binding(2) var<storage, read_write> convolution: array<f32>;
++@group(0) @binding(3) var<storage, read_write> residual: array<f32>;
++#if INPLACE == 0
++@group(0) @binding(4) var<storage, read_write> output: array<f32>;
++@group(0) @binding(5) var<uniform> params: Params;
++#else
++@group(0) @binding(4) var<uniform> params: Params;
++#endif
++
++@compute @workgroup_size(128)
++fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
++    let channel = gid.x;
++    if (channel >= params.channels) { return; }
++    let h = params.history_offset + 4u * channel;
++    let t = params.taps_offset + 4u * (channel / params.channels_per_head);
++    // Preserve reverse history order, four separate products, and the original
++    // sequential accumulation into the already computed SSM result.
++    var value = convolution[params.convolution_offset + channel];
++    let term0 = history[h + 3u] * taps[t];
++    value = value + term0;
++    let term1 = history[h + 2u] * taps[t + 1u];
++    value = value + term1;
++    let term2 = history[h + 1u] * taps[t + 2u];
++    value = value + term2;
++    let term3 = history[h] * taps[t + 3u];
++    value = value + term3;
++    let combined = residual[params.residual_offset + channel] + value;
++    let result = combined * params.scale + params.bias;
++#if INPLACE == 1
++    convolution[params.output_offset + channel] = result;
++#elif INPLACE == 2
++    residual[params.output_offset + channel] = result;
++#else
++    output[params.output_offset + channel] = result;
++#endif
++}

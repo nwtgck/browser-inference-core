@@ -1113,6 +1113,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   profiles, including intermediate readers and aliased buffers. Remove
   once upstream provides equivalent L2-scale fusion.
 
+## Dynamic short-convolution suffix
+
+- **Patch** `ggml-webgpu-short-conv-dynamic.patch` against llama.cpp
+  `07ba74babd`, after the short-convolution and dispatch storage overlays.
+- **Scope** Fuse the four dynamic tap contributions, residual addition and
+  affine scale in a single-token F32 graph. Keep the preceding static
+  convolution, first history window and state update.
+- **Contract** Match the exact tap/window layout and accumulation order. Keep
+  intermediate graph outputs alive for other readers. Bind the original
+  tensors without scratch buffers. Allow exact output reuse of the convolution
+  or residual row and reject overlapping ranges in all other cases.
+- **Validation and removal** Exercise ordinary and profiled dispatch, row tails,
+  the graph allocator's in-place layout and readers across graph slices. Remove
+  when upstream provides equivalent fusion for the dynamic suffix.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp
