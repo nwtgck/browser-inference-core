@@ -61,6 +61,38 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
 
 #include "cases/quant-matvec.hpp"
 
+static void fixed_f32_projection() {
+    auto backend = recording_context();
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> memory(ggml_init({32 * 1024, nullptr, true}), ggml_free);
+    BICORE_CHECK(memory);
+    ggml_webgpu_shader_lib_context input{};
+    input.src0 = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 2304, 128);
+    input.src1 = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 2304, 1);
+    input.dst = ggml_mul_mat(memory.get(), input.src0, input.src1);
+    input.max_wg_size = 256;
+    input.supports_subgroups = true;
+    input.min_subgroup_size = 16;
+    input.max_subgroup_size = 32;
+
+    const auto candidate = backend->shader_lib->get_mul_mat_vec_pipeline(input, false, true);
+    BICORE_CHECK(candidate.name.ends_with("_k2304"));
+    const auto & decisions = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(candidate.context.get());
+    BICORE_CHECK(decisions.wg_size == 256 && decisions.outputs_per_wg == 4);
+    BICORE_CHECK((production_dispatch(input, 7, false, true) == std::array<uint32_t, 2>{7, 5}));
+
+    const auto unaligned = backend->shader_lib->get_mul_mat_vec_pipeline(input, false, false);
+    const auto overlap = backend->shader_lib->get_mul_mat_vec_pipeline(input, true, true);
+    BICORE_CHECK(!unaligned.name.ends_with("_k2304") && !overlap.name.ends_with("_k2304"));
+    auto other = input;
+    other.src0 = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 4608, 64);
+    other.src1 = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, 4608, 1);
+    other.dst = ggml_mul_mat(memory.get(), other.src0, other.src1);
+    const auto general = backend->shader_lib->get_mul_mat_vec_pipeline(other, false, true);
+    BICORE_CHECK(!general.name.ends_with("_k2304") && candidate.pipeline.Get() != general.pipeline.Get());
+    BICORE_CHECK(backend->shader_lib->get_mul_mat_vec_pipeline(input, false, true).pipeline.Get() ==
+                 candidate.pipeline.Get());
+}
+
 static void geometry_and_offsets() {
     for (uint32_t limit : {1u, 2u, 7u, 32u, 65535u}) {
         for (uint32_t count = 0; count < std::min(uint64_t(limit) * limit, UINT64_C(5000)); ++count) {
@@ -272,6 +304,7 @@ int main(int argc, char ** argv) {
     BICORE_CHECK(argc == 2);
     BICORE_CHECK(run_q8_short_cases(argc, argv) == 0);
     BICORE_CHECK(run_quant_matvec_cases(argc, argv) == 0);
+    fixed_f32_projection();
     geometry_and_offsets();
     cache_identity_and_lifetime();
     encoding_and_upload();

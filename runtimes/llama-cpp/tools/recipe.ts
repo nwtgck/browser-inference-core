@@ -1182,6 +1182,17 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-f32-fixed-projection.patch',
+    target: 'llama-webgpu',
+    reason: 'Specialize the vec4 dot rounds and row bounds for the K2304 M128 F32 projection.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

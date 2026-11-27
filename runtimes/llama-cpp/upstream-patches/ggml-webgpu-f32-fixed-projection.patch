@@ -1,0 +1,95 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1669,7 +1669,9 @@
+ /** Matrix Multiplication **/
+ 
+ struct ggml_webgpu_mul_mat_vec_pipeline_key {
+-    enum class subgroup_mode_kind : uint32_t { legacy, requested_size, compact_bf16, single_block_q8, single_block_q4_0 };
++    enum class subgroup_mode_kind : uint32_t {
++        legacy, requested_size, compact_bf16, single_block_q8, single_block_q4_0, f32_projection_k2304
++    };
+     subgroup_mode_kind subgroup_mode = subgroup_mode_kind::legacy;
+     uint32_t requested_subgroup_size = 0;
+     ggml_webgpu_shader_lib_context::matvec_post_op epilogue = ggml_webgpu_shader_lib_context::matvec_post_op::none;
+@@ -3240,6 +3242,14 @@
+             key.workgroup_size < WEBGPU_MUL_MAT_VEC_WG_SIZE && context.src0->ne[0] <= key.workgroup_size * 8u) {
+             key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::single_block_q8;
+         }
++        if (key.src0_type == GGML_TYPE_F32 && key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
++            key.vectorized && key.num_cols == 1 && !key.src_overlap &&
++            key.epilogue == ggml_webgpu_shader_lib_context::matvec_post_op::none && context.supports_subgroups &&
++            key.workgroup_size == 256 && context.max_wg_size >= 256 && WEBGPU_MUL_MAT_VEC_FLOAT_OUTPUTS_PER_WG == 4 &&
++            context.src0->ne[0] == 2304 && context.dst->ne[0] == 128 &&
++            context.dst->ne[2] == 1 && context.dst->ne[3] == 1) {
++            key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::f32_projection_k2304;
++        }
+         if (key.src0_type == GGML_TYPE_BF16 && key.src1_type == GGML_TYPE_F32 &&
+             context.dst->type == GGML_TYPE_F32 && key.num_cols == 1 && !key.src_overlap &&
+             key.epilogue == ggml_webgpu_shader_lib_context::matvec_post_op::none &&
+@@ -3473,6 +3483,9 @@
+         if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16) {
+             defines.push_back("COMPACT_BF16_MATVEC");
+             variant += "_compact";
++        } else if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::f32_projection_k2304) {
++            defines.push_back("BICORE_F32_PROJECTION_K2304");
++            variant += "_k2304";
+         }
+ 
+         if (key.epilogue == post_op::scale_sigmoid_scale) {
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec.wgsl
+@@ -198,8 +198,10 @@
+             }
+ #endif
+ 
++#ifndef BICORE_F32_PROJECTION_K2304
+     workgroupBarrier();
+ 
++#endif // The fixed projection has no later columns that reuse the reduction scratch.
+     }
+ #endif
+ }
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -65,6 +65,30 @@
+ #else
+     var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
+ 
++#ifdef BICORE_F32_PROJECTION_K2304
++    // Preserve each lane's K order. Of the 576 vec4 entries, two rounds
++    // cover all 256 lanes and the final round uses 64 lanes.
++    let row_stride = params.stride_01 / 4u;
++    let w = src0_batch_offset / 4u + row_base * row_stride + thread_id;
++    let a = src1_idx_base / 4u + thread_id;
++    let x0 = SRC1[a];
++    acc[0][0] += inner_dot(SRC0[w], x0);
++    acc[0][1] += inner_dot(SRC0[w + row_stride], x0);
++    acc[0][2] += inner_dot(SRC0[w + 2u * row_stride], x0);
++    acc[0][3] += inner_dot(SRC0[w + 3u * row_stride], x0);
++    let x1 = SRC1[a + 256u];
++    acc[0][0] += inner_dot(SRC0[w + 256u], x1);
++    acc[0][1] += inner_dot(SRC0[w + row_stride + 256u], x1);
++    acc[0][2] += inner_dot(SRC0[w + 2u * row_stride + 256u], x1);
++    acc[0][3] += inner_dot(SRC0[w + 3u * row_stride + 256u], x1);
++    if (thread_id < 64u) {
++        let x2 = SRC1[a + 512u];
++        acc[0][0] += inner_dot(SRC0[w + 512u], x2);
++        acc[0][1] += inner_dot(SRC0[w + row_stride + 512u], x2);
++        acc[0][2] += inner_dot(SRC0[w + 2u * row_stride + 512u], x2);
++        acc[0][3] += inner_dot(SRC0[w + 3u * row_stride + 512u], x2);
++    }
++#else
+     let k_vec = params.k / VEC_SIZE;
+     let src1_idx_base_vec = src1_idx_base / VEC_SIZE;
+ 
+@@ -91,6 +115,7 @@
+             }
+         }
+     }
++#endif // BICORE_F32_PROJECTION_K2304
+ 
+     return acc;
+ #endif

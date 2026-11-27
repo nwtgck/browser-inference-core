@@ -1057,6 +1057,20 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove when upstream provides comparable row tiling and dispatch for these
   indexed layouts.
 
+## Fixed F32 projection for K2304 and M128
+
+- **Patch** `ggml-webgpu-f32-fixed-projection.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Use fixed vec4 dot rounds for the aligned single-column F32
+  projection. Each workgroup still produces four rows with 256 invocations.
+- **Contract** Keep the lane-to-K mapping, accumulation order, subgroup
+  reduction, bindings, and uniform fields. Two rounds cover every lane and
+  only 64 lanes participate in the third. The single column does not reuse
+  the reduction scratch after the result is written.
+- **Validation and removal** Check cache identity, fallback for other shapes
+  and layouts, and the dispatch grid. Remove when upstream specializes the
+  same full tiles or provides equivalent performance.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp
