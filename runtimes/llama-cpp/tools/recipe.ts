@@ -1239,6 +1239,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-q4-geglu.patch',
+    target: 'llama-webgpu',
+    reason: 'Fuse two single-token Q4_0 projections with the split GEGLU activation.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-q4-geglu.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

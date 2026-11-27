@@ -1926,6 +1926,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove this patch when upstream supplies equivalent selection for these
   packed formats.
 
+## Single-token WebGPU Q4_0 GEGLU
+
+- **Patch** `ggml-webgpu-q4-geglu.patch` against llama.cpp `07ba74babd`.
+- **Scope** Fuse two Q4_0 projections of one F32 input and their split
+  GEGLU activation. Admit K1536/M6144 or M12288 and K2560/M10240 with the
+  existing independent-subgroup matvec selector.
+- **Contract** Retain separate cache entries for fixed widths 16 and 32
+  and an optional requested width of 16. Preserve the regular kernels for
+  unsupported resources, overlapping ranges, other readers, or pipeline
+  rejection. Recheck ownership and mode after cold pipeline creation.
+  Use original packed weights and write the final row directly.
+- **Validation and removal** Compare emitted shaders with the three
+  regular dispatches and exercise the native graph and pipeline lifecycle.
+  Remove once upstream provides equivalent checked GEGLU fusion.
+
 ## Single-output row selection in Gemma 4
 
 - **Patch** `gemma4-single-output-row.patch` against llama.cpp `07ba74babd`.

@@ -82,6 +82,7 @@ function shaderInputs({ original, patched, iq3s, words }: { original: string; pa
     'ggml-webgpu-situ-shaders.hpp': edited({ names: ['situ_packed.wgsl'] }),
     'ggml-webgpu-loop-controller-shaders.hpp': edited({ names: ['loop_controller.wgsl'] }),
     'ggml-webgpu-dense-q4-swiglu-shaders.hpp': edited({ names: ['dense_q4_swiglu.wgsl'] }),
+    'ggml-webgpu-q4-geglu-shaders.hpp': edited({ names: ['q4_geglu.wgsl'] }),
     'ggml-webgpu-mul-mat-id-gather-logical32-shaders.hpp': edited({ names: ['mul_mat_id_gather_logical32.wgsl'] }),
     'ggml-webgpu-q8-subgroup-shaders.hpp': { ...common, ...edited({ names: ['mul_mat_vec_acc.tmpl', 'q8_subgroup_matvec.wgsl'] }) },
     'ggml-webgpu-iq3s-id-subgroup-shaders.hpp': { ...common, ...edited({ names: ['iq3s_id_subgroup.wgsl'] }), 'mul_mat_vec_acc.tmpl': join(iq3s, shaderBase, 'mul_mat_vec_acc.tmpl') },

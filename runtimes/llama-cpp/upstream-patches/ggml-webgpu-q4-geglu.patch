@@ -1,0 +1,433 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5579,3 +5579,4 @@
+ #include "ggml-webgpu-dense-q4-swiglu.hpp"
++#include "ggml-webgpu-q4-geglu.hpp"
+ #include "ggml-webgpu-q8-sigmoid-mul.hpp"
+ 
+@@ -5669,6 +5670,7 @@
+             return ggml_webgpu_get_rows(ctx, src0, src1, node);
+         case GGML_OP_MUL_MAT:
+             if (auto fused = webgpu_dense_q4_swiglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            if (auto fused = webgpu_q4_geglu::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = webgpu_q8_sigmoid_mul::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_f32_matvec_epilogue(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (auto fused = ggml_webgpu_loop_controller(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -15,6 +15,7 @@
+ #include "ggml-webgpu-ssm-conv-silu-shaders.hpp"
+ #include "ggml-webgpu-router-tail-shaders.hpp"
+ #include "ggml-webgpu-dense-q4-swiglu-shaders.hpp"
++#include "ggml-webgpu-q4-geglu-shaders.hpp"
+ #include "ggml-webgpu-loop-controller-shaders.hpp"
+ #include "ggml-webgpu-situ-shaders.hpp"
+ #include "ggml-webgpu-short-conv-residual-shaders.hpp"
+@@ -1899,6 +1900,24 @@
+     return true;
+ }
+ 
++struct ggml_webgpu_q4_geglu_pipeline_key {
++    uint32_t subgroup;
++    bool requested;
++
++    bool operator==(const ggml_webgpu_q4_geglu_pipeline_key & other) const {
++        return subgroup == other.subgroup && requested == other.requested;
++    }
++};
++
++struct ggml_webgpu_q4_geglu_pipeline_key_hash {
++    size_t operator()(const ggml_webgpu_q4_geglu_pipeline_key & key) const {
++        size_t seed = 0;
++        ggml_webgpu_hash_combine(seed, key.subgroup);
++        ggml_webgpu_hash_combine(seed, key.requested);
++        return seed;
++    }
++};
++
+ class ggml_webgpu_shader_lib {
+     std::unordered_map<ggml_webgpu_group_norm_pipeline_key, webgpu_pipeline, ggml_webgpu_group_norm_pipeline_key_hash>
+         group_norm_pipelines;
+@@ -1912,6 +1931,9 @@
+     using dense_swiglu_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline, uint32_t,
+         std::hash<uint32_t>>;
+     std::unique_ptr<dense_swiglu_cache_type> optional_dense_swiglu;
++    using q4_geglu_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline,
++        ggml_webgpu_q4_geglu_pipeline_key, ggml_webgpu_q4_geglu_pipeline_key_hash>;
++    std::unique_ptr<q4_geglu_cache_type> optional_q4_geglu;
+     pre_wgsl::Preprocessor preprocessor;
+ 
+     std::unordered_map<uint64_t, webgpu_pipeline> router_tail_pipelines;
+@@ -2757,6 +2779,33 @@
+                 [] { return webgpu_pipeline{}; }).pipeline;
+         } catch (const std::exception & error) {
+             GGML_ABORT("ggml_webgpu: optional dense Q4 SwiGLU pipeline is terminal: %s", error.what());
++        }
++    }
++
++    webgpu_pipeline get_q4_geglu_pipeline(const ggml_webgpu_q4_geglu_pipeline_key & key, bool & created) {
++        created = false;
++        require_healthy_device();
++        GGML_ASSERT(key.requested ? key.subgroup == 16 : (key.subgroup == 16 || key.subgroup == 32));
++        if (!optional_q4_geglu) {
++            optional_q4_geglu = std::make_unique<q4_geglu_cache_type>(
++                optional_device->control, optional_device->generation);
++        }
++        try {
++            return optional_q4_geglu->select(key, true,
++                [&] {
++                    created = true;
++                    std::vector<std::string> defines = {"LOGICAL_SUBGROUP_WIDTH=" + std::to_string(key.subgroup)};
++                    std::string variant = "q4_0_geglu_r4_sg" + std::to_string(key.subgroup);
++                    if (key.requested) {
++                        defines.push_back("REQUESTED_SUBGROUP_SIZE=" + std::to_string(key.subgroup));
++                        variant += "_requested" + std::to_string(key.subgroup);
++                    }
++                    const auto source = preprocessor.preprocess(wgsl_q4_geglu, defines);
++                    return create_scoped_pipeline(source, variant);
++                },
++                [] { return webgpu_pipeline{}; }).pipeline;
++        } catch (const std::exception & error) {
++            GGML_ABORT("ggml_webgpu: optional Q4_0 GEGLU pipeline is terminal: %s", error.what());
+         }
+     }
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-q4-geglu.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-q4-geglu.hpp
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-q4-geglu.hpp
+@@ -0,0 +1,184 @@
++#pragma once
++
++#include "ggml-webgpu-checked-tensor-binding.hpp"
++#include <iterator>
++
++namespace webgpu_q4_geglu {
++
++using namespace webgpu_checked_tensor_binding;
++
++constexpr uint32_t workgroup = 128;
++constexpr uint32_t rows_per_subgroup = 4;
++constexpr int operations = 3;
++
++// These projections already select the ordinary Q4_0 independent-subgroup
++// matvec. Do not change that selection policy as a side effect of fusion.
++static bool projection_shape(const ggml_tensor * weight) {
++    return weight && weight->type == GGML_TYPE_Q4_0 &&
++        ((weight->ne[0] == 1536 && (weight->ne[1] == 6144 || weight->ne[1] == 12288)) ||
++         (weight->ne[0] == 2560 && weight->ne[1] == 10240));
++}
++
++static bool default_params(const ggml_tensor * tensor, size_t skip) {
++    return std::all_of(std::begin(tensor->op_params) + skip, std::end(tensor->op_params),
++        [](int32_t word) { return word == 0; });
++}
++
++struct pattern {
++    ggml_tensor * gate;
++    ggml_tensor * up;
++    ggml_tensor * output;
++    uint32_t k;
++    uint32_t m;
++};
++
++static std::optional<pattern> match(const ggml_cgraph & graph, int index) {
++    if (index < 0 || index >= graph.n_nodes || graph.n_nodes - index < operations) {
++        return std::nullopt;
++    }
++    const auto * first = graph.nodes[index];
++    const auto * second = graph.nodes[index + 1];
++    auto * output = graph.nodes[index + 2];
++    if (first->op != GGML_OP_MUL_MAT || !projection_shape(first->src[0]) ||
++        second->op != GGML_OP_MUL_MAT || output->op != GGML_OP_GLU ||
++        ggml_get_glu_op(output) != GGML_GLU_OP_GEGLU || !default_params(output, 1)) {
++        return std::nullopt;
++    }
++    auto * gate = output->src[0];
++    auto * up = output->src[1];
++    if (first == second || !((gate == first && up == second) || (gate == second && up == first))) {
++        return std::nullopt;
++    }
++    const int64_t k = first->src[0]->ne[0];
++    const int64_t m = first->src[0]->ne[1];
++    if (gate->src[1] != up->src[1] || !shape(gate->src[1], GGML_TYPE_F32, k, 1) ||
++        !shape(gate->src[0], GGML_TYPE_Q4_0, k, m) || !shape(up->src[0], GGML_TYPE_Q4_0, k, m) ||
++        !default_params(gate, 0) || !default_params(up, 0)) {
++        return std::nullopt;
++    }
++    for (const auto * node : {gate, up, output}) {
++        if (node->view_src || node->view_offs || !shape(node, GGML_TYPE_F32, m, 1) ||
++            std::any_of(std::begin(node->src) + 2, std::end(node->src),
++                [](const ggml_tensor * source) { return source != nullptr; })) {
++            return std::nullopt;
++        }
++    }
++    const int indices[] = {index, index + 1, index + 2};
++    const int outputs[] = {index + 2};
++    const ggml_op ops[] = {GGML_OP_MUL_MAT, GGML_OP_MUL_MAT, GGML_OP_GLU};
++    if (!ggml_can_fuse_subgraph_ext(&graph, indices, operations, ops, outputs, 1)) {
++        return std::nullopt;
++    }
++    return pattern{gate, up, output, uint32_t(k), uint32_t(m)};
++}
++
++struct dispatch_plan {
++    std::array<binding, 4> bindings;
++    ggml_webgpu_q4_geglu_pipeline_key pipeline_key;
++    uint32_t workgroups;
++    uint32_t k;
++    uint32_t m;
++};
++
++static std::optional<dispatch_plan> plan(webgpu_context & ctx, const ggml_cgraph & graph,
++                                        int index, webgpu_fusion_view_sources & views) {
++    const auto matched = match(graph, index);
++    if (!matched) {
++        return std::nullopt;
++    }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxStorageBuffersPerShaderStage < 4 || limits.maxBindingsPerBindGroup < 5 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size ||
++        limits.maxComputeWorkgroupSizeX < workgroup || ctx->param_arena.slot_size < 8 * sizeof(uint32_t)) {
++        return std::nullopt;
++    }
++
++    dispatch_plan result{};
++    result.k = matched->k;
++    result.m = matched->m;
++    for (auto * projection : {matched->gate, matched->up}) {
++        const auto ordinary = ggml_webgpu_mat_context(ctx, projection->src[0], projection->src[1], projection);
++        const auto key = ggml_webgpu_shader_lib::make_mul_mat_vec_key(ordinary, false, false);
++        const bool requested = key.requested_subgroup_size != 0;
++        const ggml_webgpu_q4_geglu_pipeline_key pipeline_key = {
++            requested ? key.requested_subgroup_size : key.subgroup_size, requested,
++        };
++        // Consume the ordinary selector's admission, including its real width16
++        // request. Do not reinterpret a variable advertised range as fixed.
++        if (key.use_mmvq || key.num_cols != 1 || key.workgroup_size != workgroup ||
++            (requested ? key.requested_subgroup_size != 16 || key.subgroup_size != 0 :
++                         (key.subgroup_size != 16 && key.subgroup_size != 32)) ||
++            (result.pipeline_key.subgroup && !(result.pipeline_key == pipeline_key))) {
++            return std::nullopt;
++        }
++        result.pipeline_key = pipeline_key;
++    }
++    static_assert(WEBGPU_MUL_MAT_VEC_LEGACY_Q_OUTPUTS_PER_WG == rows_per_subgroup);
++    const uint32_t output_tile = workgroup / result.pipeline_key.subgroup * rows_per_subgroup;
++    result.workgroups = (result.m + output_tile - 1) / output_tile;
++    if (result.workgroups > limits.maxComputeWorkgroupsPerDimension ||
++        views.contains(matched->gate) || views.contains(matched->up)) {
++        return std::nullopt;
++    }
++
++    ctx->shader_lib->require_healthy_device();
++    const ggml_tensor * tensors[] = {matched->gate->src[0], matched->gate->src[1],
++        matched->up->src[0], matched->output};
++    std::array<buffer_facts, 4> facts{};
++    for (size_t i = 0; i < result.bindings.size(); ++i) {
++        const auto * root = tensors[i]->view_src;
++        if (root && (root == matched->gate || root == matched->up || root == matched->output)) {
++            return std::nullopt;
++        }
++        if (!get_binding(ctx, tensors[i], facts, result.bindings[i])) {
++            return std::nullopt;
++        }
++        for (size_t j = 0; j < i; ++j) {
++            if (bindings_overlap(result.bindings[i], result.bindings[j])) {
++                return std::nullopt;
++            }
++        }
++    }
++    return result;
++}
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, ggml_cgraph & graph, int index,
++                                               webgpu_fusion_view_sources & views, int & consumed) {
++    auto dispatch = plan(ctx, graph, index, views);
++    if (!dispatch) {
++        return std::nullopt;
++    }
++    bool created = false;
++    const auto pipeline_key = dispatch->pipeline_key;
++    auto pipeline = ctx->shader_lib->get_q4_geglu_pipeline(pipeline_key, created);
++    if (created) {
++        views.invalidate();
++    }
++    if (!pipeline.pipeline) {
++        return std::nullopt;
++    }
++    if (created) {
++        dispatch = plan(ctx, graph, index, views);
++        if (!dispatch || !(dispatch->pipeline_key == pipeline_key)) {
++            return std::nullopt;
++        }
++    }
++
++    const auto & bindings = dispatch->bindings;
++    const std::array<uint32_t, 8> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[2].element_offset, bindings[3].element_offset,
++        dispatch->k, dispatch->m, dispatch->k / 32u, 0,
++    };
++    const std::array<wgpu::BindGroupEntry, 4> entries = {
++        ggml_webgpu_make_bind_group_entry(0, bindings[0].buffer, bindings[0].offset, bindings[0].size),
++        ggml_webgpu_make_bind_group_entry(1, bindings[1].buffer, bindings[1].offset, bindings[1].size),
++        ggml_webgpu_make_bind_group_entry(2, bindings[2].buffer, bindings[2].offset, bindings[2].size),
++        ggml_webgpu_make_bind_group_entry(3, bindings[3].buffer, bindings[3].offset, bindings[3].size),
++    };
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, dispatch->workgroups);
++    GGML_ASSERT(encoded.num_kernels == 1);
++    consumed = operations;
++    return encoded;
++}
++
++} // namespace webgpu_q4_geglu
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl
+new file mode 100644
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl
+@@ -0,0 +1,143 @@
++enable subgroups;
++#ifdef REQUESTED_SUBGROUP_SIZE
++enable subgroup_size_control;
++#endif
++enable f16;
++
++struct Params {
++    offset_gate: u32,
++    offset_input: u32,
++    offset_up: u32,
++    offset_output: u32,
++    k: u32,
++    m: u32,
++    weight_stride: u32,
++    reserved: u32,
++};
++
++@group(0) @binding(0) var<storage, read> gate_weights: array<u32>;
++@group(0) @binding(1) var<storage, read> input: array<f32>;
++@group(0) @binding(2) var<storage, read> up_weights: array<u32>;
++@group(0) @binding(3) var<storage, read_write> output: array<f32>;
++@group(0) @binding(4) var<uniform> params: Params;
++
++fn gate_scale(byte_offset: u32) -> f32 {
++    let shift = (byte_offset & 2u) * 8u;
++    let bits = (gate_weights[byte_offset / 4u] >> shift) & 0xFFFFu;
++    return f32(f16(unpack2x16float(bits)[0]));
++}
++
++fn up_scale(byte_offset: u32) -> f32 {
++    let shift = (byte_offset & 2u) * 8u;
++    let bits = (up_weights[byte_offset / 4u] >> shift) & 0xFFFFu;
++    return f32(f16(unpack2x16float(bits)[0]));
++}
++
++fn gate_quants(byte_offset: u32) -> u32 {
++    let word = byte_offset / 4u;
++    let shift = (byte_offset & 3u) * 8u;
++    let lo = gate_weights[word];
++    let hi = gate_weights[word + select(0u, 1u, shift != 0u)];
++    return (lo >> shift) | (hi << ((32u - shift) & 31u));
++}
++
++fn up_quants(byte_offset: u32) -> u32 {
++    let word = byte_offset / 4u;
++    let shift = (byte_offset & 3u) * 8u;
++    let lo = up_weights[word];
++    let hi = up_weights[word + select(0u, 1u, shift != 0u)];
++    return (lo >> shift) | (hi << ((32u - shift) & 31u));
++}
++
++// Preserve Q4_0's ordinary per-lane dot and accumulation order. Only the
++// input loads are shared between the two independent projections.
++fn block_dot(packed: u32, scale: f32, values: array<f32, 8>) -> f32 {
++    var sum = 0.0;
++    for (var byte = 0u; byte < 4u; byte++) {
++        let q = (packed >> (8u * byte)) & 0xFFu;
++        let lo = (f32(q & 0xFu) - 8.0) * scale;
++        let hi = (f32((q >> 4u) & 0xFu) - 8.0) * scale;
++        sum += lo * values[byte];
++        sum += hi * values[byte + 4u];
++    }
++    return sum;
++}
++
++struct Accumulator {
++    gate: array<f32, 4>,
++    up: array<f32, 4>,
++};
++
++fn accumulate(thread: u32, row_base: u32) -> Accumulator {
++    var acc: Accumulator;
++    let lane_in_block = thread % 4u;
++    for (var block = thread / 4u; block < params.k / 32u; block += LOGICAL_SUBGROUP_WIDTH / 4u) {
++        let input_base = params.offset_input + block * 32u + lane_in_block * 4u;
++        var values: array<f32, 8>;
++        for (var i = 0u; i < 4u; i++) {
++            values[i] = input[input_base + i];
++            values[i + 4u] = input[input_base + i + 16u];
++        }
++        for (var row = 0u; row < 4u; row++) {
++            let output_row = row_base + row;
++            if (output_row < params.m) {
++                let gate_base = (params.offset_gate + output_row * params.weight_stride + block) * 18u;
++                let up_base = (params.offset_up + output_row * params.weight_stride + block) * 18u;
++                acc.gate[row] += block_dot(gate_quants(gate_base + 2u + 4u * lane_in_block), gate_scale(gate_base), values);
++                acc.up[row] += block_dot(up_quants(up_base + 2u + 4u * lane_in_block), up_scale(up_base), values);
++            }
++        }
++    }
++    return acc;
++}
++
++// Same expression and F32 constants as upstream glu.wgsl's OP_GEGLU.
++fn geglu(gate: f32, up: f32) -> f32 {
++    let value = 0.79788456080286535587989211986876 * gate * (1.0 + 0.044715 * gate * gate);
++    return 0.5 * gate * (2.0 - 2.0 / (exp(2 * value) + 1)) * up;
++}
++
++@compute @workgroup_size(128)
++#ifdef REQUESTED_SUBGROUP_SIZE
++@subgroup_size(REQUESTED_SUBGROUP_SIZE)
++#endif
++fn main(
++    @builtin(workgroup_id) workgroup_id: vec3<u32>,
++    @builtin(num_workgroups) num_workgroups: vec3<u32>,
++    @builtin(subgroup_id) subgroup_id: u32,
++    @builtin(subgroup_invocation_id) subgroup_lane: u32,
++    @builtin(num_subgroups) num_subgroups: u32,
++) {
++    let expected_subgroups: u32 = 128u / LOGICAL_SUBGROUP_WIDTH;
++    let rows_per_workgroup = expected_subgroups * 4u;
++    let group = workgroup_id.y * num_workgroups.x + workgroup_id.x;
++    if (group >= (params.m + rows_per_workgroup - 1u) / rows_per_workgroup) {
++        return;
++    }
++    let row_base = group * rows_per_workgroup + subgroup_id * 4u;
++    let owns_rows = subgroup_id < expected_subgroups;
++    var acc: Accumulator;
++    if (num_subgroups == expected_subgroups) {
++        acc = accumulate(subgroup_lane, row_base);
++    } else {
++        // Advertised subgroup width remains a maximum. Assign all virtual
++        // lanes even if the implementation uses legal partial subgroups.
++        let active_count = subgroupAdd(1u);
++        if (owns_rows) {
++            for (var virtual_lane = subgroup_lane; virtual_lane < LOGICAL_SUBGROUP_WIDTH; virtual_lane += active_count) {
++                let partial = accumulate(virtual_lane, row_base);
++                for (var row = 0u; row < 4u; row++) {
++                    acc.gate[row] += partial.gate[row];
++                    acc.up[row] += partial.up[row];
++                }
++            }
++        }
++    }
++    for (var row = 0u; row < 4u; row++) {
++        let gate = subgroupAdd(acc.gate[row]);
++        let up = subgroupAdd(acc.up[row]);
++        if (owns_rows && subgroup_lane == 0u && row_base + row < params.m) {
++            output[params.offset_output + row_base + row] = geglu(gate, up);
++        }
++    }
++}

@@ -17,6 +17,7 @@
 #include "cases/situ.hpp"
 #include "cases/loop-controller.hpp"
 #include "cases/dense-q4-swiglu.hpp"
+#include "cases/q4-geglu.hpp"
 #include "cases/q8-sigmoid-mul.hpp"
 #include "cases/fwht-1024.hpp"
 #include "cases/add-cast-f16.hpp"
@@ -40,6 +41,7 @@ int main() {
     situ_cases::all();
     loop_controller_cases::all();
     dense_q4_swiglu_cases::all();
+    q4_geglu_cases::all();
     q8_sigmoid_mul_cases::all();
     fwht_1024_cases::all();
     add_cast_f16_cases::all();
