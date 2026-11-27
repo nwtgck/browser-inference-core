@@ -20,17 +20,22 @@ file list and sizes. Ordinary package/verify commands perform their requested
 pack check. CI can defer that check during assembly because publication checks
 the final private snapshot. It does not maintain a second npm packlist algorithm.
 
-The offline `publication freeze` entry:
+CI calls the offline `publication assemble-freeze` entry with the three saved
+runtime packages. Local callers with an independently saved aggregate use
+`publication freeze`. Both entries:
 
-1. Validates the package, source identity and all three runtime inventories.
-2. Copies the validated byte inventory into a fresh private snapshot.
-3. Collects source facts once, including prepared-source and actual compiler-input
-   correspondence and the complete committed-source SHA-256 tree fingerprint.
-4. Creates `browser-inference-core-artifact-integrity.yaml` with the root JSON
-   bytes and source fingerprint, then checks npm packing for the complete snapshot.
-5. Stages the snapshot in a private Git repository and verifies the immutable
+1. Validate the package, source identity and all three runtime inventories.
+2. Write the validated byte inventory into a fresh private snapshot. The CI
+   entry assembles directly in that snapshot.
+3. Resolve the package's JavaScript and Wasm exports and type-check its public
+   declarations from a temporary consumer. Collect source facts once, including
+   prepared-source and actual compiler-input correspondence and the complete
+   committed-source SHA-256 tree fingerprint.
+4. Create `browser-inference-core-artifact-integrity.yaml` with the root JSON
+   bytes and source fingerprint, then check npm packing for the complete snapshot.
+5. Stage the snapshot in a private Git repository and verify the immutable
    tree's paths, entry types, sizes and blob identities.
-6. Writes a private receipt containing the tree, YAML/manifest identities and typed
+6. Write a private receipt containing the tree, YAML/manifest identities and typed
    report data with its canonical digest.
 
 The receipt remains outside the runtime package and is not a cache admission
@@ -40,6 +45,13 @@ verified tree. Conflicts retry on the new parent; they do not recompile, repack 
 force-push. An accepted push with a lost response is resolved by ancestry checks.
 
 ## Confirmation and reporting
+
+Once Git accepts the artifact commit, the publish job writes the four install
+commands to its Summary and uploads the guide before the job finishes. A separate
+`consumer-report` job uses that guide and its hash-bound publication facts for
+npm resolution and reporting. Both reports refer to the original publication
+attempt. The guide allows PR comments to link the immutable publication when
+an independent check fails.
 
 `publication confirm` reads this job's private receipt, checks its source/report
 binding, and compares the returned artifact commit's tree, YAML and manifest blobs.
@@ -77,7 +89,7 @@ Git writes remain inline in workflow YAML.
 
 `tests/tools/publication/` covers source collection, immutable Git bytes, frozen
 report reuse and npm-lock constraints. `tests/tools/package/` covers real npm
-packing, package closure, notices and generated consumer types. These tests use
+packing, package closure, notices and public consumer imports. These tests use
 synthetic runtime payloads and local repositories; they do not establish a
 hosted workflow run or model inference. Timings depend on payload size, runner
 capacity, cache state and network transfer. Packing fewer times is not by itself

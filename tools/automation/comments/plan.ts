@@ -58,12 +58,12 @@ function validateRun({ run, repository }: { run: GitHubWorkflowRun; repository: 
   }
 }
 
-export function latestRun({ runs, repository, pull }: { runs: readonly GitHubWorkflowRun[]; repository: string; pull: GitHubPullRequest }): GitHubWorkflowRun | undefined {
+export function matchingRuns({ runs, repository, pull }: { runs: readonly GitHubWorkflowRun[]; repository: string; pull: GitHubPullRequest }): GitHubWorkflowRun[] {
   if (runs.length > 1000) {
     throw new Error('Incomplete or oversized build history');
   }
   const seen = new Set<string>();
-  let latest: GitHubWorkflowRun | undefined;
+  const matches = new Map<number, GitHubWorkflowRun>();
   for (const run of runs) {
     const identity = `${positiveId({ value: run.id })}/${positiveId({ value: run.run_attempt })}`;
     if (seen.has(identity)) {
@@ -74,27 +74,48 @@ export function latestRun({ runs, repository, pull }: { runs: readonly GitHubWor
       continue;
     }
     validateRun({ run, repository });
-    const time = run.run_started_at || run.created_at || '';
-    const previousTime = latest?.run_started_at || latest?.created_at || '';
-    if (!latest || time > previousTime || time === previousTime && (run.id > latest.id || run.id === latest.id && run.run_attempt > latest.run_attempt)) {
-      latest = run;
+    const previousAttempt = matches.get(run.id);
+    if (!previousAttempt || run.run_attempt > previousAttempt.run_attempt) {
+      matches.set(run.id, run);
     }
   }
-  return latest;
+  return Array.from(matches.values()).sort((first, second) => {
+    const firstTime = first.run_started_at || first.created_at || '';
+    const secondTime = second.run_started_at || second.created_at || '';
+    return firstTime === secondTime ? second.id - first.id : firstTime < secondTime ? 1 : -1;
+  });
 }
 
-export function selectArtifact({ artifacts, run }: { artifacts: readonly GitHubArtifact[]; run: GitHubWorkflowRun }): number {
-  const name = `consumer-update-${positiveId({ value: run.run_attempt })}`;
-  const matches = artifacts.filter(item => item.name === name && !item.expired);
-  const match = matches[0];
-  if (matches.length !== 1 || !match) {
-    throw new Error('No unique unexpired report artifact for this attempt');
+export function reportAttemptAvailable({ run, attempt }: { run: GitHubWorkflowRun; attempt: number }): boolean {
+  return run.actor?.login !== 'dependabot[bot]' && Number.isSafeInteger(attempt) && attempt > 0 &&
+    (attempt < run.run_attempt || attempt === run.run_attempt && run.status === 'completed');
+}
+
+export type ReportKind = 'guide' | 'details';
+export type ReportArchive = { artifactId: number; attempt: number; kind: ReportKind; createdAt: string | undefined };
+export type PublishedReport = { run: GitHubWorkflowRun; attempt: number; kind: ReportKind; markdown: string };
+
+export function reportArchives({ artifacts, run }: { artifacts: readonly GitHubArtifact[]; run: GitHubWorkflowRun }): ReportArchive[] {
+  const matches = new Map<string, ReportArchive | undefined>();
+  for (const artifact of artifacts) {
+    const match = /^(consumer-update|publication-guide)-([1-9][0-9]*)$/u.exec(artifact.name);
+    const attempt = Number(match?.[2]);
+    if (artifact.expired || !reportAttemptAvailable({ run, attempt })) {
+      continue;
+    }
+    const kind = match?.[1] === 'consumer-update' ? 'details' : 'guide';
+    matches.set(artifact.name, matches.has(artifact.name) ? undefined : { artifactId: positiveId({ value: artifact.id }), attempt, kind, createdAt: artifact.created_at });
   }
-  return positiveId({ value: match.id });
+  return Array.from(matches.values()).filter(match => match !== undefined).sort((first, second) =>
+    second.attempt - first.attempt || Number(second.kind === 'details') - Number(first.kind === 'details'));
 }
 
-function sameRun({ first, second }: { first: GitHubWorkflowRun | undefined; second: GitHubWorkflowRun | undefined }): boolean {
-  return first?.id === second?.id && first?.run_attempt === second?.run_attempt && first?.status === second?.status && first?.conclusion === second?.conclusion;
+function sameRunHistory({ selected, current }: { selected: readonly GitHubWorkflowRun[]; current: readonly GitHubWorkflowRun[] }): boolean {
+  return selected.length === current.length && selected.every((first, index) => {
+    const second = current[index];
+    return first.id === second?.id && first.run_attempt === second.run_attempt && first.status === second.status &&
+      first.conclusion === second.conclusion && first.actor?.login === second.actor?.login;
+  });
 }
 
 export function previousPayload({ body }: { body: string }): string | undefined {
@@ -106,30 +127,34 @@ export function previousPayload({ body }: { body: string }): string | undefined 
   return body.slice(first + payloadStart.length, last).trim() || undefined;
 }
 
-export function commentBody({ pull, run, payload, previous, error }: { pull: GitHubPullRequest; run: GitHubWorkflowRun | undefined; payload: string | undefined; previous: string; error: string | undefined }): string {
+export function commentBody({ pull, run, publication, previous, error }: { pull: GitHubPullRequest; run: GitHubWorkflowRun | undefined; publication: PublishedReport | undefined; previous: string; error: string | undefined }): string {
   const head = gitObjectId({ value: pull.head.sha });
   let text = `${marker}\n## Runtime publication status\n\n**Current PR head:** \`${head}\`\n\n`;
   if (run === undefined) {
     text += 'No matching runtime build is recorded for this head yet. Human PR creation normally starts it; workflow approval, merge conflicts, or a missing workflow can prevent a run from starting.\n';
   } else if (run.status !== 'completed') {
-    text += `The latest runtime build/report run is **${run.status}**. No new complete consumer report is available yet.\n`;
-  } else if (run.conclusion === 'success') {
-    text += payload === undefined ? 'The runtime build succeeded, but its consumer report is unavailable or expired.\n' : 'The runtime build and consumer report succeeded for this PR head.\n';
+    text += `The latest runtime build is **${run.status}**.\n`;
   } else {
-    text += `The latest runtime build/report run concluded **${run.conclusion}**. Publication may have completed before a reporting failure; this is not a new complete consumer report.\n`;
+    text += `The latest runtime build concluded **${run.conclusion ?? 'unknown'}**.\n`;
   }
   if (run) {
-    text += `\n[Build/report run](${run.html_url}) (attempt ${run.run_attempt})\n`;
+    text += `\n[Build run summary](${run.html_url}/attempts/${run.run_attempt}) (attempt ${run.run_attempt})\n`;
+  }
+  if (publication) {
+    text += `\nRuntime publication confirmed for this PR head. [Publication run summary](${publication.run.html_url}/attempts/${publication.attempt}) (attempt ${publication.attempt}).\n`;
+    const detailsStatus = { guide: '\nConsumer integration details are unavailable.\n', details: '' } satisfies Record<ReportKind, string>;
+    text += detailsStatus[publication.kind];
+    text += `\n${payloadStart}\n${publication.markdown.trim()}\n${payloadEnd}\n`;
+  } else if (run) {
+    text += '\nA confirmed publication report is unavailable or expired for this PR head. See the build run summary for publication information.\n';
   }
   if (error) {
     text += '\nReport retrieval error: ' + error.replaceAll('`', "'").replace(/[\r\n]/gu, ' ').slice(0, 500) + '\n';
   }
-  if (payload !== undefined) {
-    text += `\n${payloadStart}\n${payload.trim()}\n${payloadEnd}\n`;
-  } else {
+  if (!publication) {
     const old = previousPayload({ body: previous });
     if (old) {
-      text += `\n<details>\n<summary>Previous successful publication — not confirmation of the current head/run</summary>\n\n${payloadStart}\n${old}\n${payloadEnd}\n\n</details>\n`;
+      text += `\n<details>\n<summary>Previous publication (historical reference)</summary>\n\n${payloadStart}\n${old}\n${payloadEnd}\n\n</details>\n`;
     }
   }
   if (Buffer.byteLength(text) > 62000) {
@@ -140,14 +165,14 @@ export function commentBody({ pull, run, payload, previous, error }: { pull: Git
 
 export type CommentWrite = { kind: 'skip'; reason: string } | { kind: 'create'; body: string } | { kind: 'update'; commentId: number; body: string };
 
-export function planCommentWrite({ original, current, selectedRun, currentRun, comments, repository, payload, error }: { original: GitHubPullRequest; current: GitHubPullRequest; selectedRun: GitHubWorkflowRun | undefined; currentRun: GitHubWorkflowRun | undefined; comments: readonly GitHubIssueComment[]; repository: string; payload: string | undefined; error: string | undefined }): CommentWrite {
+export function planCommentWrite({ original, current, selectedRuns, currentRuns, comments, repository, publication, error }: { original: GitHubPullRequest; current: GitHubPullRequest; selectedRuns: readonly GitHubWorkflowRun[]; currentRuns: readonly GitHubWorkflowRun[]; comments: readonly GitHubIssueComment[]; repository: string; publication: PublishedReport | undefined; error: string | undefined }): CommentWrite {
   validatePullRequest({ pull: original });
   validatePullRequest({ pull: current });
-  if (current.number !== original.number || !sameRepositoryPull({ pull: current, repository }) || current.head.sha !== original.head.sha || current.head.ref !== original.head.ref || !sameRun({ first: selectedRun, second: currentRun })) {
-    return { kind: 'skip', reason: 'PR head, trust or latest workflow run changed' };
+  if (current.number !== original.number || !sameRepositoryPull({ pull: current, repository }) || current.head.sha !== original.head.sha || current.head.ref !== original.head.ref || !sameRunHistory({ selected: selectedRuns, current: currentRuns })) {
+    return { kind: 'skip', reason: 'PR head, trust or matching workflow runs changed' };
   }
   const previous = comments.find(comment => comment.user.login === 'github-actions[bot]' && comment.user.type === 'Bot' && comment.body?.startsWith(marker));
-  const body = commentBody({ pull: current, run: currentRun, payload, previous: previous?.body ?? '', error });
+  const body = commentBody({ pull: current, run: currentRuns[0], publication, previous: previous?.body ?? '', error });
   if (previous) {
     positiveId({ value: previous.id });
     return previous.body === body ? { kind: 'skip', reason: 'Comment already matches current status' } : { kind: 'update', commentId: previous.id, body };

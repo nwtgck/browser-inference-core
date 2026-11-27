@@ -3,9 +3,13 @@ import contract from '#runtimes/stable-diffusion-cpp/config/browser-smoke-contra
 /** One scope producer shared by the browser harness and artifact validation. */
 export const imageSmokeContract = contract;
 
-export function imageSmokeScope({ testWebGpu }: { testWebGpu: boolean }): string {
+export function imageSmokeScope({ variant, testWebGpu }: { variant: string; testWebGpu: boolean }): string {
   if (typeof testWebGpu !== 'boolean') {
     throw new TypeError('testWebGpu must be boolean');
   }
-  return imageSmokeContract.scopePrefix + (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + imageSmokeContract.scopeSuffix;
+  switch (variant) {
+  case 'browser': return imageSmokeContract.browserScope;
+  case 'test': return imageSmokeContract.scopePrefix + (testWebGpu ? 'CPU and WebGPU' : 'CPU (no GPU inference)') + imageSmokeContract.scopeSuffix;
+  default: throw new TypeError(`Unknown image variant: ${variant}`);
+  }
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { checkSpeechStartup } from './startup-contract.mjs';
 
 const [directory, ...extra] = process.argv.slice(2);
 if (!directory || extra.length) {
@@ -26,11 +27,7 @@ const { default: createModule } = await import(pathToFileURL(path.join(root, 'pr
 const wasmBinary = new Uint8Array(await readFile(path.join(root, 'profiles/webgpu-wasm32-jspi/test/core.wasm')));
 const module = await createModule({ wasmBinary });
 const core = attachCore(module, schema, { suspension: 'jspi' });
-assert.equal(core.pointerBytes, 4);
-assert.equal(core.schema.runtime, 'speech-cpp');
-assert.equal(await core.api.speech_api_version_major(), core.constant('SPEECH_API_VERSION_MAJOR'));
-assert.equal(await core.api.speech_api_version_minor(), core.constant('SPEECH_API_VERSION_MINOR'));
-assert.match(core.readUtf8(await core.api.speech_version()), /^\d+\.\d+\.\d+/u);
+await checkSpeechStartup({ core, pointerBytes: 4 });
 const checks = ['packaged module, schema fingerprint, wasm32 pointers and upstream API version'];
 
 function readPointer({ storage }) {

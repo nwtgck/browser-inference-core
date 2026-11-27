@@ -58,9 +58,10 @@ upstream versions.
 
 The llama matrix builds five profiles in two variants; the image matrix builds
 three profiles in two variants. Speech builds one WebGPU wasm32 JSPI profile
-in two variants. Host tests, native checks and these eighteen
-build pairs run in separate jobs. Each runtime then packages and checks its own
-complete matrix before aggregate publication.
+in two variants. The eighteen profile and variant builds run separately from
+host and native checks. Each runtime packages its complete matrix and runs its
+required startup checks before aggregate publication. Host, native, and detailed
+regression checks report their results independently.
 
 Only final aggregation waits for all runtimes. Each runtime transfers its own
 compiler/Dawn license notices and never borrows another runtime's build artifact.

@@ -7,6 +7,10 @@ import { fileIdentity } from '#tools/shared/files';
 import { ProcessError, type runProcess } from '#tools/shared/process';
 import { validateSavedRuntimePackage } from '#tools/validation/runtime';
 import { clearValidationReceipt } from '#tools/validation/snapshot';
+import { decodeSpeechManifest } from '#dto/speech-cpp';
+import { loadConfiguration as speechConfiguration } from '#runtimes/speech-cpp/tools/config';
+import { makeRuntime, fixtureSource } from '#tests/tools/package/fixtures.test-support';
+import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 import { imageResults, llamaResults, readFixtureManifest, validationFixture } from './fixtures.test-support.js';
 
 test('both runtimes bind the fresh session, smoke every configured pair and pack exactly once', async () => {
@@ -267,6 +271,7 @@ test('saved-package entry connects current typed configuration to mandatory exte
     fixture.settings.testWebGpu = '1';
     const receipt = await validateSavedRuntimePackage({ checkoutRoot, runtime, packageDirectory: fixture.packageDirectory, receiptPath: fixture.receiptPath, settings: fixture.settings, childEnvironment: undefined, runProcess: run });
     assert.equal(receipt.runtime, runtime);
+    assert.equal(receipt.phase, 'full');
     assert.equal(receipt.status, 'complete');
     switch (runtime) {
     case 'llama-cpp': assert.deepEqual(scripts, ['asyncify-rewind.mjs', 'browser-smoke.mjs']);
@@ -282,4 +287,127 @@ test('saved-package entry connects current typed configuration to mandatory exte
     }
     assert.deepEqual(JSON.parse(await readFile(fixture.receiptPath, 'utf8')), receipt);
   }
+});
+
+test('startup records browser evidence and regression binds separate evidence to the unchanged package', async () => {
+  for (const runtime of ['llama-cpp', 'stable-diffusion-cpp'] as const) {
+    await using fixture = await validationFixture({ runtime });
+    const checkoutRoot = process.cwd();
+    const manifestPath = path.join(fixture.packageDirectory, 'manifest.json');
+    const before = await fileIdentity({ path: manifestPath });
+    fixture.settings.testWebGpu = '1';
+
+    const validate = async ({ phase, variant }: { phase: 'startup' | 'regression'; variant: 'browser' | 'test' }) => {
+      const scripts: string[] = [];
+      const gpu = runtime === 'stable-diffusion-cpp' && phase === 'regression';
+      const run: typeof runProcess = async ({ args, env }) => {
+        assert.ok(args[0]);
+        scripts.push(path.basename(args[0]));
+        if (scripts.at(-1) === 'browser-smoke.mjs') {
+          assert.equal(args[1], fixture.packageDirectory);
+          assert.equal(args.at(-1), phase);
+          assert.ok(env);
+          const values = env.kind === 'inherit' ? env.overrides : env.values;
+          assert.equal(values.SDCB_TEST_WEBGPU, gpu ? '1' : '0');
+          assert.ok(values.BIC_BROWSER_SESSION_JSON);
+          assert.ok(values.BIC_BROWSER_RESULTS_FILE);
+          const session: unknown = JSON.parse(values.BIC_BROWSER_SESSION_JSON);
+          const results = runtime === 'llama-cpp'
+            ? llamaResults({ profiles: fixture.profiles, variants: [variant] })
+            : imageResults({ profiles: fixture.profiles, variants: [variant], gpu });
+          await writeFile(values.BIC_BROWSER_RESULTS_FILE, JSON.stringify({ session, results }));
+        }
+        return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
+      };
+      const receipt = await validateSavedRuntimePackage({ checkoutRoot, runtime, phase, packageDirectory: fixture.packageDirectory, receiptPath: fixture.receiptPath, settings: fixture.settings, childEnvironment: undefined, runProcess: run });
+      const nodeAsyncify = runtime === 'llama-cpp' && phase === 'regression';
+      assert.deepEqual(scripts, nodeAsyncify ? ['asyncify-rewind.mjs', 'browser-smoke.mjs'] : ['browser-smoke.mjs']);
+      assert.equal(receipt.nodeAsyncifyPassed, nodeAsyncify ? true : undefined);
+      assert.equal(receipt.phase, phase);
+      assert.equal(receipt.testWebGpu, gpu);
+      assert.deepEqual(new Set(receipt.results.map(result => result.variant)), new Set([variant]));
+      assert.deepEqual(JSON.parse(await readFile(fixture.receiptPath, 'utf8')), receipt);
+      return receipt;
+    };
+
+    const startup = await validate({ phase: 'startup', variant: 'browser' });
+    const packaged = await readFile(manifestPath);
+    const packagedIdentity = await fileIdentity({ path: manifestPath });
+    assert.equal(startup.inputManifestSha256, before.sha256);
+    assert.equal(startup.finalManifestSha256, packagedIdentity.sha256);
+    assert.notEqual(startup.inputManifestSha256, startup.finalManifestSha256);
+    const manifest = await readFixtureManifest({ fixture });
+    for (const profile of fixture.profiles) {
+      const variants = manifest.profiles[profile]?.variants;
+      assert.equal(variants?.browser?.validation.browserSmoke, true);
+      assert.equal(variants?.test?.validation.browserSmoke, false);
+    }
+
+    const regression = await validate({ phase: 'regression', variant: 'test' });
+    assert.equal(regression.sourceCommit, startup.sourceCommit);
+    assert.equal(regression.inputManifestSha256, packagedIdentity.sha256);
+    assert.equal(regression.finalManifestSha256, packagedIdentity.sha256);
+    assert.equal(regression.snapshotSha256, startup.finalSnapshotSha256);
+    assert.equal(regression.finalSnapshotSha256, regression.snapshotSha256);
+    const detailedHarness = runtime === 'llama-cpp' ? 'chat-surface.mjs' : 'arithmetic-probes.mjs';
+    assert.ok(Object.keys(regression.testInputs).some(name => name.endsWith(detailedHarness)));
+    assert.ok(!Object.keys(startup.testInputs).some(name => name.endsWith(detailedHarness)));
+    assert.deepEqual(await readFile(manifestPath), packaged);
+  }
+});
+
+test('speech startup admits every packaged browser profile only after its Worker evidence succeeds', async () => {
+  await using fixture = await temporaryDirectory();
+  const checkoutRoot = process.cwd();
+  const runtime = 'speech-cpp';
+  await makeRuntime({ root: fixture.root, runtime, selection: 'configured' });
+  const packageDirectory = path.join(fixture.root, 'package-inputs', runtime);
+  const manifestPath = path.join(packageDirectory, 'manifest.json');
+  const receiptPath = path.join(fixture.root, 'receipt.json');
+  const { profiles } = await speechConfiguration({ checkoutRoot });
+  let validPointerWidth = false;
+  const run: typeof runProcess = async ({ args, env }) => {
+    assert.deepEqual(args, [path.join(checkoutRoot, 'tests/runtimes/speech-cpp/browser-smoke.mjs'), packageDirectory, 'startup']);
+    assert.ok(env);
+    const values = env.kind === 'inherit' ? env.overrides : env.values;
+    assert.ok(values.BIC_BROWSER_SESSION_JSON);
+    assert.ok(values.BIC_BROWSER_RESULTS_FILE);
+    const session: unknown = JSON.parse(values.BIC_BROWSER_SESSION_JSON);
+    const results = Object.entries(profiles).map(([profile, configuration]) => ({
+      profile,
+      variant: 'browser',
+      passed: true,
+      pointerBytes: validPointerWidth ? (configuration.memory64 ? 8 : 4) : 0,
+      apiVersionMajor: 1,
+      apiVersionMinor: 0,
+      version: '1.0.0',
+    }));
+    await writeFile(values.BIC_BROWSER_RESULTS_FILE, JSON.stringify({ session, results }));
+    return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
+  };
+  const validate = () => validateSavedRuntimePackage({
+    checkoutRoot,
+    runtime,
+    phase: 'startup',
+    packageDirectory,
+    receiptPath,
+    settings: { selectedSourceCommit: fixtureSource },
+    childEnvironment: undefined,
+    runProcess: run,
+  });
+
+  const before = await readFile(manifestPath);
+  await assert.rejects(validate(), /Wrong speech startup evidence/u);
+  assert.deepEqual(await readFile(manifestPath), before);
+  await assert.rejects(readFile(receiptPath), { code: 'ENOENT' });
+  validPointerWidth = true;
+  const receipt = await validate();
+  const rawManifest: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const manifest = decodeSpeechManifest({ input: rawManifest });
+  assert.equal(receipt.results.length, Object.keys(profiles).length);
+  for (const profile of Object.keys(profiles)) {
+    assert.equal(manifest.profiles[profile]?.variants.browser?.validation.browserSmoke, true);
+    assert.equal(manifest.profiles[profile]?.variants.test?.validation.browserSmoke, false);
+  }
+  assert.deepEqual(JSON.parse(await readFile(receiptPath, 'utf8')), receipt);
 });

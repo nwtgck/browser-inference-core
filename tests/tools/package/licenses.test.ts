@@ -71,14 +71,77 @@ test('llama.cpp UI notices retain their original bytes under each upstream packa
   await validateLicenseIndex({ ...options, index });
 });
 
-test('source preflight reports a newly added unclassified notice before package assembly', async () => {
+test('source preflight and package writing report unclassified owners and retain original notices in the index', async context => {
+  const warnings = context.mock.method(process.stderr, 'write', () => true);
   await using temporary = await temporaryDirectory();
   const source = join(temporary.root, 'llama.cpp');
+  const directory = join(temporary.root, 'package');
   await write({ path: join(source, 'LICENSE'), data: 'Upstream license' });
   await write({ path: join(source, 'ui/lib/harness/LICENSE'), data: 'Harness license' });
   assert.equal(await checkNoticeSource({ source }), 2);
-  await write({ path: join(source, 'ui/lib/new-library/LICENSE'), data: 'New library license' });
-  await assert.rejects(checkNoticeSource({ source }), /Unclassified native notice: llama\.cpp\/ui\/lib\/new-library\/LICENSE/u);
+  assert.equal(warnings.mock.callCount(), 0);
+  const originals = [
+    ['unexpected-tree/library/LICENSE', '\uFEFFTerms with a BOM\r\n'],
+    ['ui/lib/new-library/COPYRIGHT', 'Copyright © library contributors\r\n'],
+    ['ui/lib/new-library/COPYING.txt', ' Redistribution terms\n\n'],
+    ['ui/lib/new-library/LICENSE.APACHE', 'Apache license terms\r\n'],
+    ['ui/lib/new-library/LICENSE.Apache-2.0.txt', 'Apache license terms as a text document\n'],
+    ['ui/lib/new-library/LICENSE.MIT', 'MIT license terms\n'],
+    ['ui/lib/new-library/LICENSE.BSD-3-Clause', 'BSD license terms\r\n'],
+    ['ui/lib/new-library/LICENSE.CC0-1.0', 'CC0 terms\r\n'],
+    ['ui/lib/new-library/LICENSE.MPL-2.0', 'MPL license terms\n'],
+    ['ui/lib/new-library/LICENSE.LGPL-2.1', 'LGPL license terms\n'],
+    ['ui/lib/new-library/LICENSE.Zlib', 'Zlib license terms\n'],
+    ['ui/lib/new-library/LICENSE.extra', 'Additional license terms\n'],
+    ['ui/lib/new-library/LICENSE.upstream_terms-1.2.md', 'Supplemental terms\n'],
+  ] as const;
+  for (const [path, data] of originals) {
+    await write({ path: join(source, path), data });
+  }
+  assert.equal(await checkNoticeSource({ source }), 2 + originals.length);
+  assert.equal(warnings.mock.callCount(), originals.length);
+  for (const [path] of originals) {
+    assert(warnings.mock.calls.some(call => call.arguments[0] === `Warning: Unclassified native notice owner: llama.cpp/${path}\n`));
+  }
+  warnings.mock.resetCalls();
+  await write({ path: join(directory, 'LICENSE'), data: 'Core notice' });
+  assert.equal(await collectNotices({ source, destination: join(directory, 'licenses/0'), required: true }), 2 + originals.length);
+  const options = { directory, runtime: 'llama-cpp' as const, licenseRoots: ['llama.cpp'], metadata };
+  const index = await writeLicenseIndex(options);
+  for (const [path, data] of originals) {
+    const origin = `llama.cpp/${path}`;
+    const packaged = `licenses/0/${path}`;
+    assert.deepEqual(index.components.find(component => component.id === `unclassified:${origin}`), {
+      id: `unclassified:${origin}`,
+      name: `Unclassified owner (${origin})`,
+      version: null,
+      license: null,
+      notices: [{ path: packaged }],
+    });
+    assert.deepEqual(await readFile(join(directory, packaged)), Buffer.from(data));
+    assert(warnings.mock.calls.some(call => call.arguments[0] === `Warning: Unclassified native notice owner: ${origin} (${packaged})\n`));
+  }
+  assert.equal(warnings.mock.callCount(), originals.length);
+  await validateLicenseIndex({ ...options, index });
+  assert.equal(warnings.mock.callCount(), originals.length);
+});
+
+test('unclassified IDs distinguish notice roots and remain stable when a uniquely named root moves', async () => {
+  await using temporary = await temporaryDirectory();
+  const directory = temporary.root;
+  await write({ path: join(directory, 'LICENSE'), data: 'Core notice' });
+  for (const position of [0, 1, 2]) {
+    await write({ path: join(directory, `licenses/${position}/lib/component/LICENSE.md`), data: 'Upstream license' });
+  }
+  const options = { directory, runtime: 'llama-cpp' as const, metadata };
+  const first = await makeLicenseIndex({ ...options, licenseRoots: ['llama.cpp', 'toolchain', 'llama.cpp'] });
+  const second = await makeLicenseIndex({ ...options, licenseRoots: ['toolchain', 'llama.cpp', 'llama.cpp'] });
+  const firstIds = first.index.components.filter(component => component.id.startsWith('unclassified:')).map(component => component.id);
+  const secondIds = second.index.components.filter(component => component.id.startsWith('unclassified:')).map(component => component.id);
+  assert.equal(new Set(firstIds).size, 3);
+  assert.equal(new Set(secondIds).size, 3);
+  assert(firstIds.includes('unclassified:toolchain/lib/component/LICENSE.md'));
+  assert(secondIds.includes('unclassified:toolchain/lib/component/LICENSE.md'));
 });
 
 test('license validation rejects missing, duplicated, reassigned, extracted and unindexed documents', async () => {
@@ -104,10 +167,10 @@ test('license validation rejects missing, duplicated, reassigned, extracted and 
   await assert.rejects(validateLicenseIndex({ ...options, index }), /Extracted notice differs/u);
   await writeLicenseIndex(options);
   await write({ path: join(directory, 'licenses/0/NOTICE'), data: 'New notice' });
-  await assert.rejects(validateLicenseIndex({ ...options, index }), /index differs/u);
+  await assert.rejects(validateLicenseIndex({ ...options, index }), /Unrecognized native notice file/u);
 });
 
-test('empty, unreviewed and linked license sources and linked index destinations fail without overwriting targets', async () => {
+test('malformed, unrelated and linked license inputs and linked index destinations fail without overwriting targets', async () => {
   await using temporary = await temporaryDirectory();
   const directory = temporary.root;
   await licenseFixture({ directory });
@@ -117,10 +180,23 @@ test('empty, unreviewed and linked license sources and linked index destinations
     await write({ path: original, data });
     await assert.rejects(writeLicenseIndex(options), /Empty/u);
   }
+  await write({ path: original, data: Uint8Array.of(0xff) });
+  await assert.rejects(writeLicenseIndex(options), /not valid for encoding utf-8/u);
   await write({ path: original, data: 'Notice' });
-  for (const name of ['licenses/embedded/unreviewed.h.txt', 'licenses/0/unexpected-tree/library/LICENSE', 'licenses/0/ui/apps/chat/LICENSE.extra', 'licenses/0/ui/lib/unreviewed/LICENSE']) {
-    await write({ path: join(directory, name), data: '// Unknown owner' });
-    await assert.rejects(makeLicenseIndex(options), /Unclassified/u);
+  const invalid = [
+    ['licenses/embedded/unreviewed.h.txt', /Unclassified embedded notice/u],
+    ['licenses/embedded/vendor/nlohmann/json.hpp.bin', /Unclassified embedded notice/u],
+    ['licenses/0/ui/apps/chat/LICENSE..txt', /Unrecognized native notice file/u],
+    ['licenses/0/ui/lib/new-library/LICENSE.MIT.js', /Unrecognized native notice file/u],
+    ['licenses/0/ui/lib/new-library/LICENSE.WASM', /Unrecognized native notice file/u],
+    ['licenses/0/ui/lib/new-library/LICENSED.txt', /Unrecognized native notice file/u],
+    ['licenses/0/ui/lib/unrelated.txt', /Unrecognized native notice file/u],
+    ['licenses/0/invalid:path/LICENSE', /Unsafe native notice path/u],
+    ['licenses/2/ui/lib/unreviewed/LICENSE', /Unknown license root/u],
+  ] as const;
+  for (const [name, message] of invalid) {
+    await write({ path: join(directory, name), data: '// Invalid input' });
+    await assert.rejects(makeLicenseIndex(options), message);
     await rm(join(directory, name));
   }
   await symlink(directory, join(directory, 'licenses/0/linked'));
@@ -133,29 +209,34 @@ test('empty, unreviewed and linked license sources and linked index destinations
   assert.equal(await readFile(target, 'utf8'), 'original');
 });
 
-test('software ownership distinguishes independent roots and nested packages while rejecting unreviewed paths', () => {
-  assert.notEqual(noticeOwner({ root: 'emscripten', relative: 'node_modules/source-map/LICENSE' })[0], noticeOwner({ root: 'emscripten', relative: 'node_modules/tool/node_modules/source-map/LICENSE' })[0]);
-  assert.equal(noticeOwner({ root: 'emscripten', relative: 'node_modules/@scope/lib/LICENSE' })[1], '@scope/lib');
-  assert.notEqual(noticeOwner({ root: 'ggml', relative: 'LICENSE' })[0], noticeOwner({ root: 'stable-diffusion.cpp', relative: 'ggml/LICENSE' })[0]);
+test('software ownership distinguishes independent roots and nested packages and leaves unknown owners unclassified', () => {
+  assert.notEqual(noticeOwner({ root: 'emscripten', relative: 'node_modules/source-map/LICENSE' })?.[0], noticeOwner({ root: 'emscripten', relative: 'node_modules/tool/node_modules/source-map/LICENSE' })?.[0]);
+  assert.equal(noticeOwner({ root: 'emscripten', relative: 'node_modules/@scope/lib/LICENSE' })?.[1], '@scope/lib');
+  assert.notEqual(noticeOwner({ root: 'ggml', relative: 'LICENSE' })?.[0], noticeOwner({ root: 'stable-diffusion.cpp', relative: 'ggml/LICENSE' })?.[0]);
   assert.deepEqual(noticeOwner({ root: 'stable-diffusion.cpp', relative: 'src/core/cuda/sageattention/LICENSE' }), ['stable-diffusion.cpp/sageattention', 'SageAttention (stable-diffusion.cpp)']);
-  assert.equal(noticeOwner({ root: 'stable-diffusion.cpp', relative: 'ggml/src/ggml-cuda/sageattention/LICENSE' })[0], noticeOwner({ root: 'ggml', relative: 'ggml/src/ggml-cuda/sageattention/LICENSE' })[0]);
+  assert.equal(noticeOwner({ root: 'stable-diffusion.cpp', relative: 'ggml/src/ggml-cuda/sageattention/LICENSE' })?.[0], noticeOwner({ root: 'ggml', relative: 'ggml/src/ggml-cuda/sageattention/LICENSE' })?.[0]);
   for (const relative of ['src/core/cuda/unreviewed/LICENSE', 'src/core/cuda/sageattention-extra/LICENSE']) {
-    assert.throws(() => noticeOwner({ root: 'stable-diffusion.cpp', relative }), /Unclassified/u);
+    assert.equal(noticeOwner({ root: 'stable-diffusion.cpp', relative }), undefined);
   }
+  assert.throws(() => noticeOwner({ root: 'emscripten', relative: 'node_modules/@scope/LICENSE' }), /Unowned node_modules notice/u);
   for (const relative of ['../x', '/x', 'a//b', 'a/./b', 'C:/x', 'a\\b', 'a\0b', '']) {
     assert.throws(() => noticeOwner({ root: 'llama.cpp', relative }));
   }
 });
 
-test('notice collection skips unrelated links and refuses linked or empty original notices', async () => {
+test('notice collection and preflight skip unrelated links and reject missing or linked required notices', async () => {
   await using temporary = await temporaryDirectory();
   const source = join(temporary.root, 'source');
+  await write({ path: join(source, 'unrelated.txt'), data: 'Unrelated file' });
+  const destination = join(temporary.root, 'output');
+  await assert.rejects(checkNoticeSource({ source }), /No license notices/u);
+  await assert.rejects(collectNotices({ source, destination, required: true }), /No license notices/u);
   await write({ path: join(source, 'LICENSE'), data: 'Complete original\r\n' });
   await symlink('/missing-unrelated', join(source, 'unrelated'));
-  const destination = join(temporary.root, 'output');
   assert.equal(await collectNotices({ source, destination, required: true }), 1);
   assert.equal(await readFile(join(destination, 'LICENSE'), 'utf8'), 'Complete original\r\n');
   await symlink('/missing-notice', join(source, 'LICENSE-linked'));
+  await assert.rejects(checkNoticeSource({ source }), /Linked native notice/u);
   await assert.rejects(collectNotices({ source, destination, required: true }), /Linked native notice/u);
 });
 

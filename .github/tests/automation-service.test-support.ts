@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { appendFile, copyFile, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { GitHubIssueComment, GitHubPullRequest, GitHubRelease, GitHubWorkflowRun } from '#dto/llama-cpp';
+import type { ReportKind } from '#tools/automation/comments/plan';
 
 export type Scenario = {
   pulls: GitHubPullRequest[];
@@ -13,6 +14,7 @@ export type Scenario = {
   currentRuns: GitHubWorkflowRun[] | undefined;
   totalCount: number | undefined;
   currentTotalCount: number | undefined;
+  archives: { id: number; runId: number; attempt: number; kind: ReportKind; malformed: boolean; createdAt?: string }[];
   redirect: string;
   directArchive: boolean;
   failArtifactListing: boolean;
@@ -90,7 +92,14 @@ async function fixtureService(): Promise<void> {
       if (scenario.failArtifactListing) {
         throw new Error('Fixture artifact listing failed');
       }
-      output({ value: { artifacts: page === 1 ? [{ id: 91, name: fields.get('name'), expired: false }] : [] } });
+      const runId = Number(endpoint.split('/').at(-2));
+      const artifacts = scenario.archives.filter(archive => archive.runId === runId).map(({ id, attempt, kind, createdAt }) => ({
+        id,
+        name: `${kind === 'guide' ? 'publication-guide' : 'consumer-update'}-${attempt}`,
+        expired: false,
+        created_at: createdAt,
+      }));
+      output({ value: { total_count: artifacts.length, artifacts: pageValues({ values: artifacts }) } });
     } else if (/^repos\/example\/core\/issues\/\d+\/comments$/u.test(endpoint)) {
       output({ value: pageValues({ values: scenario.comments }) });
     } else if (endpoint === 'repos/ggml-org/llama.cpp/releases/latest' || endpoint === 'repos/ggml-org/llama.cpp/releases') {
@@ -111,18 +120,20 @@ async function fixtureService(): Promise<void> {
       if (!READ_ENV_GH_TOKEN() || args.includes('--location')) {
         throw new Error('Authenticated artifact requests must not follow redirects');
       }
-      await writeFile(argument({ name: '--dump-header' }), `HTTP/2 ${scenario.directArchive ? '200' : '302'}\r\nLocation: ${scenario.redirect}\r\n`);
+      const id = Number(url.split('/').at(-2));
+      await writeFile(argument({ name: '--dump-header' }), `HTTP/2 ${scenario.directArchive ? '200' : '302'}\r\nLocation: ${scenario.redirect}/${id}\r\n`);
       if (scenario.directArchive) {
-        await copyFile(join(root, 'report.zip'), argument({ name: '--output' }));
+        await copyFile(join(root, `artifact-${id}.zip`), argument({ name: '--output' }));
       } else {
         await writeFile(argument({ name: '--output' }), '');
       }
       process.stdout.write(scenario.directArchive ? '200' : '302');
     } else {
-      if (READ_ENV_GH_TOKEN() || url !== scenario.redirect || !url.startsWith('https://')) {
+      const id = Number(url.split('/').at(-1));
+      if (READ_ENV_GH_TOKEN() || url !== `${scenario.redirect}/${id}` || !url.startsWith('https://')) {
         throw new Error('Signed storage must be HTTPS and credential-free');
       }
-      await copyFile(join(root, 'report.zip'), argument({ name: '--output' }));
+      await copyFile(join(root, `artifact-${id}.zip`), argument({ name: '--output' }));
     }
     break;
   }

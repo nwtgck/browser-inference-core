@@ -8,7 +8,7 @@ import { requiredString } from '#tools/toolchain/cli-options';
 import { READ_ENV_GITHUB_OUTPUT } from '#tools/shared/node-env';
 import { assertSource, checkedRef, checkoutUpstream, createUpdateRequest, errorDetails, overlayPreflight, prepareCandidate, writeCandidateReport } from './upstream/operations.js';
 import { planUpdate, selectUpstream, type UpdatePlan, type UpdateTarget } from './upstream/plan.js';
-import { planArchiveDownloads, planPullRequests, planReportArchives, planReportDownloads, prepareCommentWrite } from './comments/operations.js';
+import { planPullRequests, planReportArchives, planReportDownloads, prepareArchiveRedirect, prepareCommentWrite, validateReportArchive } from './comments/operations.js';
 
 const planOptions = {
   'checkout-root': requiredString,
@@ -29,6 +29,12 @@ const requestOptions = {
   base: requiredString,
   target: { choices: ['latest', 'latest-unstable', 'custom'] as const, demandOption: true },
   'custom-ref': { type: 'string' },
+} as const;
+
+const archiveOptions = {
+  number: { type: 'number', demandOption: true },
+  'run-id': { type: 'number', demandOption: true },
+  'artifact-id': { type: 'number', demandOption: true },
 } as const;
 
 async function outputs({ outputPath, values }: { outputPath: string | undefined; values: Readonly<Record<string, string>> }): Promise<void> {
@@ -197,14 +203,17 @@ export async function main({ args, outputPath }: { args: readonly string[]; outp
     .command('comments-pulls', 'Select open same-repository pull requests', builder => builder, async options => {
       await planPullRequests({ state: options.state, repository: options.repository });
     })
-    .command('comments-runs', 'Select the latest attempt for each head', builder => builder, async options => {
+    .command('comments-runs', 'Select same-head runs with completed attempts', builder => builder, async options => {
       await planReportDownloads({ state: options.state, repository: options.repository });
     })
     .command('comments-artifacts', 'Select unique unexpired attempt-bound archives', builder => builder, async options => {
       await planReportArchives({ state: options.state, repository: options.repository });
     })
-    .command('comments-redirects', 'Validate credential-free archive download locations', builder => builder, async options => {
-      await planArchiveDownloads({ state: options.state, repository: options.repository });
+    .command('comments-redirect', 'Validate one credential-free archive download location', builder => builder.options(archiveOptions), async options => {
+      await prepareArchiveRedirect({ state: options.state, number: options.number, runId: options['run-id'], artifactId: options['artifact-id'] });
+    })
+    .command('comments-read', 'Validate one attempt-bound report archive', builder => builder.options(archiveOptions), async options => {
+      await validateReportArchive({ state: options.state, repository: options.repository, number: options.number, runId: options['run-id'], artifactId: options['artifact-id'] });
     })
     .command('comments-write', 'Refresh trust and prepare one conversation comment', builder => builder.option('number', { type: 'number', demandOption: true }), async options => {
       await prepareCommentWrite({ state: options.state, repository: options.repository, number: options.number });

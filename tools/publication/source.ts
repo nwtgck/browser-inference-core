@@ -15,6 +15,7 @@ import { loadConfiguration as loadSpeechConfiguration, upstreamFacts as speechUp
 import { sourceCaptureSelection as speechSelection } from '#runtimes/speech-cpp/tools/build';
 import { sourceCaptureSelection as imageSelection } from '#runtimes/stable-diffusion-cpp/tools/build';
 import { captureTreeFingerprint } from '#tools/source/fingerprint';
+import { unmeasuredPublication, type MeasurePublication } from './metrics.js';
 
 function identityFacts({ identity }: { identity: SourceIdentity }) {
   return typeof identity.bytes === 'number' && typeof identity.sha256 === 'string' ? { bytes: identity.bytes, sha256: identity.sha256 } : { symlink: identity.symlink };
@@ -76,7 +77,14 @@ function verifySourceInputs({ recorded, expected, sourceCommit }: { recorded: So
 }
 
 /** One release-source verification at freeze. It never creates a second Node environment. */
-export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCommit, manifests, python }: { sourceRoot: string; workRoot: string; sourceCommit: string; manifests: RuntimeManifests; python: string }): Promise<SourceFacts> {
+export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCommit, manifests, python, measure }: { sourceRoot: string; workRoot: string; sourceCommit: string; manifests: RuntimeManifests; python: string; measure?: MeasurePublication }): Promise<SourceFacts> {
+  const observe = measure ?? unmeasuredPublication;
+  const runtimes = await observe({ phase: 'publication.freeze.source-preparation', operation: () => verifyRuntimeSources({ sourceRoot, workRoot, sourceCommit, manifests, python }) });
+  const treeFingerprint = await observe({ phase: 'publication.freeze.source-fingerprint', operation: () => captureTreeFingerprint({ sourceRoot, sourceCommit }) });
+  return { sourceCommit, treeFingerprint, runtimes };
+}
+
+async function verifyRuntimeSources({ sourceRoot, workRoot, sourceCommit, manifests, python }: { sourceRoot: string; workRoot: string; sourceCommit: string; manifests: RuntimeManifests; python: string }): Promise<SourceFacts['runtimes']> {
   // These loaders verify that the supplied checkout owns the executing modules
   // and their static configuration. The snapshot is only compiler input.
   await loadLlamaConfiguration({ checkoutRoot: sourceRoot });
@@ -131,12 +139,8 @@ export async function verifyPublicationSources({ sourceRoot, workRoot, sourceCom
     }
   }
   return {
-    sourceCommit,
-    treeFingerprint: await captureTreeFingerprint({ sourceRoot, sourceCommit }),
-    runtimes: {
-      'llama-cpp': { upstream: llamaCommit, preparations: Object.fromEntries(Object.entries(prepared).map(([name, receipt]) => [name, { upstream: receipt.upstream, options: receipt.options, patches: receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: treeIdentity({ files: receipt.outputs }) }])), verifiedVariants: llamaVariants },
-      'stable-diffusion-cpp': { upstreams: image.receipt.upstreams, preparation: image.identity, patches: image.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: imageVariants },
-      'speech-cpp': { upstreams: speech.receipt.upstreams, preparation: speech.identity, patches: speech.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: speechVariants },
-    },
+    'llama-cpp': { upstream: llamaCommit, preparations: Object.fromEntries(Object.entries(prepared).map(([name, receipt]) => [name, { upstream: receipt.upstream, options: receipt.options, patches: receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), prepared: treeIdentity({ files: receipt.outputs }) }])), verifiedVariants: llamaVariants },
+    'stable-diffusion-cpp': { upstreams: image.receipt.upstreams, preparation: image.identity, patches: image.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: imageVariants },
+    'speech-cpp': { upstreams: speech.receipt.upstreams, preparation: speech.identity, patches: speech.receipt.patches.map(({ file, target, mode, sha256, reason }) => ({ file, target, mode, sha256, reason })), verifiedVariants: speechVariants },
   };
 }

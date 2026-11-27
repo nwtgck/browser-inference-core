@@ -1,13 +1,17 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { link, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { decodeFrozenPublication, type SourceFacts, type ReportData, type FrozenPublication, type JsonObject, type Validation } from '#dto/shared';
 import { artifactDirectories, runtimeNames } from '#tools/shared/contracts';
 import { isContained, optionalStat, directory } from '#tools/shared/files';
-import { validatePackage, type ValidatedPackage, type RuntimeManifests } from '#tools/package/aggregate';
+import { withOutputDirectories } from '#tools/shared/output';
+import { temporaryDirectory } from '#tools/shared/temporary-directory';
+import { assembleValidatedPackage, readRuntimePackages, validatePackage, type ValidatedPackage, type RuntimeManifests } from '#tools/package/aggregate';
 import { assertSame, bytesIdentity, copyBoundTree, readMetadata, readBoundFile, checkNpmPack } from '#tools/package/files';
 import { artifactIntegrityPath, encodeArtifactIntegrity, checkTreeFingerprint } from '#tools/package/integrity';
+import { checkPublicExports } from '#tools/package/public-exports';
 import { canonicalJson } from '#tools/abi/schema';
 import { gitBlob, gitObjectId, localGit, verifyGitTree } from './git.js';
+import { unmeasuredPublication, type MeasurePublication } from './metrics.js';
 
 export type VerifySource = ({ sourceCommit, manifests }: { sourceCommit: string; manifests: RuntimeManifests }) => Promise<SourceFacts>;
 export type ConfirmedPublication = { commit: string; frozen: FrozenPublication };
@@ -51,15 +55,14 @@ export async function createReportData({ validated, verifySource }: { validated:
   };
 }
 
-export async function freezePackage({ sourceRoot, packageDirectory, work, receipt, branch, expectedSource, repository, verifySource }: { sourceRoot: string; packageDirectory: string; work: string; receipt: string; branch: string; expectedSource: string; repository: string; verifySource: VerifySource }): Promise<FrozenPublication> {
+async function publicationPaths({ sourceRoot, input, work, receipt, branch }: { sourceRoot: string; input: string; work: string; receipt: string; branch: string }) {
   if (branch !== 'artifacts' && !branch.startsWith('artifacts/')) {
     throw new Error('Refusing to publish over a source branch');
   }
   await localGit({ cwd: sourceRoot, args: ['check-ref-format', '--branch', branch] });
-  const input = resolve(packageDirectory);
   const snapshot = resolve(work);
   const receiptPath = resolve(receipt);
-  if (isContained({ root: input, path: snapshot }) || isContained({ root: input, path: receiptPath }) || isContained({ root: snapshot, path: receiptPath }) || isContained({ root: receiptPath, path: snapshot })) {
+  if (isContained({ root: input, path: snapshot }) || isContained({ root: snapshot, path: input }) || isContained({ root: input, path: receiptPath }) || isContained({ root: receiptPath, path: input }) || isContained({ root: snapshot, path: receiptPath }) || isContained({ root: receiptPath, path: snapshot })) {
     throw new Error('Publication state must be outside the runtime package');
   }
   if (await optionalStat({ path: snapshot }) || await optionalStat({ path: receiptPath })) {
@@ -67,30 +70,95 @@ export async function freezePackage({ sourceRoot, packageDirectory, work, receip
   }
   await directory({ path: dirname(snapshot), create: true });
   await directory({ path: dirname(receiptPath), create: true });
-  const validated = await validatePackage({ sourceRoot, directory: input, requireClean: true, checkNpmPack: false });
+  return { snapshot, receiptPath };
+}
+
+/** Local entry for an independently saved aggregate. Its files cross a copy boundary. */
+export async function freezePackage({ sourceRoot, packageDirectory, work, receipt, branch, expectedSource, repository, verifySource, measure }: { sourceRoot: string; packageDirectory: string; work: string; receipt: string; branch: string; expectedSource: string; repository: string; verifySource: VerifySource; measure?: MeasurePublication }): Promise<FrozenPublication> {
+  const observe = measure ?? unmeasuredPublication;
+  const input = resolve(packageDirectory);
+  const { snapshot, receiptPath } = await publicationPaths({ sourceRoot, input, work, receipt, branch });
+  const validated = await observe({ phase: 'publication.freeze.validate-inputs', operation: () => validatePackage({ sourceRoot, directory: input, requireClean: true, checkNpmPack: false }) });
   if (validated.integrity !== undefined) {
     throw new Error('Freeze requires a newly assembled package without a previous integrity envelope');
   }
   if (validated.manifest.sourceCommit !== gitObjectId({ value: expectedSource })) {
     throw new Error('Package differs from selected source');
   }
-  // Copy verification is its own byte boundary. The typed validated input is
-  // shared afterwards; the private snapshot needs no second manifest decoder.
-  await copyBoundTree({ source: input, destination: snapshot, files: validated.files });
+  return installFrozenSnapshot({
+    snapshot,
+    receiptPath,
+    prepare: async ({ staging }) => {
+      await observe({ phase: 'publication.freeze.copy', operation: () => copyBoundTree({ source: input, destination: staging, files: validated.files }) });
+      return freezeSnapshot({ snapshot: staging, validated, branch, repository, verifySource, measure: observe });
+    },
+  });
+}
+
+/** CI entry for downloaded runtime packages. Assemble directly into the tree to be staged. */
+export async function assembleAndFreezePackage({ sourceRoot, inputs, work, receipt, branch, expectedSource, repository, verifySource, measure }: { sourceRoot: string; inputs: string; work: string; receipt: string; branch: string; expectedSource: string; repository: string; verifySource: VerifySource; measure?: MeasurePublication }): Promise<FrozenPublication> {
+  const observe = measure ?? unmeasuredPublication;
+  const input = resolve(inputs);
+  const { snapshot, receiptPath } = await publicationPaths({ sourceRoot, input, work, receipt, branch });
+  const sourceCommit = gitObjectId({ value: expectedSource });
+  const runtimes = await observe({ phase: 'publication.freeze.validate-inputs', operation: () => readRuntimePackages({ sourceRoot, inputs: input, checkNpm: false }) });
+  if (runtimeNames.some(runtime => runtimes[runtime].manifest.sourceCommit !== sourceCommit)) {
+    throw new Error('Package differs from selected source');
+  }
+  return installFrozenSnapshot({
+    snapshot,
+    receiptPath,
+    prepare: async ({ staging }) => {
+      const validated = await observe({ phase: 'publication.freeze.copy', operation: () => assembleValidatedPackage({ sourceRoot, runtimes, output: staging, checkNpm: false }) });
+      return freezeSnapshot({ snapshot: staging, validated, branch, repository, verifySource, measure: observe });
+    },
+  });
+}
+
+async function installFrozenSnapshot({ snapshot, receiptPath, prepare }: { snapshot: string; receiptPath: string; prepare: ({ staging }: { staging: string }) => Promise<FrozenPublication> }): Promise<FrozenPublication> {
+  await using temporary = await temporaryDirectory({ prefix: join(dirname(receiptPath), 'bicore-receipt-') });
+  const candidate = join(temporary.root, 'receipt.json');
+  return await withOutputDirectories({
+    destinations: [snapshot],
+    replace: false,
+    prepare: async ({ paths: [staging] }) => {
+      if (staging === undefined) {
+        throw new Error('Missing publication snapshot');
+      }
+      const frozen = await prepare({ staging });
+      await writeFile(candidate, JSON.stringify(frozen, undefined, 2) + '\n', { flag: 'wx', mode: 0o600 });
+      return frozen;
+    },
+    finalize: async () => {
+      // Install the complete receipt exclusively, rolling back the snapshot if it cannot be linked.
+      await directory({ path: dirname(receiptPath) });
+      await link(candidate, receiptPath);
+    },
+  });
+}
+
+async function freezeSnapshot({ snapshot, validated, branch, repository, verifySource, measure }: { snapshot: string; validated: ValidatedPackage; branch: string; repository: string; verifySource: VerifySource; measure: MeasurePublication }): Promise<FrozenPublication> {
+  await measure({ phase: 'publication.freeze.public-exports', operation: () => checkPublicExports({ directory: snapshot, runtimes: validated.runtimes }) });
   const data = await createReportData({ validated, verifySource });
+  const sourceCommit = validated.manifest.sourceCommit;
   const manifest = await readBoundFile({ root: snapshot, entry: { path: 'manifest.json', ...validated.manifestIdentity } });
-  const integrityBytes = encodeArtifactIntegrity({ repository, sourceCommit: expectedSource, fingerprint: data.source.treeFingerprint, manifest });
+  const integrityBytes = encodeArtifactIntegrity({ repository, sourceCommit, fingerprint: data.source.treeFingerprint, manifest });
   const integrity = bytesIdentity({ data: integrityBytes });
   await writeFile(join(snapshot, artifactIntegrityPath), integrityBytes, { flag: 'wx' });
   const files = new Map(validated.files);
   files.set(artifactIntegrityPath, { path: artifactIntegrityPath, ...integrity });
-  await checkNpmPack({ directory: snapshot, files });
-  await localGit({ cwd: snapshot, args: ['init', '-q'] });
-  await localGit({ cwd: snapshot, args: ['config', 'user.name', 'github-actions[bot]'] });
-  await localGit({ cwd: snapshot, args: ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'] });
-  await localGit({ cwd: snapshot, args: ['add', '--all'] });
-  const tree = gitObjectId({ value: (await localGit({ cwd: snapshot, args: ['write-tree'] })).toString('utf8').trim() });
-  await verifyGitTree({ work: snapshot, tree, files });
+  await measure({ phase: 'publication.freeze.npm-pack', operation: () => checkNpmPack({ directory: snapshot, files }) });
+  const tree = await measure({
+    phase: 'publication.freeze.git-stage',
+    operation: async () => {
+      await localGit({ cwd: snapshot, args: ['init', '-q'] });
+      await localGit({ cwd: snapshot, args: ['config', 'user.name', 'github-actions[bot]'] });
+      await localGit({ cwd: snapshot, args: ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'] });
+      await localGit({ cwd: snapshot, args: ['add', '--all'] });
+      return gitObjectId({ value: (await localGit({ cwd: snapshot, args: ['write-tree'] })).toString('utf8').trim() });
+    },
+  });
+  await measure({ phase: 'publication.freeze.git-verify', operation: () => verifyGitTree({ work: snapshot, tree, files }) });
   const identities = Object.fromEntries(runtimeNames.map(runtime => {
     const entry = validated.files.get(artifactDirectories[runtime] + '/manifest.json');
     if (!entry) {
@@ -104,10 +172,7 @@ export async function freezePackage({ sourceRoot, packageDirectory, work, receip
   if (!llamaIdentity || !imageIdentity || !speechIdentity) {
     throw new Error('Missing frozen manifest identity');
   }
-  const frozen: FrozenPublication = { schemaVersion: 3, sourceCommit: expectedSource, tree, branch, manifest: validated.manifestIdentity, integrity, runtimeManifests: { 'llama-cpp': llamaIdentity, 'stable-diffusion-cpp': imageIdentity, 'speech-cpp': speechIdentity }, report: { sha256: bytesIdentity({ data: Buffer.from(canonicalJson({ value: data })) }).sha256, data } };
-  await mkdir(dirname(receiptPath), { recursive: true });
-  await writeFile(receiptPath, JSON.stringify(frozen, undefined, 2) + '\n', { flag: 'wx', mode: 0o600 });
-  return frozen;
+  return { schemaVersion: 3, sourceCommit, tree, branch, manifest: validated.manifestIdentity, integrity, runtimeManifests: { 'llama-cpp': llamaIdentity, 'stable-diffusion-cpp': imageIdentity, 'speech-cpp': speechIdentity }, report: { sha256: bytesIdentity({ data: Buffer.from(canonicalJson({ value: data })) }).sha256, data } };
 }
 
 /** Consume only this job's private state; later arbitrary artifacts use revalidation. */

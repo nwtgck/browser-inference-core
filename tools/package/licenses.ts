@@ -1,5 +1,5 @@
 import { readdir, lstat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import type { RuntimeName, LicenseIndex, LicenseComponent, LicenseNotice, PackageMetadata } from '#dto/shared';
 import { regularFile, relativePath, directory as directoryPath, optionalStat } from '#tools/shared/files';
 import { assertSame, copyRegular, readRegularBytes } from './files.js';
@@ -135,10 +135,24 @@ const llamaNoticeOwners = new Map<string, readonly [string, string]>([
   ['ui/lib/voice/LICENSE', ['@ggml-org/llama-voice', '@ggml-org/llama-voice']],
 ]);
 
-export function noticeOwner({ root, relative }: { root: string; relative: string }): readonly [string, string] {
+const sourceNoticePrefix = /^(LICENSE|COPYING|COPYRIGHT)/iu;
+// Upstream labels and versions can follow the notice name. Source and binary
+// files such as cmake/license.cmake still need an existing ownership rule.
+const unclassifiedNoticeName = /^(?:LICENSE|COPYING|COPYRIGHT)(?:[._-][a-z0-9][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)*)?$/iu;
+const nonNoticeExtensions = new Set([
+  '.c', '.cc', '.cjs', '.cmake', '.cpp', '.cu', '.cuh', '.cxx', '.go', '.h', '.hh', '.hpp', '.hxx', '.java', '.js', '.jsx', '.mjs', '.php', '.py', '.rb', '.rs', '.s', '.sh', '.ts', '.tsx',
+  '.a', '.bin', '.class', '.dll', '.dylib', '.exe', '.gz', '.jar', '.o', '.obj', '.so', '.tar', '.tgz', '.wasm', '.xz', '.zip',
+]);
+
+export function noticeOwner({ root, relative }: { root: string; relative: string }): readonly [string, string] | undefined {
+  relativePath({ value: root });
   relativePath({ value: relative });
-  if (relative.includes(':')) {
+  if (/[/:]/u.test(root) || relative.includes(':')) {
     throw new Error('Unsafe native notice path');
+  }
+  const file = basename(relative);
+  if (!sourceNoticePrefix.test(file)) {
+    throw new Error(`Unrecognized native notice file: ${root}/${relative}`);
   }
   if (root === 'llama.cpp') {
     const owner = llamaNoticeOwners.get(relative);
@@ -176,26 +190,25 @@ export function noticeOwner({ root, relative }: { root: string; relative: string
     emscripten: { 'system/lib/libc/musl/': ['emscripten/musl', 'musl'], 'system/lib/openmp/src/thirdparty/ittnotify/': ['emscripten/ittnotify', 'ittnotify'], 'system/include/SDL/': ['emscripten/SDL', 'SDL'], 'cache/sysroot/include/SDL/': ['emscripten/SDL', 'SDL'], 'test/sounds/': ['emscripten/test-sounds', 'Emscripten test sounds'] },
   };
   for (const [prefix, owner] of Object.entries(rules[root] ?? {})) {
-    if (relative === prefix || relative.startsWith(prefix)) {
+    if (prefix.endsWith('/') ? relative.startsWith(prefix) : relative === prefix) {
       return owner;
     }
   }
-  for (const marker of ['system/lib/', 'third_party/', 'thirdparty/', 'vendor/']) {
-    if (relative.startsWith(marker)) {
-      const tail = relative.slice(marker.length).split('/');
-      if (tail.length < 2 || !tail[0]) {
-        throw new Error(`Unclassified native notice: ${root}/${relative}`);
-      }
+  const marker = ['system/lib/', 'third_party/', 'thirdparty/', 'vendor/'].find(prefix => relative.startsWith(prefix));
+  if (marker) {
+    const tail = relative.slice(marker.length).split('/');
+    if (tail.length >= 2 && tail[0]) {
       return [`${root}/${marker}${tail[0]}`, tail[0]];
     }
-  }
-  if (root === 'emdawnwebgpu_pkg' && (relative.startsWith('webgpu/') || relative.startsWith('webgpu_cpp/'))) {
+  } else if (root === 'emdawnwebgpu_pkg' && (relative.startsWith('webgpu/') || relative.startsWith('webgpu_cpp/'))) {
     return [`emdawnwebgpu_pkg/${parts[0]}`, `emdawnwebgpu_pkg / ${parts[0]}`];
-  }
-  if (parts.length === 1 || (root === 'llama.cpp' && relative.startsWith('cmake/')) || root === 'ggml') {
+  } else if (parts.length === 1 || (root === 'llama.cpp' && relative.startsWith('cmake/')) || root === 'ggml') {
     return [root, root];
   }
-  throw new Error(`Unclassified native notice: ${root}/${relative}`);
+  if (!unclassifiedNoticeName.test(file) || nonNoticeExtensions.has(extname(file).toLowerCase())) {
+    throw new Error(`Unrecognized native notice file: ${root}/${relative}`);
+  }
+  return undefined;
 }
 
 async function noticeFiles({ root, prefix }: { root: string; prefix: string }): Promise<string[]> {
@@ -233,6 +246,7 @@ async function noticeBytes({ path }: { path: string }): Promise<Buffer> {
 export async function makeLicenseIndex({ directory: root, runtime, licenseRoots, metadata }: { directory: string; runtime: RuntimeName; licenseRoots: readonly string[]; metadata: PackageMetadata }) {
   const components = new Map<string, LicenseComponent>();
   const extracted = new Map<string, Buffer>();
+  const unclassified: string[] = [];
   const paths = ['LICENSE', ...(await noticeFiles({ root: join(root, 'licenses'), prefix: 'licenses/' })).filter(name => !name.startsWith('licenses/extracted/'))];
   for (const relative of paths) {
     const raw = await noticeBytes({ path: join(root, relative) });
@@ -242,11 +256,10 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
       owner = [`${runtime}-browser-core`, `${runtime}-browser-core`];
     } else if (relative.startsWith('licenses/embedded/')) {
       const source = relative.slice('licenses/embedded/'.length, -'.txt'.length);
-      const identity = embeddedNotices[runtime][source];
-      if (!identity) {
+      if (!relative.endsWith('.txt') || !Object.hasOwn(embeddedNotices[runtime], source)) {
         throw new Error(`Unclassified embedded notice: ${relative}`);
       }
-      owner = identity;
+      owner = embeddedNotices[runtime][source]!;
       const text = Buffer.from(embeddedComments({ original: raw.toString('utf8') }));
       if (!text.equals(raw)) {
         const output = `licenses/extracted/${source}.txt`;
@@ -256,6 +269,7 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
     } else {
       let tail = relative.slice('licenses/'.length);
       let sourceRoot: string;
+      let repeatedRootPosition: string | undefined;
       switch (runtime) {
       case 'llama-cpp': {
         const at = tail.indexOf('/');
@@ -264,17 +278,29 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
         if (!/^(0|[1-9][0-9]*)$/u.test(position) || !sourceRoot) {
           throw new Error(`Unknown license root: ${relative}`);
         }
+        if (licenseRoots.indexOf(sourceRoot) !== licenseRoots.lastIndexOf(sourceRoot)) {
+          repeatedRootPosition = position;
+        }
         tail = tail.slice(at + 1);
         break;
       }
       case 'stable-diffusion-cpp': case 'speech-cpp': {
-        if (tail.startsWith('toolchain/')) {
+        const runtimeRoots = {
+          'stable-diffusion-cpp': ['stable-diffusion', 'stable-diffusion.cpp'],
+          'speech-cpp': ['speech', 'speech.cpp'],
+        } as const;
+        const [runtimeRoot, upstreamRoot] = runtimeRoots[runtime];
+        const toolchain = tail.startsWith('toolchain/');
+        if (toolchain) {
           tail = tail.slice('toolchain/'.length);
         }
         const at = tail.indexOf('/');
         const rootName = tail.slice(0, at);
+        if (toolchain ? rootName !== 'emscripten' && rootName !== 'emdawnwebgpu_pkg' : rootName !== runtimeRoot && rootName !== 'ggml') {
+          throw new Error(`Unknown license root: ${relative}`);
+        }
         tail = tail.slice(at + 1);
-        sourceRoot = rootName === 'stable-diffusion' ? 'stable-diffusion.cpp' : rootName === 'speech' ? 'speech.cpp' : rootName;
+        sourceRoot = rootName === runtimeRoot ? upstreamRoot : rootName;
         break;
       }
       default: {
@@ -282,7 +308,15 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
         throw new Error(String(exhaustive));
       }
       }
-      owner = noticeOwner({ root: sourceRoot, relative: tail });
+      const classified = noticeOwner({ root: sourceRoot, relative: tail });
+      if (classified) {
+        owner = classified;
+      } else {
+        const origin = `${sourceRoot}/${tail}`;
+        const scope = repeatedRootPosition === undefined ? sourceRoot : `${sourceRoot}:${repeatedRootPosition}`;
+        owner = [`unclassified:${scope}/${tail}`, `Unclassified owner (${origin})`];
+        unclassified.push(`${origin} (${relative})`);
+      }
     }
     const [id, name] = owner;
     let component = components.get(id);
@@ -295,11 +329,11 @@ export async function makeLicenseIndex({ directory: root, runtime, licenseRoots,
     }
     component.notices.push(notice);
   }
-  return { index: { components: [...components.entries()].sort(([a], [b]) => a < b ? -1 : 1).map(([, value]) => value) }, extracted };
+  return { index: { components: [...components.entries()].sort(([a], [b]) => a < b ? -1 : 1).map(([, value]) => value) }, extracted, unclassified };
 }
 
 export async function writeLicenseIndex({ directory, runtime, licenseRoots, metadata }: { directory: string; runtime: RuntimeName; licenseRoots: readonly string[]; metadata: PackageMetadata }): Promise<LicenseIndex> {
-  const { index, extracted } = await makeLicenseIndex({ directory, runtime, licenseRoots, metadata });
+  const { index, extracted, unclassified } = await makeLicenseIndex({ directory, runtime, licenseRoots, metadata });
   for (const [relative, raw] of extracted) {
     const output = join(directory, relative);
     await directoryPath({ path: dirname(output), create: true });
@@ -312,6 +346,9 @@ export async function writeLicenseIndex({ directory, runtime, licenseRoots, meta
     await regularFile({ path: join(directory, 'native-license-index.json') });
   }
   await writeFile(join(directory, 'native-license-index.json'), JSON.stringify(index, undefined, 2) + '\n');
+  for (const path of unclassified) {
+    warnUnclassifiedNotice({ path });
+  }
   return index;
 }
 
@@ -335,7 +372,7 @@ async function visitSourceNotices({ source, required, visit }: { source: string;
       }
       const path = join(root, name);
       const mode = await lstat(path);
-      const notice = /^(LICENSE|COPYING|COPYRIGHT)/iu.test(name);
+      const notice = sourceNoticePrefix.test(name);
       if (mode.isSymbolicLink()) {
         if (notice) {
           throw new Error(`Linked native notice: ${path}`);
@@ -344,7 +381,10 @@ async function visitSourceNotices({ source, required, visit }: { source: string;
       }
       if (mode.isDirectory()) {
         await collect({ root: path, prefix: prefix + name + '/' });
-      } else if (mode.isFile() && notice) {
+      } else if (notice) {
+        if (!mode.isFile()) {
+          throw new Error(`Non-regular native notice: ${path}`);
+        }
         await noticeBytes({ path });
         await visit({ path, relative: prefix + name });
         count++;
@@ -362,6 +402,10 @@ export function collectNotices({ source, destination, required }: { source: stri
   return visitSourceNotices({ source, required, visit: async ({ path, relative }) => copyRegular({ source: path, destination: join(destination, relative) }) });
 }
 
+function warnUnclassifiedNotice({ path }: { path: string }): void {
+  process.stderr.write(`Warning: Unclassified native notice owner: ${path}\n`);
+}
+
 /** Check the same source files and ownership rules used to assemble the license index. */
 export function checkNoticeSource({ source }: { source: string }): Promise<number> {
   const root = basename(source);
@@ -369,7 +413,9 @@ export function checkNoticeSource({ source }: { source: string }): Promise<numbe
     source,
     required: true,
     visit: ({ relative }) => {
-      noticeOwner({ root, relative });
+      if (!noticeOwner({ root, relative })) {
+        warnUnclassifiedNotice({ path: `${root}/${relative}` });
+      }
     },
   });
 }

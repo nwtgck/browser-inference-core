@@ -6,8 +6,8 @@ import type { StableDiffusionManifest, StableDiffusionProvenance } from '#dto/st
 import type { SpeechManifest, SpeechProvenance } from '#dto/speech-cpp';
 import { inventory } from '#tools/shared/contracts';
 import { parseJson } from '#tools/shared/json';
-import { regularFile, containedPath } from '#tools/shared/files';
-import { readMetadata, packageFiles, assertSame, checkNpmPack, requireFiles, readMetadataBytes, bytesIdentity } from './files.js';
+import { regularFile } from '#tools/shared/files';
+import { packageFiles, assertSame, checkNpmPack, requireFiles, readMetadataBytes, readBoundFile, bytesIdentity } from './files.js';
 import { assertWasmExports } from './wasm-exports.js';
 import { runtimeExports } from './layout.js';
 import { renderExtensionTypes, renderExtensionDeclarations, renderModuleTypes } from '#tools/abi/generate';
@@ -53,23 +53,32 @@ export async function readRuntimeArtifact<M extends RuntimeManifest>({ directory
 
 /** Read an existing artifact once. Internal assembly carries these typed values directly. */
 export async function readRuntimePackage<M extends RuntimeManifest>({ directory, manifest, manifestIdentity }: { directory: string; manifest: M; manifestIdentity: FileIdentity }): Promise<RuntimePackageInput<M>> {
-  const metadata = await readMetadata({ path: join(directory, 'package.json'), decode: decodePackageMetadata });
-  const catalog = await readMetadata({ path: join(directory, 'api/schema.json'), decode: decodeAbiCatalog });
+  const expected = inventory({ entries: manifest.files });
+  async function read<T>({ path, decode }: { path: string; decode: ({ input }: { input: unknown }) => T }): Promise<T> {
+    const entry = expected.get(path);
+    if (!entry) {
+      throw new Error(`Missing runtime metadata binding: ${path}`);
+    }
+    const raw = await readBoundFile({ root: directory, entry });
+    return parseJson({ text: raw.toString('utf8'), decode });
+  }
+  const metadata = await read({ path: 'package.json', decode: decodePackageMetadata });
+  const catalog = await read({ path: 'api/schema.json', decode: decodeAbiCatalog });
   const targets = new Map<string, AbiSchema>();
   const sidecars = new Map<string, AbiExtensionSidecar>();
   for (const [profile, information] of Object.entries(manifest.profiles)) {
     for (const variant of Object.keys(information.variants)) {
       const key = `${profile}/${variant}`;
-      const target = await readMetadata({ path: containedPath({ root: directory, relative: `profiles/${key}/abi.json` }), decode: decodeAbiSchema });
+      const target = await read({ path: `profiles/${key}/abi.json`, decode: decodeAbiSchema });
       targets.set(key, target);
       for (const extensionId of Object.keys(target.extensions ?? {})) {
         const prefix = `profiles/${key}/${extensionId === 'webgpu-q8-diagnostic-v1' ? 'q8-diagnostic-v1' : extensionId}`;
-        sidecars.set(prefix, await readMetadata({ path: containedPath({ root: directory, relative: prefix + '.schema.json' }), decode: decodeAbiExtensionSidecar }));
+        sidecars.set(prefix, await read({ path: prefix + '.schema.json', decode: decodeAbiExtensionSidecar }));
       }
     }
   }
-  const exports = await readMetadata({ path: join(directory, 'api/exports.json'), decode: decodeStringArray });
-  const licenseIndex = await readMetadata({ path: join(directory, 'native-license-index.json'), decode: decodeLicenseIndex });
+  const exports = await read({ path: 'api/exports.json', decode: decodeStringArray });
+  const licenseIndex = await read({ path: 'native-license-index.json', decode: decodeLicenseIndex });
   return { directory, manifest, manifestIdentity, metadata, catalog, targets, sidecars, exports, licenseIndex };
 }
 

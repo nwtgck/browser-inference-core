@@ -105,11 +105,17 @@ export async function validatePackage({ sourceRoot, directory, requireClean, che
   return validateAggregateRoot({ directory, manifest, manifestBytes: raw, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
 }
 
-export async function assemblePackage({ sourceRoot, inputs, destination, checkNpmPack: checkNpm }: { sourceRoot: string; inputs: string; destination: string; checkNpmPack: boolean }): Promise<ValidatedPackage> {
+/** The downloaded runtime packages are independent inputs, each decoded once. */
+export async function readRuntimePackages({ sourceRoot, inputs, checkNpm }: { sourceRoot: string; inputs: string; checkNpm: boolean }): Promise<RuntimeValidations> {
   const llama = await readLlama({ sourceRoot, directory: join(inputs, 'llama-cpp'), requireClean: true, checkNpmPack: checkNpm });
   const image = await readImage({ sourceRoot, directory: join(inputs, 'stable-diffusion-cpp'), requireClean: true, checkNpmPack: checkNpm });
   const speech = await readSpeech({ sourceRoot, directory: join(inputs, 'speech-cpp'), requireClean: true, checkNpmPack: checkNpm });
-  return assembleValidatedPackage({ sourceRoot, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, destination, checkNpm });
+  return { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech };
+}
+
+export async function assemblePackage({ sourceRoot, inputs, destination, checkNpmPack: checkNpm }: { sourceRoot: string; inputs: string; destination: string; checkNpmPack: boolean }): Promise<ValidatedPackage> {
+  const runtimes = await readRuntimePackages({ sourceRoot, inputs, checkNpm });
+  return installAggregate({ sourceRoot, runtimes, destination, checkNpm });
 }
 
 /** Assemble actual selected local builds. Normal publication rejects these source records. */
@@ -124,10 +130,10 @@ export async function assembleLocalPackage({ sourceRoot, runtimes, destination }
       }
     }
   }
-  return assembleValidatedPackage({ sourceRoot, runtimes, destination, checkNpm: false });
+  return installAggregate({ sourceRoot, runtimes, destination, checkNpm: false });
 }
 
-async function assembleValidatedPackage({ sourceRoot, runtimes, destination, checkNpm }: { sourceRoot: string; runtimes: RuntimeValidations; destination: string; checkNpm: boolean }): Promise<ValidatedPackage> {
+async function installAggregate({ sourceRoot, runtimes, destination, checkNpm }: { sourceRoot: string; runtimes: RuntimeValidations; destination: string; checkNpm: boolean }): Promise<ValidatedPackage> {
   return withOutputDirectories({
     destinations: [destination],
     replace: true,
@@ -136,27 +142,30 @@ async function assembleValidatedPackage({ sourceRoot, runtimes, destination, che
       if (!output) {
         throw new Error('Missing aggregate output');
       }
-      const llama = runtimes['llama-cpp'];
-      const image = runtimes['stable-diffusion-cpp'];
-      const speech = runtimes['speech-cpp'];
-      if (llama.manifest.sourceCommit !== image.manifest.sourceCommit || llama.manifest.sourceCommit !== speech.manifest.sourceCommit) {
-        throw new Error('Cannot mix source revisions');
-      }
-      for (const runtime of runtimeNames) {
-        await copyBoundTree({ source: runtimes[runtime].input.directory, destination: join(output, artifactDirectories[runtime]), files: runtimes[runtime].files });
-      }
-      await copyRegular({ source: join(sourceRoot, 'LICENSE'), destination: join(output, 'LICENSE') });
-      await copyRegular({ source: join(sourceRoot, 'tools/package/runtime-readme.md'), destination: join(output, 'README.md') });
-      const metadata: PackageMetadata & { private: boolean; files: string[] } = { name: packageName, version: '0.1.0', private: true, type: 'module', license: 'MIT', files: ['runtimes/', 'manifest.json', artifactIntegrityPath, 'README.md', 'LICENSE'], exports: packageExports() };
-      await writeFile(join(output, 'package.json'), JSON.stringify(metadata, undefined, 2) + '\n');
-      const entries: FileEntry[] = [];
-      for (const path of [...rootFiles, ...runtimeNames.map(runtime => artifactDirectories[runtime] + '/manifest.json')].sort()) {
-        entries.push({ path, ...await fileIdentity({ path: join(output, path) }) });
-      }
-      const manifest: RootManifest = { formatVersion: 6, sourceCommit: llama.manifest.sourceCommit, runtimes: { 'llama-cpp': { manifest: `${artifactDirectories['llama-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'stable-diffusion-cpp': { manifest: `${artifactDirectories['stable-diffusion-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'speech-cpp': { manifest: `${artifactDirectories['speech-cpp']}/manifest.json`, manifestFormatVersion: 2 } }, files: entries };
-      const raw = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
-      await writeFile(join(output, 'manifest.json'), raw);
-      return validateAggregateRoot({ directory: output, manifest, manifestBytes: raw, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes: { 'llama-cpp': llama, 'stable-diffusion-cpp': image, 'speech-cpp': speech }, checkNpm });
+      return assembleValidatedPackage({ sourceRoot, runtimes, output, checkNpm });
     },
   });
+}
+
+/** Write directly into the caller's fresh staging directory. */
+export async function assembleValidatedPackage({ sourceRoot, runtimes, output, checkNpm }: { sourceRoot: string; runtimes: RuntimeValidations; output: string; checkNpm: boolean }): Promise<ValidatedPackage> {
+  const sourceCommit = runtimes['llama-cpp'].manifest.sourceCommit;
+  if (runtimeNames.some(runtime => runtimes[runtime].manifest.sourceCommit !== sourceCommit)) {
+    throw new Error('Cannot mix source revisions');
+  }
+  for (const runtime of runtimeNames) {
+    await copyBoundTree({ source: runtimes[runtime].input.directory, destination: join(output, artifactDirectories[runtime]), files: runtimes[runtime].files });
+  }
+  await copyRegular({ source: join(sourceRoot, 'LICENSE'), destination: join(output, 'LICENSE') });
+  await copyRegular({ source: join(sourceRoot, 'tools/package/runtime-readme.md'), destination: join(output, 'README.md') });
+  const metadata: PackageMetadata & { private: boolean; files: string[] } = { name: packageName, version: '0.1.0', private: true, type: 'module', license: 'MIT', files: ['runtimes/', 'manifest.json', artifactIntegrityPath, 'README.md', 'LICENSE'], exports: packageExports() };
+  await writeFile(join(output, 'package.json'), JSON.stringify(metadata, undefined, 2) + '\n');
+  const entries: FileEntry[] = [];
+  for (const path of [...rootFiles, ...runtimeNames.map(runtime => artifactDirectories[runtime] + '/manifest.json')].sort()) {
+    entries.push({ path, ...await fileIdentity({ path: join(output, path) }) });
+  }
+  const manifest: RootManifest = { formatVersion: 6, sourceCommit, runtimes: { 'llama-cpp': { manifest: `${artifactDirectories['llama-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'stable-diffusion-cpp': { manifest: `${artifactDirectories['stable-diffusion-cpp']}/manifest.json`, manifestFormatVersion: 2 }, 'speech-cpp': { manifest: `${artifactDirectories['speech-cpp']}/manifest.json`, manifestFormatVersion: 2 } }, files: entries };
+  const raw = Buffer.from(JSON.stringify(manifest, undefined, 2) + '\n');
+  await writeFile(join(output, 'manifest.json'), raw);
+  return validateAggregateRoot({ directory: output, manifest, manifestBytes: raw, manifestIdentity: bytesIdentity({ data: raw }), metadata, runtimes, checkNpm });
 }

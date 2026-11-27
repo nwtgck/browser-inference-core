@@ -40,6 +40,7 @@ const workflowRunSchema = z.object({
   head_branch: z.string().nullable(),
   head_repository: repositorySchema.nullable(),
   event: z.string(),
+  actor: z.object({ login: z.string() }).nullable().optional(),
   status: z.string(),
   conclusion: z.string().nullable(),
   html_url: z.string(),
@@ -52,7 +53,7 @@ export function decodeGitHubWorkflowRuns({ input }: { input: unknown }): GitHubW
   return z.array(workflowRunSchema).parse(input);
 }
 
-const artifactSchema = z.object({ id: z.number(), name: z.string(), expired: z.boolean() });
+const artifactSchema = z.object({ id: z.number(), name: z.string(), expired: z.boolean(), created_at: z.string().optional() });
 export type GitHubArtifact = z.infer<typeof artifactSchema>;
 
 export function decodeGitHubArtifacts({ input }: { input: unknown }): GitHubArtifact[] {
@@ -66,7 +67,7 @@ export function decodeGitHubIssueComments({ input }: { input: unknown }): GitHub
   return z.array(issueCommentSchema).parse(input);
 }
 
-const consumerReportEnvelopeSchema = z.object({ schemaVersion: z.literal(1), repository: z.string(), sourceCommit: z.string(), artifactCommit: z.string(), runId: z.number(), runAttempt: z.number(), markdownSha256: z.string() });
+const consumerReportEnvelopeSchema = z.object({ schemaVersion: z.literal(1), repository: z.string(), sourceCommit: z.string(), artifactCommit: z.string(), runId: z.number(), runAttempt: z.number(), markdownSha256: z.string(), frozenSha256: z.string().optional() });
 export type ConsumerReportEnvelope = z.infer<typeof consumerReportEnvelopeSchema>;
 
 export function decodeConsumerReportEnvelope({ input }: { input: unknown }): ConsumerReportEnvelope {

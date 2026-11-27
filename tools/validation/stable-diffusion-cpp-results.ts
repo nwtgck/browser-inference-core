@@ -6,11 +6,11 @@ import { requireResultPairs } from './pairs.js';
 const sharedProbes = ['timestep', 'bf16Weights'] as const;
 const testOnlyProbes = ['conv3dBias', 'webgpuPerformance'] as const;
 
-export function checkedImageResults({ profiles, variants, results, testWebGpu }: { profiles: readonly string[]; variants: readonly string[]; results: readonly StableDiffusionBrowserResult[]; testWebGpu: boolean }): void {
+export function checkedStableDiffusionResults({ profiles, variants, results, testWebGpu }: { profiles: readonly string[]; variants: readonly string[]; results: readonly StableDiffusionBrowserResult[]; testWebGpu: boolean }): void {
   requireResultPairs({ profiles, variants, results });
   const backends = testWebGpu ? ['CPU', 'WebGPU'] : ['CPU'];
   for (const result of results) {
-    if (result.scope !== imageSmokeScope({ testWebGpu })) {
+    if (result.scope !== imageSmokeScope({ variant: result.variant, testWebGpu })) {
       throw new Error('Wrong image smoke scope');
     }
     if (result.variant === 'browser') {
@@ -46,7 +46,7 @@ export function checkedImageResults({ profiles, variants, results, testWebGpu }:
   }
 }
 
-export function addImageValidation({ manifest, results }: { manifest: StableDiffusionManifest; results: readonly StableDiffusionBrowserResult[] }): StableDiffusionManifest {
+export function addStableDiffusionValidation({ manifest, results }: { manifest: StableDiffusionManifest; results: readonly StableDiffusionBrowserResult[] }): StableDiffusionManifest {
   const updated = structuredClone(manifest);
   for (const result of results) {
     const provenance = updated.profiles[result.profile]?.variants[result.variant];

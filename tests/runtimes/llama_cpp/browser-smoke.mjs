@@ -1,51 +1,29 @@
-import { READ_ENV_BIC_BROWSER_RESULTS_FILE, READ_ENV_BIC_BROWSER_SESSION_JSON, READ_ENV_BIC_PLAYWRIGHT_MODULE } from '#tools/shared/node-env';
-/** CI-only checks of each shipped variant; synthetic inference and mocked GPU suspension. */
-import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve, extname, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { READ_ENV_BIC_BROWSER_RESULTS_FILE } from '#tools/shared/node-env';
+/** CI-only checks of shipped Wasm with synthetic inference and mocked GPU suspension. */
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { browserVariantsForPhase, withBrowserPackage, writeBrowserResults } from '../browser-smoke-harness.mjs';
 
 const packageRoot = resolve(process.argv[2] || 'dist/package');
 const modelFile = resolve(process.argv[3] || 'build/fixture.gguf');
-const chatTestFile = fileURLToPath(new URL('./chat-surface.mjs', import.meta.url));
-const fileMountTestFile = fileURLToPath(new URL('./file-mount-lifetime.mjs', import.meta.url));
-const chatTemplate = await readFile('vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
-const playwrightPath = resolve(READ_ENV_BIC_PLAYWRIGHT_MODULE() || '../../.tools/browser/node_modules/playwright/index.mjs');
-const { chromium } = await import(pathToFileURL(playwrightPath).href);
-const mime = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
-const server = createServer(async (req, res) => {
-  try {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    if (pathname === '/') {
-      res.setHeader('Content-Type', 'text/html');
-      res.end('<!doctype html><title>Core smoke test</title>');
-      return;
-    }
-    const file = pathname === '/fixture.gguf' ? modelFile : pathname === '/chat-surface.mjs' ? chatTestFile : pathname === '/file-mount-lifetime.mjs' ? fileMountTestFile : resolve(packageRoot, '.' + pathname);
-    if (file !== modelFile && file !== chatTestFile && file !== fileMountTestFile && !file.startsWith(packageRoot + sep)) {
-      res.writeHead(403);
-      res.end();
-      return;
-    }
-    res.setHeader('Content-Type', mime[extname(file)] || 'application/octet-stream');
-    res.end(await readFile(file));
-  } catch {
-    res.writeHead(404);
-    res.end();
-  }
-});
-await new Promise((resolve, reject) => {
-  server.once('error', reject);
-  server.listen(0, '127.0.0.1', resolve);
-});
-const browser = await chromium.launch({ headless: true });
-const results = [];
-try {
-  const url = `http://127.0.0.1:${server.address().port}`;
+const phase = process.argv[4] ?? 'full';
+const variants = browserVariantsForPhase({ phase });
+const detailed = phase !== 'startup';
+const files = new Map([['/fixture.gguf', modelFile]]);
+let chatTemplate;
+if (detailed) {
+  files.set('/chat-surface.mjs', fileURLToPath(new URL('./chat-surface.mjs', import.meta.url)));
+  files.set('/file-mount-lifetime.mjs', fileURLToPath(new URL('./file-mount-lifetime.mjs', import.meta.url)));
+  chatTemplate = await readFile('vendor/llama.cpp/models/templates/Qwen-Qwen3-0.6B.jinja', 'utf8');
+}
+
+async function smoke({ browser, url }) {
+  const results = [];
   // Exercise both suspension mechanisms on the shipped pointer widths and the bigint ABI through a real
   // suspension. A mocked missing adapter requires no physical GPU and does not
   // establish WebGPU inference or production-model support.
-  for (const variant of ['browser', 'test']) {
+  for (const variant of variants) {
     for (const profile of ['webgpu-wasm32-jspi', 'webgpu-wasm64-jspi', 'webgpu-wasm32-asyncify', 'webgpu-wasm64-jspi-gpu-profile']) {
       const suspensionPage = await browser.newPage();
       await suspensionPage.goto(url);
@@ -151,7 +129,7 @@ try {
       await suspensionPage.close();
     }
   }
-  for (const variant of ['browser', 'test']) {
+  for (const variant of variants) {
     for (const profile of ['cpu-wasm32']) {
       const page = await browser.newPage();
       page.on('console', msg => {
@@ -160,20 +138,30 @@ try {
         }
       });
       await page.goto(url);
-      const result = await page.evaluate(async ({ profile, variant, chatTemplate }) => {
-        const { default: createNative } = await import(`/profiles/${profile}/${variant}/core.mjs`);
-        const native = await createNative({ print() {}, printErr() {} });
+      const result = await page.evaluate(async ({ profile, variant, detailed, chatTemplate }) => {
         const { createCore, attachCore, schema, mountReadOnlyFile } = await import('/host/index.mjs');
-        const { checkChatSurface } = await import('/chat-surface.mjs');
-        const chatCore = attachCore(native, schema, { suspension: 'direct' });
-        const chatSurface = await checkChatSurface({ core: chatCore, template: chatTemplate });
+        let chatSurface;
+        if (detailed) {
+          const { default: createNative } = await import(`/profiles/${profile}/${variant}/core.mjs`);
+          const native = await createNative({ print() {}, printErr() {} });
+          const { checkChatSurface } = await import('/chat-surface.mjs');
+          const chatCore = attachCore(native, schema, { suspension: 'direct' });
+          chatSurface = await checkChatSurface({ core: chatCore, template: chatTemplate });
+        }
         const core = await createCore({ profile, variant, moduleOptions: { print() {}, printErr() {} } });
+        if (core.pointerBytes !== 4) {
+          throw new Error('Unexpected pointer width');
+        }
         const fileRowsVersion = await core.api.bicore_file_backed_rows_version();
         if (fileRowsVersion !== 0) {
           throw new Error('Unexpected file-backed rows capability');
         }
         await core.api.llama_backend_init();
-        const bytes = new Uint8Array(await (await fetch('/fixture.gguf')).arrayBuffer());
+        const response = await fetch('/fixture.gguf');
+        if (!response.ok) {
+          throw new Error('Missing synthetic model');
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
         const mounted = mountReadOnlyFile(core, '/models/test.gguf', {
           size: bytes.length,
           read(view, position) {
@@ -182,8 +170,11 @@ try {
             return chunk.length;
           },
         }, { maxChunkBytes: 1024 });
-        const { checkFileMountLifetime } = await import('/file-mount-lifetime.mjs');
-        const fileMountLifetime = checkFileMountLifetime(core, mountReadOnlyFile);
+        let fileMountLifetime;
+        if (detailed) {
+          const { checkFileMountLifetime } = await import('/file-mount-lifetime.mjs');
+          fileMountLifetime = checkFileMountLifetime(core, mountReadOnlyFile);
+        }
         const params = core.allocRecord('llama_model_params');
         await core.api.llama_model_default_params(params);
         core.setField('llama_model_params', params, 'n_gpu_layers', 0);
@@ -219,32 +210,45 @@ try {
         if (sampled < 0 || sampled >= 259) {
           throw new Error('Invalid sampled token');
         }
-        const size = await core.api.llama_state_get_size(ctx);
-        const state = core.alloc(size);
-        const used = await core.api.llama_state_get_data(ctx, state, size);
-        if (used <= 0n || await core.api.llama_state_set_data(ctx, state, used) !== used) {
-          throw new Error('State roundtrip failed');
+        let stateBytes;
+        if (detailed) {
+          const size = await core.api.llama_state_get_size(ctx);
+          const state = core.alloc(size);
+          try {
+            const used = await core.api.llama_state_get_data(ctx, state, size);
+            if (used <= 0n || await core.api.llama_state_set_data(ctx, state, used) !== used) {
+              throw new Error('State roundtrip failed');
+            }
+            stateBytes = String(used);
+          } finally {
+            core.free(state);
+          }
         }
         await core.api.llama_sampler_free(sampler);
         await core.api.llama_free(ctx);
         await core.api.llama_model_free(model);
-        for (const pointer of [params, path, cp, token, batch, state]) {
+        for (const pointer of [params, path, cp, token, batch]) {
           core.free(pointer);
         }
         mounted.remove();
         await core.api.llama_backend_free();
-        return { profile, variant, fileRowsVersion, syntheticModel: true, sampledToken: sampled, stateBytes: String(used), chatSurface, fileMountLifetime, passed: true };
-      }, { profile, variant, chatTemplate });
+        return {
+          profile,
+          variant,
+          fileRowsVersion,
+          syntheticModel: true,
+          sampledToken: sampled,
+          passed: true,
+          ...(detailed ? { stateBytes, chatSurface, fileMountLifetime } : {}),
+        };
+      }, { profile, variant, detailed, chatTemplate });
       results.push(result);
       await page.close();
     }
   }
-  const resultFile = READ_ENV_BIC_BROWSER_RESULTS_FILE() || 'build/browser-results.json';
-  const output = READ_ENV_BIC_BROWSER_SESSION_JSON()
-    ? { session: JSON.parse(READ_ENV_BIC_BROWSER_SESSION_JSON()), results } : results;
-  await writeFile(resultFile, JSON.stringify(output, null, 2)+'\n');
-  console.log(JSON.stringify(results, null, 2));
-} finally {
-  await browser.close();
-  server.close();
+  return results;
 }
+
+const results = await withBrowserPackage({ packageRoot, files, run: smoke });
+await writeBrowserResults({ file: READ_ENV_BIC_BROWSER_RESULTS_FILE() || 'build/browser-results.json', results });
+console.log(JSON.stringify(results, null, 2));

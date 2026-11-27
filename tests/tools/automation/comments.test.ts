@@ -3,8 +3,8 @@ import { mkdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { archiveRedirect, maximumArchiveBytes, readConsumerReport } from '#tools/automation/comments/archive';
-import { commentBody, latestRun, marker, payloadStart, planCommentWrite, previousPayload, selectArtifact, selectPulls } from '#tools/automation/comments/plan';
-import { planPullRequests, planReportDownloads, planReportArchives, prepareCommentWrite } from '#tools/automation/comments/operations';
+import { commentBody, matchingRuns, marker, payloadStart, planCommentWrite, previousPayload, reportArchives, selectPulls } from '#tools/automation/comments/plan';
+import { planPullRequests, planReportDownloads, planReportArchives, prepareCommentWrite, validateReportArchive } from '#tools/automation/comments/operations';
 import { runProcess } from '#tools/shared/process';
 import { temporaryDirectory } from '#tests/tools/shared/fixtures.test-support';
 import { botComment, pullRequest, reportArchive, reportPayload, repository, source, spoofedComment, workflowRun } from '#tests/tools/automation/comments.test-support';
@@ -12,6 +12,7 @@ import { botComment, pullRequest, reportArchive, reportPayload, repository, sour
 const pull = pullRequest({ head: source, number: 7 });
 const run = workflowRun({ head: source, id: 123, attempt: 1, status: 'completed', conclusion: 'success' });
 const payload = reportPayload({ head: source });
+const publication = { run, attempt: 1, kind: 'details', markdown: payload } as const;
 
 test('pull selection covers late PRs while excluding forks and artifact branches', () => {
   const other = pullRequest({ head: source, number: 8 });
@@ -25,54 +26,69 @@ test('pull selection covers late PRs while excluding forks and artifact branches
 test('latest attempts use start time, source head, branch, event and repository rather than completion order', () => {
   const recent = { ...workflowRun({ head: source, id: 100, attempt: 3, status: 'completed', conclusion: 'success' }), run_started_at: '2026-09-22T12:00:00Z' };
   const older = Array.from({ length: 100 }, (_, index) => ({ ...workflowRun({ head: source, id: 200 + index, attempt: 1, status: 'completed', conclusion: 'success' }), run_started_at: '2026-09-22T10:00:00Z' }));
-  assert.equal(latestRun({ runs: [...older, recent], repository, pull }), recent);
+  assert.equal(matchingRuns({ runs: [...older, recent], repository, pull })[0], recent);
   for (const irrelevant of [{ ...run, head_sha: 'b'.repeat(40) }, { ...run, head_branch: 'another' }, { ...run, event: 'pull_request_target' }, { ...run, head_repository: { full_name: 'fork/core' } }]) {
-    assert.equal(latestRun({ runs: [irrelevant], repository, pull }), undefined);
+    assert.deepEqual(matchingRuns({ runs: [irrelevant], repository, pull }), []);
   }
   const prRun = { ...workflowRun({ head: source, id: 124, attempt: 1, status: 'completed', conclusion: 'success' }), event: 'pull_request' };
-  assert.equal(latestRun({ runs: [run, prRun], repository, pull }), prRun);
-  assert.throws(() => latestRun({ runs: [run, run], repository, pull }), /Duplicate/u);
-  assert.throws(() => latestRun({ runs: Array.from({ length: 1001 }, () => run), repository, pull }), /oversized/u);
-  assert.throws(() => latestRun({ runs: [{ ...run, html_url: 'https://attacker.invalid' }], repository, pull }), /URL/u);
+  const rerun = { ...run, run_attempt: 2, status: 'in_progress', conclusion: null, run_started_at: '2026-09-22T12:00:00Z' };
+  assert.deepEqual(matchingRuns({ runs: [run, prRun], repository, pull }), [prRun, run]);
+  assert.deepEqual(matchingRuns({ runs: [run, prRun, rerun], repository, pull }), [rerun, prRun]);
+  assert.throws(() => matchingRuns({ runs: [run, run], repository, pull }), /Duplicate/u);
+  assert.throws(() => matchingRuns({ runs: Array.from({ length: 1001 }, () => run), repository, pull }), /oversized/u);
+  assert.throws(() => matchingRuns({ runs: [{ ...run, html_url: 'https://attacker.invalid' }], repository, pull }), /URL/u);
 });
 
-test('artifact selection binds a unique unexpired report to its run attempt', () => {
-  const artifacts = [{ id: 91, name: 'consumer-update-1', expired: false }, { id: 90, name: 'consumer-update-0', expired: false }];
-  assert.equal(selectArtifact({ artifacts, run }), 91);
-  assert.throws(() => selectArtifact({ artifacts, run: { ...run, run_attempt: 2 } }), /unique/u);
-  assert.throws(() => selectArtifact({ artifacts: [artifacts[0]!, artifacts[0]!], run }), /unique/u);
-  assert.throws(() => selectArtifact({ artifacts: [{ ...artifacts[0]!, expired: true }], run }), /unique/u);
+test('each completed attempt considers unique, unexpired details first and then its guide', () => {
+  const details = { id: 91, name: 'consumer-update-1', expired: false };
+  const artifacts = [
+    details,
+    { id: 92, name: 'publication-guide-1', expired: false },
+    { id: 93, name: 'publication-guide-2', expired: false },
+    { id: 94, name: 'consumer-update-2', expired: true },
+    { id: 95, name: 'consumer-update-0', expired: false },
+  ];
+  const first = [
+    { artifactId: 91, attempt: 1, kind: 'details', createdAt: undefined },
+    { artifactId: 92, attempt: 1, kind: 'guide', createdAt: undefined },
+  ];
+  assert.deepEqual(reportArchives({ artifacts, run }), first);
+  assert.deepEqual(reportArchives({ artifacts, run: { ...run, run_attempt: 2, status: 'in_progress', conclusion: null } }), first);
+  assert.deepEqual(reportArchives({ artifacts, run: { ...run, run_attempt: 2, conclusion: 'failure' } }), [{ artifactId: 93, attempt: 2, kind: 'guide', createdAt: undefined }, ...first]);
+  assert.deepEqual(reportArchives({ artifacts: [...artifacts, { ...details, id: 96 }], run }), first.slice(1));
+  assert.deepEqual(reportArchives({ artifacts, run: { ...run, actor: { login: 'dependabot[bot]' } } }), []);
 });
 
 test('comment plans update only an owned bot comment and suppress identical writes', () => {
-  const base = { original: pull, current: pull, selectedRun: run, currentRun: run, repository, payload, error: undefined };
+  const base = { original: pull, current: pull, selectedRuns: [run], currentRuns: [run], repository, publication, error: undefined };
   const create = planCommentWrite({ ...base, comments: [spoofedComment] });
   assert.equal(create.kind, 'create');
   const old = botComment({ body: marker + '\nOld' });
   const update = planCommentWrite({ ...base, comments: [old] });
   assert.equal(update.kind, 'update');
-  const body = commentBody({ pull, run, payload, previous: '', error: undefined });
+  const body = commentBody({ pull, run, publication, previous: '', error: undefined });
   assert.equal(planCommentWrite({ ...base, comments: [botComment({ body })] }).kind, 'skip');
   for (const current of [{ ...pull, head: { ...pull.head, sha: 'b'.repeat(40) } }, { ...pull, head: { ...pull.head, ref: 'another' } }, { ...pull, head: { ...pull.head, repo: null } }, { ...pull, state: 'closed' }]) {
     assert.equal(planCommentWrite({ ...base, current, comments: [old] }).kind, 'skip');
   }
-  assert.equal(planCommentWrite({ ...base, currentRun: { ...run, run_attempt: 2, status: 'queued', conclusion: null }, comments: [old] }).kind, 'skip');
+  assert.equal(planCommentWrite({ ...base, currentRuns: [{ ...run, run_attempt: 2, status: 'queued', conclusion: null }], comments: [old] }).kind, 'skip');
+  const older = workflowRun({ head: source, id: 121, attempt: 1, status: 'completed', conclusion: 'success' });
+  assert.equal(planCommentWrite({ ...base, selectedRuns: [run, older], currentRuns: [run, { ...older, run_attempt: 2 }], comments: [old] }).kind, 'skip');
 });
 
 test('pending, missing and failed reports preserve one clearly previous publication section', () => {
-  const old = commentBody({ pull, run, payload, previous: '', error: undefined });
+  const old = commentBody({ pull, run, publication, previous: '', error: undefined });
   const current = pullRequest({ head: 'b'.repeat(40), number: 7 });
-  const pending = commentBody({ pull: current, run: { ...run, head_sha: current.head.sha, status: 'queued', conclusion: null }, payload: undefined, previous: old, error: undefined });
-  const again = commentBody({ pull: current, run: { ...run, head_sha: current.head.sha, status: 'in_progress', conclusion: null }, payload: undefined, previous: pending, error: undefined });
+  const pending = commentBody({ pull: current, run: { ...run, head_sha: current.head.sha, status: 'queued', conclusion: null }, publication: undefined, previous: old, error: undefined });
+  const again = commentBody({ pull: current, run: { ...run, head_sha: current.head.sha, status: 'in_progress', conclusion: null }, publication: undefined, previous: pending, error: undefined });
   assert.equal(again.split(payloadStart).length - 1, 1);
-  assert.equal(again.split('Previous successful publication').length - 1, 1);
-  assert.match(again, /not confirmation of the current head\/run/u);
-  assert.doesNotMatch(again, /succeeded for this PR head/u);
+  assert.equal(again.split('Previous publication (historical reference)').length - 1, 1);
+  assert.doesNotMatch(again, /Runtime publication confirmed for this PR head/u);
   assert.equal(previousPayload({ body: again }), payload.trim());
   assert.equal(previousPayload({ body: `${old}${payloadStart}` }), undefined);
-  assert.match(commentBody({ pull, run: undefined, payload: undefined, previous: '', error: undefined }), /Human PR creation/u);
-  assert.match(commentBody({ pull, run, payload: undefined, previous: old, error: 'invalid report' }), /unavailable or expired/u);
-  assert.match(commentBody({ pull, run: { ...run, conclusion: 'failure' }, payload: undefined, previous: old, error: undefined }), /\*\*failure\*\*/u);
+  assert.match(commentBody({ pull, run: undefined, publication: undefined, previous: '', error: undefined }), /Human PR creation/u);
+  assert.match(commentBody({ pull, run, publication: undefined, previous: old, error: 'invalid report' }), /unavailable or expired/u);
+  assert.match(commentBody({ pull, run: { ...run, conclusion: 'failure' }, publication: undefined, previous: old, error: undefined }), /\*\*failure\*\*/u);
 });
 
 test('standard unzip reads bounded JSON and Markdown while leaving large download-only YAML compressed', async () => {
@@ -133,7 +149,7 @@ test('bad ZIPs, duplicate report members, symlinks, CRC errors and oversized arc
 
 test('artifact redirect policy allows only a single credential-free HTTPS location', () => {
   assert.equal(archiveRedirect({ status: '302', headers: 'HTTP/2 302\r\nLocation: https://storage.invalid/archive?sig=abc\r\n' }), 'https://storage.invalid/archive?sig=abc');
-  for (const location of ['http://storage.invalid/archive', 'https://user:password@storage.invalid/x', 'https://storage.invalid:444/x']) {
+  for (const location of ['http://storage.invalid/archive', 'https://user:password@storage.invalid/x', 'https://storage.invalid:444/x', 'https://storage.invalid/a\tb']) {
     assert.throws(() => archiveRedirect({ status: '302', headers: `Location: ${location}\r\n` }));
   }
   assert.throws(() => archiveRedirect({ status: '302', headers: 'Location: https://a.invalid\nLocation: https://b.invalid\n' }));
@@ -152,17 +168,26 @@ test('real file operations isolate malformed reports per PR and recheck current 
     await writeFile(join(directory, 'runs.json'), JSON.stringify([run]));
     await writeFile(join(directory, 'current-runs.json'), JSON.stringify([run]));
     await writeFile(join(directory, 'current-pr.json'), JSON.stringify(pullRequest({ head: source, number })));
-    await writeFile(join(directory, 'current-comments.json'), JSON.stringify([botComment({ body: commentBody({ pull, run, payload, previous: '', error: undefined }) })]));
-    await writeFile(join(directory, 'artifacts.json'), JSON.stringify([{ id: 91, name: 'consumer-update-1', expired: false }]));
+    await writeFile(join(directory, 'current-comments.json'), JSON.stringify([botComment({ body: commentBody({ pull, run, publication, previous: '', error: undefined }) })]));
   }
   await planReportDownloads({ state, repository });
+  assert.equal(await readFile(join(state, 'downloads.tsv'), 'utf8'), '7\t123\n8\t123\n');
+  for (const number of [7, 8]) {
+    await writeFile(join(state, String(number), '123/artifacts.json'), JSON.stringify([{ id: 91, name: 'consumer-update-1', expired: false }]));
+  }
   await planReportArchives({ state, repository });
-  assert.equal(await readFile(join(state, 'downloads.tsv'), 'utf8'), '7\t123\t1\n8\t123\t1\n');
-  await writeFile(join(state, '7/report.zip'), 'malformed');
+  assert.equal(await readFile(join(state, 'archives.tsv'), 'utf8'), '7\t123\t91\n8\t123\t91\n');
+  for (const number of [7, 8]) {
+    await mkdir(join(state, String(number), '123/91'));
+  }
+  await writeFile(join(state, '7/123/91/report.zip'), 'malformed');
   const archive = await reportArchive({ root: temporary.root, run, changes: {}, body: undefined, envelope: undefined, yaml: '' });
-  await writeFile(join(state, '8/report.zip'), await readFile(archive.path));
+  await writeFile(join(state, '8/123/91/report.zip'), await readFile(archive.path));
+  for (const number of [7, 8]) {
+    await validateReportArchive({ state, repository, number, runId: 123, artifactId: 91 });
+  }
   await prepareCommentWrite({ state, repository, number: 7 });
-  assert.match(await readFile(join(state, '7/body.json'), 'utf8'), /Previous successful publication/u);
+  assert.match(await readFile(join(state, '7/body.json'), 'utf8'), /Previous publication \(historical reference\)/u);
   assert.match(await readFile(join(state, '7/body.json'), 'utf8'), /Report retrieval error/u);
   await prepareCommentWrite({ state, repository, number: 8 });
   assert.equal(await readFile(join(state, '8/write.txt'), 'utf8'), 'skip\n');

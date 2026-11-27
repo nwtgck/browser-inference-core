@@ -1,53 +1,28 @@
-import {
-  READ_ENV_BIC_BROWSER_RESULTS_FILE,
-  READ_ENV_BIC_BROWSER_SESSION_JSON,
-  READ_ENV_BIC_PLAYWRIGHT_MODULE,
-  READ_ENV_SDCB_TEST_WEBGPU,
-} from '#tools/shared/node-env';
+import { READ_ENV_BIC_BROWSER_RESULTS_FILE, READ_ENV_SDCB_TEST_WEBGPU } from '#tools/shared/node-env';
 // Real Wasm/Worker/filesystem/callback tests plus small synthetic Qwen timestep
-// and 3D convolution graphs. Optional SDCB_TEST_WEBGPU=1 checks WebGPU arithmetic;
-// neither mode is a trained-model image-generation/quality test.
-import { createServer } from 'node:http';
+// and 3D convolution graphs. SDCB_TEST_WEBGPU=1 also checks WebGPU arithmetic.
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { browserVariantsForPhase, withBrowserPackage, writeBrowserResults } from '../browser-smoke-harness.mjs';
 import { makeFixture } from './gguf-fixture.mjs';
 import { makeModelIoFixtures } from './model-io-fixtures.mjs';
-import { pathToFileURL } from 'node:url';
 import { imageSmokeScope } from './browser-smoke-contract.mjs';
-import { runArithmeticProbes } from './arithmetic-probes.mjs';
 import { assertModuleSurface, assertPublicGguf } from './core-contract.mjs';
-const root = path.resolve(process.argv[2] ?? 'dist/package');
-const testWebGpu = READ_ENV_SDCB_TEST_WEBGPU() === '1';
-const { chromium } = await import(pathToFileURL(path.resolve(READ_ENV_BIC_PLAYWRIGHT_MODULE() || '../../.tools/browser/node_modules/playwright/index.mjs')).href);
-const server = createServer(async (req, res) => {
-  try {
-    const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
-    if (pathname === '/') {
-      res.setHeader('Content-Type', 'text/html');
-      res.end('<!doctype html><title>Image core boundary test</title>');
-      return;
-    }
-    const file = path.resolve(root, '.' + pathname);
-    if (!file.startsWith(root + path.sep)) {
-      res.writeHead(403).end();
-      return;
-    }
-    res.setHeader('Content-Type', file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream');
-    res.end(await readFile(file));
-  } catch {
-    res.writeHead(404).end();
-  }
-});
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-let browser;
-try {
-  browser = await chromium.launch({ headless: true });
+
+const packageRoot = path.resolve(process.argv[2] ?? 'dist/package');
+const phase = process.argv[3] ?? 'full';
+const variants = browserVariantsForPhase({ phase });
+const arithmeticSource = variants.includes('test') ? (await import('./arithmetic-probes.mjs')).runArithmeticProbes.toString() : undefined;
+const testWebGpu = variants.includes('test') && READ_ENV_SDCB_TEST_WEBGPU() === '1';
+const resultFile = READ_ENV_BIC_BROWSER_RESULTS_FILE();
+
+async function smoke({ browser, url }) {
   const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  await page.goto(url);
   const profiles = JSON.parse(await readFile('config/profiles.json', 'utf8'));
   const failures = [], results = [];
   for (const profile of Object.keys(profiles)) {
-    for (const variant of ['browser', 'test']) {
+    for (const variant of variants) {
       try {
         const result = await page.evaluate(async ({ profile, variant, fixtureSource, modelIoSource, testWebGpu, scope, arithmeticSource, moduleSurfaceSource, publicGgufSource }) => {
           const run = async ({ origin, base, variant, profile, testWebGpu, scope }) => {
@@ -298,12 +273,12 @@ try {
             worker.terminate();
             URL.revokeObjectURL(url);
           }
-        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), arithmeticSource: runArithmeticProbes.toString(), moduleSurfaceSource: assertModuleSurface.toString(), publicGgufSource: assertPublicGguf.toString(), testWebGpu, scope: imageSmokeScope({ testWebGpu }) });
+        }, { profile, variant, fixtureSource: makeFixture.toString(), modelIoSource: makeModelIoFixtures.toString(), arithmeticSource, moduleSurfaceSource: assertModuleSurface.toString(), publicGgufSource: assertPublicGguf.toString(), testWebGpu, scope: imageSmokeScope({ variant, testWebGpu }) });
         console.log(JSON.stringify(result, null, 2));
         results.push(result);
         // The pipeline wrapper finalizes its tested package snapshot, not build/.
         // Preserve the standalone recorder behavior outside that explicit mode.
-        if (!READ_ENV_BIC_BROWSER_RESULTS_FILE()) {
+        if (!resultFile && phase !== 'regression') {
           const file = path.resolve('build', profile, variant, 'provenance.json');
           const provenance = JSON.parse(await readFile(file, 'utf8'));
           provenance.validation.browserSmoke = true;
@@ -320,12 +295,10 @@ try {
   if (failures.length) {
     throw new Error(`${failures.length} image browser smoke configuration(s) failed; see per-profile diagnostics`);
   }
-  if (READ_ENV_BIC_BROWSER_RESULTS_FILE()) {
-    const output = READ_ENV_BIC_BROWSER_SESSION_JSON()
-      ? { session: JSON.parse(READ_ENV_BIC_BROWSER_SESSION_JSON()), results } : results;
-    await writeFile(READ_ENV_BIC_BROWSER_RESULTS_FILE(), JSON.stringify(output, null, 2) + '\n');
-  }
-} finally {
-  await browser?.close();
-  await new Promise(resolve => server.close(resolve));
+  return results;
+}
+
+const results = await withBrowserPackage({ packageRoot, files: new Map(), run: smoke });
+if (resultFile) {
+  await writeBrowserResults({ file: resultFile, results });
 }
