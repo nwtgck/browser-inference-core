@@ -1099,6 +1099,20 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Q8_0 shape, and the in-place and rejection paths. Remove when upstream
   provides equivalent checked gate fusion.
 
+## L2 normalization with an affine scale
+
+- **Patch** `ggml-webgpu-l2-norm-scale.patch` against llama.cpp
+  `07ba74babd`, after the row-norm and scale/unary fusion overlays.
+- **Scope** Fuse adjacent L2 normalization and scale operations on F32
+  rows. Keep the normalized result and affine coefficients in their
+  original arithmetic order within one dispatch.
+- **Contract** Reuse the RMS-scale layout, range, and intermediate lifetime
+  checks. Select L2 and RMS shader pipelines separately. Preserve the
+  longer scale/unary fusion and the existing vectorized RMS path.
+- **Validation and removal** Check dispatch and pipeline reuse in both
+  profiles, including intermediate readers and aliased buffers. Remove
+  once upstream provides equivalent L2-scale fusion.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

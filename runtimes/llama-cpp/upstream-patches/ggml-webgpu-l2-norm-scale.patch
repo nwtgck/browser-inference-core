@@ -1,0 +1,166 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp
+@@ -3,9 +3,9 @@
+ #include "ggml-webgpu-fusion-view-sources.hpp"
+ #include <cstdint>
+ 
+-struct rms_scale_plan {
++struct row_norm_scale_plan {
+     ggml_tensor * source = nullptr;
+-    ggml_tensor * rms = nullptr;
++    ggml_tensor * norm = nullptr;
+     ggml_tensor * output = nullptr;
+     uint64_t source_bytes = 0;
+     uint64_t output_bytes = 0;
+@@ -37,29 +37,30 @@
+     return true;
+ }
+ 
+-inline bool plan_rms_scale(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
+-                           rms_scale_plan & plan) {
++inline bool plan_row_norm_scale(const ggml_cgraph * graph, int index, webgpu_fusion_view_sources & views,
++                                row_norm_scale_plan & plan) {
+     plan = {};
+-    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2 ||
+-        !ggml_can_fuse(graph, index, { GGML_OP_RMS_NORM, GGML_OP_SCALE })) { return false; }
+-    auto * rms = graph->nodes[index];
++    if (!graph || index < 0 || index >= graph->n_nodes || graph->n_nodes - index < 2) { return false; }
++    auto * norm = graph->nodes[index];
++    if ((norm->op != GGML_OP_RMS_NORM && norm->op != GGML_OP_L2_NORM) ||
++        !ggml_can_fuse(graph, index, { norm->op, GGML_OP_SCALE })) { return false; }
+     auto * output = graph->nodes[index + 1];
+-    auto * source = rms->src[0];
+-    if (!source || rms->view_src || output->view_src || output->src[0] != rms ||
+-        !ggml_are_same_shape(source, rms) || !ggml_are_same_shape(rms, output)) { return false; }
+-    for (auto * node : { rms, output }) {
++    auto * source = norm->src[0];
++    if (!source || norm->view_src || output->view_src || output->src[0] != norm ||
++        !ggml_are_same_shape(source, norm) || !ggml_are_same_shape(norm, output)) { return false; }
++    for (auto * node : { norm, output }) {
+         for (int s = 1; s < GGML_MAX_SRC; ++s) { if (node->src[s]) { return false; } }
+     }
+     if (source->view_src && (source->view_src == source || source->view_src->view_src ||
+                             source->view_src->type != GGML_TYPE_F32)) { return false; }
+-    uint64_t source_bytes, rms_bytes, output_bytes;
+-    uint32_t elements, rows, rms_elements, rms_rows, output_elements, output_rows;
++    uint64_t source_bytes, norm_bytes, output_bytes;
++    uint32_t elements, rows, norm_elements, norm_rows, output_elements, output_rows;
+     if (!rms_scale_layout(source, false, source_bytes, elements, rows) ||
+-        !rms_scale_layout(rms, true, rms_bytes, rms_elements, rms_rows) ||
++        !rms_scale_layout(norm, true, norm_bytes, norm_elements, norm_rows) ||
+         !rms_scale_layout(output, true, output_bytes, output_elements, output_rows) ||
+-        elements != rms_elements || elements != output_elements || rows != rms_rows || rows != output_rows) { return false; }
+-    if (views.contains(rms)) { return false; }
+-    plan = { source, rms, output, source_bytes, output_bytes, elements, rows };
++        elements != norm_elements || elements != output_elements || rows != norm_rows || rows != output_rows) { return false; }
++    if (views.contains(norm)) { return false; }
++    plan = { source, norm, output, source_bytes, output_bytes, elements, rows };
+     return true;
+ }
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1916,7 +1916,7 @@
+     std::array<webgpu_pipeline, 2> add_cast_f16_pipelines;
+     webgpu_pipeline short_conv_state_pipeline;
+     webgpu_pipeline loop_controller_pipelines[2][2];
+-    std::unordered_map<int, webgpu_pipeline> rms_scale_pipelines;
++    std::unordered_map<int, webgpu_pipeline> row_norm_scale_pipelines;
+     webgpu_pipeline rms_vec4_pipelines[4];
+     webgpu_pipeline rms_concat_pipeline;
+     webgpu_pipeline l2_clip_pipelines[2];
+@@ -2803,16 +2803,18 @@
+         return pipeline;
+     }
+ 
+-    webgpu_pipeline get_rms_scale_pipeline(bool inplace) {
+-        const int key = int(inplace);
+-        auto it = rms_scale_pipelines.find(key);
+-        if (it != rms_scale_pipelines.end()) { return it->second; }
+-        std::vector<std::string> defines { "RMS_NORM", "SRC_F32", "DST_F32", "WG_SIZE=128", "POST_SCALE" };
+-        std::string label = "rms_norm_scale_f32";
++    webgpu_pipeline get_row_norm_scale_pipeline(ggml_op op, bool inplace) {
++        GGML_ASSERT(op == GGML_OP_RMS_NORM || op == GGML_OP_L2_NORM);
++        const bool l2 = op == GGML_OP_L2_NORM;
++        const int key = int(inplace) | (int(l2) << 1);
++        auto it = row_norm_scale_pipelines.find(key);
++        if (it != row_norm_scale_pipelines.end()) { return it->second; }
++        std::vector<std::string> defines { l2 ? "L2_NORM" : "RMS_NORM", "SRC_F32", "DST_F32", "WG_SIZE=128", "POST_SCALE" };
++        std::string label = l2 ? "l2_norm_scale_f32" : "rms_norm_scale_f32";
+         if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
+         const auto code = preprocessor.preprocess(wgsl_rms_norm_scale, defines);
+         auto pipeline = ggml_webgpu_create_pipeline(device, code, label);
+-        rms_scale_pipelines[key] = pipeline;
++        row_norm_scale_pipelines[key] = pipeline;
+         return pipeline;
+     }
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4744,12 +4744,12 @@
+     return ggml_backend_webgpu_build(ctx, ctx->shader_lib->get_rms_concat_pipeline(), params, entries, x, y);
+ }
+ 
+-static std::optional<webgpu_encoded_op> ggml_webgpu_rms_scale(webgpu_context & ctx,
++static std::optional<webgpu_encoded_op> ggml_webgpu_row_norm_scale(webgpu_context & ctx,
+                                                              ggml_cgraph * graph, int index,
+                                                              webgpu_fusion_view_sources & views,
+                                                              int & num_encoded_ops) {
+-    rms_scale_plan plan;
+-    if (!plan_rms_scale(graph, index, views, plan)) { return std::nullopt; }
++    row_norm_scale_plan plan;
++    if (!plan_row_norm_scale(graph, index, views, plan)) { return std::nullopt; }
+     // Preserve the existing three-operation SCALE/UNARY/SCALE fusion. Taking
+     // its first SCALE here would increase that chain from two dispatches to three.
+     // Prefer it conservatively even if its later runtime bindings must fall back.
+@@ -4773,16 +4773,17 @@
+     const uint32_t storage_bindings = inplace ? 1 : 2;
+     if (limits.maxStorageBuffersPerShaderStage < storage_bindings ||
+         limits.maxBindingsPerBindGroup < storage_bindings + 1) { return std::nullopt; }
+-    const bool vec4 = ggml_webgpu_can_use_rms_vec4(limits, plan.source, plan.output,
++    const bool vec4 = plan.norm->op == GGML_OP_RMS_NORM &&
++                     ggml_webgpu_can_use_rms_vec4(limits, plan.source, plan.output,
+                                                   source.element_offset, destination.element_offset);
+     auto pipeline = vec4 ? ctx->shader_lib->get_rms_vec4_pipeline(inplace, true) :
+-                           ctx->shader_lib->get_rms_scale_pipeline(inplace);
++                           ctx->shader_lib->get_row_norm_scale_pipeline(plan.norm->op, inplace);
+     std::vector<uint32_t> params = {
+         source.element_offset, destination.element_offset,
+         uint32_t(plan.source->nb[1] / 4), uint32_t(plan.source->nb[2] / 4), uint32_t(plan.source->nb[3] / 4),
+         uint32_t(plan.output->nb[1] / 4), uint32_t(plan.output->nb[2] / 4), uint32_t(plan.output->nb[3] / 4),
+         uint32_t(plan.source->ne[0]), uint32_t(plan.source->ne[1]), uint32_t(plan.source->ne[2]), uint32_t(plan.source->ne[3]),
+-        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.rms, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.norm, 0)),
+         ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 0)),
+         ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(plan.output, 1)),
+     };
+@@ -5711,11 +5712,13 @@
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+                 return ggml_webgpu_rms_norm_mul(ctx, src0, node, mul_node->src[0], mul_node->src[1], mul_node);
+             } else {
+-                if (auto fused = ggml_webgpu_rms_scale(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++                if (auto fused = ggml_webgpu_row_norm_scale(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+                 return ggml_webgpu_row_norm(ctx, src0, node);
+             }
+         case GGML_OP_NORM:
++            return ggml_webgpu_row_norm(ctx, src0, node);
+         case GGML_OP_L2_NORM:
++            if (auto fused = ggml_webgpu_row_norm_scale(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             return ggml_webgpu_row_norm(ctx, src0, node);
+         case GGML_OP_ROPE:
+             return ggml_webgpu_rope(ctx, src0, src1, src2, node);
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -267,7 +267,7 @@
+         let i_dst = i_dst_row + col;
+         let v = src[i_src];
+ #ifdef POST_SCALE
+-        // Preserve the original RMS result before applying the SCALE affine.
++        // Preserve the normalized result before applying the SCALE affine.
+         let normalized = scale * (v - mean_val);
+         let result = normalized * params.post_scale + params.post_bias;
+ #else

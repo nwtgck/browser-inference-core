@@ -1215,6 +1215,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-l2-norm-scale.patch',
+    target: 'llama-webgpu',
+    reason: 'Fuse L2 normalization followed by an affine scale using the checked row norm path.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-rms-scale.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

@@ -1,7 +1,7 @@
 #pragma once
 
 namespace fusion_cases {
-enum class Family { scale_unary, scale_tanh, rms_scale };
+enum class Family { scale_unary, scale_tanh, rms_scale, l2_scale };
 enum class Guard { ordinary, exposed_intermediate, external_consumer, raw_intermediate, raw_output };
 enum class RouterDenominator { clamp, epsilon, other_epsilon, other_scale, exposed };
 enum class RouterAlias { none, sum, result };
@@ -11,14 +11,20 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
     const bool tanh = family == Family::scale_tanh;
-    const bool unary = family != Family::rms_scale;
-    auto * input = ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, tanh ? 202048 : 64, tanh ? 1 : 2);
+    const bool l2 = family == Family::l2_scale;
+    const bool unary = tanh || family == Family::scale_unary;
+    auto * input =
+        ggml_new_tensor_2d(memory.get(), GGML_TYPE_F32, tanh ? 202048 : (l2 ? 128 : 64), tanh ? 1 : (l2 ? 24 : 2));
     ggml_set_input(input);
-    auto * intermediate =
-        unary ? ggml_scale(memory.get(), input, tanh ? 0.05f : 0.5f) : ggml_rms_norm(memory.get(), input, 1e-5f);
-    auto * output =
-        tanh ? ggml_tanh(memory.get(), intermediate)
-             : (unary ? ggml_silu(memory.get(), intermediate) : ggml_scale(memory.get(), intermediate, 0.5f));
+    ggml_tensor * intermediate;
+    ggml_tensor * output;
+    if (unary) {
+        intermediate = ggml_scale(memory.get(), input, tanh ? 0.05f : 0.5f);
+        output = tanh ? ggml_tanh(memory.get(), intermediate) : ggml_silu(memory.get(), intermediate);
+    } else {
+        intermediate = l2 ? ggml_l2_norm(memory.get(), input, 0.375f) : ggml_rms_norm(memory.get(), input, 1e-5f);
+        output = ggml_scale_bias(memory.get(), intermediate, 0.5f, -0.125f);
+    }
     if (final_scale)
         output = ggml_scale(memory.get(), output, tanh ? 20.0f : 0.25f);
     ggml_set_output(output);
@@ -50,6 +56,20 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
         const auto & shader = *gpu.context->bind_group_cache.slots[0].pipeline.Get();
         BICORE_CHECK(shader.name.starts_with(final_scale ? "scale_tanh_scale" : "scale_tanh"));
     }
+    if (l2) {
+        const bool inplace = ggml_webgpu_tensor_equal(input, output);
+        const auto expected = gpu.context->shader_lib->get_row_norm_scale_pipeline(GGML_OP_L2_NORM, inplace);
+        const auto rms = gpu.context->shader_lib->get_row_norm_scale_pipeline(GGML_OP_RMS_NORM, inplace);
+        const auto other_layout = gpu.context->shader_lib->get_row_norm_scale_pipeline(GGML_OP_L2_NORM, !inplace);
+        BICORE_CHECK(pipeline == expected.pipeline.Get()->id && pipeline != rms.pipeline.Get()->id &&
+                     pipeline != other_layout.pipeline.Get()->id);
+        BICORE_CHECK(commands.dispatches[0].x == 24 && commands.dispatches[0].y == 1);
+        const auto & binding = gpu.context->bind_group_cache.slots[0].bindings.back();
+        std::array<uint32_t, 15> words;
+        std::memcpy(words.data(), binding.buffer.Get()->bytes.data() + binding.offset, sizeof(words));
+        BICORE_CHECK(words[12] == std::bit_cast<uint32_t>(0.375f) && words[13] == std::bit_cast<uint32_t>(0.5f) &&
+                     words[14] == std::bit_cast<uint32_t>(-0.125f));
+    }
     const auto created = ::created, groups = resources.groups_created;
     const float coefficient = 2.5f;
     auto * scale = unary ? intermediate : output;
@@ -80,7 +100,7 @@ static void graph(Family family, Guard guard, bool final_scale = false) {
     const auto before = ::created;
     webgpu_fusion_view_sources views(*graph);
     const auto result = unary ? ggml_webgpu_scale_unary(gpu.context, graph, 0, views, consumed)
-                              : ggml_webgpu_rms_scale(gpu.context, graph, 0, views, consumed);
+                              : ggml_webgpu_row_norm_scale(gpu.context, graph, 0, views, consumed);
     output->data = original_data;
     output->buffer = original_buffer;
     BICORE_CHECK(!result && consumed == 1 && ::created == before && commands.dispatches.empty());
@@ -400,7 +420,7 @@ static void rms_concat() {
 static void all() {
     rms_concat();
     rms_vec4();
-    for (const auto family : {Family::scale_unary, Family::scale_tanh, Family::rms_scale})
+    for (const auto family : {Family::scale_unary, Family::scale_tanh, Family::rms_scale, Family::l2_scale})
         for (const auto guard : {Guard::ordinary, Guard::exposed_intermediate, Guard::external_consumer})
             graph(family, guard);
     graph(Family::scale_unary, Guard::ordinary, true);

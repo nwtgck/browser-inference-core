@@ -1,7 +1,16 @@
 #pragma once
 
 namespace raw_view_fusion_cases {
-enum class Family { rms_mul, rms_mul_inplace, rms_scale, rms_scale_unary, scale_unary, matvec_epilogue, moe_sum };
+enum class Family {
+    rms_mul,
+    rms_mul_inplace,
+    rms_scale,
+    l2_scale,
+    rms_scale_unary,
+    scale_unary,
+    matvec_epilogue,
+    moe_sum
+};
 
 struct DispatchCounts {
     unsigned prefix;
@@ -36,7 +45,8 @@ static DispatchCounts run(Family family, int raw_output) {
             ggml_set_input(weights);
             chain.push_back(ggml_mul_mat(ctx, weights, input));
         } else if (family != Family::scale_unary) {
-            chain.push_back(ggml_rms_norm(ctx, input, 1e-5f));
+            chain.push_back(family == Family::l2_scale ? ggml_l2_norm(ctx, input, 0.375f)
+                                                       : ggml_rms_norm(ctx, input, 1e-5f));
         }
         if (family == Family::rms_mul || family == Family::rms_mul_inplace) {
             auto * weights = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 64);
@@ -46,7 +56,7 @@ static DispatchCounts run(Family family, int raw_output) {
                                                               : ggml_mul(ctx, rms, weights));
         } else {
             chain.push_back(ggml_scale(ctx, chain.empty() ? input : chain.back(), 0.5f));
-            if (family != Family::rms_scale) {
+            if (family != Family::rms_scale && family != Family::l2_scale) {
                 chain.push_back(ggml_sigmoid(ctx, chain.back()));
                 chain.push_back(ggml_scale(ctx, chain.back(), 0.25f));
             }
@@ -104,6 +114,7 @@ static void all() {
         {Family::rms_mul, -1, 1},         {Family::rms_mul, 0, 2},         {Family::rms_mul, 1, 1},
         {Family::rms_mul_inplace, -1, 1}, {Family::rms_mul_inplace, 0, 1}, {Family::rms_mul_inplace, 1, 1},
         {Family::rms_scale, -1, 1},       {Family::rms_scale, 0, 2},       {Family::rms_scale, 1, 1},
+        {Family::l2_scale, -1, 1},        {Family::l2_scale, 0, 2},        {Family::l2_scale, 1, 1},
         {Family::rms_scale_unary, -1, 2}, {Family::rms_scale_unary, 1, 3}, {Family::rms_scale_unary, 2, 3},
         {Family::rms_scale_unary, 3, 2},  {Family::scale_unary, -1, 1},    {Family::scale_unary, 0, 3},
         {Family::scale_unary, 1, 2},      {Family::scale_unary, 2, 1},     {Family::matvec_epilogue, -1, 1},
