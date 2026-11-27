@@ -4,7 +4,8 @@
 #include "cases/q8-short.hpp"
 
 static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_context & input, uint32_t dimension,
-                                                   bool overlap, std::optional<bool> expected_matvec = std::nullopt) {
+                                                   bool overlap, std::optional<bool> expected_matvec = std::nullopt,
+                                                   uint32_t source_byte_offset = 0) {
     auto ctx = recording_context();
     auto & capabilities = ctx->global_ctx->capabilities;
     capabilities.limits.maxComputeInvocationsPerWorkgroup = input.max_wg_size;
@@ -31,12 +32,13 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
         tensor.nb[1] = ggml_row_size(tensor.type, tensor.ne[0]);
         tensor.nb[2] = tensor.nb[1] * tensor.ne[1];
         tensor.nb[3] = tensor.nb[2] * tensor.ne[2];
-        tensor.data = webgpu_ptr_base;
+        const uint32_t offset = i == 0 ? source_byte_offset : 0;
+        tensor.data = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(webgpu_ptr_base) + offset);
         tensor.view_src = nullptr;
         tensor.view_offs = 0;
         backing.emplace_back(wgpu::Buffer::Acquire(new WGPUBufferImpl), "metadata-only binding", ctx->global_ctx);
         buffers[i].context = &backing.back();
-        buffers[i].size = ggml_nbytes(&tensor);
+        buffers[i].size = offset + ggml_nbytes(&tensor);
         tensor.buffer = &buffers[i];
     }
     if (overlap)
@@ -49,8 +51,9 @@ static std::array<uint32_t, 2> production_dispatch(const ggml_webgpu_shader_lib_
     BICORE_CHECK(encoded.num_kernels == commands.dispatches.size() && !commands.dispatches.empty());
     const auto dispatch = commands.dispatches.back();
     if (expected_matvec) {
-        const auto expected = *expected_matvec ? ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, true)
-                                               : ctx->shader_lib->get_mul_mat_fast_pipeline(input, overlap, true);
+        const bool aligned = source_byte_offset == 0;
+        const auto expected = *expected_matvec ? ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, aligned)
+                                               : ctx->shader_lib->get_mul_mat_fast_pipeline(input, overlap, aligned);
         BICORE_CHECK(dispatch.pipeline == expected.pipeline.Get()->id);
     }
 #ifndef GGML_WEBGPU_GPU_PROFILE

@@ -1244,6 +1244,21 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   matmul outputs. Remove this patch when upstream uses equivalent row
   addressing and subgroup reduction.
 
+## Paired BF16 loads for compact single-column matvec
+
+- **Patch** `ggml-webgpu-bf16-paired-matvec.patch`.
+- **Scope** Extend the compact BF16 pipeline when both inputs have aligned
+  vector strides and offsets. Keep its scalar path for other layouts.
+- **Contract** Decode two BF16 weights from each aligned 32-bit word and
+  combine two independent F32 accumulators per lane. The accumulation order
+  can change. The 320/10240 shape uses 128 lanes and 2 KiB of shared memory.
+  The weight format, output tiling, dispatch count, and storage bindings stay
+  the same.
+- **Validation and removal** Check shader cache separation and actual dispatch
+  for aligned and misaligned inputs. Compare both kernels with Float64 dot
+  products and check disjoint input/output ranges of a shared GPU buffer.
+  Remove when the upstream path handles paired BF16 loads equivalently.
+
 ## Packed F32 register tiles for long-K prefill
 
 - **Patch** `ggml-webgpu-f32-packed-prefill.patch` against llama.cpp

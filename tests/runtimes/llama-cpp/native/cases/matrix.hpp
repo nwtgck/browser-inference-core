@@ -294,14 +294,29 @@ static void compact_bf16_matvec(const std::filesystem::path & output) {
             BICORE_CHECK(decisions.wg_size == 256 && decisions.outputs_per_wg == 4 && decisions.vec_size == 1);
             BICORE_CHECK(ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, false).pipeline.Get() ==
                          pipeline.pipeline.Get());
+            const auto aligned = ctx->shader_lib->get_mul_mat_vec_pipeline(input, overlap, true);
+            BICORE_CHECK(aligned.name.ends_with("_compact_paired") == packed);
+            BICORE_CHECK((pipeline.pipeline.Get() != aligned.pipeline.Get()) == packed);
+            const auto & aligned_decisions =
+                *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(aligned.context.get());
+            BICORE_CHECK(aligned_decisions.wg_size == (packed && fixture.a.ne[0] == 320 ? 128u : 256u));
+            BICORE_CHECK(aligned_decisions.outputs_per_wg == 4 && aligned_decisions.vec_size == 1);
             if (dispatch) {
-                BICORE_CHECK((production_dispatch(input, 65535, overlap, true) ==
-                              std::array<uint32_t, 2>{uint32_t((fixture.dst.ne[0] + 3) / 4), 1}));
+                const std::array<uint32_t, 2> groups{uint32_t((fixture.dst.ne[0] + 3) / 4), 1};
+                BICORE_CHECK(production_dispatch(input, 65535, overlap, true) == groups);
+                if (packed) {
+                    BICORE_CHECK(production_dispatch(input, 65535, false, true, 2) == groups);
+                }
             }
             if (!output.empty() && !overlap && fixture.dst.ne[1] == 1) {
                 std::ofstream shader(output / (pipeline.name + ".wgsl"));
                 shader << pipeline.pipeline.Get()->code;
                 BICORE_CHECK(bool(shader));
+                if (packed) {
+                    std::ofstream paired_shader(output / (aligned.name + ".wgsl"));
+                    paired_shader << aligned.pipeline.Get()->code;
+                    BICORE_CHECK(bool(paired_shader));
+                }
             }
         };
         for (auto [k, m] : {std::pair{320, 10240}, {10240, 4}, {10240, 320}, {2560, 48}, {2560, 128}, {2560, 512}}) {

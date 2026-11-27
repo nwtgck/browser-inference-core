@@ -1,0 +1,80 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1676,7 +1676,7 @@
+ 
+ struct ggml_webgpu_mul_mat_vec_pipeline_key {
+     enum class subgroup_mode_kind : uint32_t {
+-        legacy, requested_size, compact_bf16, single_block_q8, single_block_q4_0, f32_projection_k2304
++        legacy, requested_size, compact_bf16, single_block_q8, single_block_q4_0, f32_projection_k2304, paired_bf16
+     };
+     subgroup_mode_kind subgroup_mode = subgroup_mode_kind::legacy;
+     uint32_t requested_subgroup_size = 0;
+@@ -3379,6 +3379,12 @@
+                 (k == 2560 && (m == 48 || m == 128 || m == 512));
+             if (compact_shape && ggml_is_contiguous(context.src0)) {
+                 key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16;
++                if (vec4_aligned) {
++                    key.subgroup_mode = ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::paired_bf16;
++                    if (k == 320) {
++                        key.workgroup_size = 128;
++                    }
++                }
+             }
+         }
+ 
+@@ -3597,9 +3603,14 @@
+             defines.push_back("Q4_0_SINGLE_BLOCK_PER_LANE");
+             variant += "_single_block";
+         }
+-        if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16) {
++        const bool paired_bf16 = key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::paired_bf16;
++        if (paired_bf16 || key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::compact_bf16) {
+             defines.push_back("COMPACT_BF16_MATVEC");
+             variant += "_compact";
++            if (paired_bf16) {
++                defines.push_back("PAIRED_BF16_MATVEC");
++                variant += "_paired";
++            }
+         } else if (key.subgroup_mode == ggml_webgpu_mul_mat_vec_pipeline_key::subgroup_mode_kind::f32_projection_k2304) {
+             defines.push_back("BICORE_F32_PROJECTION_K2304");
+             variant += "_k2304";
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2144,5 +2144,5 @@
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
+     // The packed Q6 matvec uses a vector binding only for F32 activations.
+     const bool q6_vec4_input = use_mat_vec && src0->type == GGML_TYPE_Q6_K && src1->type == GGML_TYPE_F32;
+-    const bool vec4_aligned = (q6_vec4_input || ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0, !use_mat_vec)) &&
++    const bool vec4_aligned = (q6_vec4_input || ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0, true)) &&
+                               ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -46,7 +46,27 @@
+ 
+ #ifdef MUL_ACC_FLOAT
+ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
+-#ifdef COMPACT_BF16_MATVEC
++#ifdef PAIRED_BF16_MATVEC
++    // Each lane owns both BF16 values of an aligned 32-bit word. Keep
++    // independent F32 accumulation chains; no conversion to F16 or new
++    // storage is needed. All admitted K and M shapes have complete pairs
++    // and complete four-row tiles.
++    let row_words = params.stride_01 / 2u;
++    var word = (src0_batch_offset + row_base * params.stride_01) / 2u + thread_id;
++    var lo_sum = vec4<f32>(0.0);
++    var hi_sum = vec4<f32>(0.0);
++    for (var k = 2u * thread_id; k < params.k; k += 2u * WG_SIZE) {
++        let packed = vec4<u32>(SRC0[word], SRC0[word + row_words],
++            SRC0[word + 2u * row_words], SRC0[word + 3u * row_words]);
++        let lo = bitcast<vec4<f32>>(packed << vec4<u32>(16u));
++        let hi = bitcast<vec4<f32>>(packed & vec4<u32>(0xffff0000u));
++        lo_sum += lo * SRC1[src1_idx_base + k];
++        hi_sum += hi * SRC1[src1_idx_base + k + 1u];
++        word += WG_SIZE;
++    }
++    let sums = lo_sum + hi_sum;
++    return array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>(array<f32, OUTPUTS_PER_WG>(sums.x, sums.y, sums.z, sums.w));
++#elif defined(COMPACT_BF16_MATVEC)
+     // A full four-row tile with even weight strides. Each lane keeps its
+     // original K indices, all with the same half-word position.
+     let first_element = src0_batch_offset + row_base * params.stride_01 + thread_id;
