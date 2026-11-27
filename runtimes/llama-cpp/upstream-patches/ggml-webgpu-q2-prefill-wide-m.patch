@@ -25,6 +25,11 @@
      bool        indexed_split_weights = false;
      bool        indexed_src0_aligned = false;
      bool        prefer_narrow_indexed_k = false;
+@@ -1618,3 +1619,3 @@
+ struct ggml_webgpu_mul_mat_pipeline_key {
+-    enum class quant_shared_mode : uint32_t { scalar, half_pairs, half_pairs_m8 };
++    enum class quant_shared_mode : uint32_t { scalar, half_pairs, half_pairs_m8, half_pairs_m8_partial_n };
+     quant_shared_mode shared_mode = quant_shared_mode::scalar;
 @@ -3299,8 +3300,19 @@
          // Retain the original group count for these narrower output widths.
          const bool q8_c4 = key.src0_type == GGML_TYPE_Q8_0 && n == 128 &&
@@ -32,8 +37,8 @@
                             context.dst->ne[2] == 1 && context.dst->ne[3] == 1;
 -        if ((q4_blocks || q6_c8_groups >= 8 || q8_c8 || q8_c4) &&
 +        const bool q2_c8 = key.src0_type == GGML_TYPE_Q2_0 && context.supports_q2_paired_prefill &&
-+                           n == 128 &&
-+                           ((k == 5120 && (m == 17408 || m == 10240)) ||
++                           n >= 33 && n <= 128 &&
++                           ((k == 5120 && (m == 6144 || m == 10240 || m == 12288 || m == 17408)) ||
 +                            (m == 5120 && (k == 17408 || k == 6144))) &&
 +                           context.src0->ne[2] == 1 && context.src0->ne[3] == 1 &&
 +                           context.src1->ne[2] == 1 && context.src1->ne[3] == 1 &&
@@ -46,9 +51,56 @@
              key.src1_type == GGML_TYPE_F32 && context.dst->type == GGML_TYPE_F32 &&
              context.dst->ne[1] >= 5 && !key.use_subgroup_matrix && !key.src_overlap &&
              !key.vectorized && !key.small_m_tile && WEBGPU_MUL_MAT_TILE_M == 4 &&
+@@ -3322,9 +3334,16 @@
+ 
++        if (q2_c8 && key.shared_mode == shared_mode::half_pairs_m8 &&
++            n % (WEBGPU_MUL_MAT_WG_SIZE_N * WEBGPU_MUL_MAT_TILE_N) != 0) {
++            key.shared_mode = shared_mode::half_pairs_m8_partial_n;
++        }
++
+         auto it = mul_mat_fast_pipelines.find(key);
+         if (it != mul_mat_fast_pipelines.end()) {
+             return it->second;
+         }
+ 
+-        const uint32_t tile_m = key.shared_mode == shared_mode::half_pairs_m8 ? 8u :
++        const bool wide_m = key.shared_mode == shared_mode::half_pairs_m8 ||
++                            key.shared_mode == shared_mode::half_pairs_m8_partial_n;
++        const uint32_t tile_m = wide_m ? 8u :
+                                 (key.small_m_tile ? key.small_m_tile : WEBGPU_MUL_MAT_TILE_M);
+         const uint32_t tile_n = key.small_m_tile ? 1u : WEBGPU_MUL_MAT_TILE_N;
+@@ -3505,5 +3524,9 @@
+         if (key.shared_mode != shared_mode::scalar) {
+-            variant += key.shared_mode == shared_mode::half_pairs_m8 ? "_half_pairs_m8" : "_half_pairs";
++            variant += wide_m ? "_half_pairs_m8" : "_half_pairs";
++        }
++        if (key.shared_mode == shared_mode::half_pairs_m8_partial_n) {
++            defines.push_back("Q2_PARTIAL_N_TILE");
++            variant += "_partial_n";
+         }
+ 
+         auto processed = preprocessor.preprocess(shader_src, defines);
 --- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_half_pairs_decls.tmpl
-@@ -121,9 +121,10 @@
+@@ -79,8 +79,17 @@
+         let global_n = offset_n + tile_n;
+         let global_k = k_outer + tile_k;
+         let src1_idx = batch_offset + global_n * params.stride_11 + global_k;
++#ifdef Q2_PARTIAL_N_TILE
++        // The paired Q2_0 path only uses complete K tiles. Skip reads from the final partial N tile.
++        var values = vec2<f16>(0.0);
++        if (global_n < params.n) {
++            values = vec2<f16>(f16(src1[src1_idx]), f16(src1[src1_idx + 1u]));
++        }
++        shmem[(TILE_SRC0_SHMEM + elem_idx) / 2u] = values;
++#else
+         let src1_val0 = select(f32(0.0), src1[src1_idx], global_n < params.n && global_k < params.k);
+         let src1_val1 = select(f32(0.0), src1[src1_idx + 1u], global_n < params.n && global_k + 1u < params.k);
+         shmem[(TILE_SRC0_SHMEM + elem_idx) / 2u] = vec2<f16>(f16(src1_val0), f16(src1_val1));
++#endif
+     }
+ }
+@@ -121,9 +130,10 @@
              let block_byte_base = block_idx * BLOCK_SIZE_BYTES;
              let d = load_f16_as_f32_at_src0(block_byte_base);
              let q_packed = load_u32_at_src0(block_byte_base + 2u + (global_k % BLOCK_SIZE) / 4u);

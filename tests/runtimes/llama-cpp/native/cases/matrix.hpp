@@ -161,9 +161,8 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
 
     struct Shape {
         int64_t k, m;
-        uint32_t scalar_grid, paired_grid;
     };
-    constexpr Shape gate{5120, 17408, 2176, 1088};
+    constexpr Shape gate{5120, 17408};
     enum class Precision { automatic, accumulator, input };
     const auto run = [&](const Shape & shape, int64_t n, size_t prefix, bool overlap, bool paired, const char * capture,
                          Precision precision = Precision::automatic) {
@@ -211,8 +210,11 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
         const auto & dispatch = commands.dispatches.front();
         const auto & slot = ctx->bind_group_cache.slots.front();
         const auto & pipeline = *slot.pipeline.Get();
-        BICORE_CHECK(pipeline.id == dispatch.pipeline && pipeline.name.ends_with("_half_pairs_m8") == paired);
-        const uint32_t groups = paired ? shape.paired_grid : shape.scalar_grid;
+        const char * suffix =
+            paired ? (n % 32 != 0 ? "_half_pairs_m8_partial_n" : "_half_pairs_m8") : (overlap ? "_src_overlap" : "");
+        BICORE_CHECK(pipeline.id == dispatch.pipeline &&
+                     pipeline.name == std::string("mul_mat_reg_tile_q2_0_f32") + suffix);
+        const uint32_t groups = (shape.m / (paired ? 64 : 32)) * CEIL_DIV(n, 32);
         BICORE_CHECK(dispatch.x <= limits.maxComputeWorkgroupsPerDimension && dispatch.z == 1);
         BICORE_CHECK(limits.maxComputeWorkgroupsPerDimension < groups ? dispatch.y > 1
                                                                       : dispatch.x == groups && dispatch.y == 1);
@@ -225,6 +227,8 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
             const size_t weight_bytes = prefix + shape.m * blocks_per_row * 18;
             BICORE_CHECK(slot.bindings.size() == 4 && slot.bindings[0].offset == 0 &&
                          slot.bindings[0].size == ROUNDUP_POW2(weight_bytes, 4));
+            BICORE_CHECK(slot.bindings[1].offset == 0 && slot.bindings[1].size == sizeof(float) * shape.k * n);
+            BICORE_CHECK(slot.bindings[2].offset == 0 && slot.bindings[2].size == sizeof(float) * shape.m * n);
             BICORE_CHECK(params[0] == prefix / 18 && params[6] == blocks_per_row);
         }
         const auto command = ctx->active_command_encoder.Finish();
@@ -255,7 +259,11 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
     limits.maxComputeWorkgroupsPerDimension = 1087;
     BICORE_CHECK(run(gate, 128, 0, false, false, nullptr) == scalar);
     limits.maxComputeWorkgroupsPerDimension = 65535;
-    BICORE_CHECK(run(gate, 127, 0, false, false, nullptr) == scalar);
+    BICORE_CHECK(run(gate, 32, 0, false, false, nullptr) == scalar);
+    const auto partial = run(gate, 95, 0, false, true, "q2-dense-gate95");
+    BICORE_CHECK(partial != wide && run(gate, 33, 18, false, true, nullptr) == partial);
+    BICORE_CHECK(run(gate, 64, 0, false, true, nullptr) == wide);
+    BICORE_CHECK(run(gate, 129, 0, false, false, nullptr) == scalar);
     BICORE_CHECK(run(gate, 128, 0, true, false, nullptr) != wide);
     BICORE_CHECK(run(gate, 128, 0, false, false, nullptr, Precision::accumulator) == scalar);
     BICORE_CHECK(run(gate, 128, 0, false, false, nullptr, Precision::input) == scalar);
@@ -267,10 +275,13 @@ static void q2_paired_prefill(const std::filesystem::path & output) {
         BICORE_CHECK(run(shape, 128, 0, false, false, scalar_capture) == scalar);
         ++limits.maxComputeWorkgroupStorageSize;
     };
-    check_shape({17408, 5120, 640, 320}, "q2-dense-down-wide", "q2-dense-down-stock");
-    check_shape({6144, 5120, 640, 320}, "q2-dense-out-wide", "q2-dense-out-stock");
-    check_shape({5120, 10240, 1280, 640}, "q2-dense-qkv-wide", "q2-dense-qkv-stock");
-    BICORE_CHECK(run({6144, 10240, 1280, 0}, 128, 0, false, false, nullptr) == scalar);
+    check_shape({17408, 5120}, "q2-dense-down-wide", "q2-dense-down-stock");
+    check_shape({6144, 5120}, "q2-dense-out-wide", "q2-dense-out-stock");
+    check_shape({5120, 10240}, "q2-dense-qkv-wide", "q2-dense-qkv-stock");
+    BICORE_CHECK(run({5120, 6144}, 128, 0, false, true, "q2-dense-ssm-gate128") == wide);
+    BICORE_CHECK(run({5120, 12288}, 39, 0, false, true, "q2-dense-attn-q39") == partial);
+    BICORE_CHECK(run({17408, 5120}, 114, 0, false, true, "q2-dense-down114") == partial);
+    BICORE_CHECK(run({6144, 10240}, 128, 0, false, false, nullptr) == scalar);
 }
 
 static void compact_bf16_matvec(const std::filesystem::path & output) {
