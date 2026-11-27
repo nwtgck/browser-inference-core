@@ -208,6 +208,7 @@ static void indexed_k_adapter_selection() {
         selection.max_wg_size = std::min(limits.maxComputeInvocationsPerWorkgroup, limits.maxComputeWorkgroupSizeX);
         selection.wg_mem_limit_bytes = limits.maxComputeWorkgroupStorageSize;
         selection.indexed_src0_aligned = true;
+        selection.indexed_src1_vec4_aligned = true;
         const auto k64 = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);
         selection.prefer_narrow_indexed_k = true;
         const auto k32 = ctx->shader_lib->get_mul_mat_id_pipeline(selection, false);

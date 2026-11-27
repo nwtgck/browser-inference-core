@@ -100,6 +100,8 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             uint32_t memory;
             uint32_t rows;
             bool narrow_k = false;
+            uint32_t input_prefix = 0;
+            uint32_t token_row_padding = 0;
         };
         std::vector<Dispatch> dispatches{{narrow, 6399, 32}, {chosen, 6400, 64}};
         if (has_128_experts) {
@@ -111,7 +113,18 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             context.indexed_src0_aligned = false;
             BICORE_CHECK(select(10496, 64).pipeline.Get() == chosen.pipeline.Get());
             context.indexed_src0_aligned = true;
-            dispatches.push_back({double_rows, 10496, 128, true});
+            context.indexed_src1_vec4_aligned = true;
+            const auto vector_rows = select(10496, 128);
+            BICORE_CHECK(vector_rows.name.ends_with("_tm16") &&
+                         vector_rows.name.find("_activation_vec4") != std::string::npos);
+            BICORE_CHECK(vector_rows.pipeline.Get() != double_rows.pipeline.Get());
+            BICORE_CHECK(select(10495, 64).pipeline.Get() == chosen.pipeline.Get());
+            context.indexed_src1_vec4_aligned = false;
+            BICORE_CHECK(select(10496, 128).pipeline.Get() == double_rows.pipeline.Get());
+            dispatches.push_back({vector_rows, 10496, 128, true});
+            dispatches.push_back({vector_rows, 10496, 128, true, 16});
+            dispatches.push_back({double_rows, 10496, 128, true, 4});
+            dispatches.push_back({double_rows, 10496, 128, true, 0, 4});
             context.prefer_narrow_indexed_k = false;
             BICORE_CHECK(select(8447, 64).pipeline.Get() == chosen.pipeline.Get());
             const auto k64_narrow = select(12543, 32, 64);
@@ -158,9 +171,15 @@ static void indexed_wide_m(const std::filesystem::path & output) {
         BICORE_CHECK(max_tiles == (has_128_experts ? 156 : 536));
         std::vector<uint8_t> narrow_parameters;
         uint32_t graph_index = 0;
-        for (const auto & [pipeline, memory, rows, narrow_k] : dispatches) {
+        const size_t input_token_stride = input->nb[2];
+        const size_t input_batch_stride = input->nb[3];
+        for (const auto & [pipeline, memory, rows, narrow_k, input_prefix, token_row_padding] : dispatches) {
             limits.maxComputeWorkgroupStorageSize = memory;
             ctx->global_ctx->vendor = narrow_k ? "apple" : "";
+            input->data = reinterpret_cast<void *>(uintptr_t(webgpu_ptr_base) + input_prefix);
+            input->nb[2] = input_token_stride + token_row_padding;
+            input->nb[3] = token_row_padding ? input->nb[2] * input->ne[2] : input_batch_stride;
+            buffers[1].size = ggml_backend_webgpu_buffer_type_get_alloc_size(&buffer_type, input) + input_prefix;
             commands = {};
             ctx->active_command_encoder = ctx->global_ctx->device.CreateCommandEncoder();
             ctx->bind_group_cache.begin_graph(graph_index);
@@ -182,7 +201,12 @@ static void indexed_wide_m(const std::filesystem::path & output) {
             BICORE_CHECK(main.x == max_tiles * CEIL_DIV(m, rows));
             BICORE_CHECK(commands.writes.front().bytes.size() == 512);
             if (rows > 32) {
-                BICORE_CHECK(commands.writes.front().bytes == narrow_parameters);
+                auto parameters = narrow_parameters;
+                const uint32_t offset = input_prefix / sizeof(float);
+                const uint32_t stride = input->nb[2] / sizeof(float);
+                std::memcpy(parameters.data() + 256 + sizeof(uint32_t), &offset, sizeof(offset));
+                std::memcpy(parameters.data() + 256 + 12 * sizeof(uint32_t), &stride, sizeof(stride));
+                BICORE_CHECK(commands.writes.front().bytes == parameters);
             } else {
                 narrow_parameters = commands.writes.front().bytes;
             }

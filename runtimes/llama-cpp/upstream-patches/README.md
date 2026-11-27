@@ -1399,6 +1399,22 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Validation:** Compare grouped and sparse expert outputs against the previous implementation for representative routing layouts. Report paired software WebGPU timing separately from physical-adapter and full-model behavior.
 - **Removal:** Retire this shader change when upstream stages only consumed columns and avoids repeated offset calculation.
 
+### Four-element activation loads
+
+- **Patch** `ggml-webgpu-indexed-activation-vec4.patch`.
+- **Scope** Use aligned F32 activation loads of four elements in complete
+  K32, 128-row IQ4_NL and F32-accumulating NVFP4 prefill tiles. Require the
+  binding-relative activation offset and all active row strides to be divisible
+  by 16 bytes. Other layouts use the scalar staging pipeline.
+- **Contract** Preserve F16 activation staging, the K accumulation order,
+  padding for unused routed columns, the same storage bindings and dispatch
+  geometry. Complete weight tiles permit the guarded tail loads to be omitted.
+  No extra storage allocation is required.
+- **Validation and removal** Check normal and profile pipeline selection with
+  aligned offsets, shifted offsets and padded strides. Compare emitted WGSL
+  with the scalar path before extending the scope. Retire when upstream supplies
+  equivalent staging.
+
 ## Paired-half Q8 prefill tiles
 
 - **Patches:** `ggml-webgpu-q8-prefill-wide-m.patch` and `ggml-webgpu-q8-prefill-admission.patch`.

@@ -1290,6 +1290,18 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-activation-vec4.patch',
+    target: 'llama-webgpu',
+    reason: 'Stage four F32 activations at once for complete indexed prefill tiles.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

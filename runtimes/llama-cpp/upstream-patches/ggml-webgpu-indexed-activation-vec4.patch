@@ -1,0 +1,152 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -118,6 +118,7 @@
+     bool        supports_q2_paired_prefill = false;
+     uint32_t    indexed_extra_weight_bindings = 0;
+     bool        indexed_src0_aligned = false;
++    bool        indexed_src1_vec4_aligned = false;
+     bool        prefer_narrow_indexed_k = false;
+     // Actual aligned bindings, ordered as weights, input, IDs, output.
+     uint64_t    indexed_prefix_bytes[4] = {};
+@@ -1841,13 +1842,15 @@
+     bool      f32_accumulator;
+     uint32_t  extra_weight_bindings;
+     bool      iq4_paired_half;
++    bool      activation_vec4;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+         return src0_type == other.src0_type && src1_type == other.src1_type && n_experts == other.n_experts &&
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+                f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m &&
+-               extra_weight_bindings == other.extra_weight_bindings && iq4_paired_half == other.iq4_paired_half;
++               extra_weight_bindings == other.extra_weight_bindings && iq4_paired_half == other.iq4_paired_half &&
++               activation_vec4 == other.activation_vec4;
+     }
+ };
+ 
+@@ -1866,6 +1869,7 @@
+         ggml_webgpu_hash_combine(seed, key.tile_m);
+         ggml_webgpu_hash_combine(seed, key.extra_weight_bindings);
+         ggml_webgpu_hash_combine(seed, key.iq4_paired_half);
++        ggml_webgpu_hash_combine(seed, key.activation_vec4);
+         return seed;
+     }
+ };
+@@ -4128,6 +4132,11 @@
+                               !key.vectorized && key.tile_m == double_row_tile_m &&
+                               key.tile_k % 32u == 0 && k > 0 && k % key.tile_k == 0 &&
+                               m > 0 && m % output_rows == 0;
++        // Complete tiles permit four adjacent F32 activations to be loaded
++        // together, with no guarded partial reads or partial M rows.
++        key.activation_vec4 = eligible_type && key.src1_type == GGML_TYPE_F32 && !key.vectorized &&
++                              context.indexed_src1_vec4_aligned && key.tile_m == double_row_tile_m &&
++                              key.tile_k == WEBGPU_MUL_MAT_REG_TILE_K_QUANT && k % key.tile_k == 0 && m % output_rows == 0;
+ 
+         auto it = mul_mat_id_pipelines.find(key);
+         if (it != mul_mat_id_pipelines.end()) {
+@@ -4249,6 +4258,10 @@
+ 
+         if (key.src0_type == GGML_TYPE_NVFP4 && key.src1_type == GGML_TYPE_F32 && key.f32_accumulator) {
+             defines.push_back("BICORE_NVFP4_STAGE_HALF_VEC");
++        }
++        if (key.activation_vec4) {
++            defines.push_back("BICORE_INDEXED_ACTIVATION_VEC4");
++            variant += "_activation_vec4";
+         }
+ 
+         if (!key.vectorized && key.src1_type == GGML_TYPE_F32 &&
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2648,8 +2648,12 @@
+     const size_t src0_misalignment = ggml_webgpu_tensor_misalignment(ctx, src0);
+     shader_lib_ctx.indexed_src0_aligned = src0_misalignment == 0;
+     const uint32_t offset_src0 = (uint32_t) (src0_misalignment / ggml_type_size(src0->type));
+-    const uint32_t offset_src1 =
+-        (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src1) / ggml_type_size(src1->type));
++    const size_t src1_misalignment = ggml_webgpu_tensor_misalignment(ctx, src1);
++    const uint32_t offset_src1 = (uint32_t) (src1_misalignment / ggml_type_size(src1->type));
++    shader_lib_ctx.indexed_src1_vec4_aligned =
++        (src0->type == GGML_TYPE_NVFP4 || src0->type == GGML_TYPE_IQ4_NL) && src1->type == GGML_TYPE_F32 &&
++        src1->nb[0] == sizeof(float) && src1_misalignment % (4 * sizeof(float)) == 0 &&
++        ggml_webgpu_mul_mat_vec4_aligned(src1, offset_src1);
+     const uint32_t offset_dst =
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, dst) / ggml_type_size(dst->type));
+     const bool vec4_aligned = ggml_webgpu_mul_mat_vec4_aligned(src0, offset_src0) &&
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -48,7 +48,11 @@
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>; // [cols, rows, n_expert]
++#ifdef BICORE_INDEXED_ACTIVATION_VEC4
++@group(0) @binding(1) var<storage, read_write> src1: array<vec4<f32>>; // [cols / 4, b_ne1, n_tokens]
++#else
+ @group(0) @binding(1) var<storage, read_write> src1: array<SRC1_TYPE>; // [cols, b_ne1, n_tokens]
++#endif
+ @group(0) @binding(2) var<storage, read_write> dst: array<DST_TYPE>;   // [rows, n_expert_used, n_tokens]
+ 
+ @group(0) @binding(3) var<storage, read_write> ids_slot_pos: array<u32>; // [n_expert_used * n_tokens]
+@@ -86,6 +90,22 @@
+     // The last active invocation can consume up to TILE_N columns. Keep its
+     // zero padding, and do not initialize columns no invocation can read.
+     let columns = ((rest_token_n + TILE_N - 1u) / TILE_N) * TILE_N;
++#ifdef BICORE_INDEXED_ACTIVATION_VEC4
++    let vectors_per_column = TILE_K / 4u;
++    for (var elem = thread_id; elem < columns * vectors_per_column; elem += TOTAL_WORKGROUP_SIZE) {
++        let column = elem / vectors_per_column;
++        let k = k_outer + (elem % vectors_per_column) * 4u;
++        var x = vec4<f16>(0.0h);
++        if (column < rest_token_n) {
++            x = vec4<f16>(src1[(gathered_src1_offset[column] + k) / 4u]);
++        }
++        let dst = TILE_SRC0_SHMEM + elem * 4u;
++        shmem[dst] = x.x;
++        shmem[dst + 1u] = x.y;
++        shmem[dst + 2u] = x.z;
++        shmem[dst + 3u] = x.w;
++    }
++#else
+     for (var elem_idx = thread_id * VEC_SIZE; elem_idx < columns * TILE_K; elem_idx += TOTAL_WORKGROUP_SIZE * VEC_SIZE) {
+         let tile_n = elem_idx / TILE_K;
+         let tile_k = elem_idx % TILE_K;
+@@ -101,6 +121,7 @@
+             store_shmem(SHMEM_TYPE(0.0), TILE_SRC0_SHMEM + elem_idx);
+         }
+     }
++#endif
+ }
+ #endif // INIT_SRC1_SHMEM_FLOAT
+ 
+@@ -161,7 +182,7 @@
+ 
+ #ifdef BICORE_SPARSE_EXPERT_COLUMNS
+         if (is_valid && rest_token_n <= WORKGROUP_SIZE_N && local_n < rest_token_n) {
+-#ifdef BICORE_IQ4_PAIRED_HALF
++#if defined(BICORE_IQ4_PAIRED_HALF) || defined(BICORE_INDEXED_ACTIVATION_VEC4)
+             let k_end = TILE_K;
+ #else
+             let k_end = min(TILE_K, params.k - k_outer);
+@@ -183,7 +204,7 @@
+ #else
+         if (is_valid && output_col_base < rest_token_n) {
+ #endif
+-#ifdef BICORE_IQ4_PAIRED_HALF
++#if defined(BICORE_IQ4_PAIRED_HALF) || defined(BICORE_INDEXED_ACTIVATION_VEC4)
+             let k_end = TILE_K;
+ #else
+             let k_end = min(TILE_K, params.k - k_outer);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -383,9 +383,11 @@
+         let global_m = offset_m + tile_m;
+         let global_k_start = k_outer + tile_k_start;
+ 
++#ifndef BICORE_INDEXED_ACTIVATION_VEC4
+         if (global_m >= params.m) {
+             break;
+         }
++#endif
+ 
+         let block_k  = global_k_start / BLOCK_SIZE;
+         let sub_block      = (global_k_start % BLOCK_SIZE) / SUB_BLOCK_SIZE;
