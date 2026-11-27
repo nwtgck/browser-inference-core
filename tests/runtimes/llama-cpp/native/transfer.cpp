@@ -9,6 +9,7 @@
 #include "cases/indexed-decode.hpp"
 #include "cases/indexed-live-grid.hpp"
 #include "cases/indexed-q2.hpp"
+#include "cases/indexed-weight-windows.hpp"
 #include "cases/short-conv.hpp"
 #include "cases/depth-mix.hpp"
 #include "cases/situ.hpp"
@@ -29,6 +30,7 @@ int main() {
     indexed_decode_cases::all();
     indexed_live_grid_cases::all();
     indexed_q2_cases::all();
+    indexed_weight_window_cases::all();
     short_conv_cases::all();
     depth_mix_cases::all();
     situ_cases::all();

@@ -1011,6 +1011,32 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   upstream covers the same shapes and scale loads. Review the 17-byte
   MXFP4 block and subgroup mapping on upstream updates.
 
+## Aligned windows for oversized indexed weights
+
+- **Patches** `ggml-webgpu-indexed-weight-windows.patch` and
+  `ggml-webgpu-indexed-third-weight-window.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Place the supported K2880/M2880 MXFP4, K2816/M1408 Q4_0, and
+  K704/M2816 Q4_0 expert tensors in one WebGPU buffer and bind up to three
+  ranges when one storage binding is too small. Use packed, contiguous
+  weights with an aligned buffer offset. The entire allocation must fit the
+  device buffer limit. Cuts align to both expert strides and the device
+  storage offset alignment.
+- **Contract** Check each range, its source device, the matrix and vector
+  resource limits, and the gather scratch before using the GPU path.
+  Decode and prefill use the same planner and source allocation. Loader
+  metadata can select WebGPU on compatible devices. A packed tensor
+  explicitly placed on a host buffer stays on that backend. Q2_0 keeps its
+  checked two-range limit and explicit placement policy.
+- **Integration** Include the window count in the shader cache key and pass
+  the word boundaries in the existing uniform. Read the original packed
+  words without a copy or a new weight allocation. Each paired Q4_0 load
+  fits completely within one expert and picks its range once.
+- **Validation and removal** Exercise loader and scheduler admission,
+  physical bounds, and the two- and three-window binding layouts for
+  matrix and vector execution. Remove when the underlying backend supports
+  equivalent indexed operands larger than the storage binding limit.
+
 ## Packed bytes for wide Q6_K decoding
 
 - **Patch** `ggml-webgpu-q6-packed-decode.patch` against llama.cpp

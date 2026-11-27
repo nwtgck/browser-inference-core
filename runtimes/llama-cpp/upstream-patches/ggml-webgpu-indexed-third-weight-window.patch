@@ -1,0 +1,15 @@
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl
+@@ -53,6 +53,11 @@
+     if (index < params.split_word) {
+         return SRC0[index];
+     }
++#ifdef BICORE_INDEXED_SPLIT_THREE
++    if (index >= params.split_word2) {
++        return src0_last[index - params.split_word2];
++    }
++#endif
+     return src0_high[index - params.split_word];
+ }
+ #endif

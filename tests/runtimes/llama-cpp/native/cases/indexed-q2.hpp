@@ -27,10 +27,10 @@ static void check_weight_windows() {
     limits.minStorageBufferOffsetAlignment = alignment;
     limits.maxBufferSize = 256 * 1024 * 1024;
     limits.maxStorageBufferBindingSize = 128 * 1024 * 1024;
-    const auto large_windows = ggml_webgpu_q2_weight_windows(large, limits);
+    const auto large_windows = ggml_webgpu_indexed_weight_windows(large, limits);
     BICORE_CHECK(large_windows && large_windows->first == 117964800 && large_windows->second == large_windows->first);
     limits.maxStorageBufferBindingSize = large_windows->first - 4;
-    BICORE_CHECK(!ggml_webgpu_q2_weight_windows(large, limits));
+    BICORE_CHECK(!ggml_webgpu_indexed_weight_windows(large, limits));
 }
 
 static void check_encoded(const Shape & shape, int64_t tokens, bool split, uint32_t subgroup_min, uint32_t subgroup_max,

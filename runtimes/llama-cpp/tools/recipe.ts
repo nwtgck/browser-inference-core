@@ -1141,6 +1141,27 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-weight-windows.patch',
+    target: 'llama-webgpu',
+    reason: 'Bind indexed MXFP4 and Q4_0 weights as aligned windows of their existing GPU buffer.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-indexed-third-weight-window.patch',
+    target: 'word-template',
+    reason: 'Resolve a packed word in the optional third expert weight window.',
+    files: ['ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

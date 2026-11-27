@@ -1,0 +1,583 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -113,7 +113,7 @@
+     uint32_t    max_workgroups_per_dim = 0;
+     uint64_t    max_storage_binding_bytes = 0;
+     bool        supports_q2_paired_prefill = false;
+-    bool        indexed_split_weights = false;
++    uint32_t    indexed_extra_weight_bindings = 0;
+     bool        indexed_src0_aligned = false;
+     bool        prefer_narrow_indexed_k = false;
+     // Actual aligned bindings, ordered as weights, input, IDs, output.
+@@ -377,7 +377,7 @@
+         return (sg == 16 || sg == 32) && (mxfp4_square || q4_gate_up || q4_down);
+     }
+     if (a->type == GGML_TYPE_Q2_0) {
+-        return !context.indexed_split_weights && (sg == 16 || sg == 32) && a->ne[0] == 1152 &&
++        return !context.indexed_extra_weight_bindings && (sg == 16 || sg == 32) && a->ne[0] == 1152 &&
+                a->ne[1] == 2304 && dst->ne[1] == 8;
+     }
+     const bool matched_k = a->ne[0] == 2304 || (a->ne[0] == 1152 && a->type != GGML_TYPE_Q5_K);
+@@ -430,8 +430,10 @@
+     for (unsigned i = 0; i < 4; ++i) {
+         const uint64_t prefix = context.indexed_prefix_bytes[i];
+         const uint64_t binding = context.indexed_binding_bytes[i];
++        // The provider validates each physical weight window before selection.
++        const bool split_weights = i == 0 && context.indexed_extra_weight_bindings;
+         if (prefix % block_bytes[i] != 0 || spans[i] > address_limit || prefix > address_limit - spans[i] ||
+-            prefix + spans[i] > binding || binding > context.max_storage_binding_bytes ||
++            prefix + spans[i] > binding || (!split_weights && binding > context.max_storage_binding_bytes) ||
+             binding > context.indexed_buffer_remaining[i]) {
+             return 0;
+         }
+@@ -1783,7 +1785,7 @@
+     uint32_t  tile_m;
+     int       vectorized;
+     bool      f32_accumulator;
+-    bool      split_weights;
++    uint32_t  extra_weight_bindings;
+     bool      iq4_paired_half;
+ 
+     bool operator==(const ggml_webgpu_mul_mat_id_pipeline_key & other) const {
+@@ -1791,7 +1793,7 @@
+                num_cols == other.num_cols && workgroup_size == other.workgroup_size &&
+                subgroup_size == other.subgroup_size && vectorized == other.vectorized &&
+                f32_accumulator == other.f32_accumulator && tile_k == other.tile_k && tile_m == other.tile_m &&
+-               split_weights == other.split_weights && iq4_paired_half == other.iq4_paired_half;
++               extra_weight_bindings == other.extra_weight_bindings && iq4_paired_half == other.iq4_paired_half;
+     }
+ };
+ 
+@@ -1808,7 +1810,7 @@
+         ggml_webgpu_hash_combine(seed, key.f32_accumulator);
+         ggml_webgpu_hash_combine(seed, key.tile_k);
+         ggml_webgpu_hash_combine(seed, key.tile_m);
+-        ggml_webgpu_hash_combine(seed, key.split_weights);
++        ggml_webgpu_hash_combine(seed, key.extra_weight_bindings);
+         ggml_webgpu_hash_combine(seed, key.iq4_paired_half);
+         return seed;
+     }
+@@ -3824,8 +3826,10 @@
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
+-        key.split_weights                       = context.indexed_split_weights;
+-        GGML_ASSERT(!key.split_weights || key.src0_type == GGML_TYPE_Q2_0);
++        key.extra_weight_bindings                       = context.indexed_extra_weight_bindings;
++        GGML_ASSERT(key.extra_weight_bindings <= 2 &&
++                    (!key.extra_weight_bindings || key.src0_type == GGML_TYPE_Q2_0 ||
++                     key.src0_type == GGML_TYPE_Q4_0 || key.src0_type == GGML_TYPE_MXFP4));
+         if (key.src0_type == GGML_TYPE_NVFP4) {
+             const auto precision = ggml_prec_get_acc(context.dst);
+             key.f32_accumulator = precision == GGML_PREC_BF16 || precision == GGML_PREC_F32;
+@@ -3885,7 +3889,7 @@
+             context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
+             context.dst->ne[3] == 1 && context.max_wg_size >= grouped_threads &&
+             context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
+-            const bool aligned_weights = !key.split_weights && context.indexed_src0_aligned &&
++            const bool aligned_weights = !key.extra_weight_bindings && context.indexed_src0_aligned &&
+                                          !context.src0->view_src && ggml_is_contiguous(context.src0);
+             if (tokens == 128 || aligned_weights) {
+                 key.tile_m = wide_tile_m;
+@@ -3922,7 +3926,7 @@
+             sizeof(ggml_fp16_t) * wide_tile_k * (wide_rows + cols) + 2 * sizeof(uint32_t) * cols;
+         if (key.src0_type == GGML_TYPE_Q4_0 && k == 2816 && m == 1408 &&
+             (key.n_experts == 48 || key.n_experts == 128) && key.src1_type == GGML_TYPE_F32 &&
+-            !key.split_weights && context.indexed_src0_aligned && !context.src0->view_src &&
++            context.indexed_src0_aligned && !context.src0->view_src &&
+             context.src0->ne[3] == 1 && ggml_is_contiguous(context.src0) &&
+             context.src1->ne[0] == k && context.src1->ne[1] == 1 && context.src1->ne[2] == 128 &&
+             context.src1->ne[3] == 1 && ids && ids->type == GGML_TYPE_I32 && ids->ne[0] == 8 &&
+@@ -4078,9 +4082,13 @@
+         if (key.tile_m != WEBGPU_MUL_MAT_TILE_M) {
+             variant += "_tm" + std::to_string(key.tile_m);
+         }
+-        if (key.split_weights) {
++        if (key.extra_weight_bindings) {
+             defines.push_back("BICORE_INDEXED_SPLIT_WEIGHTS");
+             variant += "_split_weights";
++            if (key.extra_weight_bindings == 2) {
++                defines.push_back("BICORE_INDEXED_SPLIT_THREE");
++                variant += "3";
++            }
+         }
+         if (key.src0_type == GGML_TYPE_Q4_0 && key.tile_m == wide_tile_m && tile_k == wide_tile_k) {
+             defines.push_back("BICORE_INDEXED_Q4_0_PAIRED_K64");
+@@ -4109,8 +4117,10 @@
+         key.src0_type                           = context.src0->type;
+         key.src1_type                           = context.src1->type;
+         key.n_experts                           = context.src0->ne[2];
+-        key.split_weights                       = context.indexed_split_weights;
+-        GGML_ASSERT(!key.split_weights || key.src0_type == GGML_TYPE_Q2_0);
++        key.extra_weight_bindings                       = context.indexed_extra_weight_bindings;
++        GGML_ASSERT(key.extra_weight_bindings <= 2 &&
++                    (!key.extra_weight_bindings || key.src0_type == GGML_TYPE_Q2_0 ||
++                     key.src0_type == GGML_TYPE_Q4_0 || key.src0_type == GGML_TYPE_MXFP4));
+         key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :
+@@ -4244,9 +4254,13 @@
+         defines.push_back(std::string("NUM_COLS=1"));
+ 
+         defines.push_back(std::string("N_EXPERTS=") + std::to_string(key.n_experts));
+-        if (key.split_weights) {
++        if (key.extra_weight_bindings) {
+             defines.push_back("BICORE_INDEXED_SPLIT_WEIGHTS");
+             variant += "_split_weights";
++            if (key.extra_weight_bindings == 2) {
++                defines.push_back("BICORE_INDEXED_SPLIT_THREE");
++                variant += "3";
++            }
+         }
+ 
+         auto processed = preprocessor.preprocess(shader_src, defines);
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2253,18 +2253,30 @@
+ }
+ 
+-struct webgpu_q2_weight_windows {
++struct webgpu_indexed_weight_windows {
+     uint64_t first;
+     uint64_t second;
++    uint64_t third = 0;
++
++    uint32_t extra_bindings() const { return third ? 2 : second ? 1 : 0; }
++    uint64_t total() const { return first + second + third; }
+ };
+ 
+-static uint64_t ggml_webgpu_q2_buffer_limit(const wgpu::Limits & limits) {
++static bool ggml_webgpu_indexed_window_type(const ggml_tensor * weight) {
++    const auto k = weight->ne[0];
++    const auto m = weight->ne[1];
++    return (weight->type == GGML_TYPE_MXFP4 && k == 2880 && m == 2880) ||
++           (weight->type == GGML_TYPE_Q4_0 && ((k == 2816 && m == 1408) || (k == 704 && m == 2816)));
++}
++
++static uint64_t ggml_webgpu_indexed_buffer_limit(const wgpu::Limits & limits) {
+     return sizeof(size_t) < sizeof(uint64_t) ?
+         std::min<uint64_t>(limits.maxBufferSize, SIZE_MAX / 2) : limits.maxBufferSize;
+ }
+ 
+-static std::optional<webgpu_q2_weight_windows> ggml_webgpu_q2_weight_windows(
++static std::optional<webgpu_indexed_weight_windows> ggml_webgpu_indexed_weight_windows(
+         const ggml_tensor * weight, const wgpu::Limits & limits) {
+-    if (weight->type != GGML_TYPE_Q2_0 || weight->view_src || weight->ne[0] <= 0 ||
++    if ((weight->type != GGML_TYPE_Q2_0 && !ggml_webgpu_indexed_window_type(weight)) ||
++        weight->view_src || weight->ne[0] <= 0 ||
+         weight->ne[0] % ggml_blck_size(weight->type) || weight->ne[1] <= 0 || weight->ne[2] <= 0 ||
+         weight->ne[3] != 1 || !ggml_is_contiguous(weight)) {
+         return {};
+@@ -2280,11 +2292,11 @@
+         return {};
+     }
+     const uint64_t bytes = ROUNDUP_POW2(bytes_per_expert * experts, UINT64_C(4));
+-    if (ROUNDUP_POW2(bytes, alignment) > ggml_webgpu_q2_buffer_limit(limits)) {
++    if (ROUNDUP_POW2(bytes, alignment) > ggml_webgpu_indexed_buffer_limit(limits)) {
+         return {};
+     }
+     if (bytes <= storage_limit) {
+-        return webgpu_q2_weight_windows{ bytes, 0 };
++        return webgpu_indexed_weight_windows{ bytes, 0 };
+     }
+ 
+     // Split only at an expert boundary that is also a legal storage offset.
+@@ -2293,38 +2305,52 @@
+     const uint64_t step = alignment / std::gcd(alignment, bytes_per_expert);
+     const uint64_t middle = CEIL_DIV(std::max(experts / 2, first_min), step) * step;
+     const uint64_t first_experts = std::min(middle, first_max / step * step);
+-    if (first_experts < first_min) {
++    if (first_experts >= first_min) {
++        const uint64_t first = first_experts * bytes_per_expert;
++        return webgpu_indexed_weight_windows{ first, bytes - first };
++    }
++    if (weight->type == GGML_TYPE_Q2_0) {
+         return {};
+     }
+-    const uint64_t first = first_experts * bytes_per_expert;
+-    return webgpu_q2_weight_windows{ first, bytes - first };
+-}
+-
+-static bool ggml_webgpu_q2_weight_range_fits(const ggml_tensor * weight,
++
++    // For three windows, the first two use the same aligned expert count.
++    // The last range has no following boundary and may end with word padding.
++    const uint64_t window_min = CEIL_DIV(first_min, UINT64_C(2));
++    const uint64_t window_max = std::min((experts - 1) / 2, storage_limit / bytes_per_expert);
++    const uint64_t target = CEIL_DIV(std::max(CEIL_DIV(experts, UINT64_C(3)), window_min), step) * step;
++    const uint64_t window_experts = std::min(target, window_max / step * step);
++    if (window_experts < window_min) {
++        return {};
++    }
++    const uint64_t window_bytes = window_experts * bytes_per_expert;
++    return webgpu_indexed_weight_windows{ window_bytes, window_bytes, bytes - 2 * window_bytes };
++}
++
++static bool ggml_webgpu_indexed_weight_range_fits(const ggml_tensor * weight,
+                                              const wgpu::Limits & limits,
+-                                             const webgpu_q2_weight_windows & windows) {
++                                             const webgpu_indexed_weight_windows & windows) {
+     const uint64_t offset = ggml_webgpu_tensor_offset(weight);
+     const uint64_t size = ggml_webgpu_tensor_buf(weight).GetSize();
+     return offset % limits.minStorageBufferOffsetAlignment == 0 && offset <= size &&
+-           windows.first + windows.second <= size - offset;
+-}
+-
+-static std::optional<webgpu_q2_weight_windows> ggml_webgpu_q2_split_for_encoding(
++           windows.total() <= size - offset;
++}
++
++static std::optional<webgpu_indexed_weight_windows> ggml_webgpu_indexed_split_for_encoding(
+         const ggml_tensor * weight, const wgpu::Limits & limits) {
+-    if (weight->type != GGML_TYPE_Q2_0 ||
++    if ((weight->type != GGML_TYPE_Q2_0 && !ggml_webgpu_indexed_window_type(weight)) ||
+         ggml_nbytes(weight) <= (limits.maxStorageBufferBindingSize & ~UINT64_C(3))) {
+         return {};
+     }
+-    const auto windows = ggml_webgpu_q2_weight_windows(weight, limits);
+-    GGML_ASSERT(windows && windows->second && ggml_webgpu_q2_weight_range_fits(weight, limits, *windows));
++    const auto windows = ggml_webgpu_indexed_weight_windows(weight, limits);
++    GGML_ASSERT(windows && windows->extra_bindings() && ggml_webgpu_indexed_weight_range_fits(weight, limits, *windows));
+     return windows;
+ }
+ 
+-static void ggml_webgpu_bind_q2_high_range(const webgpu_q2_weight_windows & windows,
++static void ggml_webgpu_bind_indexed_weight_windows(const webgpu_indexed_weight_windows & windows,
+                                            std::vector<uint32_t> & params,
+                                            std::vector<wgpu::BindGroupEntry> & bindings) {
+     auto & first = bindings.front();
+-    GGML_ASSERT(params[0] == 0 && first.size == windows.first + windows.second);
++    GGML_ASSERT(params[0] == 0 && first.size == windows.total());
+     for (size_t i = 1; i < bindings.size(); ++i) {
+         const auto & other = bindings[i];
+         if (first.buffer.Get() != other.buffer.Get()) {
+@@ -2333,10 +2359,18 @@
+         GGML_ASSERT(first.offset < other.offset ? other.offset - first.offset >= first.size :
+                                                     first.offset - other.offset >= other.size);
+     }
++    const auto weight_buffer = first.buffer;
++    const uint64_t offset = first.offset;
+     first.size = windows.first;
+     bindings.push_back(ggml_webgpu_make_bind_group_entry(
+-        uint32_t(bindings.size()), first.buffer, first.offset + windows.first, windows.second));
++        uint32_t(bindings.size()), weight_buffer, offset + windows.first, windows.second));
+     params.push_back(uint32_t(windows.first / sizeof(uint32_t)));
++    if (windows.third) {
++        const uint64_t boundary = windows.first + windows.second;
++        bindings.push_back(ggml_webgpu_make_bind_group_entry(
++            uint32_t(bindings.size()), weight_buffer, offset + boundary, windows.third));
++        params.push_back(uint32_t(boundary / sizeof(uint32_t)));
++    }
+ }
+ 
+ static webgpu_encoded_op ggml_webgpu_mul_mat_id_vec(webgpu_context & ctx,
+@@ -2362,8 +2396,8 @@
+     shader_lib_ctx.min_subgroup_size = ctx->global_ctx->capabilities.min_subgroup_size;
+     shader_lib_ctx.max_subgroup_size = ctx->global_ctx->capabilities.max_subgroup_size;
+ 
+-    const auto q2_split = ggml_webgpu_q2_split_for_encoding(src0, ctx->global_ctx->capabilities.limits);
+-    shader_lib_ctx.indexed_split_weights = q2_split.has_value();
++    const auto weight_windows = ggml_webgpu_indexed_split_for_encoding(src0, ctx->global_ctx->capabilities.limits);
++    shader_lib_ctx.indexed_extra_weight_bindings = weight_windows ? weight_windows->extra_bindings() : 0;
+ 
+     std::vector<uint32_t> params = {
+         (uint32_t) (ggml_webgpu_tensor_misalignment(ctx, src0) / ggml_type_size(src0->type)),
+@@ -2392,8 +2426,8 @@
+                                           ggml_webgpu_tensor_binding_size(ctx, dst)),
+     };
+ 
+-    if (q2_split) {
+-        ggml_webgpu_bind_q2_high_range(*q2_split, params, entries);
++    if (weight_windows) {
++        ggml_webgpu_bind_indexed_weight_windows(*weight_windows, params, entries);
+     }
+     if (ctx->global_ctx->capabilities.limits.maxComputeWorkgroupSizeX >= 128 &&
+         ggml_webgpu_id_subgroup_shape(shader_lib_ctx)) {
+@@ -2404,7 +2438,8 @@
+             const auto & entry = entries[i];
+             const uint64_t physical = entry.buffer.GetSize();
+             shader_lib_ctx.indexed_prefix_bytes[i] = ggml_webgpu_tensor_misalignment(ctx, tensors[i]);
+-            shader_lib_ctx.indexed_binding_bytes[i] = entry.size;
++            // The weight range plan has already checked each physical binding.
++            shader_lib_ctx.indexed_binding_bytes[i] = i == 0 && weight_windows ? weight_windows->total() : entry.size;
+             shader_lib_ctx.indexed_buffer_remaining[i] = entry.offset <= physical ? physical - entry.offset : 0;
+         }
+     }
+@@ -2554,11 +2589,11 @@
+     }
+ 
+     const uint32_t row_tile = main.tile_m * main.wg_size_m;
+-    const bool q2 = full_batch && weights->type == GGML_TYPE_Q2_0 && shader.indexed_split_weights &&
++    const bool q2 = full_batch && weights->type == GGML_TYPE_Q2_0 && shader.indexed_extra_weight_bindings &&
+                     weights->ne[0] == 640 && weights->ne[1] == 2560 && weights->ne[2] == 512 &&
+                     input->ne[1] == 10 && dst->ne[1] == 10 && ids->ne[0] == 10 &&
+                     row_tile == 32 && main.tile_k == 32;
+-    const bool q4 = full_batch && weights->type == GGML_TYPE_Q4_0 && !shader.indexed_split_weights &&
++    const bool q4 = full_batch && weights->type == GGML_TYPE_Q4_0 &&
+                     weights->ne[0] == 2816 && weights->ne[1] == 1408 &&
+                     (weights->ne[2] == 48 || weights->ne[2] == 128) &&
+                     input->ne[1] == 1 && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+@@ -2569,7 +2604,7 @@
+                               nv_acc == GGML_PREC_BF16 || nv_acc == GGML_PREC_F32;
+     const bool broadcast_gate = weights->ne[0] == 2304 && input->ne[1] == 1;
+     const bool per_slot_down = weights->ne[0] == 1152 && input->ne[1] == 8;
+-    const bool grouped_quant = grouped_type && !shader.indexed_split_weights &&
++    const bool grouped_quant = grouped_type && !shader.indexed_extra_weight_bindings &&
+                                !weights->view_src && ggml_is_contiguous(weights) &&
+                                weights->ne[1] == 2304 && weights->ne[2] == 128 &&
+                                (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+@@ -2606,8 +2641,8 @@
+     shader_lib_ctx.wg_mem_limit_bytes =
+         ctx->global_ctx->capabilities.limits.maxComputeWorkgroupStorageSize;
+     shader_lib_ctx.prefer_narrow_indexed_k = ctx->global_ctx->vendor == "apple";
+-    const auto q2_split = ggml_webgpu_q2_split_for_encoding(src0, ctx->global_ctx->capabilities.limits);
+-    shader_lib_ctx.indexed_split_weights = q2_split.has_value();
++    const auto weight_windows = ggml_webgpu_indexed_split_for_encoding(src0, ctx->global_ctx->capabilities.limits);
++    shader_lib_ctx.indexed_extra_weight_bindings = weight_windows ? weight_windows->extra_bindings() : 0;
+ 
+     // Get or create pipeline
+     webgpu_pipeline gather_pipeline;
+@@ -2726,8 +2761,8 @@
+         ggml_webgpu_make_bind_group_entry(3, ggml_webgpu_tensor_buf(dst), ids_cache_align_offset, ids_cache_bind_size),
+         ggml_webgpu_make_bind_group_entry(4, ggml_webgpu_tensor_buf(dst), ids_tiles_align_offset, ids_tiles_bind_size),
+     };
+-    if (q2_split) {
+-        ggml_webgpu_bind_q2_high_range(*q2_split, main_params, main_entries);
++    if (weight_windows) {
++        ggml_webgpu_bind_indexed_weight_windows(*weight_windows, main_params, main_entries);
+     }
+ 
+     // Calculate workgroup dimensions
+@@ -7244,7 +7279,11 @@
+     }
+ }
+ 
+-static bool ggml_webgpu_q2_indexed_float_span(const ggml_tensor * tensor, uint64_t alignment, uint64_t binding) {
++static bool ggml_webgpu_empty_backend_probe(const ggml_backend_buffer * buffer) {
++    return buffer->size == 0 && !buffer->context && !buffer->iface.get_base;
++}
++
++static bool ggml_webgpu_indexed_float_span(const ggml_tensor * tensor, uint64_t alignment, uint64_t binding) {
+     if (tensor->nb[0] != 4 || tensor->view_offs % 4) {
+         return false;
+     }
+@@ -7263,7 +7302,7 @@
+     return true;
+ }
+ 
+-static bool ggml_webgpu_q2_0_indexed_supported(ggml_backend_dev_t dev, const ggml_tensor * op,
++static bool ggml_webgpu_indexed_weight_windows_supported(ggml_backend_dev_t dev, const ggml_tensor * op,
+                                              const webgpu_global_context & global) {
+     const auto & limits = global->capabilities.limits;
+     const auto * weight = op->src[0];
+@@ -7277,7 +7316,7 @@
+         op->ne[1] % input->ne[1] != 0) {
+         return false;
+     }
+-    const auto windows = ggml_webgpu_q2_weight_windows(weight, limits);
++    const auto windows = ggml_webgpu_indexed_weight_windows(weight, limits);
+     if (!windows) {
+         return false;
+     }
+@@ -7299,7 +7338,7 @@
+     constexpr uint64_t vector_shared = WEBGPU_MUL_MAT_VEC_WG_SIZE * WEBGPU_MUL_MAT_VEC_K_Q_OUTPUTS_PER_WG * sizeof(float);
+     const uint64_t experts = weight->ne[2];
+     const uint64_t shared = limits.maxComputeWorkgroupStorageSize;
+-    const uint32_t matrix_storage_bindings = windows->second ? 6 : 5;
++    const uint32_t matrix_storage_bindings = 5 + windows->extra_bindings();
+     // Check resources for both matrix prefill and vector decode on the selected device.
+     if (limits.maxComputeInvocationsPerWorkgroup < WEBGPU_MUL_MAT_VEC_WG_SIZE ||
+         limits.maxComputeWorkgroupSizeX < WEBGPU_MUL_MAT_VEC_WG_SIZE ||
+@@ -7314,7 +7353,7 @@
+     const uint64_t binding = std::min<uint64_t>({limits.maxStorageBufferBindingSize, limits.maxBufferSize,
+                                                 uint64_t{UINT32_MAX}}) & ~UINT64_C(3);
+     for (const auto * tensor : {input, ids, op}) {
+-        if (!ggml_webgpu_q2_indexed_float_span(tensor, alignment, binding)) {
++        if (!ggml_webgpu_indexed_float_span(tensor, alignment, binding)) {
+             return false;
+         }
+     }
+@@ -7336,7 +7375,7 @@
+     const uint64_t tiles_bytes = sizeof(uint32_t) * (1 + 3 * tiles);
+     const uint64_t slots_bytes = sizeof(uint32_t) * slots;
+     const uint64_t destination_size = ggml_nbytes(op) + slots_bytes + tiles_bytes + 2 * alignment;
+-    if (ROUNDUP_POW2(destination_size, alignment) > ggml_webgpu_q2_buffer_limit(limits) ||
++    if (ROUNDUP_POW2(destination_size, alignment) > ggml_webgpu_indexed_buffer_limit(limits) ||
+         tiles_bytes > binding || slots_bytes > binding) {
+         return false;
+     }
+@@ -7360,10 +7399,11 @@
+             return false;
+         }
+         if (allocation->iface.get_base != ggml_backend_webgpu_buffer_get_base) {
+-            if (allocation->buft && ggml_backend_webgpu_device_supports_buft(dev, allocation->buft)) {
++            if (allocation->buft && ggml_backend_webgpu_device_supports_buft(dev, allocation->buft) &&
++                (root->data || allocation->buft->device != dev || !ggml_webgpu_empty_backend_probe(allocation))) {
+                 return false;
+             }
+-            continue; // the scheduler can transfer non-WebGPU inputs
++            continue; // loader probes and scheduler-transferred inputs
+         }
+         const auto * buffer = static_cast<const ggml_backend_webgpu_buffer_context *>(allocation->context);
+         if (!buffer || !buffer->buffer || buffer->global_ctx != global) {
+@@ -7386,7 +7426,7 @@
+         }
+         range.buffer = buffer->buffer;
+         range.offset = tensor == weight ? address : ggml_webgpu_tensor_align_offset(tensor, alignment);
+-        range.size = tensor == weight ? windows->first + windows->second : address - range.offset + uint64_t(ggml_nbytes(tensor));
++        range.size = tensor == weight ? windows->total() : address - range.offset + uint64_t(ggml_nbytes(tensor));
+         const uint64_t physical = range.buffer.GetSize();
+         if (range.offset > physical || range.size > physical - range.offset ||
+             (tensor != weight && range.size > binding)) {
+@@ -7431,17 +7471,27 @@
+     ggml_tensor * src1 = op->src[1];
+     ggml_tensor * src2 = op->src[2];
+ 
+-    if (op->op == GGML_OP_MUL_MAT_ID && src0 && src0->type == GGML_TYPE_Q2_0) {
+-        // Keep the loader's default placement for these weights. An explicit tensor
+-        // buffer override can place them here using the existing model parameters.
+-        if (!src0->data || !src0->buffer || src0->buffer->iface.get_base != ggml_backend_webgpu_buffer_get_base) {
+-            return false;
+-        }
+-        const auto * backing = static_cast<const ggml_backend_webgpu_buffer_context *>(src0->buffer->context);
+-        if (!backing || backing->global_ctx != ctx->webgpu_global_ctx || !backing->buffer) {
+-            return false;
+-        }
+-        return ggml_webgpu_q2_0_indexed_supported(dev, op, ctx->webgpu_global_ctx);
++    if (op->op == GGML_OP_MUL_MAT_ID && src0) {
++        const auto & limits = ctx->webgpu_global_ctx->capabilities.limits;
++        const bool q2 = src0->type == GGML_TYPE_Q2_0;
++        const bool split = ggml_webgpu_indexed_window_type(src0) &&
++                           ggml_nbytes(src0) > (limits.maxStorageBufferBindingSize & ~UINT64_C(3));
++        if (q2 || split) {
++            // Q2_0 remains opt-in. For other packed types, admit the loader's
++            // empty WebGPU allocation, but do not transfer CPU-resident weights
++            // into oversized storage allocations while scheduling a graph.
++            const bool resident = src0->buffer &&
++                                  src0->buffer->iface.get_base == ggml_backend_webgpu_buffer_get_base;
++            if ((q2 && !src0->data) || ((src0->data || q2) && !resident)) {
++                return false;
++            }
++            if (const auto * allocation = src0->buffer; allocation && !resident &&
++                (!ggml_webgpu_empty_backend_probe(allocation) || !allocation->buft ||
++                 allocation->buft->device != dev || !ggml_backend_webgpu_device_supports_buft(dev, allocation->buft))) {
++                return false;
++            }
++            return ggml_webgpu_indexed_weight_windows_supported(dev, op, ctx->webgpu_global_ctx);
++        }
+     }
+ 
+     // on smaller devices (or CI), tensors may be larger than the max storage buffer size
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/iq3s_id_subgroup.wgsl
+@@ -25,6 +25,12 @@
+     stride_11: u32,
+     stride_02: u32,
+     stride_12: u32,
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    split_word: u32,
++#ifdef BICORE_INDEXED_SPLIT_THREE
++    split_word2: u32,
++#endif
++#endif
+ };
+ 
+ @group(0) @binding(0) var<storage, read_write> src0: array<SRC0_TYPE>; // [cols, rows, n_expert]
+@@ -33,7 +39,17 @@
+ @group(0) @binding(3) var<storage, read_write> dst: array<f32>;   // [rows, n_expert_used, n_tokens(1)]
+ 
+ // "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++@group(0) @binding(4) var<storage, read_write> src0_high: array<u32>;
++#ifdef BICORE_INDEXED_SPLIT_THREE
++@group(0) @binding(5) var<storage, read_write> src0_last: array<u32>;
++@group(0) @binding(6) var<uniform> params: MulMatIdVecParams;
++#else
++@group(0) @binding(5) var<uniform> params: MulMatIdVecParams;
++#endif
++#else
+ @group(0) @binding(4) var<uniform> params: MulMatIdVecParams;
++#endif
+ 
+ @compute @workgroup_size(HARDWARE_WG_SIZE)
+ fn main(
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group.wgsl
+@@ -41,6 +41,9 @@
+     stride_12: u32,
+ #ifdef BICORE_INDEXED_SPLIT_WEIGHTS
+     split_word: u32,
++#ifdef BICORE_INDEXED_SPLIT_THREE
++    split_word2: u32,
++#endif
+ #endif
+ };
+ 
+@@ -53,7 +56,12 @@
+ 
+ #ifdef BICORE_INDEXED_SPLIT_WEIGHTS
+ @group(0) @binding(5) var<storage, read_write> src0_high: array<u32>;
++#ifdef BICORE_INDEXED_SPLIT_THREE
++@group(0) @binding(6) var<storage, read_write> src0_last: array<u32>;
++@group(0) @binding(7) var<uniform> params: MulMatIdParams;
++#else
+ @group(0) @binding(6) var<uniform> params: MulMatIdParams;
++#endif
+ #else
+ @group(0) @binding(5) var<uniform> params: MulMatIdParams;
+ #endif
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_group_decls.tmpl
+@@ -149,6 +149,21 @@
+ 
+ #ifdef BICORE_INDEXED_Q4_0_PAIRED_K64
+ fn load_q4_aligned_pair(word: u32) -> array<u32, 9> {
++#ifdef BICORE_INDEXED_SPLIT_WEIGHTS
++    // The 36-byte pair stays inside one expert and one aligned weight range.
++    if (word >= params.split_word) {
++#ifdef BICORE_INDEXED_SPLIT_THREE
++        if (word >= params.split_word2) {
++            let i = word - params.split_word2;
++            return array<u32, 9>(src0_last[i], src0_last[i + 1u], src0_last[i + 2u], src0_last[i + 3u], src0_last[i + 4u],
++                                 src0_last[i + 5u], src0_last[i + 6u], src0_last[i + 7u], src0_last[i + 8u]);
++        }
++#endif
++        let i = word - params.split_word;
++        return array<u32, 9>(src0_high[i], src0_high[i + 1u], src0_high[i + 2u], src0_high[i + 3u], src0_high[i + 4u],
++                             src0_high[i + 5u], src0_high[i + 6u], src0_high[i + 7u], src0_high[i + 8u]);
++    }
++#endif
+     return array<u32, 9>(SRC0[word + 0u], SRC0[word + 1u], SRC0[word + 2u], SRC0[word + 3u], SRC0[word + 4u], SRC0[word + 5u], SRC0[word + 6u], SRC0[word + 7u], SRC0[word + 8u]);
+ }
+ 
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_id_vec.wgsl
+@@ -27,6 +27,9 @@
+     stride_12: u32,
+ #ifdef BICORE_INDEXED_SPLIT_WEIGHTS
+     split_word: u32,
++#ifdef BICORE_INDEXED_SPLIT_THREE
++    split_word2: u32,
++#endif
+ #endif
+ };
+ 
+@@ -38,7 +41,12 @@
+ // "mul_mat_vec_acc.tmpl" requires params.k, params.m, params.stride_01
+ #ifdef BICORE_INDEXED_SPLIT_WEIGHTS
+ @group(0) @binding(4) var<storage, read_write> src0_high: array<u32>;
++#ifdef BICORE_INDEXED_SPLIT_THREE
++@group(0) @binding(5) var<storage, read_write> src0_last: array<u32>;
++@group(0) @binding(6) var<uniform> params: MulMatIdVecParams;
++#else
+ @group(0) @binding(5) var<uniform> params: MulMatIdVecParams;
++#endif
+ #else
+ @group(0) @binding(4) var<uniform> params: MulMatIdVecParams;
+ #endif
