@@ -270,6 +270,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
       }
       if (webgpu) {
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.webgpuExpertStorageRetry }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.webgpuContextStorageRetry }));
       }
       if (qsa) {
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.qsa }));

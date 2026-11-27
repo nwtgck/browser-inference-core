@@ -1285,6 +1285,21 @@ export const modelPatches = {
       'src/llama.cpp',
     ],
   },
+  webgpuContextStorageRetry: {
+    file: 'ggml-webgpu-context-storage-retry.patch',
+    target: 'llama-webgpu',
+    reason: 'Identify context allocation exhaustion after optional expert placement and expose a compatible reload path.',
+    files: [
+      'ggml/include/ggml-webgpu-expert-storage.h',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'include/llama.h',
+      'src/llama-context.cpp',
+      'src/llama-context.h',
+      'src/llama-model.cpp',
+      'src/llama-model.h',
+      'src/llama.cpp',
+    ],
+  },
   inklingLoopMix: {
     file: 'inkling-loop-shared-mix-state.patch',
     target: 'llama',

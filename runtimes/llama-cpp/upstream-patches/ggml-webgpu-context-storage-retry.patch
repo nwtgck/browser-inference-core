@@ -1,0 +1,649 @@
+--- a/ggml/include/ggml-webgpu-expert-storage.h
++++ b/ggml/include/ggml-webgpu-expert-storage.h
+@@ -16,3 +16,18 @@
+ 
+ #define GGML_WEBGPU_EXPERT_STORAGE_V1 "ggml_backend_webgpu_expert_storage_v1"
+ using ggml_webgpu_get_expert_storage_v1_t = const ggml_webgpu_expert_storage_v1 * (*)();
++
++// Active only while constructing a context for a model with optional weights.
++// A checked allocation resolves errors before publishing the GGML buffer.
++struct ggml_webgpu_context_storage_status {
++    ggml_backend_dev_t device;
++    bool out_of_memory = false;
++    bool other_failure = false;
++};
++
++#define GGML_WEBGPU_CONTEXT_STORAGE_V1 "ggml_backend_webgpu_context_storage_v1"
++struct ggml_webgpu_context_storage_v1 {
++    ggml_webgpu_context_storage_status * (*exchange)(ggml_webgpu_context_storage_status *);
++    bool (*drain)(ggml_backend_dev_t);
++};
++using ggml_webgpu_get_context_storage_v1_t = const ggml_webgpu_context_storage_v1 * (*)();
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -6775,6 +6775,124 @@
+ 
+ /* GGML Backend Buffer Type Interface */
+ 
++static thread_local ggml_webgpu_context_storage_status * webgpu_context_storage = nullptr;
++
++static ggml_webgpu_context_storage_status * ggml_webgpu_exchange_context_storage(
++        ggml_webgpu_context_storage_status * next) {
++    return std::exchange(webgpu_context_storage, next);
++}
++
++static bool ggml_webgpu_drain_context_storage(ggml_backend_dev_t dev) {
++    auto * ctx = static_cast<ggml_backend_webgpu_device_context *>(dev->context);
++    auto & global = *ctx->webgpu_global_ctx;
++    auto & control = global.optional_device->control;
++    if (!control.healthy()) {
++        return false;
++    }
++    struct completion {
++        std::atomic<bool> done{false};
++        wgpu::QueueWorkDoneStatus status = wgpu::QueueWorkDoneStatus::Error;
++    };
++    using ticket = std::shared_ptr<completion>;
++    try {
++        const auto state = std::make_shared<completion>();
++        // The callback owns its ticket even if the future does not complete
++        // during this wait. Never hand WebGPU a pointer into the caller stack.
++        auto callback = [](wgpu::QueueWorkDoneStatus status, wgpu::StringView, ticket * pending) noexcept {
++            const std::unique_ptr<ticket> owner(pending);
++            (*owner)->status = status;
++            (*owner)->done.store(true, std::memory_order_release);
++        };
++        const auto future = global.queue.OnSubmittedWorkDone(
++            wgpu::CallbackMode::WaitAnyOnly, callback, new ticket(state));
++        if (future.id && global.instance.WaitAny(future, WEBGPU_RUNTIME_WAIT_TIMEOUT_NS) == wgpu::WaitStatus::Success &&
++            state->done.load(std::memory_order_acquire) && state->status == wgpu::QueueWorkDoneStatus::Success &&
++            control.healthy()) {
++            return true;
++        }
++    } catch (...) {
++        // A failed or indeterminate wait cannot certify memory for reload.
++    }
++    control.terminal.store(true, std::memory_order_release);
++    return false;
++}
++
++static const ggml_webgpu_context_storage_v1 * ggml_webgpu_context_storage() {
++    static const ggml_webgpu_context_storage_v1 functions{
++        ggml_webgpu_exchange_context_storage, ggml_webgpu_drain_context_storage,
++    };
++    return &functions;
++}
++
++// The issue interval contains only buffer creation. In particular the error
++// scopes are popped before yielding to JSPI and before a caller can use a
++// non-null Dawn error buffer.
++template<class Allocate>
++static auto ggml_webgpu_checked_create(webgpu_global_context_struct & global, Allocate allocate) {
++    using resource_type = decltype(allocate());
++    struct ops {
++        using Pipeline = resource_type;
++        webgpu_global_context_struct & global;
++        Allocate & run;
++        std::exception_ptr exception;
++
++        uint64_t now_ns() const noexcept {
++            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                std::chrono::steady_clock::now().time_since_epoch()).count());
++        }
++        void push(wgpu::ErrorFilter filter) { global.device.PushErrorScope(filter); }
++        Pipeline create() {
++            try {
++                return run();
++            } catch (...) {
++                exception = std::current_exception();
++                return {};
++            }
++        }
++        wgpu::Future pop(wgpu::CallbackMode mode,
++                        void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView,
++                                         ggml_webgpu_optional::Ticket *) noexcept,
++                        ggml_webgpu_optional::Ticket * ticket) {
++            return global.device.PopErrorScope(mode, callback, ticket);
++        }
++        wgpu::WaitStatus wait(wgpu::Future future, uint64_t timeout) { return global.instance.WaitAny(future, timeout); }
++        bool valid(const Pipeline &) { return true; }
++    } api{global, allocate, {}};
++
++    using namespace ggml_webgpu_optional;
++    auto result = create_optional(api, global.optional_device->control, WEBGPU_RUNTIME_WAIT_TIMEOUT_NS,
++                                  false, WaitBudget::after_issue);
++    if (api.exception) {
++        result.host_exception = api.exception;
++    }
++    return result;
++}
++
++template<class Resource>
++static bool ggml_webgpu_is_pure_oom(const ggml_webgpu_optional::Attempt<Resource> & result) {
++    return !result.host_exception && result.outcome == ggml_webgpu_optional::Outcome::rejected &&
++        result.scopes[0]->error == wgpu::ErrorType::NoError &&
++        result.scopes[1]->error == wgpu::ErrorType::NoError &&
++        result.scopes[2]->error == wgpu::ErrorType::OutOfMemory;
++}
++
++template<class Allocate>
++static auto ggml_webgpu_allocate_context_resource(webgpu_global_context_struct & global, ggml_backend_dev_t device,
++                                                   Allocate allocate) {
++    auto * status = webgpu_context_storage;
++    if (!status || status->device != device) {
++        return allocate();
++    }
++    auto result = ggml_webgpu_checked_create(global, allocate);
++    if (!result.host_exception && result.outcome == ggml_webgpu_optional::Outcome::ready && result.pipeline) {
++        return std::move(result.pipeline);
++    }
++    const bool oom = ggml_webgpu_is_pure_oom(result);
++    status->out_of_memory |= oom;
++    status->other_failure |= !oom;
++    return decltype(allocate()){};
++}
++
+ static const char * ggml_backend_webgpu_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
+     ggml_backend_webgpu_device_context * ctx = static_cast<ggml_backend_webgpu_device_context *>(buft->device->context);
+     return ctx->device_name.c_str();
+@@ -6788,10 +6906,17 @@
+     WEBGPU_LOG_DEBUG("ggml_backend_webgpu_buffer_type_alloc_buffer_" << buffer_id << ": " << size << " bytes");
+ 
+     ggml_backend_webgpu_device_context * ctx = static_cast<ggml_backend_webgpu_device_context *>(buft->device->context);
+-    wgpu::Buffer                         buf;
+-    ggml_webgpu_create_buffer(ctx->webgpu_global_ctx->device, buf, ROUNDUP_POW2(size, WEBGPU_STORAGE_BUF_BINDING_MULT),
+-                              wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst,
+-                              buf_name.c_str());
++    auto & global = *ctx->webgpu_global_ctx;
++    auto buf = ggml_webgpu_allocate_context_resource(global, buft->device, [&] {
++        wgpu::Buffer buffer;
++        ggml_webgpu_create_buffer(global.device, buffer, ROUNDUP_POW2(size, WEBGPU_STORAGE_BUF_BINDING_MULT),
++                                  wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst,
++                                  buf_name.c_str());
++        return buffer;
++    });
++    if (!buf) {
++        return nullptr;
++    }
+ 
+     ggml_backend_webgpu_buffer_context * buf_ctx =
+         new ggml_backend_webgpu_buffer_context(buf, buf_name, ctx->webgpu_global_ctx);
+@@ -7209,7 +7334,11 @@
+     initialization.finish();
+ }
+ 
+-static webgpu_context initialize_webgpu_context(ggml_backend_dev_t dev) {
++static webgpu_context initialize_webgpu_context(ggml_backend_dev_t dev
++#ifdef GGML_WEBGPU_DEBUG
++                                               , wgpu::Buffer & debug_host_buf, wgpu::Buffer & debug_dev_buf
++#endif
++                                               ) {
+     ggml_backend_webgpu_device_context * dev_ctx    = (ggml_backend_webgpu_device_context *) dev->context;
+     webgpu_context                       webgpu_ctx = std::make_shared<webgpu_context_struct>();
+     webgpu_ctx->global_ctx                          = dev_ctx->webgpu_global_ctx;
+@@ -7241,10 +7370,10 @@
+ 
+ #ifdef GGML_WEBGPU_DEBUG
+     // Initialize debug buffers
+-    ggml_webgpu_create_buffer(webgpu_ctx->global_ctx->device, webgpu_ctx->global_ctx->debug_host_buf,
++    ggml_webgpu_create_buffer(webgpu_ctx->global_ctx->device, debug_host_buf,
+                               WEBGPU_DEBUG_BUF_ELEMS * sizeof(uint32_t),
+                               wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead, "debug_host_buf");
+-    ggml_webgpu_create_buffer(webgpu_ctx->global_ctx->device, webgpu_ctx->global_ctx->debug_dev_buf,
++    ggml_webgpu_create_buffer(webgpu_ctx->global_ctx->device, debug_dev_buf,
+                               WEBGPU_DEBUG_BUF_ELEMS * sizeof(uint32_t),
+                               wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc, "debug_dev_buf");
+ #endif
+@@ -7258,9 +7387,25 @@
+ 
+     ggml_backend_webgpu_device_context * dev_ctx = static_cast<ggml_backend_webgpu_device_context *>(dev->context);
+ 
+-    auto * backend_ctx      = new ggml_backend_webgpu_context();
+-    backend_ctx->name       = GGML_WEBGPU_NAME + std::string(": ") + dev_ctx->device_name;
+-    backend_ctx->webgpu_ctx = initialize_webgpu_context(dev);
++    auto backend_ctx = std::make_unique<ggml_backend_webgpu_context>();
++    backend_ctx->name = GGML_WEBGPU_NAME + std::string(": ") + dev_ctx->device_name;
++#ifdef GGML_WEBGPU_DEBUG
++    wgpu::Buffer debug_host_buf, debug_dev_buf;
++#endif
++    backend_ctx->webgpu_ctx = ggml_webgpu_allocate_context_resource(*dev_ctx->webgpu_global_ctx, dev, [&] {
++#ifdef GGML_WEBGPU_DEBUG
++        return initialize_webgpu_context(dev, debug_host_buf, debug_dev_buf);
++#else
++        return initialize_webgpu_context(dev);
++#endif
++    });
++    if (!backend_ctx->webgpu_ctx) {
++        return nullptr;
++    }
++#ifdef GGML_WEBGPU_DEBUG
++    dev_ctx->webgpu_global_ctx->debug_host_buf = std::move(debug_host_buf);
++    dev_ctx->webgpu_global_ctx->debug_dev_buf = std::move(debug_dev_buf);
++#endif
+ 
+     // See GGML Backend Interface section
+     auto * backend = new ggml_backend();
+@@ -7268,7 +7413,7 @@
+         /* .guid      = */ ggml_backend_webgpu_guid(),
+         /* .interface = */ ggml_backend_webgpu_i,
+         /* .device    = */ dev,
+-        /* .context   = */ backend_ctx,
++        /* .context   = */ backend_ctx.release(),
+     };
+     return backend;
+ }
+@@ -8073,62 +8218,22 @@
+         ggml_backend_buffer_type_t buft, ggml_context * context) {
+     auto * ctx = static_cast<ggml_backend_webgpu_device_context *>(buft->device->context);
+     auto & global = *ctx->webgpu_global_ctx;
+-    // Buffer creation is synchronous inside the issue interval. Resolve every
+-    // scope before the loader can upload to a non-null Dawn error buffer.
+-    struct ops {
+-        using Pipeline = ggml_backend_buffer_ptr;
+-        ggml_backend_buffer_type_t buft;
+-        ggml_context * context;
+-        wgpu::Device & device;
+-        wgpu::Instance & instance;
+-        std::exception_ptr allocation_exception{};
+-
+-        uint64_t now_ns() const noexcept {
+-            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+-                std::chrono::steady_clock::now().time_since_epoch()).count());
+-        }
+-        void push(wgpu::ErrorFilter filter) { device.PushErrorScope(filter); }
+-        Pipeline create() {
+-            // Close the scopes even if host allocation fails inside GGML.
+-            try {
+-                return Pipeline(ggml_backend_alloc_ctx_tensors_from_buft(context, buft));
+-            } catch (...) {
+-                allocation_exception = std::current_exception();
+-                return {};
+-            }
+-        }
+-        wgpu::Future pop(wgpu::CallbackMode mode,
+-                        void (*callback)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView,
+-                                         ggml_webgpu_optional::Ticket *) noexcept,
+-                        ggml_webgpu_optional::Ticket * ticket) {
+-            return device.PopErrorScope(mode, callback, ticket);
+-        }
+-        wgpu::WaitStatus wait(wgpu::Future future, uint64_t timeout) { return instance.WaitAny(future, timeout); }
+-        // A null GGML allocation can have an ordinary host-side cause. Pass it
+-        // through the loader's normal failure path if the scopes are clean.
+-        bool valid(const Pipeline &) { return true; }
+-    } api{buft, context, global.device, global.instance};
+-
++    auto result = ggml_webgpu_checked_create(global, [&] {
++        return ggml_backend_buffer_ptr(ggml_backend_alloc_ctx_tensors_from_buft(context, buft));
++    });
+     using namespace ggml_webgpu_optional;
+-    auto result = create_optional(api, global.optional_device->control, WEBGPU_RUNTIME_WAIT_TIMEOUT_NS,
+-                                  false, WaitBudget::after_issue);
+-    if (api.allocation_exception) {
+-        std::rethrow_exception(api.allocation_exception);
++    if (result.host_exception) {
++        std::rethrow_exception(result.host_exception);
+     }
+     if (result.outcome == Outcome::ready) {
+         return {result.pipeline.release(), false};
+     }
+-    if (result.host_exception) {
+-        std::rethrow_exception(result.host_exception);
++    if (ggml_webgpu_is_pure_oom(result)) {
++        return {nullptr, true};
+     }
+     if (result.outcome == Outcome::rejected) {
+         const auto & validation = result.scopes[0];
+         const auto & internal = result.scopes[1];
+-        const auto & memory = result.scopes[2];
+-        if (validation->error == wgpu::ErrorType::NoError && internal->error == wgpu::ErrorType::NoError &&
+-            memory->error == wgpu::ErrorType::OutOfMemory) {
+-            return {nullptr, true};
+-        }
+         const auto & failure = validation->error != wgpu::ErrorType::NoError ? validation : internal;
+         GGML_LOG_ERROR("ggml_webgpu: model buffer creation rejected: %s\n", failure->message.data());
+     } else {
+@@ -8146,6 +8251,10 @@
+ 
+ static void * ggml_backend_webgpu_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
++    if (name && strcmp(name, GGML_WEBGPU_CONTEXT_STORAGE_V1) == 0) {
++        ggml_webgpu_get_context_storage_v1_t get = ggml_webgpu_context_storage;
++        return reinterpret_cast<void *>(get);
++    }
+     if (name && strcmp(name, GGML_WEBGPU_EXPERT_STORAGE_V1) == 0) {
+         ggml_webgpu_get_expert_storage_v1_t get = ggml_webgpu_expert_storage;
+         return reinterpret_cast<void *>(get);
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -555,6 +555,13 @@
+                                  size_t    n_paths,
+               struct llama_model_params    params);
+ 
++    // Reload after optional WebGPU expert placement exhausted context memory.
++    // The model and its other placements use the same ordinary file-load rules.
++    LLAMA_API struct llama_model * llama_model_load_without_optional_expert_storage(
++                             const char ** paths,
++                                 size_t    n_paths,
++        const struct llama_model_params * params);
++
+     LLAMA_API void llama_model_save_to_file(
+             const struct llama_model * model,
+                         const char * path_model);
+@@ -565,6 +572,20 @@
+                      struct llama_model * model,
+             struct llama_context_params   params);
+ 
++    enum llama_context_init_status {
++        LLAMA_CONTEXT_INIT_OK = 0,
++        LLAMA_CONTEXT_INIT_FAILED = 1,
++        LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE = 2,
++        LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED = 3,
++    };
++
++    // On a retry result, release the original model before reloading without
++    // optional storage. Other initialization failures retain the usual result.
++    LLAMA_API struct llama_context * llama_init_from_model_with_allocation_status(
++                           struct llama_model * model,
++            const struct llama_context_params * params,
++                                       int32_t * status);
++
+     // Frees all allocated memory
+     LLAMA_API void llama_free(struct llama_context * ctx);
+ 
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -11,6 +11,7 @@
+ #include "llama-model.h"
+ #include "llama-moe-cache.h"
+ #include "llama-ext.h"
++#include "ggml-webgpu-expert-storage.h"
+ #include "llama-sampler.h"
+ #include "llama.h"
+ 
+@@ -162,7 +163,8 @@
+ 
+ llama_context::llama_context(
+         const llama_model & model,
+-              llama_context_params params) :
++              llama_context_params params,
++        ggml_webgpu_context_storage_status * storage) :
+     model(model),
+     cvec(std::make_unique<llama_adapter_cvec>()),
+     loras(std::make_unique<llama_adapter_loras>()),
+@@ -556,6 +558,9 @@
+         };
+ 
+         memory.reset(model.create_memory(params_mem, cparams));
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+     }
+ 
+     // init backends
+@@ -626,7 +631,10 @@
+             moe_cache = std::make_unique<llama_moe_cache>(model, model.no_alloc(), backend_ptrs, backend_buft, cparams.moe_cache_size, cparams.moe_cache_cpu_share);
+         }
+ 
+-        sched_reserve();
++        if (storage) {
++            storage->out_of_memory = false;
++        }
++        sched_reserve(storage);
+ 
+         if (!cparams.flash_attn) {
+             if (ggml_is_quantized(params.type_v)) {
+@@ -795,7 +803,7 @@
+     sched_params_cur = params;
+ }
+ 
+-void llama_context::sched_reserve() {
++void llama_context::sched_reserve(ggml_webgpu_context_storage_status * storage) {
+     if (!sched_need_reserve) {
+         return;
+     }
+@@ -872,12 +880,18 @@
+                     /*.parallel   =*/ false,
+                     /*.op_offload =*/ cparams.op_offload,
+                 });
++                if (storage) {
++                    storage->out_of_memory = false;
++                }
+                 gf = graph_reserve(n_tokens, n_seqs, n_outputs_pp, mctx.get());
+             }
+             if (!gf) {
+                 throw std::runtime_error("failed to allocate compute pp buffers");
+             }
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+ 
+         n_splits_pp        = ggml_backend_sched_get_n_splits(sched.get());
+         n_nodes_pp         = ggml_graph_n_nodes(gf);
+@@ -897,6 +911,9 @@
+         if (!gf) {
+             throw std::runtime_error("failed to allocate compute tg buffers");
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+ 
+         n_splits_tg        = ggml_backend_sched_get_n_splits(sched.get());
+         n_nodes_tg         = ggml_graph_n_nodes(gf);
+@@ -924,6 +941,9 @@
+         if (!gf) {
+             throw std::runtime_error("failed to allocate compute pp buffers");
+         }
++        if (storage) {
++            storage->out_of_memory = false;
++        }
+     }
+ 
+     for (size_t i = 0; i < backend_ptrs.size(); ++i) {
+@@ -4450,9 +4470,10 @@
+     return result;
+ }
+ 
+-llama_context * llama_init_from_model(
++static llama_context * llama_init_from_model_impl(
+                  llama_model * model,
+-        llama_context_params   params) {
++        llama_context_params   params,
++        int32_t * status) {
+     if (!model) {
+         LLAMA_LOG_ERROR("%s: model cannot be NULL\n", __func__);
+         return nullptr;
+@@ -4578,8 +4599,32 @@
+         return nullptr;
+     }
+ 
++    struct context_storage_check {
++        const ggml_webgpu_context_storage_v1 * api = nullptr;
++        ggml_webgpu_context_storage_status current;
++        ggml_webgpu_context_storage_status * previous = nullptr;
++
++        explicit context_storage_check(ggml_backend_dev_t device) : current{device} {
++            if (device) {
++                auto * reg = ggml_backend_dev_backend_reg(device);
++                if (reg) {
++                    const auto get = reinterpret_cast<ggml_webgpu_get_context_storage_v1_t>(
++                        ggml_backend_reg_get_proc_address(reg, GGML_WEBGPU_CONTEXT_STORAGE_V1));
++                    api = get ? get() : nullptr;
++                }
++                if (api) {
++                    previous = api->exchange(&current);
++                }
++            }
++        }
++        ~context_storage_check() {
++            if (api) {
++                api->exchange(previous);
++            }
++        }
++    } storage(model->optional_expert_device);
+     try {
+-        auto * ctx = new llama_context(*model, params);
++        auto * ctx = new llama_context(*model, params, storage.api ? &storage.current : nullptr);
+         const auto & cparams = ctx->get_cparams();
+ 
+         if (cparams.rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN && cparams.rope_freq_scale != model->hparams.rope_freq_scale_train) {
+@@ -4588,14 +4633,40 @@
+             LLAMA_LOG_INFO("%s: n_ctx_train adjusted to %u\n", __func__, model->hparams.n_ctx_train);
+         }
+ 
++        if (status) {
++            *status = LLAMA_CONTEXT_INIT_OK;
++        }
+         return ctx;
+     } catch (const std::exception & err) {
+         LLAMA_LOG_ERROR("%s: failed to initialize the context: %s\n", __func__, err.what());
+     }
+ 
++    if (status && storage.api) {
++        if (storage.current.other_failure) {
++            *status = LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED;
++        } else if (storage.current.out_of_memory) {
++            // Constructor unwinding released the partial context. Submitted
++            // clears or uploads can still keep those backing allocations live.
++            *status = storage.api->drain(storage.current.device)
++                ? LLAMA_CONTEXT_INIT_RETRY_WITHOUT_OPTIONAL_EXPERT_STORAGE
++                : LLAMA_CONTEXT_INIT_WEBGPU_ALLOCATION_FAILED;
++        }
++    }
+     return nullptr;
+ }
+ 
++llama_context * llama_init_from_model(llama_model * model, llama_context_params params) {
++    return llama_init_from_model_impl(model, params, nullptr);
++}
++
++llama_context * llama_init_from_model_with_allocation_status(
++        llama_model * model, const llama_context_params * params, int32_t * status) {
++    if (status) {
++        *status = LLAMA_CONTEXT_INIT_FAILED;
++    }
++    return params ? llama_init_from_model_impl(model, *params, status) : nullptr;
++}
++
+ void llama_free(llama_context * ctx) {
+     delete ctx;
+ }
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -42,11 +42,14 @@
+ 
+ using llama_memory_buffers = std::map<ggml_backend_buffer_type_t, llama_memory_buffer>;
+ 
++struct ggml_webgpu_context_storage_status;
++
+ struct llama_context {
+     // init scheduler and compute buffers, reserve worst-case graphs
+     llama_context(
+             const llama_model & model,
+-                  llama_context_params params);
++                  llama_context_params params,
++            ggml_webgpu_context_storage_status * storage = nullptr);
+ 
+     ~llama_context();
+ 
+@@ -56,7 +59,7 @@
+     //   - changing samplers
+     //   - changing attention type
+     //   - etc.
+-    void sched_reserve();
++    void sched_reserve(ggml_webgpu_context_storage_status * storage = nullptr);
+ 
+     void synchronize();
+ 
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -2191,6 +2191,7 @@
+             if (!buffer) {
+                 throw std::runtime_error(format("unable to allocate %s buffer", ggml_backend_buft_name(key.buft)));
+             }
++            optional_expert_device = ggml_backend_buft_get_device(key.buft);
+             checked_buffers.emplace(context.get(), std::move(buffer));
+         }
+     }
+--- a/src/llama-model.h
++++ b/src/llama-model.h
+@@ -837,6 +837,8 @@
+ };
+ 
+ struct llama_model {
++    // Only file loads that promoted oversized banks require checked context allocations.
++    ggml_backend_dev_t optional_expert_device = nullptr;
+     llm_type type = LLM_TYPE_UNKNOWN;
+     llm_arch arch = LLM_ARCH_UNKNOWN;
+ 
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -390,7 +390,8 @@
+         const std::string & path_model,
+         std::vector<std::string> & splits,
+         FILE * file,
+-        struct llama_model_params params) {
++        struct llama_model_params params,
++        bool allow_optional_expert_storage = true) {
+     {
+         int n_sources_defined = 0;
+         if (metadata != nullptr) {
+@@ -433,7 +434,7 @@
+     }
+ 
+     // Memory-fit probes estimate ordinary placement without making allocations.
+-    const bool try_expert_storage = !path_model.empty() && !params.no_alloc;
++    const bool try_expert_storage = allow_optional_expert_storage && !path_model.empty() && !params.no_alloc;
+     auto [status, model] = llama_model_load(metadata, set_tensor_data, set_tensor_data_ud, path_model, splits, file,
+                                            params, try_expert_storage);
+     if (status == llama_model_load_optional_storage_oom) {
+@@ -491,10 +492,11 @@
+     return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, path_model, splits, /*file*/ nullptr, params);
+ }
+ 
+-struct llama_model * llama_model_load_from_splits(
++static struct llama_model * llama_model_load_explicit_splits(
+         const char ** paths,
+         size_t n_paths,
+-        struct llama_model_params params) {
++        struct llama_model_params params,
++        bool allow_optional_expert_storage) {
+     std::vector<std::string> splits;
+     if (n_paths == 0) {
+         LLAMA_LOG_ERROR("%s: list of splits is empty\n", __func__);
+@@ -504,7 +506,34 @@
+     for (size_t i = 0; i < n_paths; ++i) {
+         splits.push_back(paths[i]);
+     }
+-    return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, splits.front(), splits, /*file*/ nullptr, params);
++    return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, splits.front(), splits, /*file*/ nullptr, params,
++                                           allow_optional_expert_storage);
++}
++
++struct llama_model * llama_model_load_from_splits(
++        const char ** paths,
++        size_t n_paths,
++        struct llama_model_params params) {
++    return llama_model_load_explicit_splits(paths, n_paths, params, true);
++}
++
++struct llama_model * llama_model_load_without_optional_expert_storage(
++        const char ** paths,
++        size_t n_paths,
++        const struct llama_model_params * params) {
++    if (!paths || !params || n_paths == 0) {
++        return nullptr;
++    }
++    if (n_paths == 1 && paths[0]) {
++        std::vector<std::string> splits;
++        return llama_model_load_from_file_impl(nullptr, nullptr, nullptr, paths[0], splits, /*file*/ nullptr, *params, false);
++    }
++    for (size_t i = 0; i < n_paths; ++i) {
++        if (!paths[i]) {
++            return nullptr;
++        }
++    }
++    return llama_model_load_explicit_splits(paths, n_paths, *params, false);
+ }
+ 
+ struct llama_model * llama_model_load_from_file_ptr(FILE * file, struct llama_model_params params) {

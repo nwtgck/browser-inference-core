@@ -1059,6 +1059,29 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   Remove when upstream can recover from cumulative placement exhaustion
   before uploading weights.
 
+### Context memory after automatic placement
+
+- **Patch** `ggml-webgpu-context-storage-retry.patch` against `07ba74babd`,
+  after the model-load retry.
+- **Scope** While initializing a context for a file model with optional
+  expert placement, check allocations on the promoted device. Resolve
+  WebGPU errors before admitting each new backend context or tensor buffer.
+  Context creation for other models and ordinary graph execution keep
+  their existing allocation path.
+- **Contract** `llama_init_from_model_with_allocation_status` reports when
+  the caller can release a model and load the same files once with
+  `llama_model_load_without_optional_expert_storage`. Pure allocation
+  exhaustion permits retry only after the healthy device completes queued
+  work. Validation, internal errors, failed waits and device loss return a
+  terminal allocation result. Explicit placement overrides, load options, context parameters,
+  split order, and existing entry-point signatures remain available.
+  The caller owns the model and must free it before retrying.
+- **Validation and removal** Exercise native allocation and cleanup
+  with non-null error buffers. Check model loading and context
+  construction under the same simulated device budget, including
+  explicit shards. Remove when the upstream loader and backend expose
+  equivalent allocation results and support optional placement recovery.
+
 ## Wider indexed prefill for low-bit expert projections
 
 - **Patch** `ggml-webgpu-indexed-low-bit-wide-prefill.patch` against llama.cpp

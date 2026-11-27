@@ -54,8 +54,72 @@ static void allocate(Result result) {
                  global.optional_device->control.healthy() == (result != Result::device_lost));
 }
 
+static void context_allocations(Result result, bool tracked) {
+    transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+    gpu.type.iface.alloc_buffer = ggml_backend_webgpu_buffer_type_alloc_buffer;
+    const auto get = reinterpret_cast<ggml_webgpu_get_context_storage_v1_t>(
+        ggml_backend_reg_get_proc_address(&gpu.registry, GGML_WEBGPU_CONTEXT_STORAGE_V1));
+    BICORE_CHECK(get);
+    const auto * storage = get();
+    ggml_webgpu_context_storage_status status{tracked ? &gpu.device : nullptr};
+    BICORE_CHECK(storage->exchange(&status) == nullptr);
+
+    commands = {};
+    auto & global = *gpu.context->global_ctx;
+    unsigned count = 0;
+    resources.buffer_error = [&](uint64_t) {
+        if (++count == 2) {
+            switch (result) {
+            case Result::fits:
+                return WGPUErrorType_NoError;
+            case Result::exhausted:
+                return WGPUErrorType_OutOfMemory;
+            case Result::validation_and_exhaustion:
+                return WGPUErrorType_Validation;
+            case Result::device_lost:
+                return WGPUErrorType_OutOfMemory;
+            }
+        }
+        return WGPUErrorType_NoError;
+    };
+    const auto before = pushes;
+    ggml_backend_buffer_ptr first(ggml_backend_buft_alloc_buffer(&gpu.type, 256));
+    BICORE_CHECK(first);
+    bool clear_completed = false;
+    if (result == Result::exhausted) {
+        // Simulate previously submitted work retaining the first buffer
+        // while the next allocation fails.
+        global.queue.Get()->pending.push_back([&] { clear_completed = true; });
+    }
+    if (result == Result::device_lost) {
+        on_wait_once = [&] { global.optional_device->control.lost.store(true); };
+    }
+    ggml_backend_buffer_ptr second(ggml_backend_buft_alloc_buffer(&gpu.type, 256));
+    resources.buffer_error = {};
+    BICORE_CHECK(storage->exchange(nullptr) == &status);
+    BICORE_CHECK(count == 2 && pushes - before == (tracked ? 6 : 0));
+    BICORE_CHECK(static_cast<bool>(second) == (result == Result::fits));
+    BICORE_CHECK(status.out_of_memory == (result == Result::exhausted));
+    BICORE_CHECK(status.other_failure ==
+                 (result == Result::validation_and_exhaustion || result == Result::device_lost));
+    BICORE_CHECK(commands.writes.empty() && commands.submissions == 0);
+    if (status.out_of_memory) {
+        first.reset();
+        BICORE_CHECK(!clear_completed && commands.queue_waits == 0);
+        BICORE_CHECK(storage->drain(&gpu.device));
+        BICORE_CHECK(clear_completed && commands.queue_waits == 1 && futures.empty());
+        readback.queue_status = WGPUQueueWorkDoneStatus_Error;
+        BICORE_CHECK(!storage->drain(&gpu.device));
+        BICORE_CHECK(!global.optional_device->control.healthy());
+        readback.queue_status = WGPUQueueWorkDoneStatus_Success;
+    }
+}
+
 static void all() {
-    for (auto result : {Result::fits, Result::exhausted, Result::validation_and_exhaustion, Result::device_lost})
+    for (auto result : {Result::fits, Result::exhausted, Result::validation_and_exhaustion, Result::device_lost}) {
         allocate(result);
+        context_allocations(result, true);
+    }
+    context_allocations(Result::fits, false);
 }
 } // namespace expert_storage_cases
