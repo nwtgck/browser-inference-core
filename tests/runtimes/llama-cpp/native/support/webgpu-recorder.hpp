@@ -154,6 +154,7 @@ struct ResourceObserver {
     unsigned groups_alive = 0;
     unsigned layouts_created = 0;
     unsigned buffers_released = 0, pipelines_released = 0;
+    unsigned buffer_size_queries = 0, buffer_usage_queries = 0;
     std::function<void(WGPUBuffer)> before_buffer_destroy;
     GroupFailure group_failure = GroupFailure::none;
     bool reject_indirect_buffer = false;
@@ -228,9 +229,11 @@ void wgpuBufferDestroy(WGPUBuffer value) {
     ++commands.buffers_destroyed;
 }
 uint64_t wgpuBufferGetSize(WGPUBuffer value) {
+    ++resources.buffer_size_queries;
     return value->logical_size ? value->logical_size : value->bytes.size();
 }
 WGPUBufferUsage wgpuBufferGetUsage(WGPUBuffer value) {
+    ++resources.buffer_usage_queries;
     return value->usage;
 }
 void wgpuQueueAddRef(WGPUQueue value) {

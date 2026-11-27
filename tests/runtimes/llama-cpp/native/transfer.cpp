@@ -19,6 +19,8 @@
 #include "cases/loop-controller.hpp"
 #include "cases/dense-q4-swiglu.hpp"
 #include "cases/q4-geglu.hpp"
+#include "cases/rms-scale-mul.hpp"
+#include "cases/rms-mul-add.hpp"
 #include "cases/q8-sigmoid-mul.hpp"
 #include "cases/fwht-1024.hpp"
 #include "cases/add-cast-f16.hpp"
@@ -44,6 +46,8 @@ int main() {
     loop_controller_cases::all();
     dense_q4_swiglu_cases::all();
     q4_geglu_cases::all();
+    rms_scale_mul_cases::all();
+    rms_mul_add_cases::all({});
     q8_sigmoid_mul_cases::all();
     fwht_1024_cases::all();
     add_cast_f16_cases::all();

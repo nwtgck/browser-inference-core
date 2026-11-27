@@ -61,8 +61,69 @@ inline void indexed_decode_blocks() {
     }
 }
 
+inline void indexed_prefill_positions() {
+    struct Shape {
+        int64_t queries, streams;
+        bool supported, vector;
+    };
+    for (const auto [queries, streams, supported, vector] :
+         {Shape{1, 1, false, false}, Shape{4, 2, false, false}, Shape{4, 1, true, true}, Shape{32, 1, true, false}}) {
+        transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
+        auto & caps = gpu.context->global_ctx->capabilities;
+        caps.supports_subgroups = true;
+        caps.min_subgroup_size = caps.max_subgroup_size = 16;
+        gpu.type.iface.get_max_size = ggml_backend_webgpu_buffer_type_get_max_size;
+        gpu.context->param_arena.cleanup();
+        gpu.context->param_arena.init(gpu.context->global_ctx->device, WEBGPU_PARAMS_BUF_SIZE_BYTES, 8, 256);
+        transfer_cases::Memory memory(ggml_init({128 * 1024, nullptr, true}), ggml_free);
+        auto * ctx = memory.get();
+        constexpr int64_t keys = 256, dim = 128, heads = 6, kv_heads = 2, buckets = 65;
+        auto * q = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, dim, queries, heads, streams);
+        auto * k = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, dim, keys, kv_heads, streams);
+        auto * v = ggml_dup_tensor(ctx, k);
+        auto * raw = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, keys, queries, 1, streams);
+        auto * table = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, buckets, heads, queries * streams);
+        auto * ids = ggml_new_tensor_2d(ctx, GGML_TYPE_I32, keys, queries * streams);
+        auto * positions = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, keys + queries + (vector ? 0 : 64));
+        auto * out = ggml_flash_attn_ext(ctx, q, k, v, raw, 0.125f, 0.0f, 0.0f);
+        ggml_flash_attn_ext_add_indexed_bias(out, table, ids);
+        out->op_params[5] = GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS;
+        const auto check = [&]() { return ggml_backend_dev_supports_op(&gpu.device, out); };
+        BICORE_CHECK(check());
+        out->op_params[5] = GGML_WEBGPU_FLASH_INDEXED_HALF_POSITIONS;
+        BICORE_CHECK(!check());
+        out->src[7] = ggml_view_1d(ctx, positions, keys + queries - 1, sizeof(int32_t));
+        BICORE_CHECK(!check());
+        out->src[7] = positions;
+        BICORE_CHECK(check() == supported);
+        if (!supported) {
+            continue;
+        }
+        for (auto * input : {q, k, v, raw, table, positions}) {
+            ggml_set_input(input);
+        }
+        ggml_set_output(out);
+        auto * graph = ggml_new_graph_custom(ctx, 16, false);
+        ggml_build_forward_expand(graph, out);
+        const std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(ggml_gallocr_new(&gpu.type),
+                                                                                    ggml_gallocr_free);
+        BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
+        BICORE_CHECK(check() && !ids->buffer);
+        commands = {};
+        BICORE_CHECK(ggml_backend_graph_compute_async(&gpu.backend, graph) == GGML_STATUS_SUCCESS);
+        ggml_backend_synchronize(&gpu.backend);
+        const auto & slot = gpu.context->bind_group_cache.slots.front();
+        const auto & label = slot.pipeline.Get()->name;
+        BICORE_CHECK(vector ? label == "indexed_vec_mask_positions"
+                            : label.find("_indexed_half_positions") != std::string::npos);
+        BICORE_CHECK(slot.bindings[vector ? 1 : 5].size == ggml_nbytes(positions));
+        BICORE_CHECK(vector ? commands.executed >= 3 : commands.executed == 1);
+    }
+}
+
 inline void all() {
     indexed_decode_blocks();
+    indexed_prefill_positions();
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     auto & caps = gpu.context->global_ctx->capabilities;
     caps.supports_subgroups = true;
@@ -119,7 +180,8 @@ inline void all() {
         limits.maxStorageBufferBindingSize = limits.maxBufferSize = allocation_limit;
     };
     verify_webgpu_views();
-    const std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(ggml_gallocr_new(&gpu.type), ggml_gallocr_free);
+    const std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(ggml_gallocr_new(&gpu.type),
+                                                                                ggml_gallocr_free);
     BICORE_CHECK(allocator && ggml_gallocr_alloc_graph(allocator.get(), graph));
     BICORE_CHECK(ggml_webgpu_tensor_binding_size(direct->src[3], alignment) == bytes);
     BICORE_CHECK(ggml_webgpu_tensor_binding_size(shifted->src[3], alignment) == bytes + prefix);
@@ -128,8 +190,8 @@ inline void all() {
     transfer_cases::Backend host(transfer_cases::BackendKind::host);
     transfer_cases::Memory host_context(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     auto * host_view = mask_view(host_context.get(), new_mask_root(host_context.get()), prefix);
-    const transfer_cases::Buffer host_buffer(
-        ggml_backend_alloc_ctx_tensors_from_buft(host_context.get(), &host.type), ggml_backend_buffer_free);
+    const transfer_cases::Buffer host_buffer(ggml_backend_alloc_ctx_tensors_from_buft(host_context.get(), &host.type),
+                                             ggml_backend_buffer_free);
     BICORE_CHECK(host_buffer && host_view->buffer == host_buffer.get());
     auto * copied = flash(host_view);
     limits.maxStorageBufferBindingSize = bytes;

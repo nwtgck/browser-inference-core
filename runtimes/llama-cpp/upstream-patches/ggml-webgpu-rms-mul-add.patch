@@ -1,0 +1,277 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5753,6 +5753,7 @@
+ #include "ggml-webgpu-dense-q4-swiglu.hpp"
+ #include "ggml-webgpu-q4-geglu.hpp"
+ #include "ggml-webgpu-q8-sigmoid-mul.hpp"
++#include "ggml-webgpu-rms-mul-add.hpp"
+ 
+ static std::optional<webgpu_encoded_op> ggml_webgpu_fwht_1024(webgpu_context & ctx,
+                                                              const ggml_tensor * rotation,
+@@ -5884,6 +5885,7 @@
+             return ggml_webgpu_group_norm(ctx, src0, node);
+         case GGML_OP_RMS_NORM:
+             if (auto fused = ggml_webgpu_rms_concat(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
++            if (auto fused = webgpu_rms_mul_add::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+             if (ggml_webgpu_can_fuse_rms_norm_mul(cgraph, node_idx, fusion_views)) {
+                 num_encoded_ops        = 2;
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2187,6 +2187,8 @@
+                        webgpu_pipeline,
+                        ggml_webgpu_rms_norm_mul_pipeline_key_hash>
+         rms_norm_mul_pipelines;
++    using rms_mul_add_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline, uint64_t, std::hash<uint64_t>>;
++    std::unique_ptr<rms_mul_add_cache_type> optional_rms_mul_add;
+     std::unordered_map<ggml_webgpu_upscale_pipeline_key, webgpu_pipeline, ggml_webgpu_upscale_pipeline_key_hash>
+         upscale_pipelines;
+ 
+@@ -4558,6 +4560,39 @@
+         return unary_pipelines[key];
+     }
+ 
++    enum class rms_mul_add_output : uint32_t { separate, norm_input, residual };
++
++    webgpu_pipeline get_rms_norm_mul_add_pipeline(uint32_t wg_size, rms_mul_add_output output, bool * created = nullptr) {
++        if (created) { *created = false; }
++        require_healthy_device();
++        GGML_ASSERT(wg_size && !(wg_size & (wg_size - 1)));
++        GGML_ASSERT(output <= rms_mul_add_output::residual);
++        const uint64_t key = (uint64_t(wg_size) << 2) | uint32_t(output);
++        if (!optional_rms_mul_add) {
++            optional_rms_mul_add = std::make_unique<rms_mul_add_cache_type>(
++                optional_device->control, optional_device->generation);
++        }
++        try {
++            return optional_rms_mul_add->select(key, true,
++                [&] {
++                    if (created) { *created = true; }
++                    std::vector<std::string> defines{"POST_ADD", "WG_SIZE=" + std::to_string(wg_size)};
++                    std::string label = "RMS_NORM_MUL_ADD";
++                    if (output == rms_mul_add_output::norm_input) {
++                        defines.push_back("INPLACE");
++                        label += "_norm_inplace";
++                    } else if (output == rms_mul_add_output::residual) {
++                        defines.push_back("ADD_INPLACE");
++                        label += "_residual_inplace";
++                    }
++                    return create_scoped_pipeline(preprocessor.preprocess(wgsl_rms_norm_mul, defines), label);
++                },
++                [] { return webgpu_pipeline{}; }).pipeline;
++        } catch (const std::exception & error) {
++            GGML_ABORT("ggml_webgpu: optional RMS weight residual pipeline is terminal: %s", error.what());
++        }
++    }
++
+     webgpu_pipeline get_rms_norm_mul_pipeline(const ggml_webgpu_shader_lib_context & context, bool src_overlap) {
+         ggml_webgpu_rms_norm_mul_pipeline_key key = {};
+         key.inplace                               = ggml_webgpu_tensor_equal(context.src0, context.dst);
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-rms-mul-add.hpp
+@@ -0,0 +1,136 @@
++#pragma once
++
++#include "ggml-webgpu-checked-tensor-binding.hpp"
++
++namespace webgpu_rms_mul_add {
++
++using namespace webgpu_checked_tensor_binding;
++
++static bool same_binding(const binding & a, const binding & b) {
++    return a.buffer.Get() == b.buffer.Get() && a.offset == b.offset &&
++        a.size == b.size && a.element_offset == b.element_offset;
++}
++
++using mode = ggml_webgpu_shader_lib::rms_mul_add_output;
++
++struct dispatch_plan {
++    uint32_t wg;
++    mode output_mode;
++    uint32_t grid_x;
++    uint32_t grid_y;
++    std::vector<uint32_t> params;
++    std::vector<wgpu::BindGroupEntry> entries;
++};
++
++static std::optional<dispatch_plan> plan(webgpu_context & ctx, const ggml_cgraph & graph, int index,
++                                         webgpu_fusion_view_sources & views) {
++    constexpr int operations = 3;
++    if (index < 0 || index >= graph.n_nodes || graph.n_nodes - index < operations) { return std::nullopt; }
++    auto * rms = graph.nodes[index];
++    auto * mul = graph.nodes[index + 1];
++    auto * output = graph.nodes[index + 2];
++    if (rms->op != GGML_OP_RMS_NORM || mul->op != GGML_OP_MUL || output->op != GGML_OP_ADD ||
++        (mul->src[0] != rms && mul->src[1] != rms) ||
++        (output->src[0] != mul && output->src[1] != mul)) { return std::nullopt; }
++    auto * source = rms->src[0];
++    auto * weight = mul->src[0] == rms ? mul->src[1] : mul->src[0];
++    auto * residual = output->src[0] == mul ? output->src[1] : output->src[0];
++    const int64_t rows = rms->ne[1];
++    const int64_t width = rms->ne[0];
++    if (width != 1536 && width != 2560 && width != 2816 && width != 6656) { return std::nullopt; }
++    if (!shape(source, GGML_TYPE_F32, width, rows) || !shape(weight, GGML_TYPE_F32, width, 1) ||
++        !shape(residual, GGML_TYPE_F32, width, rows)) { return std::nullopt; }
++    const ggml_tensor * chain[] = {rms, mul, output};
++    for (const auto * node : chain) {
++        if (node->view_src || node->view_offs || !shape(node, GGML_TYPE_F32, width, rows) ||
++            std::any_of(std::begin(node->src) + (node == rms ? 1 : 2), std::end(node->src),
++                        [](const ggml_tensor * value) { return value != nullptr; }) ||
++            std::any_of(std::begin(node->op_params) + (node == rms ? 1 : 0), std::end(node->op_params),
++                        [](int32_t word) { return word != 0; })) { return std::nullopt; }
++    }
++    const float eps = ggml_get_op_params_f32(rms, 0);
++    if (!std::isfinite(eps) || eps < 0 ||
++        !ggml_can_fuse(&graph, index, {GGML_OP_RMS_NORM, GGML_OP_MUL, GGML_OP_ADD}) ||
++        views.contains(rms) || views.contains(mul) ||
++        !ggml_webgpu_can_fuse_rms_norm_mul(&graph, index, views)) { return std::nullopt; }
++
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    // Keep the existing RMS+MUL workgroup and reduction tree.
++    const uint32_t wg = limits.maxComputeInvocationsPerWorkgroup;
++    uint32_t grid_x, grid_y;
++    if (wg < 32 || (wg & (wg - 1)) || wg > limits.maxComputeWorkgroupSizeX ||
++        uint64_t(wg) * sizeof(float) > limits.maxComputeWorkgroupStorageSize ||
++        limits.maxStorageBuffersPerShaderStage < 3 || limits.maxBindingsPerBindGroup < 4 ||
++        limits.maxUniformBuffersPerShaderStage < 1 || limits.maxUniformBufferBindingSize < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        ctx->param_arena.slot_size < WEBGPU_PARAMS_BUF_SIZE_BYTES ||
++        !rms_scale_grid(uint64_t(rows), limits.maxComputeWorkgroupsPerDimension, grid_x, grid_y)) { return std::nullopt; }
++
++    ctx->shader_lib->require_healthy_device();
++    const ggml_tensor * live[] = {source, weight, residual, output};
++    std::array<binding, 4> bindings;
++    std::array<buffer_facts, 6> facts{};
++    for (size_t i = 0; i < bindings.size(); ++i) {
++        const auto * root = live[i]->view_src ? live[i]->view_src : live[i];
++        if ((i != 3 && std::find(std::begin(chain), std::end(chain), root) != std::end(chain)) ||
++            !get_binding(ctx, live[i], facts, bindings[i])) { return std::nullopt; }
++    }
++    const bool norm_inplace = same_binding(bindings[0], bindings[3]);
++    const bool residual_inplace = same_binding(bindings[2], bindings[3]);
++    for (size_t i = 1; i < bindings.size(); ++i) {
++        for (size_t j = 0; j < i; ++j) {
++            if (!(i == 3 && ((j == 0 && norm_inplace) || (j == 2 && residual_inplace))) &&
++                bindings_overlap(bindings[i], bindings[j])) { return std::nullopt; }
++        }
++    }
++    // Eliminated writes must not change a live weight or residual, or leave
++    // an observable input mutation behind when the final output is separate.
++    for (const auto * intermediate : {rms, mul}) {
++        binding discarded;
++        if (!get_binding(ctx, intermediate, facts, discarded) || bindings_overlap(discarded, bindings[1]) ||
++            bindings_overlap(discarded, bindings[2]) ||
++            (bindings_overlap(discarded, bindings[0]) && (!norm_inplace || !same_binding(discarded, bindings[0])))) { return std::nullopt; }
++    }
++    const uint32_t storage_count = norm_inplace || residual_inplace ? 3 : 4;
++    if (limits.maxStorageBuffersPerShaderStage < storage_count ||
++        limits.maxBindingsPerBindGroup < storage_count + 1) { return std::nullopt; }
++    const mode output_mode = norm_inplace ? mode::norm_input : residual_inplace ? mode::residual : mode::separate;
++    std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[1].element_offset, bindings[3].element_offset,
++        uint32_t(source->nb[1] / 4), uint32_t(source->nb[2] / 4), uint32_t(source->nb[3] / 4),
++        uint32_t(weight->nb[1] / 4), uint32_t(weight->nb[2] / 4), uint32_t(weight->nb[3] / 4),
++        uint32_t(output->nb[1] / 4), uint32_t(output->nb[2] / 4), uint32_t(output->nb[3] / 4),
++        uint32_t(weight->ne[0]), 1, 1, 1, uint32_t(width), uint32_t(rows), 1, 1,
++        ggml_webgpu_u32_from_f32(eps), bindings[2].element_offset,
++        uint32_t(residual->nb[1] / 4), uint32_t(residual->nb[2] / 4), uint32_t(residual->nb[3] / 4),
++    };
++    std::vector<wgpu::BindGroupEntry> entries;
++    entries.reserve(storage_count);
++    for (uint32_t i = 0; i < storage_count; ++i) {
++        const auto & item = bindings[i];
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, item.buffer, item.offset, item.size));
++    }
++    return dispatch_plan{wg, output_mode, grid_x, grid_y, std::move(params), std::move(entries)};
++}
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, const ggml_cgraph & graph, int index,
++                                               webgpu_fusion_view_sources & views, int & consumed) {
++    auto dispatch = plan(ctx, graph, index, views);
++    if (!dispatch) { return std::nullopt; }
++    const uint32_t wg = dispatch->wg;
++    const mode output_mode = dispatch->output_mode;
++    bool created = false;
++    const auto pipeline = ctx->shader_lib->get_rms_norm_mul_add_pipeline(wg, output_mode, &created);
++    // Scoped compilation may yield, even when it declines the pipeline.
++    if (created) { views.invalidate(); }
++    if (!pipeline.pipeline) { return std::nullopt; }
++    if (created) {
++        dispatch = plan(ctx, graph, index, views);
++        if (!dispatch || dispatch->wg != wg || dispatch->output_mode != output_mode) { return std::nullopt; }
++    }
++    auto result = ggml_backend_webgpu_build(ctx, pipeline, std::move(dispatch->params),
++        std::move(dispatch->entries), dispatch->grid_x, dispatch->grid_y);
++    consumed = 3;
++    return result;
++}
++
++}  // namespace webgpu_rms_mul_add
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl
+@@ -1,4 +1,28 @@
+-#ifdef OVERLAP
++#ifdef POST_ADD
++
++@group(0) @binding(0) var<storage, read_write> rn_src: array<f32>;
++@group(0) @binding(1) var<storage, read_write> mul_src: array<f32>;
++@group(0) @binding(2) var<storage, read_write> add_src: array<f32>;
++#if defined(INPLACE) || defined(ADD_INPLACE)
++@group(0) @binding(3) var<uniform> params: Params;
++#else
++@group(0) @binding(3) var<storage, read_write> dst: array<f32>;
++@group(0) @binding(4) var<uniform> params: Params;
++#endif
++
++fn update(rn_src_offset: u32, dst_offset: u32, scale: f32, mul_src_offset: u32, add_src_offset: u32) {
++    let weighted = scale * rn_src[rn_src_offset] * mul_src[mul_src_offset];
++    let result = weighted + add_src[add_src_offset];
++#ifdef INPLACE
++    rn_src[dst_offset] = result;
++#elif ADD_INPLACE
++    add_src[dst_offset] = result;
++#else
++    dst[dst_offset] = result;
++#endif
++}
++
++#elif OVERLAP
+ 
+ @group(0) @binding(0)
+ var<storage, read_write> rn_src: array<f32>;
+@@ -90,7 +114,13 @@
+     ne2: u32,
+     ne3: u32,
+ 
+-    eps: f32
++    eps: f32,
++#ifdef POST_ADD
++    offset_add_src: u32,
++    stride_add_src1: u32,
++    stride_add_src2: u32,
++    stride_add_src3: u32,
++#endif
+ };
+ 
+ var<workgroup> scratch: array<f32, WG_SIZE>;
+@@ -112,6 +142,9 @@
+     let i_rn_src_row = params.offset_rn_src + i3 * params.stride_rn_src3 + i2 * params.stride_rn_src2 + i1 * params.stride_rn_src1;
+     let i_mul_src_row = params.offset_mul_src + (i3 % params.mul_src_ne3) * params.stride_mul_src3 + (i2 % params.mul_src_ne2) * params.stride_mul_src2 + (i1 % params.mul_src_ne1) * params.stride_mul_src1;
+     let i_dst_row = params.offset_dst + i3 * params.stride_dst3 + i2 * params.stride_dst2 + i1 * params.stride_dst1;
++#ifdef POST_ADD
++    let i_add_src_row = params.offset_add_src + i3 * params.stride_add_src3 + i2 * params.stride_add_src2 + i1 * params.stride_add_src1;
++#endif
+ 
+     let elems = (params.ne0 + WG_SIZE - 1) / WG_SIZE;
+ 
+@@ -150,7 +183,11 @@
+         if (col >= params.ne0) {
+             break;
+         }
++#ifdef POST_ADD
++        update(i_rn_src_row + col, i_dst_row + col, scale, i_mul_src_row + col % params.mul_src_ne0, i_add_src_row + col);
++#else
+         update(i_rn_src_row + col, i_dst_row + col, scale, i_mul_src_row + col % params.mul_src_ne0);
++#endif
+         col += WG_SIZE;
+     }
+ }

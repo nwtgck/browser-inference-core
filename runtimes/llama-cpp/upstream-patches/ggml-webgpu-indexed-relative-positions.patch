@@ -1,0 +1,155 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1294,10 +1294,17 @@
+ };
+ 
+ inline constexpr int32_t GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS = 2;
++inline constexpr int32_t GGML_WEBGPU_FLASH_INDEXED_HALF_POSITIONS = 3;
++
++inline bool ggml_webgpu_flash_indexed_half_positions(const ggml_tensor * node) {
++    return node->op == GGML_OP_FLASH_ATTN_EXT &&
++           ggml_get_op_params_i32(node, 5) == GGML_WEBGPU_FLASH_INDEXED_HALF_POSITIONS;
++}
+ 
+ inline bool ggml_webgpu_flash_indexed_half_bias(const ggml_tensor * node) {
+     return node->op == GGML_OP_FLASH_ATTN_EXT &&
+-           ggml_get_op_params_i32(node, 5) == GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS;
++           (ggml_get_op_params_i32(node, 5) == GGML_WEBGPU_FLASH_INDEXED_HALF_BIAS ||
++            ggml_webgpu_flash_indexed_half_positions(node));
+ }
+ 
+ struct ggml_webgpu_flash_attn_pipeline_key {
+@@ -1305,11 +1312,13 @@
+     bool                                       use_sg_matrix;
+     bool                                       skip_masked_tiles;
+     bool                                       indexed_half_bias;
++    bool                                       indexed_half_positions;
+     uint32_t                                   kv_tile;
+ 
+     bool operator==(const ggml_webgpu_flash_attn_pipeline_key & other) const {
+         return common == other.common && use_sg_matrix == other.use_sg_matrix &&
+                skip_masked_tiles == other.skip_masked_tiles && indexed_half_bias == other.indexed_half_bias &&
++               indexed_half_positions == other.indexed_half_positions &&
+                kv_tile == other.kv_tile;
+     }
+ };
+@@ -1321,6 +1330,7 @@
+         ggml_webgpu_hash_combine(seed, key.use_sg_matrix);
+         ggml_webgpu_hash_combine(seed, key.skip_masked_tiles);
+         ggml_webgpu_hash_combine(seed, key.indexed_half_bias);
++        ggml_webgpu_hash_combine(seed, key.indexed_half_positions);
+         ggml_webgpu_hash_combine(seed, key.kv_tile);
+         return seed;
+     }
+@@ -4789,6 +4799,7 @@
+         key.common.v_direct &= decisions.use_sg_matrix && key.common.v_type == GGML_TYPE_F16;
+         key.use_sg_matrix = decisions.use_sg_matrix;
+         key.indexed_half_bias = indexed_half;
++        key.indexed_half_positions = ggml_webgpu_flash_indexed_half_positions(context.dst);
+ 
+         uint32_t max_kv_tile = ggml_webgpu_flash_attn_max_kv_tile(
+             context.wg_mem_limit_bytes, decisions.q_tile, decisions.use_sg_matrix ? context.sg_mat_n : 1u,
+@@ -4844,6 +4855,10 @@
+             if (key.indexed_half_bias) {
+                 defines.push_back("BICORE_INDEXED_HALF_BIAS");
+                 variant += "_indexed_half";
++            }
++            if (key.indexed_half_positions) {
++                defines.push_back("BICORE_INDEXED_POSITIONS");
++                variant += "_positions";
+             }
+             defines.push_back("MIN_SUBGROUP_SIZE=" + std::to_string(context.min_subgroup_size) + "u");
+             defines.push_back("MAX_SUBGROUP_SIZE=" + std::to_string(context.max_subgroup_size) + "u");
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -443,6 +443,7 @@
+     std::array<std::array<webgpu_pipeline, 3>, depth_mix::max_depth - 1> depth_mix_pipelines;
+ 
+     webgpu_pipeline indexed_vec_mask;
++    webgpu_pipeline indexed_vec_mask_positions;
+     webgpu_pipeline indexed_vec_mask_block;
+ 
+     webgpu_param_arena       param_arena;
+@@ -2981,9 +2982,14 @@
+         return false;
+     }
+     const int64_t queries = q->ne[1] * q->ne[3];
++    const bool packed = ggml_webgpu_flash_indexed_half_positions(node);
++    const bool ids_match = packed ?
++        q->ne[3] == 1 && queries >= 2 && k->ne[1] <= UINT32_MAX - queries &&
++            ggml_is_vector(ids) && ids->ne[0] >= k->ne[1] + queries :
++        ggml_is_matrix(ids) && ids->ne[0] == k->ne[1] && ids->ne[1] == queries;
+     if (mask->ne[0] != k->ne[1] || mask->ne[1] != q->ne[1] || mask->ne[2] != 1 || mask->ne[3] != q->ne[3] ||
+         table->ne[1] != q->ne[2] || table->ne[2] != queries || table->ne[3] != 1 ||
+-        ids->ne[0] != k->ne[1] || ids->ne[1] != queries || !ggml_is_matrix(ids) ||
++        !ids_match ||
+         !ggml_is_contiguous(mask) || !ggml_is_contiguous(table) || !ggml_is_contiguous(ids) ||
+         (sinks && (sinks->type != GGML_TYPE_F32 || !ggml_is_contiguous(sinks) || ggml_nelements(sinks) != q->ne[2]))) {
+         return false;
+@@ -3176,11 +3182,23 @@
+     auto * table = node->src[6];
+     auto * ids = node->src[7];
+     auto * raw = node->src[3];
+-    auto & pipeline = blocks ? ctx->indexed_vec_mask_block : ctx->indexed_vec_mask;
++    const bool packed = ggml_webgpu_flash_indexed_half_positions(node);
++    GGML_ASSERT(!packed || !blocks);
++    auto & pipeline = blocks ? ctx->indexed_vec_mask_block :
++        packed ? ctx->indexed_vec_mask_positions : ctx->indexed_vec_mask;
+     if (!pipeline.pipeline) {
+-        pipeline = ggml_webgpu_create_pipeline(ctx->global_ctx->device,
+-            blocks ? wgsl_indexed_vec_mask_block : wgsl_indexed_vec_mask,
+-            blocks ? "indexed_vec_mask_block" : "indexed_vec_mask");
++        if (blocks) {
++            pipeline = ggml_webgpu_create_pipeline(ctx->global_ctx->device,
++                wgsl_indexed_vec_mask_block, "indexed_vec_mask_block");
++        } else {
++            pre_wgsl::Preprocessor preprocessor;
++            const std::vector<std::string> defines = packed ?
++                std::vector<std::string>{"BICORE_INDEXED_POSITIONS"} : std::vector<std::string>{};
++            const auto code = preprocessor.preprocess(wgsl_indexed_vec_mask, defines);
++            pipeline = ggml_webgpu_create_pipeline(ctx->global_ctx->device,
++                code.c_str(),
++                packed ? "indexed_vec_mask_positions" : "indexed_vec_mask");
++        }
+     }
+     uint32_t x, y;
+     compute_2d_workgroups(layout.groups, ctx->global_ctx->capabilities.limits.maxComputeWorkgroupsPerDimension, x, y);
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl
+@@ -43,8 +43,18 @@
+ fn combined_mask(batch: u32, head: u32, q_row: u32, key: u32) -> f16 {
+     let q_index = batch * params.seq_len_q + q_row;
+     let cell = q_index * params.seq_len_kv + key;
++#ifdef BICORE_INDEXED_POSITIONS
++    let positions_base = params.relative_ids_offset + batch * (params.seq_len_kv + params.seq_len_q);
++    let key_pos = relative_ids[positions_base + key];
++    let query_pos = relative_ids[positions_base + params.seq_len_kv + q_row];
++    let extent = params.relative_buckets - 1u;
++    let distance = u32(query_pos) - u32(key_pos);
++    let bucket = select(extent, min(distance, extent), key_pos >= 0 && query_pos >= key_pos);
++    let bias_index = (q_index * params.n_heads + head) * params.relative_buckets + bucket;
++#else
+     let bias_index = (q_index * params.n_heads + head) * params.relative_buckets
+                         + u32(relative_ids[params.relative_ids_offset + cell]);
++#endif
+     return f16(bias_table[params.bias_offset + bias_index] + f32(mask[params.offset_mask + cell]));
+ }
+ #endif
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask.wgsl
+@@ -28,7 +28,15 @@
+     let stream = head_stream / params.heads;
+     let flat_query = stream * params.queries + query;
+     let cell = flat_query * params.kv + index % params.kv;
++#ifdef BICORE_INDEXED_POSITIONS
++    let base = params.ids_offset + stream * (params.kv + params.queries);
++    let key = relative_ids[base + index % params.kv];
++    let position = relative_ids[base + params.kv + query];
++    let extent = params.buckets - 1u;
++    let bucket = select(extent, min(u32(position) - u32(key), extent), key >= 0 && position >= key);
++#else
+     let bucket = u32(relative_ids[params.ids_offset + cell]);
++#endif
+     let bias = table[params.table_offset + (flat_query * params.table_heads + head) * params.buckets + bucket];
+     return f16(bias + f32(raw[params.raw_offset + cell]));
+ }

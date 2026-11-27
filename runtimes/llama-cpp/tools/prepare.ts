@@ -139,6 +139,7 @@ async function prepareWebgpu({ source, original, scratch, patchRoot, runtime, mo
   canonical['mul_mat_fwht_1024.wgsl'] = join(source, shaderBase, 'mul_mat_fwht_1024.wgsl');
   canonical['argsort.wgsl'] = join(source, shaderBase, 'argsort.wgsl');
   canonical['row_norm.wgsl'] = join(source, shaderBase, 'row_norm.wgsl');
+  canonical['rms_norm_mul.wgsl'] = join(source, shaderBase, 'rms_norm_mul.wgsl');
   headers['ggml-webgpu-aligned-word-load-shaders.hpp'] = canonical;
   const shaders: Record<string, Record<string, FileIdentity>> = {};
   const generator = join(original, shaderBase, 'embed_wgsl.py');
@@ -246,6 +247,7 @@ export async function prepareSources({ inputs, output, options, python }: { inpu
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingRowViews }));
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.indexedHalfCpu }));
         patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingIndexedHalfFlash }));
+        patches.push(await applyPatch({ sourceRoot: root, patchRoot, patch: modelPatches.inklingPackedRelativePositions }));
         shaders = result.shaders;
         switch (target) {
         case 'native': {

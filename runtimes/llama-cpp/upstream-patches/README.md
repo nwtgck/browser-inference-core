@@ -2189,3 +2189,95 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   allocation, transferred CPU views, scalar and vector pipeline selection, and
   numerical parity across prefill and generation. Remove the patches and
   generated shader entry together when upstream covers these contracts.
+
+## Packed positions for relative attention prefill
+
+- **Patches** `ggml-webgpu-indexed-relative-positions.patch` and
+  `inkling-packed-relative-positions.patch` against llama.cpp `07ba74babd`.
+- **Scope** Single-stream WebGPU Inkling graphs with at least two queries,
+  resident K/V and an admitted rounded indexed Flash Attention operation.
+  Smaller prefill tails use the same layout through the existing vector
+  mask producer. Single-token decode and rejected graph candidates keep
+  the existing distance-ID or dense-mask paths.
+- **Contract** The internal Flash mode accepts one I32 tensor containing KV
+  cell positions followed by query positions. Empty or future keys and
+  distances at least as large as the extent use the last bias bucket.
+  Reserve positions for the KV capacity and maximum microbatch, and
+  upload only its active prefix.
+  Scalar Flash, the vector producer and the CPU fallback retain the
+  F16 rounding before the head slope. The shader cache separates this
+  layout from precomputed IDs. Binding count, public API and model formats
+  are unchanged.
+- **Validation and removal** Verify the exact input range, both prefill
+  pipelines, fallback, and transitions to single-token decode. Check the
+  actual graph reservation and allocation in the Wasm runtime. Return to
+  precomputed IDs as the upstream alternative. Remove both patches and
+  their recipe entries when upstream supports an equivalent position input
+  with bounded allocation.
+
+## Affine RMS normalization with broadcast weights
+
+- **Patch** `ggml-webgpu-rms-scale-mul.patch` against llama.cpp `07ba74babd`.
+- **Scope** Fuse consecutive F32 RMS normalization, SCALE and broadcast
+  row multiplication in ordinary WebGPU graphs. Preserve the original
+  reduction variant, float operation order and the individual graph path
+  when layout or lifetime checks fail.
+- **Contract** Use the existing row geometry and guard physical bind ranges,
+  output aliasing, intermediate readers and adapter limits. Read and store
+  through compatible storage usages when multiple disjoint ranges share
+  one backing buffer. Keep pipeline creation scoped and use the existing
+  fallback on a recoverable optional-pipeline failure.
+- **Validation and removal** Exercise the real native provider in both modes,
+  aliasing and failure fallback, and compare emitted shaders with the two
+  ordinary dispatches. This applies to Gemma router input and any equivalent
+  shape. Replace the patch and associated tests when upstream provides the
+  same fusion and numerical contract.
+
+## Weighted RMS normalization with a residual
+
+- **Patch** `ggml-webgpu-rms-mul-add.patch` against llama.cpp `07ba74babd`.
+- **Scope** Fuse weighted F32 RMS normalization with the adjacent residual
+  addition for row widths 1536, 2560, 2816 and 6656, including the Gemma
+  and Muse graphs. The weighted reduction, multiplication and residual
+  addition retain their original operation order.
+- **Contract** Guard the graph consumers and allocations, and allow
+  disjoint bindings in a shared storage buffer. Preserve the individual
+  dispatches for unsupported shapes, unsafe aliases or recoverable
+  pipeline creation failures.
+- **Validation and removal** Check selection and lifetime in both native
+  providers and compare the emitted shaders against separate dispatches.
+  Retire the patch and tests when upstream implements the same fusion.
+
+## WebGPU dispatch binding cache and small batches
+
+- **Patch** `ggml-webgpu-borrowed-dispatch-bindings.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Compare the ordered storage bindings and transient uniform
+  binding by reference for warm cache requests. Keep up to two dispatch
+  groups and uniform offsets on the stack.
+- **Contract** The owner of cached keys, retained buffers and created bind
+  groups remains the cache. Form contiguous descriptor entries during
+  creation, including uncached oversized and non-buffer groups. Preserve
+  arena bounds, planned offsets, invalidation generation and the profiled
+  and ordinary submission order.
+- **Validation and removal** Native host-encode tests bound temporary
+  allocations for warm and oversized requests. Check the full contract
+  suites and device error handling, and remove this patch when upstream
+  has equivalent cache and small-batch encoding behavior.
+
+## Large Q5_K vocabulary projection
+
+- **Patch** `ggml-webgpu-q5-output-subgroup-matvec.patch` against llama.cpp
+  `07ba74babd`.
+- **Scope** Contiguous Q5_K × F32 → F32 single-token projection with
+  K6656/M202048 and a fixed 16- or 32-lane subgroup. Reuse the existing
+  independent subgroup shader family and exclude source overlap, integer
+  activation quantization, epilogues and batched operands.
+- **Contract** Preserve the weight format, bindings and allocation. The
+  subgroup reduction can change the order of floating-point additions.
+  Devices that cannot bind the original weights retain their placement
+  and dispatch fallback.
+- **Validation and removal** Exercise both subgroup widths and dimension
+  boundaries in the native provider. Compare numerical error and time
+  against the ordinary workgroup kernel. Remove when upstream provides an
+  equivalent selection.

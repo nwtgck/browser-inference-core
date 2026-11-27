@@ -1302,6 +1302,56 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-relative-positions.patch',
+    target: 'llama-webgpu',
+    reason: 'Read packed KV and query positions when computing prefill relative attention bias.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/flash_attn_tile.wgsl',
+      'ggml/src/ggml-webgpu/wgsl-shaders/indexed_vec_mask.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-rms-scale-mul.patch',
+    target: 'llama-webgpu',
+    reason: 'Apply a broadcast weight row in the existing affine RMS dispatch.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-mul.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-rms-mul-add.patch',
+    target: 'llama-webgpu',
+    reason: 'Add a compatible residual in the existing weighted RMS dispatch.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-rms-mul-add.hpp',
+      'ggml/src/ggml-webgpu/wgsl-shaders/rms_norm_mul.wgsl',
+    ],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-borrowed-dispatch-bindings.patch',
+    target: 'llama-webgpu',
+    reason: 'Read bind entries in place on cache hits and keep two dispatch states on the stack.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu.cpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
+    file: 'ggml-webgpu-q5-output-subgroup-matvec.patch',
+    target: 'llama-webgpu',
+    reason: 'Reduce large Q5_K vocabulary projections within independent subgroups.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {
@@ -1385,6 +1435,19 @@ export const modelPatches = {
     target: 'llama',
     reason: 'Keep the same compact relative-bias graph for prefill and generation.',
     files: ['src/llama-graph.h', 'src/llama-graph.cpp'],
+  },
+  inklingPackedRelativePositions: {
+    file: 'inkling-packed-relative-positions.patch',
+    target: 'llama',
+    reason: 'Share KV positions across prefill queries and compute the same buckets on GPU and CPU.',
+    files: [
+      'ggml/src/ggml-cpu/flash-attn-indexed-mask.h',
+      'ggml/src/ggml-cpu/ops.cpp',
+      'src/llama-graph.cpp',
+      'src/llama-graph.h',
+      'src/llama-kv-cache.cpp',
+      'src/llama-kv-cache.h',
+    ],
   },
   chat: {
     file: 'common-chat-independent-vocabulary.patch',

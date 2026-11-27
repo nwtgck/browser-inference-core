@@ -656,6 +656,59 @@ static void check_dense_q2_matvecs(ggml_webgpu_shader_lib & library, const std::
     }
 }
 
+static void check_q5_output_matvec(ggml_webgpu_shader_lib & library) {
+    constexpr int64_t k = 6656, m = 202048;
+    for (const uint32_t sg : {16u, 32u}) {
+        q4_current::Fixture f(GGML_TYPE_Q5_K, k, m);
+        for (auto * tensor : {&f.a, &f.x, &f.dst}) {
+            tensor->nb[0] = ggml_type_size(tensor->type);
+            tensor->nb[1] = ggml_row_size(tensor->type, tensor->ne[0]);
+            tensor->nb[2] = tensor->nb[1] * tensor->ne[1];
+            tensor->nb[3] = tensor->nb[2];
+        }
+        f.min_sg = f.max_sg = sg;
+        const auto key = [&](bool overlap = false) {
+            auto c = f.context<ggml_webgpu_shader_lib_context>();
+            c.subgroup_size_control_enabled = true;
+            return library.make_mul_mat_vec_key(c, overlap, false);
+        };
+        const auto c = f.context<ggml_webgpu_shader_lib_context>();
+        const auto candidate = library.get_mul_mat_vec_pipeline(c, false, false);
+        const auto & shape = *static_cast<const ggml_webgpu_mul_mat_vec_shader_decisions *>(candidate.context.get());
+        const uint32_t rows = (128 / sg) * 4;
+        BICORE_CHECK(shape.logical_subgroup_size == sg && shape.wg_size == 128 && shape.outputs_per_wg == rows);
+        BICORE_CHECK((production_dispatch(c, 65535, false) == std::array<uint32_t, 2>{uint32_t(m) / rows, 1}));
+        BICORE_CHECK(library.get_mul_mat_vec_pipeline(c, false, false).pipeline.Get() == candidate.pipeline.Get());
+
+        BICORE_CHECK(key(true).subgroup_size == 0);
+        BICORE_CHECK(ggml_webgpu_q5_output_subgroup_size(c, true, false) == 0);
+        f.max_wg = 127;
+        BICORE_CHECK(key().subgroup_size == 0);
+        f.max_wg = 256;
+        f.indexed = true;
+        BICORE_CHECK(key().subgroup_size == 0);
+        f.indexed = false;
+        f.subgroups = false;
+        BICORE_CHECK(key().subgroup_size == 0);
+        f.subgroups = true;
+        ++f.a.nb[1];
+        BICORE_CHECK(key().subgroup_size == 0);
+        --f.a.nb[1];
+        f.x.ne[2] = f.dst.ne[2] = 2;
+        BICORE_CHECK(key().subgroup_size == 0);
+        f.x.ne[2] = f.dst.ne[2] = 1;
+        f.a.ne[1] = f.dst.ne[0] = m - 1;
+        BICORE_CHECK(key().subgroup_size == 0);
+        f.a.ne[1] = f.dst.ne[0] = m;
+        f.min_sg = 16;
+        f.max_sg = 32;
+        const auto fallback = key();
+        BICORE_CHECK(!fallback.subgroup_size && !fallback.requested_subgroup_size && fallback.workgroup_size == 256);
+        BICORE_CHECK(library.get_mul_mat_vec_pipeline(f.context<ggml_webgpu_shader_lib_context>(), false, false)
+                         .pipeline.Get() != candidate.pipeline.Get());
+    }
+}
+
 static int run_quant_matvec_cases(int argc, char ** argv) {
     try {
         if (argc != 2)
@@ -672,6 +725,7 @@ static int run_quant_matvec_cases(int argc, char ** argv) {
         q6_current::packed_vec4(argv[1]);
         check_long_k_matvecs(library, argv[1]);
         check_dense_q2_matvecs(library, argv[1]);
+        check_q5_output_matvec(library);
         BICORE_CHECK(q4_checks + q6_checks > 9000 && created > 100);
         std::cout << "{\"status\":\"passed\",\"checks\":" << q4_checks + q6_checks << ",\"pipelines\":" << created
                   << "}\n";

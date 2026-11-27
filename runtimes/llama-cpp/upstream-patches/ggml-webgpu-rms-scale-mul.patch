@@ -1,0 +1,260 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -5750,6 +5750,7 @@
+ }
+ 
+ #include "ggml-webgpu-checked-tensor-binding.hpp"
++#include "ggml-webgpu-rms-scale-mul.hpp"
+ #include "ggml-webgpu-dense-q4-swiglu.hpp"
+ #include "ggml-webgpu-q4-geglu.hpp"
+ #include "ggml-webgpu-q8-sigmoid-mul.hpp"
+@@ -5889,6 +5890,7 @@
+                 ggml_tensor * mul_node = nodes[node_idx + 1];
+                 return ggml_webgpu_rms_norm_mul(ctx, src0, node, mul_node->src[0], mul_node->src[1], mul_node);
+             } else {
++                if (auto fused = webgpu_rms_scale_mul::encode(ctx, *cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+                 if (auto fused = ggml_webgpu_row_norm_scale(ctx, cgraph, node_idx, fusion_views, num_encoded_ops)) { return fused; }
+                 return ggml_webgpu_row_norm(ctx, src0, node);
+             }
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -2077,6 +2077,9 @@
+     using dense_swiglu_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline, uint32_t,
+         std::hash<uint32_t>>;
+     std::unique_ptr<dense_swiglu_cache_type> optional_dense_swiglu;
++    using rms_scale_mul_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline, uint32_t,
++        std::hash<uint32_t>>;
++    std::unique_ptr<rms_scale_mul_cache_type> optional_rms_scale_mul;
+     using q4_geglu_cache_type = ggml_webgpu_optional::OptionalCache<webgpu_pipeline,
+         ggml_webgpu_q4_geglu_pipeline_key, ggml_webgpu_q4_geglu_pipeline_key_hash>;
+     std::unique_ptr<q4_geglu_cache_type> optional_q4_geglu;
+@@ -3035,6 +3038,33 @@
+             pipeline.context = decisions;
+         }
+         return pipeline;
++    }
++
++    webgpu_pipeline get_rms_scale_mul_pipeline(bool inplace, bool vec4, bool & created) {
++        created = false;
++        require_healthy_device();
++        const uint32_t key = uint32_t(inplace) | (uint32_t(vec4) << 1);
++        if (!optional_rms_scale_mul) {
++            optional_rms_scale_mul = std::make_unique<rms_scale_mul_cache_type>(
++                optional_device->control, optional_device->generation);
++        }
++        try {
++            return optional_rms_scale_mul->select(key, true,
++                [&] {
++                    created = true;
++                    // This is the existing row reduction, not the weighted RMS
++                    // factory whose workgroup and squared term are different.
++                    std::vector<std::string> defines{"RMS_NORM", "SRC_F32", "DST_F32", "POST_SCALE", "POST_MUL",
++                        vec4 ? "WG_SIZE=32" : "WG_SIZE=128"};
++                    std::string label = "rms_norm_scale_mul_f32";
++                    if (vec4) { defines.push_back("RMS_VEC4"); label += "_vec4"; }
++                    if (inplace) { defines.push_back("INPLACE"); label += "_inplace"; }
++                    return create_scoped_pipeline(preprocessor.preprocess(wgsl_row_norm, defines), label);
++                },
++                [] { return webgpu_pipeline{}; }).pipeline;
++        } catch (const std::exception & error) {
++            GGML_ABORT("ggml_webgpu: optional RMS scale multiply pipeline is terminal: %s", error.what());
++        }
+     }
+ 
+     webgpu_pipeline get_row_norm_scale_pipeline(ggml_op op, bool inplace) {
+--- /dev/null
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-rms-scale-mul.hpp
+@@ -0,0 +1,132 @@
++#pragma once
++
++// Extend the existing RMS/SCALE dispatch with a single broadcast weight row.
++// Keep its scalar/vec4 reduction selection and affine operation order.
++namespace webgpu_rms_scale_mul {
++
++struct dispatch_plan {
++    row_norm_scale_plan prefix;
++    ggml_tensor * output;
++    // The SCALE allocation is checked to preserve the existing prefix choice;
++    // only source, weight and final output are bound by the new shader.
++    std::array<webgpu_checked_tensor_binding::binding, 4> bindings;
++    bool inplace;
++    bool vec4;
++    uint32_t x, y;
++};
++
++static std::optional<dispatch_plan> plan(webgpu_context & ctx, const ggml_cgraph & graph, int index,
++                                        webgpu_fusion_view_sources & views) {
++    if (index < 0 || index >= graph.n_nodes || graph.n_nodes - index < 3 ||
++        !ggml_can_fuse(&graph, index, {GGML_OP_RMS_NORM, GGML_OP_SCALE, GGML_OP_MUL})) {
++        return std::nullopt;
++    }
++    dispatch_plan result{};
++    if (!plan_row_norm_scale(&graph, index, views, result.prefix)) { return std::nullopt; }
++    const auto & prefix = result.prefix;
++    auto * output = graph.nodes[index + 2];
++    auto * weight = output->src[1];
++    if (output->src[0] != prefix.output || !weight || output->view_src || output->view_offs ||
++        !ggml_are_same_shape(output, prefix.output) || views.contains(prefix.output) ||
++        weight->ne[0] != output->ne[0] || weight->ne[1] != 1 || weight->ne[2] != 1 || weight->ne[3] != 1 ||
++        std::any_of(std::begin(output->src) + 2, std::end(output->src),
++            [](const ggml_tensor * source) { return source != nullptr; })) {
++        return std::nullopt;
++    }
++    const auto & limits = ctx->global_ctx->capabilities.limits;
++    if (limits.maxComputeInvocationsPerWorkgroup < 128 || limits.maxComputeWorkgroupSizeX < 128 ||
++        limits.maxComputeWorkgroupStorageSize < 128 * 2 * sizeof(float) || !limits.maxUniformBuffersPerShaderStage ||
++        ctx->param_arena.slot_size < 16 * sizeof(uint32_t) ||
++        limits.maxUniformBufferBindingSize < ctx->param_arena.slot_size ||
++        !rms_scale_grid(prefix.rows, limits.maxComputeWorkgroupsPerDimension, result.x, result.y)) {
++        return std::nullopt;
++    }
++
++    ctx->shader_lib->require_healthy_device();
++    const ggml_tensor * tensors[] = {prefix.source, weight, output, prefix.output};
++    std::array<webgpu_checked_tensor_binding::buffer_facts, 4> facts{};
++    for (unsigned i = 0; i < result.bindings.size(); ++i) {
++        const auto * root = tensors[i]->view_src;
++        if (tensors[i]->type != GGML_TYPE_F32 ||
++            (root && (root == prefix.norm || root == prefix.output || root == output)) ||
++            !webgpu_checked_tensor_binding::get_binding(ctx, tensors[i], facts, result.bindings[i])) {
++            return std::nullopt;
++        }
++    }
++    const auto same_range = [&](unsigned a, unsigned b) {
++        const auto & first = result.bindings[a];
++        const auto & second = result.bindings[b];
++        return first.buffer.Get() == second.buffer.Get() && first.offset == second.offset &&
++               first.element_offset == second.element_offset && first.size == second.size &&
++               rms_scale_same_mapping(tensors[a], tensors[b]);
++    };
++    const auto overlap = [&](unsigned a, unsigned b) {
++        return webgpu_checked_tensor_binding::bindings_overlap(result.bindings[a], result.bindings[b]);
++    };
++    result.inplace = same_range(0, 2);
++    // Keep the existing RMS/SCALE allocation valid, including aligned binding
++    // prefixes. The old prefix must not overwrite a later weight read.
++    if ((!same_range(0, 3) && overlap(0, 3)) || (!result.inplace && overlap(0, 2)) ||
++        overlap(1, 0) || overlap(1, 2) || overlap(1, 3)) {
++        return std::nullopt;
++    }
++    const uint32_t storage_count = result.inplace ? 2 : 3;
++    if (limits.maxStorageBuffersPerShaderStage < storage_count || limits.maxBindingsPerBindGroup < storage_count + 1) {
++        return std::nullopt;
++    }
++
++    result.vec4 = ggml_webgpu_can_use_rms_vec4(limits, prefix.source, prefix.output,
++        result.bindings[0].element_offset, result.bindings[3].element_offset);
++    if (result.vec4 && (result.bindings[1].element_offset % 4 != 0 ||
++        !ggml_webgpu_can_use_rms_vec4(limits, prefix.source, output,
++            result.bindings[0].element_offset, result.bindings[2].element_offset))) {
++        return std::nullopt;
++    }
++    result.output = output;
++    return result;
++}
++
++static std::optional<webgpu_encoded_op> encode(webgpu_context & ctx, ggml_cgraph & graph, int index,
++                                               webgpu_fusion_view_sources & views, int & consumed) {
++    auto dispatch = plan(ctx, graph, index, views);
++    if (!dispatch) { return std::nullopt; }
++    const bool inplace = dispatch->inplace, vec4 = dispatch->vec4;
++    bool created = false;
++    const auto pipeline = ctx->shader_lib->get_rms_scale_mul_pipeline(inplace, vec4, created);
++    if (created) {
++        // A cold scoped attempt can yield even when compilation is rejected.
++        views.invalidate();
++    }
++    if (!pipeline.pipeline) { return std::nullopt; }
++    if (created) {
++        dispatch = plan(ctx, graph, index, views);
++        if (!dispatch || dispatch->inplace != inplace || dispatch->vec4 != vec4) { return std::nullopt; }
++    }
++
++    const auto & prefix = dispatch->prefix;
++    const auto * source = prefix.source;
++    const auto * output = dispatch->output;
++    const auto & bindings = dispatch->bindings;
++    const std::vector<uint32_t> params = {
++        bindings[0].element_offset, bindings[2].element_offset,
++        uint32_t(source->nb[1] / 4), uint32_t(source->nb[2] / 4), uint32_t(source->nb[3] / 4),
++        uint32_t(output->nb[1] / 4), uint32_t(output->nb[2] / 4), uint32_t(output->nb[3] / 4),
++        uint32_t(source->ne[0]), uint32_t(source->ne[1]), uint32_t(source->ne[2]), uint32_t(source->ne[3]),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(prefix.norm, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(prefix.output, 0)),
++        ggml_webgpu_u32_from_f32(ggml_get_op_params_f32(prefix.output, 1)), bindings[1].element_offset,
++    };
++    const std::array<unsigned, 3> order = {0, inplace ? 1u : 2u, 1};
++    const unsigned storage_count = inplace ? 2 : 3;
++    std::vector<wgpu::BindGroupEntry> entries;
++    entries.reserve(storage_count);
++    for (unsigned i = 0; i < storage_count; ++i) {
++        const auto & binding = bindings[order[i]];
++        entries.push_back(ggml_webgpu_make_bind_group_entry(i, binding.buffer, binding.offset, binding.size));
++    }
++    auto encoded = ggml_backend_webgpu_build(ctx, pipeline, params, entries, dispatch->x, dispatch->y);
++    consumed = 3;
++    return encoded;
++}
++
++}  // namespace webgpu_rms_scale_mul
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/row_norm.wgsl
+@@ -68,6 +68,9 @@
+     post_scale: f32,
+     post_bias: f32,
+ #endif
++#ifdef POST_MUL
++    offset_weight: u32,
++#endif
+ };
+ 
+ @group(0) @binding(0)
+@@ -75,12 +78,22 @@
+ 
+ #ifdef INPLACE
+ @group(0) @binding(1)
++#ifdef POST_MUL
++var<storage, read_write> weight: array<SRC_TYPE>;
++
++@group(0) @binding(2)
++#endif
+ var<uniform> params: Params;
+ #else
+ @group(0) @binding(1)
+ var<storage, read_write> dst: array<DST_TYPE>;
+ 
+ @group(0) @binding(2)
++#ifdef POST_MUL
++var<storage, read_write> weight: array<SRC_TYPE>;
++
++@group(0) @binding(3)
++#endif
+ var<uniform> params: Params;
+ #endif
+ 
+@@ -177,7 +190,12 @@
+     for (var col = lid.x; col < columns; col += WG_SIZE) {
+         let normalized = scale * (src[src_row + col] - zero);
+ #ifdef POST_SCALE
++#ifdef POST_MUL
++        let scaled = normalized * params.post_scale + vec4<f32>(params.post_bias);
++        let result = scaled * weight[params.offset_weight / 4u + col];
++#else
+         let result = normalized * params.post_scale + vec4<f32>(params.post_bias);
++#endif
+ #else
+         let result = normalized;
+ #endif
+@@ -269,7 +287,12 @@
+ #ifdef POST_SCALE
+         // Preserve the normalized result before applying the SCALE affine.
+         let normalized = scale * (v - mean_val);
++#ifdef POST_MUL
++        let scaled = normalized * params.post_scale + params.post_bias;
++        let result = scaled * weight[params.offset_weight + col];
++#else
+         let result = normalized * params.post_scale + params.post_bias;
++#endif
+ #else
+         let result = scale * (v - mean_val);
+ #endif

@@ -1,0 +1,208 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -258,33 +258,64 @@
+         }
+     }
+ 
++    // Borrow the storage entries and any uniform only during get(). Cached
++    // groups and keys own their references independently of the input.
++    struct entry_view {
++        std::span<const wgpu::BindGroupEntry> storage;
++        const wgpu::BindGroupEntry * uniform;
++
++        size_t size() const { return storage.size() + (uniform != nullptr); }
++        const wgpu::BindGroupEntry & operator[](size_t index) const {
++            return index < storage.size() ? storage[index] : *uniform;
++        }
++    };
++
+     static wgpu::BindGroup create(wgpu::Device & device,
+                                    const wgpu::ComputePipeline & pipeline,
+                                    uint32_t group_index,
+-                                   std::span<const wgpu::BindGroupEntry> entries,
++                                   entry_view entries,
+                                    const char * label) {
+         wgpu::BindGroupDescriptor descriptor;
+         descriptor.layout = pipeline.GetBindGroupLayout(group_index);
+         descriptor.entryCount = entries.size();
+-        descriptor.entries = entries.data();
+         descriptor.label = label;
++        if (!entries.uniform) {
++            descriptor.entries = entries.storage.data();
++            return device.CreateBindGroup(&descriptor);
++        }
++
++        // Only creation needs a contiguous descriptor. The existing cache
++        // ceiling still permits larger groups through the uncached path.
++        std::array<wgpu::BindGroupEntry, max_buffer_entries> local_entries;
++        std::vector<wgpu::BindGroupEntry> extra_entries;
++        if (entries.size() > local_entries.size()) {
++            extra_entries.resize(entries.size());
++        }
++        auto * contiguous = extra_entries.empty() ? local_entries.data() : extra_entries.data();
++        std::copy(entries.storage.begin(), entries.storage.end(), contiguous);
++        contiguous[entries.storage.size()] = *entries.uniform;
++        descriptor.entries = contiguous;
+         return device.CreateBindGroup(&descriptor);
+     }
+ 
+     wgpu::BindGroup get(wgpu::Device & device,
+                          const wgpu::ComputePipeline & pipeline,
+                          uint32_t group_index,
+-                         std::span<const wgpu::BindGroupEntry> entries,
++                         std::span<const wgpu::BindGroupEntry> storage,
+                          const char * label,
+-                         uint64_t current_generation) {
++                         uint64_t current_generation,
++                         const wgpu::BindGroupEntry * uniform = nullptr) {
+         check_generation(current_generation);
++        const entry_view entries{storage, uniform};
++        const size_t entry_count = entries.size();
+         const size_t position = cursor;
+         if (cursor < max_slots) {
+             ++cursor;
+         }
+ 
+-        bool cacheable = position < max_slots && entries.size() <= max_buffer_entries && pipeline;
+-        for (const auto & entry : entries) {
++        bool cacheable = position < max_slots && entry_count <= max_buffer_entries && pipeline;
++        for (size_t i = 0; i < entry_count; ++i) {
++            const auto & entry = entries[i];
+             if (entry.nextInChain || !entry.buffer || entry.sampler || entry.textureView) {
+                 cacheable = false;
+                 break;
+@@ -300,8 +331,8 @@
+         if (position < slots.size()) {
+             const slot & cached = slots[position];
+             bool matches = cached.group && cached.pipeline.Get() == pipeline.Get() &&
+-                           cached.group_index == group_index && cached.bindings.size() == entries.size();
+-            for (size_t i = 0; matches && i < entries.size(); ++i) {
++                           cached.group_index == group_index && cached.bindings.size() == entry_count;
++            for (size_t i = 0; matches && i < entry_count; ++i) {
+                 const auto & key = cached.bindings[i];
+                 const auto & entry = entries[i];
+                 matches = key.binding_index == entry.binding && key.buffer.Get() == entry.buffer.Get() &&
+@@ -315,8 +346,9 @@
+         slot replacement;
+         replacement.pipeline = pipeline;
+         replacement.group_index = group_index;
+-        replacement.bindings.reserve(entries.size());
+-        for (const auto & entry : entries) {
++        replacement.bindings.reserve(entry_count);
++        for (size_t i = 0; i < entry_count; ++i) {
++            const auto & entry = entries[i];
+             replacement.bindings.push_back({ entry.binding, entry.buffer, entry.offset, entry.size });
+         }
+         replacement.group = create(device, pipeline, group_index, entries, label);
+@@ -808,19 +840,21 @@
+                                                         size_t dispatch_count, const Launch & launch = {}) {
+     ctx->shader_lib->require_healthy_device();
+     webgpu_encoded_op result = {};
+-    const bool single = dispatch_count == 1;
+-    wgpu::BindGroup single_group;
+-    size_t single_offset = 0;
+-    std::vector<wgpu::BindGroup> batch_groups;
+-    std::vector<size_t> batch_offsets;
++    struct dispatch_state {
++        wgpu::BindGroup group;
++        size_t offset;
++    };
++    // Keep single dispatches and two-dispatch batches (such as MMVQ) local.
++    std::array<dispatch_state, 2> local_states;
++    std::vector<dispatch_state> batch_states;
+     result.num_kernels = dispatch_count;
+     // Invalid oversized batches still fail at the existing arena guard without
+     // reserving unbounded scratch storage first.
+     const size_t reserve_count = dispatch_count < ctx->param_arena.slot_count ? dispatch_count : ctx->param_arena.slot_count;
+-    if (!single) {
+-        batch_groups.reserve(reserve_count);
+-        batch_offsets.reserve(reserve_count);
+-    }
++    if (dispatch_count > local_states.size()) {
++        batch_states.resize(reserve_count);
++    }
++    auto * states = dispatch_count > local_states.size() ? batch_states.data() : local_states.data();
+ 
+     for (size_t i = 0; i < dispatch_count; i++) {
+         const auto & dispatch = dispatches[i];
+@@ -828,45 +862,21 @@
+         const size_t                 param_offset = ctx->param_arena.alloc_slot(param_size);
+ 
+         const auto & storage = dispatch.bind_group_entries;
+-        auto uniform = ggml_webgpu_make_bind_group_entry(storage.size(), ctx->param_arena.buffer, param_offset,
+-                                                         ctx->param_arena.slot_size);
+-        const auto get_group = [&](std::span<const wgpu::BindGroupEntry> entries) {
+-            return ctx->bind_group_cache.get(ctx->global_ctx->device, dispatch.pipeline.pipeline, 0, entries,
+-                                             dispatch.pipeline.name.c_str(),
+-                                             ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed));
+-        };
+-        if (single && storage.size() < webgpu_bind_group_cache::max_buffer_entries) {
+-            std::array<wgpu::BindGroupEntry, webgpu_bind_group_cache::max_buffer_entries> entries;
+-            std::copy(storage.begin(), storage.end(), entries.begin());
+-            entries[storage.size()] = std::move(uniform);
+-            single_group = get_group({entries.data(), storage.size() + 1});
+-        } else {
+-            std::vector<wgpu::BindGroupEntry> entries;
+-            entries.reserve(storage.size() + 1);
+-            entries.insert(entries.end(), storage.begin(), storage.end());
+-            entries.push_back(std::move(uniform));
+-            auto group = get_group(entries);
+-            if (single) {
+-                single_group = std::move(group);
+-            } else {
+-                batch_groups.push_back(std::move(group));
+-            }
+-        }
+-        if (single) {
+-            single_offset = param_offset;
+-        } else {
+-            batch_offsets.push_back(param_offset);
+-        }
+-    }
+-
+-    const auto * bind_groups = single ? &single_group : batch_groups.data();
+-    const auto * param_offsets = single ? &single_offset : batch_offsets.data();
++        const auto uniform = ggml_webgpu_make_bind_group_entry(storage.size(), ctx->param_arena.buffer, param_offset,
++                                                               ctx->param_arena.slot_size);
++        states[i].group = ctx->bind_group_cache.get(ctx->global_ctx->device, dispatch.pipeline.pipeline, 0, storage,
++                                                   dispatch.pipeline.name.c_str(),
++                                                   ctx->global_ctx->buffer_generation.load(std::memory_order_relaxed),
++                                                   &uniform);
++        states[i].offset = param_offset;
++    }
++
+     for (size_t i = 0; i < dispatch_count; i++) {
+ #ifdef GGML_WEBGPU_BATCH_PARAM_UPLOADS
+-        ctx->param_arena.stage(param_offsets[i], dispatches[i].params.data(),
++        ctx->param_arena.stage(states[i].offset, dispatches[i].params.data(),
+                                dispatches[i].params.size() * sizeof(uint32_t));
+ #else
+-        ctx->global_ctx->queue.WriteBuffer(ctx->param_arena.buffer, param_offsets[i], dispatches[i].params.data(),
++        ctx->global_ctx->queue.WriteBuffer(ctx->param_arena.buffer, states[i].offset, dispatches[i].params.data(),
+                                            dispatches[i].params.size() * sizeof(uint32_t));
+ #endif
+     }
+@@ -887,7 +897,7 @@
+         wgpu::ComputePassEncoder pass = ctx->active_command_encoder.BeginComputePass(&pass_desc);
+ 
+         pass.SetPipeline(dispatches[i].pipeline.pipeline);
+-        pass.SetBindGroup(0, bind_groups[i]);
++        pass.SetBindGroup(0, states[i].group);
+         launch(pass, dispatches[i].workgroups, i);
+         pass.End();
+         result.pipeline_names.push_back(dispatches[i].pipeline.name);
+@@ -896,12 +906,12 @@
+     for (size_t i = 0; i < dispatch_count; i++) {
+         if (ctx->batch_compute_passes) {
+             ctx->active_compute_pass.SetPipeline(dispatches[i].pipeline.pipeline);
+-            ctx->active_compute_pass.SetBindGroup(0, bind_groups[i]);
++            ctx->active_compute_pass.SetBindGroup(0, states[i].group);
+             launch(ctx->active_compute_pass, dispatches[i].workgroups, i);
+         } else {
+             wgpu::ComputePassEncoder pass = ctx->active_command_encoder.BeginComputePass();
+             pass.SetPipeline(dispatches[i].pipeline.pipeline);
+-            pass.SetBindGroup(0, bind_groups[i]);
++            pass.SetBindGroup(0, states[i].group);
+             launch(pass, dispatches[i].workgroups, i);
+             pass.End();
+         }

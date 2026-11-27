@@ -1,0 +1,273 @@
+--- a/ggml/src/ggml-cpu/flash-attn-indexed-mask.h
++++ b/ggml/src/ggml-cpu/flash-attn-indexed-mask.h
+@@ -2,12 +2,24 @@
+ 
+ #include "ggml-impl.h"
+ 
++#include <algorithm>
++
+ // Reproduce the F16 mask materialization after F32 mask+bias. Mode 1
+ // continues to add the indexed bias without another F16 rounding step.
+ static constexpr int32_t GGML_FLASH_ATTN_INDEXED_BIAS_F16_MASK = 2;
++static constexpr int32_t GGML_FLASH_ATTN_INDEXED_POSITIONS_F16_MASK = 3;
++
++static inline bool ggml_cpu_fattn_indexed_positions(const ggml_tensor * op) {
++    return ggml_get_op_params_i32(op, 5) == GGML_FLASH_ATTN_INDEXED_POSITIONS_F16_MASK;
++}
+ 
+ static inline bool ggml_cpu_fattn_round_indexed_mask(const ggml_tensor * op) {
+-    return ggml_get_op_params_i32(op, 5) == GGML_FLASH_ATTN_INDEXED_BIAS_F16_MASK;
++    return ggml_get_op_params_i32(op, 5) == GGML_FLASH_ATTN_INDEXED_BIAS_F16_MASK ||
++           ggml_cpu_fattn_indexed_positions(op);
++}
++
++static inline int64_t ggml_cpu_fattn_position_bucket(int32_t key, int32_t query, int64_t extent) {
++    return key >= 0 && query >= key ? std::min<int64_t>(int64_t(query) - key, extent) : extent;
+ }
+ 
+ static inline bool ggml_cpu_fattn_indexed_mask_supported(const ggml_tensor * op) {
+@@ -36,10 +48,14 @@
+     }
+     const int64_t nc = rows ? rows->ne[0] : k->ne[1];
+     const int64_t nq = q->ne[1] * q->ne[3];
++    const bool positions = ggml_cpu_fattn_indexed_positions(op);
++    const bool indices_match = positions ?
++        !rows && q->ne[3] == 1 && nq >= 2 && nc <= INT64_MAX - nq &&
++            ggml_is_vector(indices) && indices->ne[0] >= nc + nq :
++        ggml_is_matrix(indices) && indices->ne[0] == nc && indices->ne[1] == nq;
+     return mask->type == GGML_TYPE_F16 && ggml_is_contiguous(mask) &&
+            mask->ne[0] == nc && mask->ne[1] == q->ne[1] && mask->ne[2] == 1 && mask->ne[3] == q->ne[3] &&
+            table->type == GGML_TYPE_F32 && ggml_is_contiguous(table) && table->ne[0] > 0 &&
+            table->ne[1] == q->ne[2] && table->ne[2] == nq && table->ne[3] == 1 &&
+-           indices->type == GGML_TYPE_I32 && ggml_is_contiguous(indices) && ggml_is_matrix(indices) &&
+-           indices->ne[0] == nc && indices->ne[1] == nq;
++           indices->type == GGML_TYPE_I32 && ggml_is_contiguous(indices) && indices_match;
+ }
+--- a/ggml/src/ggml-cpu/ops.cpp
++++ b/ggml/src/ggml-cpu/ops.cpp
+@@ -9027,6 +9027,7 @@
+ 
+     const int64_t n_bins = bias_table ? bias_table->ne[0] : 0;
+     const bool round_indexed_mask = ggml_cpu_fattn_round_indexed_mask(dst);
++    const auto * positions = ggml_cpu_fattn_indexed_positions(dst) ? static_cast<const int32_t *>(bias_indices->data) : nullptr;
+ 
+     // parallelize by q rows using ggml_vec_dot_f32
+ 
+@@ -9093,7 +9094,8 @@
+ 
+         // bias rows of this query and head, queries of all streams are flattened
+         const float   * bias = bias_table   ? (const float   *) ((const char *) bias_table->data   + (iq3*neq1 + iq1)*bias_table->nb[2] + iq2*bias_table->nb[1]) : nullptr;
+-        const int32_t * bins = bias_indices ? (const int32_t *) ((const char *) bias_indices->data + (iq3*neq1 + iq1)*bias_indices->nb[1]) : nullptr;
++        const int32_t * bins = bias_indices && !positions ? (const int32_t *) ((const char *) bias_indices->data + (iq3*neq1 + iq1)*bias_indices->nb[1]) : nullptr;
++        const int32_t query_position = positions ? positions[nek1 + iq1] : 0;
+ 
+         // online softmax / attention
+         // loop over n_kv and n_head_kv
+@@ -9102,8 +9104,9 @@
+         for (int64_t ic = ic_start; ic < ic_end; ++ic) {
+             float mv = mp ? GGML_CPU_FP16_TO_FP32(mp[ic]) : 0.0f;
+             if (bias) {
+-                GGML_ASSERT(bins[ic] >= 0 && bins[ic] < n_bins);
+-                mv += bias[bins[ic]];
++                const int64_t bucket = positions ? ggml_cpu_fattn_position_bucket(positions[ic], query_position, n_bins - 1) : bins[ic];
++                GGML_ASSERT(bucket >= 0 && bucket < n_bins);
++                mv += bias[bucket];
+                 if (round_indexed_mask) {
+                     mv = GGML_CPU_FP16_TO_FP32(GGML_CPU_FP32_TO_FP16(mv));
+                 }
+@@ -9290,6 +9293,7 @@
+     const ggml_tensor * bias_indices = dst->src[7];
+     const int64_t n_bins = bias_table ? bias_table->ne[0] : 0;
+     const bool round_indexed_mask = ggml_cpu_fattn_round_indexed_mask(dst);
++    const auto * positions = ggml_cpu_fattn_indexed_positions(dst) ? static_cast<const int32_t *>(bias_indices->data) : nullptr;
+ 
+     int ir = ir0;
+     while (ir < ir1) {
+@@ -9370,12 +9374,15 @@
+                 for (int tq = 0; tq < tile_rows; tq++) {
+                     const ggml_fp16_t * mp_row = (const ggml_fp16_t *)((const char *) mask->data + (iq1 + tq)*mask->nb[1] + (iq2%mask->ne[2])*mask->nb[2] + (iq3%mask->ne[3])*mask->nb[3]);
+                     const float   * bias = bias_table   ? (const float   *) ((const char *) bias_table->data   + (iq3*neq1 + iq1 + tq)*bias_table->nb[2] + iq2*bias_table->nb[1]) : nullptr;
+-                    const int32_t * bins = bias_indices ? (const int32_t *) ((const char *) bias_indices->data + (iq3*neq1 + iq1 + tq)*bias_indices->nb[1]) : nullptr;
++                    const int32_t * bins = bias_indices && !positions ? (const int32_t *) ((const char *) bias_indices->data + (iq3*neq1 + iq1 + tq)*bias_indices->nb[1]) : nullptr;
++                    const int32_t query_position = positions ? positions[nek1 + iq1 + tq] : 0;
+                     for (int tk = 0; tk < kv_tile; tk++) {
+                         float m = GGML_CPU_FP16_TO_FP32(mp_row[ic + tk]);
+                         if (bias) {
+-                            GGML_ASSERT(bins[ic + tk] >= 0 && bins[ic + tk] < n_bins);
+-                            m += bias[bins[ic + tk]];
++                            const int64_t key = ic + tk;
++                            const int64_t bucket = positions ? ggml_cpu_fattn_position_bucket(positions[key], query_position, n_bins - 1) : bins[key];
++                            GGML_ASSERT(bucket >= 0 && bucket < n_bins);
++                            m += bias[bucket];
+                             if (round_indexed_mask) {
+                                 m = GGML_CPU_FP16_TO_FP32(GGML_CPU_FP32_TO_FP16(m));
+                             }
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -1449,6 +1449,9 @@
+     if (self_rel_pos->buffer) {
+         attn_ctx->get_base()->set_input_relative_pos(self_rel_pos, ubatch, extent);
+     }
++    if (self_rel_positions && self_rel_positions->buffer) {
++        attn_ctx->get_base()->set_input_relative_positions(self_rel_positions, ubatch);
++    }
+ 
+     // swa tensors may not be allocated if there are no SWA attention layers
+     if (inp_attn->self_k_idxs_swa && inp_attn->self_k_idxs_swa->buffer) {
+@@ -1462,6 +1465,9 @@
+ 
+     if (self_rel_pos_swa->buffer) {
+         attn_ctx->get_swa()->set_input_relative_pos(self_rel_pos_swa, ubatch, extent_swa);
++    }
++    if (self_rel_positions_swa && self_rel_positions_swa->buffer) {
++        attn_ctx->get_swa()->set_input_relative_positions(self_rel_positions_swa, ubatch);
+     }
+ 
+     const int64_t n_rs = mctx->get_recr()->get_n_rs();
+@@ -3162,6 +3168,10 @@
+            buckets->ne[0] == raw->ne[0] && buckets->ne[1] == flat_queries;
+ }
+ 
++// Internal Flash modes retain the F16 rounding of the dense bias mask.
++static constexpr int32_t relative_half_bias_mode = 2;
++static constexpr int32_t relative_half_positions_mode = 3;
++
+ ggml_tensor * llm_graph_context::build_attn_mha(
+          ggml_tensor * q,
+          ggml_tensor * k,
+@@ -3250,10 +3260,18 @@
+             bool supported = false;
+             if (kv_resident && !kv_rows && !v_mla &&
+                 relative_attention_bias_matches(q, k, kq_mask, bias_table, bias_indices)) {
+-                ggml_flash_attn_ext_add_indexed_bias(cur, bias_table, bias_indices);
+-                // Preserve rounding after F32(raw) + bias and before the head slope.
+-                cur->op_params[5] = 2;
+-                supported = ggml_backend_dev_supports_op(device, cur);
++                if (half_mask->positions) {
++                    // The public indexed-bias helper accepts only precomputed IDs.
++                    cur->src[6] = bias_table;
++                    cur->src[7] = half_mask->positions;
++                    cur->op_params[5] = relative_half_positions_mode;
++                    supported = ggml_backend_dev_supports_op(device, cur);
++                }
++                if (!supported) {
++                    ggml_flash_attn_ext_add_indexed_bias(cur, bias_table, bias_indices);
++                    cur->op_params[5] = relative_half_bias_mode;
++                    supported = ggml_backend_dev_supports_op(device, cur);
++                }
+             }
+             if (supported) {
+                 ggml_backend_sched_set_tensor_backend(sched, cur, half_mask->backend);
+@@ -4558,6 +4576,21 @@
+                 const auto current = ggml_backend_sched_get_backend(sched, i);
+                 if (ggml_backend_get_device(current) == device) {
+                     half_mask.backend = current;
++                    // The single-query vector path already sends one ID per KV cell.
++                    // Smaller prefill tails use the same packed layout as long batches.
++                    const uint32_t extent = is_swa ? inp->extent_swa : inp->extent;
++                    if (attn_mask.raw->ne[3] == 1 && ubatch.n_tokens >= 2 &&
++                            bias_table && bias_table->ne[0] == int64_t(extent) + 1) {
++                        auto * & positions = is_swa ? inp->self_rel_positions_swa : inp->self_rel_positions;
++                        if (!positions) {
++                            const auto * attention = inp->mctx->get_attn();
++                            const auto * cache = is_swa ? attention->get_swa() : attention->get_base();
++                            positions = cache->build_input_relative_positions(ctx0, cparams.n_ubatch);
++                            ggml_set_input(positions);
++                            ggml_set_name(positions, is_swa ? "attn_inp_kv_positions_swa" : "attn_inp_kv_positions");
++                        }
++                        half_mask.positions = positions;
++                    }
+                     break;
+                 }
+             }
+--- a/src/llama-graph.h
++++ b/src/llama-graph.h
+@@ -819,6 +819,10 @@
+     // distance from the token to the cell, extent for the empty, future and more distant cells
+     ggml_tensor * self_rel_pos     = nullptr; // I32 [n_kv,     n_batch]
+     ggml_tensor * self_rel_pos_swa = nullptr; // I32 [n_kv_swa, n_batch]
++    // The prefix contains the active, single-stream KV positions and the
++    // current queries. The allocation also covers the largest prefill batch.
++    ggml_tensor * self_rel_positions     = nullptr;
++    ggml_tensor * self_rel_positions_swa = nullptr;
+ 
+     const uint32_t extent;
+     const uint32_t extent_swa;
+@@ -1101,6 +1105,7 @@
+ struct llm_graph_context {
+     struct relative_half_mask {
+         ggml_backend_t backend;
++        ggml_tensor * positions = nullptr;
+     };
+ 
+     const llama_model & model;
+--- a/src/llama-kv-cache.cpp
++++ b/src/llama-kv-cache.cpp
+@@ -2141,6 +2141,24 @@
+     ggml_backend_tensor_set(dst, data.data(), 0, ggml_nbytes(dst));
+ }
+ 
++void llama_kv_cache::set_input_relative_positions(ggml_tensor * dst, const llama_ubatch * ubatch, uint32_t n_kv) const {
++    GGML_ASSERT(dst->type == GGML_TYPE_I32 && ggml_is_vector(dst) && ubatch->n_tokens >= 2);
++    const auto stream = seq_to_stream.at(ubatch->seq_id[0][0]);
++    const auto & cells = v_cells.at(stream);
++    GGML_ASSERT(n_kv > 0 && n_kv <= cells.size());
++    const int64_t elements = int64_t(n_kv) + ubatch->n_tokens;
++    GGML_ASSERT(elements <= dst->ne[0]);
++    std::vector<int32_t> data(elements);
++    for (int64_t j = 0; j < n_kv; ++j) {
++        data[j] = cells.is_empty(j) ? -1 : cells.pos_get(j);
++    }
++    for (uint32_t i = 0; i < ubatch->n_tokens; ++i) {
++        GGML_ASSERT(seq_to_stream.at(ubatch->seq_id[i][0]) == stream);
++        data[int64_t(n_kv) + i] = ubatch->pos[i];
++    }
++    ggml_backend_tensor_set(dst, data.data(), 0, data.size() * sizeof(int32_t));
++}
++
+ void llama_kv_cache::get_prev_tokens(const llama_ubatch & ubatch, uint32_t n, std::vector<llama_token> & res) const {
+     const uint32_t n_tokens = ubatch.n_tokens;
+ 
+@@ -3253,6 +3271,16 @@
+     kv->set_input_relative_pos(dst, ubatch, extent);
+ }
+ 
++ggml_tensor * llama_kv_cache_context::build_input_relative_positions(ggml_context * ctx, uint32_t max_queries) const {
++    // The allocator reuses this input across prefill batches. Reserve capacity
++    // once so increasing the KV span on a smaller tail need not replan it.
++    return ggml_new_tensor_1d(ctx, GGML_TYPE_I32, int64_t(kv->get_size()) + max_queries);
++}
++
++void llama_kv_cache_context::set_input_relative_positions(ggml_tensor * dst, const llama_ubatch * ubatch) const {
++    kv->set_input_relative_positions(dst, ubatch, n_kv);
++}
++
+ void llama_kv_cache_context::get_prev_tokens(const llama_ubatch & ubatch, uint32_t n, std::vector<llama_token> & res) const {
+     kv->get_prev_tokens(ubatch, n, res);
+ }
+--- a/src/llama-kv-cache.h
++++ b/src/llama-kv-cache.h
+@@ -259,6 +259,7 @@
+     void set_input_kpool(ggml_tensor * pool_idxs, ggml_tensor * pool_pos, ggml_tensor * pool_mask, ggml_tensor * tail_idxs,
+             const llama_ubatch * ubatch, const slot_info & sinfo, uint32_t kpool, uint32_t n_kv) const;
+     void set_input_relative_pos(ggml_tensor * dst, const llama_ubatch * ubatch, uint32_t extent) const;
++    void set_input_relative_positions(ggml_tensor * dst, const llama_ubatch * ubatch, uint32_t n_kv) const;
+ 
+     // true if llama_kv_cell_ext holds information that has to survive a state save/restore
+     bool has_cell_ext() const;
+@@ -453,6 +454,7 @@
+     //   helps understand the implementation logic of cpy_k and cpy_v
+     ggml_tensor * build_input_k_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
+     ggml_tensor * build_input_v_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
++    ggml_tensor * build_input_relative_positions(ggml_context * ctx, uint32_t max_queries) const;
+ 
+     std::vector<ggml_tensor *> get_k_rot() const;
+     std::vector<ggml_tensor *> get_v_rot() const;
+@@ -466,6 +468,7 @@
+     void set_input_kpool(ggml_tensor * pool_idxs, ggml_tensor * pool_pos, ggml_tensor * pool_mask, ggml_tensor * tail_idxs,
+             const llama_ubatch * ubatch, uint32_t kpool) const;
+     void set_input_relative_pos(ggml_tensor * dst, const llama_ubatch * ubatch, uint32_t extent) const;
++    void set_input_relative_positions(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+ 
+     // see llama_kv_cache::get_prev_tokens()
+     void get_prev_tokens(const llama_ubatch & ubatch, uint32_t n, std::vector<llama_token> & res) const;

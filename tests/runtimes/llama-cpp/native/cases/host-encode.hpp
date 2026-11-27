@@ -117,12 +117,12 @@ static void run(Mode mode, size_t parameter_count, size_t storage_count, bool lo
             const unsigned new_groups = cacheable ? 0 : count;
             BICORE_CHECK(resources.groups_created == groups + new_groups &&
                          resources.layouts_created == layouts + new_groups);
-            // Single dispatches fit their group, offset and entries on the stack.
-            // A batch retains its two arrays and one binding list per dispatch.
-            const bool batch = count > 1;
-            const size_t binding_lists = batch || !cacheable ? count : 0;
-            size_t call_budget = (batch ? 2 : 0) + binding_lists;
-            size_t byte_budget = (batch ? count * (sizeof(wgpu::BindGroup) + sizeof(size_t)) : 0) +
+            // A warm hit borrows the bindings. Only oversized groups need a
+            // dynamic descriptor, and batches above two allocate one state array.
+            const bool large_batch = count > 2;
+            const size_t binding_lists = cacheable ? 0 : count;
+            size_t call_budget = (large_batch ? 1 : 0) + binding_lists;
+            size_t byte_budget = (large_batch ? count * (sizeof(wgpu::BindGroup) + sizeof(size_t)) : 0) +
                                  binding_lists * (storage_count + 1) * sizeof(wgpu::BindGroupEntry);
             // The recorder allocates a small object for each uncached layout.
             call_budget += new_groups;
