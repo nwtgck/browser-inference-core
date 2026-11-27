@@ -1162,6 +1162,16 @@ const webgpuRecipe: readonly RecipePatch[] = [
     files: ['ggml/src/ggml-webgpu/wgsl-shaders/common_decls.tmpl'],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-indexed-iq4-nvfp4-weight-windows.patch',
+    target: 'llama-webgpu',
+    reason: 'Use aligned weight windows for checked IQ4_NL and NVFP4 expert projections.',
+    files: [
+      'ggml/src/ggml-webgpu/ggml-webgpu.cpp',
+      'ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp',
+    ],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

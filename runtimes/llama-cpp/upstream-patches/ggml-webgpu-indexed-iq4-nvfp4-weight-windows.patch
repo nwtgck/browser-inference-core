@@ -1,0 +1,89 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -2261,13 +2261,6 @@
+     uint64_t total() const { return first + second + third; }
+ };
+ 
+-static bool ggml_webgpu_indexed_window_type(const ggml_tensor * weight) {
+-    const auto k = weight->ne[0];
+-    const auto m = weight->ne[1];
+-    return (weight->type == GGML_TYPE_MXFP4 && k == 2880 && m == 2880) ||
+-           (weight->type == GGML_TYPE_Q4_0 && ((k == 2816 && m == 1408) || (k == 704 && m == 2816)));
+-}
+-
+ static uint64_t ggml_webgpu_indexed_buffer_limit(const wgpu::Limits & limits) {
+     return sizeof(size_t) < sizeof(uint64_t) ?
+         std::min<uint64_t>(limits.maxBufferSize, SIZE_MAX / 2) : limits.maxBufferSize;
+@@ -2604,7 +2597,7 @@
+                               nv_acc == GGML_PREC_BF16 || nv_acc == GGML_PREC_F32;
+     const bool broadcast_gate = weights->ne[0] == 2304 && input->ne[1] == 1;
+     const bool per_slot_down = weights->ne[0] == 1152 && input->ne[1] == 8;
+-    const bool grouped_quant = grouped_type && !shader.indexed_extra_weight_bindings &&
++    const bool grouped_quant = grouped_type &&
+                                !weights->view_src && ggml_is_contiguous(weights) &&
+                                weights->ne[1] == 2304 && weights->ne[2] == 128 &&
+                                (broadcast_gate || per_slot_down) && dst->ne[1] == 8 && ids->ne[0] == 8 &&
+@@ -7324,10 +7317,12 @@
+     const auto source_precision = ggml_prec_get_src(op, 1);
+     const auto accumulate_precision = ggml_prec_get_acc(op);
+     const bool vector = op->ne[2] == 1;
++    // NVFP4 selects its grouped F32 accumulator for either of these flags.
++    const bool supports_f32_accum = vector || weight->type == GGML_TYPE_NVFP4;
+     if ((source_precision != GGML_PREC_UNDEFINED && source_precision != GGML_PREC_F16 &&
+          source_precision != GGML_PREC_Q8 && source_precision != GGML_PREC_Q4) ||
+         (accumulate_precision != GGML_PREC_UNDEFINED && accumulate_precision != GGML_PREC_F16 &&
+-         !(vector && (accumulate_precision == GGML_PREC_F32 || accumulate_precision == GGML_PREC_BF16)))) {
++         !(supports_f32_accum && (accumulate_precision == GGML_PREC_F32 || accumulate_precision == GGML_PREC_BF16)))) {
+         return false;
+     }
+ 
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -325,6 +325,16 @@
+         output_elements *= static_cast<uint64_t>(x->ne[axis]);
+     }
+     return 16;
++}
++
++// Only shapes with checked matrix and vector kernels use weight windows.
++inline bool ggml_webgpu_indexed_window_type(const ggml_tensor * weight) {
++    const auto k = weight->ne[0];
++    const auto m = weight->ne[1];
++    const bool packed_iq4 = weight->type == GGML_TYPE_IQ4_NL || weight->type == GGML_TYPE_NVFP4;
++    return (weight->type == GGML_TYPE_MXFP4 && k == 2880 && m == 2880) ||
++           (weight->type == GGML_TYPE_Q4_0 && ((k == 2816 && m == 1408) || (k == 704 && m == 2816))) ||
++           (packed_iq4 && m == 2304 && (k == 1152 || k == 2304));
+ }
+ 
+ // Plan one four-row slice per logical subgroup of the maximum advertised width.
+@@ -3829,7 +3839,7 @@
+         key.extra_weight_bindings                       = context.indexed_extra_weight_bindings;
+         GGML_ASSERT(key.extra_weight_bindings <= 2 &&
+                     (!key.extra_weight_bindings || key.src0_type == GGML_TYPE_Q2_0 ||
+-                     key.src0_type == GGML_TYPE_Q4_0 || key.src0_type == GGML_TYPE_MXFP4));
++                     ggml_webgpu_indexed_window_type(context.src0)));
+         if (key.src0_type == GGML_TYPE_NVFP4) {
+             const auto precision = ggml_prec_get_acc(context.dst);
+             key.f32_accumulator = precision == GGML_PREC_BF16 || precision == GGML_PREC_F32;
+@@ -3889,8 +3899,8 @@
+             context.dst->type == GGML_TYPE_F32 && context.dst->ne[0] == m && context.dst->ne[1] == 8 &&
+             context.dst->ne[3] == 1 && context.max_wg_size >= grouped_threads &&
+             context.wg_mem_limit_bytes >= wide_m_shared_bytes) {
+-            const bool aligned_weights = !key.extra_weight_bindings && context.indexed_src0_aligned &&
+-                                         !context.src0->view_src && ggml_is_contiguous(context.src0);
++            const bool aligned_weights = context.indexed_src0_aligned && !context.src0->view_src &&
++                                         ggml_is_contiguous(context.src0);
+             if (tokens == 128 || aligned_weights) {
+                 key.tile_m = wide_tile_m;
+             }
+@@ -4120,7 +4130,7 @@
+         key.extra_weight_bindings                       = context.indexed_extra_weight_bindings;
+         GGML_ASSERT(key.extra_weight_bindings <= 2 &&
+                     (!key.extra_weight_bindings || key.src0_type == GGML_TYPE_Q2_0 ||
+-                     key.src0_type == GGML_TYPE_Q4_0 || key.src0_type == GGML_TYPE_MXFP4));
++                     ggml_webgpu_indexed_window_type(context.src0)));
+         key.vectorized = (vec4_aligned && context.src0->ne[0] % 4 == 0 &&
+                           (context.src0->type == GGML_TYPE_F32 || context.src0->type == GGML_TYPE_F16)) ?
+                              1 :

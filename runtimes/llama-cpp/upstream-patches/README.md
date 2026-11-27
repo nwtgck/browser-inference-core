@@ -1015,13 +1015,17 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 - **Patches** `ggml-webgpu-indexed-weight-windows.patch` and
   `ggml-webgpu-indexed-third-weight-window.patch` against llama.cpp
-  `07ba74babd`.
+  `07ba74babd`; `ggml-webgpu-indexed-iq4-nvfp4-weight-windows.patch`
+  adds IQ4_NL and NVFP4.
 - **Scope** Place the supported K2880/M2880 MXFP4, K2816/M1408 Q4_0, and
   K704/M2816 Q4_0 expert tensors in one WebGPU buffer and bind up to three
   ranges when one storage binding is too small. Use packed, contiguous
   weights with an aligned buffer offset. The entire allocation must fit the
   device buffer limit. Cuts align to both expert strides and the device
   storage offset alignment.
+  The IQ4_NL and NVFP4 extension covers K2304/M2304 and K1152/M2304,
+  including their existing grouped row tiles and indirect grid. NVFP4
+  supports the existing F32 accumulator selected by BF16 or F32 precision.
 - **Contract** Check each range, its source device, the matrix and vector
   resource limits, and the gather scratch before using the GPU path.
   Decode and prefill use the same planner and source allocation. Loader
