@@ -14,7 +14,7 @@ enum class Guard {
     rejection
 };
 
-static void graph(uint32_t subgroup, Guard guard) {
+static void graph(uint32_t subgroup, Guard guard, int64_t input_width = 6656, int64_t m = 19968) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     auto & global = *gpu.context->global_ctx;
     auto & caps = global.capabilities;
@@ -28,8 +28,7 @@ static void graph(uint32_t subgroup, Guard guard) {
     arena.cleanup();
     arena.init(global.device, WEBGPU_PARAMS_BUF_SIZE_BYTES, 74, 256);
 
-    const int64_t k = guard == Guard::shape ? 6400 : 6656;
-    constexpr int64_t m = 19968;
+    const int64_t k = guard == Guard::shape ? input_width - 256 : input_width;
     const bool live_alias = guard == Guard::live_alias;
     const auto weights = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
     const auto memory = transfer_cases::Memory(ggml_init({1024 * 1024, nullptr, true}), ggml_free);
@@ -122,8 +121,9 @@ static void graph(uint32_t subgroup, Guard guard) {
             return;
         }
         const auto & dispatch = commands.dispatches.front();
+        const uint32_t rows_per_workgroup = subgroup == 16 ? 32 : 16;
         BICORE_CHECK(first.pipeline.Get()->name == "dense_q4_swiglu_r4_sg" + std::to_string(subgroup) &&
-                     dispatch.x == (subgroup == 16 ? 624 : 1248) && dispatch.y == 1 && dispatch.z == 1);
+                     dispatch.x == uint32_t(m) / rows_per_workgroup && dispatch.y == 1 && dispatch.z == 1);
         BICORE_CHECK(first.bindings.size() == 5);
         const ggml_tensor * tensors[] = {gate_weight, x, up_weight, y};
         uint32_t offsets[4] = {};
@@ -139,9 +139,30 @@ static void graph(uint32_t subgroup, Guard guard) {
         BICORE_CHECK(uniform.binding_index == 4 && uniform.size == WEBGPU_PARAMS_BUF_SIZE_BYTES);
         std::array<uint32_t, 20> params;
         std::memcpy(params.data(), uniform.buffer.Get()->bytes.data() + uniform.offset, sizeof(params));
+        const uint32_t width = uint32_t(k);
+        const uint32_t stride = width / 256;
+        const uint32_t weight_blocks = stride * uint32_t(m);
         const std::array<uint32_t, 20> expected_params = {
-            offsets[0], offsets[1], offsets[3], 19968, 1, 6656, 26,         6656, 519168, 6656,
-            519168,     6656,       1,          1,     1, 1,    offsets[2], 0,    0,      0,
+            offsets[0],
+            offsets[1],
+            offsets[3],
+            uint32_t(m),
+            1,
+            width,
+            stride,
+            width,
+            weight_blocks,
+            width,
+            weight_blocks,
+            width,
+            1,
+            1,
+            1,
+            1,
+            offsets[2],
+            0,
+            0,
+            0,
         };
         BICORE_CHECK(params == expected_params && offsets[0] == 1);
     };
@@ -186,6 +207,10 @@ static void all() {
          {Guard::ordinary, Guard::observed_projection, Guard::raw_view, Guard::final_view, Guard::live_alias,
           Guard::shape, Guard::subgroup_range, Guard::cold_raw_view, Guard::rejection}) {
         graph(32, guard);
+    }
+    graph(16, Guard::ordinary, 2048, 10752);
+    for (const auto guard : {Guard::ordinary, Guard::shape, Guard::cold_raw_view, Guard::subgroup_range}) {
+        graph(32, guard, 2048, 10752);
     }
 }
 

@@ -1,0 +1,82 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp
+@@ -8,15 +8,18 @@
+ 
+ using namespace webgpu_checked_tensor_binding;
+ 
+-constexpr int64_t input_width = 6656;
+-constexpr int64_t output_width = 19968;
+ constexpr uint32_t workgroup = 128;
+ constexpr uint32_t rows_per_subgroup = 4;
+ constexpr int operations = 3;
+ 
+ static bool matches_projection_weight(const ggml_tensor * weight) {
+-    return weight && weight->type == GGML_TYPE_Q4_K &&
+-        weight->ne[0] == input_width && weight->ne[1] == output_width;
++    if (!weight || weight->type != GGML_TYPE_Q4_K) {
++        return false;
++    }
++    // Keep admission to complete, independently reduced projection pairs.
++    // The WGSL uses uniform dimensions, so both shapes share one pipeline.
++    return (weight->ne[0] == 6656 && weight->ne[1] == 19968) ||
++           (weight->ne[0] == 2048 && weight->ne[1] == 10752);
+ }
+ 
+ static bool default_params(const ggml_tensor * tensor, size_t skip) {
+@@ -42,6 +45,8 @@
+         ggml_get_glu_op(output) != GGML_GLU_OP_SWIGLU || !default_params(output, 1)) {
+         return std::nullopt;
+     }
++    const int64_t input_width = first->src[0]->ne[0];
++    const int64_t output_width = first->src[0]->ne[1];
+     auto * gate = output->src[0];
+     auto * up = output->src[1];
+     if (first == second || !((gate == first && up == second) || (gate == second && up == first))) {
+@@ -73,6 +78,8 @@
+     std::array<binding, 4> bindings;
+     uint32_t subgroup;
+     uint32_t workgroups;
++    uint32_t input_width;
++    uint32_t output_width;
+ };
+ 
+ static std::optional<dispatch_plan> plan(webgpu_context & ctx, const ggml_cgraph & graph,
+@@ -89,6 +96,9 @@
+     }
+ 
+     dispatch_plan result{};
++    // match() admitted a bounded shape pair and checked both projections.
++    result.input_width = static_cast<uint32_t>(matched->gate->src[0]->ne[0]);
++    result.output_width = static_cast<uint32_t>(matched->gate->src[0]->ne[1]);
+     for (auto * projection : {matched->gate, matched->up}) {
+         const auto ordinary = ggml_webgpu_mat_context(ctx, projection->src[0], projection->src[1], projection);
+         // Check the disjoint-binding key first. The physical check below
+@@ -103,7 +113,7 @@
+     }
+     static_assert(WEBGPU_MUL_MAT_VEC_K_Q_OUTPUTS_PER_WG == rows_per_subgroup);
+     const uint32_t output_tile = workgroup / result.subgroup * rows_per_subgroup;
+-    result.workgroups = (output_width + output_tile - 1) / output_tile;
++    result.workgroups = (result.output_width + output_tile - 1) / output_tile;
+     if (result.workgroups > limits.maxComputeWorkgroupsPerDimension ||
+         views.contains(matched->gate) || views.contains(matched->up)) {
+         return std::nullopt;
+@@ -155,13 +165,16 @@
+     }
+ 
+     const auto & bindings = dispatch->bindings;
+-    constexpr uint32_t weight_stride = input_width / 256;
+-    const std::vector<uint32_t> params = {
++    // Use the revalidated plan after a cold optional pipeline attempt yields.
++    const uint32_t input_width = dispatch->input_width;
++    const uint32_t output_width = dispatch->output_width;
++    const uint32_t weight_stride = input_width / 256;
++    const uint32_t params[] = {
+         bindings[0].element_offset, bindings[1].element_offset, bindings[3].element_offset, output_width, 1, input_width,
+         weight_stride, input_width, weight_stride * output_width, input_width, weight_stride * output_width, input_width,
+         1, 1, 1, 1, bindings[2].element_offset, 0, 0, 0,
+     };
+-    const std::vector<wgpu::BindGroupEntry> entries = {
++    const wgpu::BindGroupEntry entries[] = {
+         ggml_webgpu_make_bind_group_entry(0, bindings[0].buffer, bindings[0].offset, bindings[0].size),
+         ggml_webgpu_make_bind_group_entry(1, bindings[1].buffer, bindings[1].offset, bindings[1].size),
+         ggml_webgpu_make_bind_group_entry(2, bindings[2].buffer, bindings[2].offset, bindings[2].size),

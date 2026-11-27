@@ -1251,6 +1251,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     ],
     modes: ['normal', 'profile'],
   },
+  {
+    file: 'ggml-webgpu-dense-q4-swiglu-lfm.patch',
+    target: 'llama-webgpu',
+    reason: 'Reuse the dense Q4_K SwiGLU pipeline for smaller single-token projections.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-dense-q4-swiglu.hpp'],
+    modes: ['normal', 'profile'],
+  },
 ];
 
 export function webgpuPatches({ mode }: { mode: SourceMode }): Patch[] {

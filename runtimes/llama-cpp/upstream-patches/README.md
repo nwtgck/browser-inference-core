@@ -1737,11 +1737,14 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 
 ## Dense Q4_K SwiGLU projection fusion
 
-- **Patch** `ggml-webgpu-dense-q4-swiglu.patch` against llama.cpp `c212d25ad`.
+- **Patches** `ggml-webgpu-dense-q4-swiglu.patch` against llama.cpp `c212d25ad`
+  and `ggml-webgpu-dense-q4-swiglu-lfm.patch` against `07ba74babd`.
 - **Scope** Fuse two dense Q4_K × F32 matvecs with the same F32 input and
-  their split SwiGLU into one dispatch. Admission covers K6656/M19968/N1,
-  one batch, and ordinary independent matvecs with fixed subgroup width 16
-  or 32. The four-row reduction and the activation approximation follow the
+  their split SwiGLU into one dispatch. Admission covers K6656/M19968 and
+  K2048/M10752, with one token, one batch, and ordinary independent matvecs
+  with fixed subgroup width 16 or 32. Both shapes use the same pipeline
+  and the encoder supplies their dimensions in the uniform block. The
+  four-row reduction and the activation approximation follow the
   ordinary shaders. The input sums for Q4_K minimum offsets are shared across
   both projections without changing their accumulation order.
 - **Contract** Check the graph closure, raw view readers, GPUBuffer ownership,
@@ -1936,9 +1939,13 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
   and an optional requested width of 16. Preserve the regular kernels for
   unsupported resources, overlapping ranges, other readers, or pipeline
   rejection. Recheck ownership and mode after cold pipeline creation.
-  Use original packed weights and write the final row directly.
+  Use original packed weights and write the final row directly. Bind each
+  buffer with the same storage access mode when disjoint regions share a
+  backing GPUBuffer.
 - **Validation and removal** Compare emitted shaders with the three
   regular dispatches and exercise the native graph and pipeline lifecycle.
+  The optional Dawn regression in `tests/runtimes/llama_cpp/webgpu-q4-geglu`
+  submits the emitted shader with shared and separate buffers.
   Remove once upstream provides equivalent checked GEGLU fusion.
 
 ## Single-output row selection in Gemma 4

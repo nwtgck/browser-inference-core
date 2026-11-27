@@ -287,7 +287,7 @@ diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl b/ggml/src/ggml-web
 new file mode 100644
 --- /dev/null
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/q4_geglu.wgsl
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,145 @@
 +enable subgroups;
 +#ifdef REQUESTED_SUBGROUP_SIZE
 +enable subgroup_size_control;
@@ -305,9 +305,11 @@ new file mode 100644
 +    reserved: u32,
 +};
 +
-+@group(0) @binding(0) var<storage, read> gate_weights: array<u32>;
-+@group(0) @binding(1) var<storage, read> input: array<f32>;
-+@group(0) @binding(2) var<storage, read> up_weights: array<u32>;
++// Disjoint bindings can share an arena. WebGPU requires compatible storage
++// usages for the entire buffer, including read-only inputs and packed weights.
++@group(0) @binding(0) var<storage, read_write> gate_weights: array<u32>;
++@group(0) @binding(1) var<storage, read_write> input: array<f32>;
++@group(0) @binding(2) var<storage, read_write> up_weights: array<u32>;
 +@group(0) @binding(3) var<storage, read_write> output: array<f32>;
 +@group(0) @binding(4) var<uniform> params: Params;
 +

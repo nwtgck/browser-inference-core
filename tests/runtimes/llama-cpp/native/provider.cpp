@@ -300,10 +300,24 @@ static void encoding_and_upload() {
 #include "cases/expert.hpp"
 #include "cases/attention.hpp"
 
+static void export_q4_geglu_shaders(const std::filesystem::path & output) {
+    const auto backend = recording_context();
+    for (const uint32_t width : {16, 32}) {
+        bool created = false;
+        const auto pipeline = backend->shader_lib->get_q4_geglu_pipeline({width, false}, created);
+        BICORE_CHECK(created && pipeline.pipeline);
+        std::ofstream shader(output / ("q4-geglu-sg" + std::to_string(width) + ".wgsl"));
+        shader << pipeline.pipeline.Get()->code;
+        shader.close();
+        BICORE_CHECK(shader.good());
+    }
+}
+
 int main(int argc, char ** argv) {
     BICORE_CHECK(argc == 2);
     BICORE_CHECK(run_q8_short_cases(argc, argv) == 0);
     BICORE_CHECK(run_quant_matvec_cases(argc, argv) == 0);
+    export_q4_geglu_shaders(argv[1]);
     fixed_f32_projection();
     geometry_and_offsets();
     cache_identity_and_lifetime();
