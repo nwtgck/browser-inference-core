@@ -1083,6 +1083,13 @@ const webgpuRecipe: readonly RecipePatch[] = [
     modes: ['normal', 'profile'],
   },
   {
+    file: 'ggml-webgpu-indexed-low-bit-subgroups.patch',
+    target: 'llama-webgpu',
+    reason: 'Reuse independent subgroups for indexed IQ2 and IQ3_XXS decode in checked layouts.',
+    files: ['ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp'],
+    modes: ['normal', 'profile'],
+  },
+  {
     file: 'ggml-webgpu-indexed-iq4-paired-half.patch',
     target: 'llama-webgpu',
     reason: 'stage complete IQ4_NL expert tiles with paired nibbles and checked half arithmetic',

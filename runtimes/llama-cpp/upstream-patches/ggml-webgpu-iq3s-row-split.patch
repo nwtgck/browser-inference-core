@@ -1,16 +1,74 @@
-diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
 --- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
 +++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
-@@ -1363,7 +1363,7 @@
+@@ -1424,98 +1424,140 @@
+ #endif
+ 
+ #ifdef MUL_ACC_IQ3_S
+ #define BLOCK_SIZE 256
+ #define BLOCK_SIZE_BYTES 110
+ #define THREADS_PER_BLOCK 16
+ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
+     var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
+ 
+     let tid = thread_id % THREADS_PER_BLOCK;
+     let block_group = thread_id / THREADS_PER_BLOCK;
+     let num_block_groups: u32 = WG_SIZE / THREADS_PER_BLOCK;
+ 
+     let sub_blk = tid / 2u;
+     let half    = tid % 2u;
+     let slot0   = half * 2u;
+     let y_offset = sub_blk * 32u + slot0 * 8u;
+ 
+     let num_blocks = params.k / BLOCK_SIZE;
+ 
+     for (var block = block_group; block < num_blocks; block += num_block_groups) {
+         let x_base = src1_idx_base + block * BLOCK_SIZE + y_offset;
+         var x_block: array<array<f32, 16>, NUM_COLS>;
+         for (var col = 0u; col < NUM_COLS;col += 1) {
+             for (var i = 0u; i < 16u; i++) {
                  x_block[col][i] = f32(SRC1[x_base + col * params.stride_11 + i]);
              }
          }
 -        for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
-+        for (var row = 0u; row < 2; row++) {
++        for (var row = 0u; row < 2u; row++) {
              let output_row = row_base + row;
              if (output_row < params.m) {
                  let block_byte_base = (src0_batch_offset + output_row * params.stride_01 + block) * BLOCK_SIZE_BYTES;
-@@ -1405,6 +1405,48 @@
+                 let d = f32(load_f16_at_src0(block_byte_base));
+                 let selected_qs = load_u32_at_src0(block_byte_base + 2u + sub_blk * 8u + half * 4u);
+                 let qh_byte_offset = block_byte_base + 66u + sub_blk;
+                 let qh_word = load_u32_at_src0_aligned(qh_byte_offset);
+                 let qh_byte = get_byte(qh_word, qh_byte_offset & 3u);
+                 let sign_pair = load_u16_at_src0(block_byte_base + 74u + sub_blk * 4u + half * 2u);
+                 let scale_byte_offset = block_byte_base + 106u + sub_blk / 2u;
+                 let sc_word = load_u32_at_src0_aligned(scale_byte_offset);
+                 let scales_byte = get_byte(sc_word, scale_byte_offset & 3u);
+                 let sub_scale = (scales_byte >> (4u * (sub_blk % 2u))) & 0xFu;
+                 let db = d * (1.0 + 2.0 * f32(sub_scale));
+ 
+                 for (var col = 0u;col < NUM_COLS;col += 1) {
+                     var row_sum = 0.0;
+                     for (var ll = 0u; ll < 2u; ll++) {
+                         let l = slot0 + ll;
+                         let qs_word = selected_qs;
+                         let byte_pos = (l % 2u) * 2u;
+                         let qs0 = (qs_word >> (byte_pos * 8u)) & 0xFFu;
+                         let qs1 = (qs_word >> ((byte_pos + 1u) * 8u)) & 0xFFu;
+                         let grid_idx_1 = qs0 | (((qh_byte >> (2u * l)) & 1u) << 8u);
+                         let grid_idx_2 = qs1 | (((qh_byte >> (2u * l + 1u)) & 1u) << 8u);
+                         let sign_byte = get_byte(sign_pair, ll);
+                         let grid1 = iq3s_grid[grid_idx_1];
+                         let grid2 = iq3s_grid[grid_idx_2];
+                         for (var j = 0u; j < 4u; j++) {
+                             let b1 = f32((grid1 >> (j * 8u)) & 0xFFu);
+                             let b2 = f32((grid2 >> (j * 8u)) & 0xFFu);
+                             let s1 = select(1.0, -1.0, ((sign_byte >> j) & 1u) != 0u);
+                             let s2 = select(1.0, -1.0, ((sign_byte >> (j + 4u)) & 1u) != 0u);
+                             row_sum += db * b1 * s1 * x_block[col][ll * 8u + j];
+                             row_sum += db * b2 * s2 * x_block[col][ll * 8u + j + 4u];
+                         }
+                     }
+                     acc[col][row] += row_sum;
                  }
              }
          }
@@ -59,3 +117,28 @@ diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl b/ggml/src/g
      }
  
      return acc;
+ }
+ #endif
+ 
+ #ifdef MUL_ACC_IQ4_NL
+ #define BLOCK_SIZE 32
+ #define BLOCK_SIZE_BYTES 18
+ #define THREADS_PER_BLOCK 4
+ #define ELEMS_PER_THREAD (BLOCK_SIZE/THREADS_PER_BLOCK)
+ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
+     var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
+ 
+     let num_blocks = params.k / BLOCK_SIZE;
+     let thread_within_block = thread_id % THREADS_PER_BLOCK;
+     for (var block = thread_id / THREADS_PER_BLOCK; block < num_blocks; block += WG_SIZE / THREADS_PER_BLOCK) {
+         let x_base = src1_idx_base + block * BLOCK_SIZE + thread_within_block * 4u;
+         var x_block: array<array<f32, ELEMS_PER_THREAD>, NUM_COLS>;
+         for (var col = 0u; col < NUM_COLS;col += 1) {
+             for (var i = 0u; i < ELEMS_PER_THREAD / 2u; i++) {
+                 x_block[col][i]     = f32(SRC1[x_base + col * params.stride_11 + i]);
+                 x_block[col][i + 4u] = f32(SRC1[x_base + col * params.stride_11 + i + 16u]);
+             }
+         }
+         for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
+             let output_row = row_base + row;
+             if (output_row < params.m) {

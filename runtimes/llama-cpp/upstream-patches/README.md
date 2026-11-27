@@ -940,11 +940,32 @@ Apply the stage in ordinary and profiling builds after the shared encoder and fu
 - **Patch:** `ggml-webgpu-iq3s-row-split.patch`.
 - **Scope:** Split only the existing independent indexed IQ3_S accumulator's row0..3 loop into row0..1 and row2..3, keeping its four accumulators. Do not change the canonical accumulator, ordinary/cooperative shaders, selector or supported subgroup widths.
 - **Contract:** the existing factory supplies OUTPUTS_PER_WG=4. Preserve one source-level activation-block load, every row's decoder/FP expression and K order, return layout, main/partial-subgroup completion, reductions, parameters, bindings, geometry, cache and queue behavior. Pin and recheck this factory contract rather than applying the literal two-row split to another row count.
-- **Integration:** append a checked dedicated-header stage after tight tile capacity. Copy the field-load stage's pinned derived accumulator, patch only its IQ3 branch and re-embed with the same main/common declarations. Provenance records the final compiled header. Normal/profile host source, other headers and the shared ABI/schema are unchanged.
+- **Integration:** apply the split to the derived accumulator after the field-load patch. Anchor it to the IQ3_S format guard and its 110-byte block decoder. Re-embed the derived accumulator with the same main and common declarations in normal and profiling builds.
 - **No-patch alternative:** keep the existing single four-row loop or wait for an upstream equivalent. This avoids maintaining another source specialization.
 - **Validation and limits:** source-bound inverse/row-order/tail checks and actual factory/cache tests cover fixed widths16/32/64. Private software hot-only comparisons informed the choice; native load/register behavior, streaming/model performance and target-device gains are not established. Reusing the same mathematical source order is not a universal cross-compiler FP-bit guarantee.
 - **Removal:** remove this patch and its preparation/build/provenance/tests when upstream provides equivalent code generation or the owner drops the specialization. Re-review the derived field-load input, four-row factory, preprocessor and emitter after upstream changes.
 
+
+## Independent subgroups for indexed IQ2 and IQ3_XXS decode
+
+- **Patch** `ggml-webgpu-indexed-low-bit-subgroups.patch` against llama.cpp
+  `07ba74babd`, after the checked fixed-width indexed selector and the
+  IQ3_S accumulator patches.
+- **Scope** Use the existing four-row independent subgroup kernel with
+  IQ2_XXS, IQ2_XS, IQ2_S and IQ3_XXS weights, broadcast F32 activation,
+  I32 IDs, F32 output, and either K2304/M2304/top-8 or K2560/M640/top-10.
+  Require one token and fixed subgroup widths of 16 or 32. The existing
+  shape, buffer-range, and device-limit checks remain authoritative.
+- **Contract** Keep the GGUF layouts, per-format lookup tables, five bindings,
+  and parameters. Use the existing accumulators with 16 logical lanes or
+  more per 256 weights. Each subgroup owns four output rows and completes
+  its reduction without a workgroup barrier. Reduction order can differ
+  from cooperative execution. No weight copies or scratch buffers are needed.
+- **Validation and removal** Record actual dispatches and compare the emitted
+  shaders with GGML's CPU dequantizers on both shapes, including repeated IDs
+  and skipped slots. Remove the extension when upstream supports equivalent
+  indexed subgroup execution. Recheck each format's template and the fixed
+  subgroup mapping after upstream updates.
 
 ## Packed bytes for wide Q6_K decoding
 

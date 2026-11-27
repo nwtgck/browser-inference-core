@@ -1,0 +1,41 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -327,17 +327,20 @@
+     return 16;
+ }
+ 
+-// The independently reduced rows use quant-specific block strides. IQ3_S needs
+-// at least sixteen logical lanes per 256 weights. The short expert shapes use
+-// fixed widths of 16 or 32, with four output rows per subgroup.
++// The independent shader assigns four rows to each fixed-width subgroup.
++// IQ2 and IQ3 formats need at least sixteen logical lanes per block.
+ inline bool ggml_webgpu_id_subgroup_shape(const ggml_webgpu_shader_lib_context & context) {
+     const auto * a = context.src0;
+     const auto * x = context.src1;
+     const auto * ids = context.src2;
+     const auto * dst = context.dst;
+     const uint32_t sg = context.min_subgroup_size;
+-    if (!a || !x || !ids || !dst ||
+-        (a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
++    if (!a || !x || !ids || !dst) {
++        return false;
++    }
++    const bool iq2_or_iq3_xxs = a->type == GGML_TYPE_IQ2_XXS || a->type == GGML_TYPE_IQ2_XS ||
++                                  a->type == GGML_TYPE_IQ2_S || a->type == GGML_TYPE_IQ3_XXS;
++    if ((!iq2_or_iq3_xxs && a->type != GGML_TYPE_IQ3_S && a->type != GGML_TYPE_IQ4_NL && a->type != GGML_TYPE_NVFP4 &&
+          a->type != GGML_TYPE_Q8_0 && a->type != GGML_TYPE_Q5_K && a->type != GGML_TYPE_Q2_0) ||
+         x->type != GGML_TYPE_F32 || dst->type != GGML_TYPE_F32 || ids->type != GGML_TYPE_I32 ||
+         !context.supports_subgroups || context.max_wg_size < 128 ||
+@@ -353,6 +356,11 @@
+         return (sg == 16 || sg == 32 || sg == 64) &&
+                a->ne[0] >= 2048 && a->ne[0] <= 4096 && a->ne[0] % 256 == 0 &&
+                a->ne[1] >= 256 && a->ne[1] <= UINT32_MAX - 31u;
++    }
++    if (iq2_or_iq3_xxs) {
++        const bool wide_rows = a->ne[0] == 2304 && a->ne[1] == 2304 && dst->ne[1] == 8;
++        const bool narrow_rows = a->ne[0] == 2560 && a->ne[1] == 640 && dst->ne[1] == 10;
++        return (sg == 16 || sg == 32) && x->ne[1] == 1 && (wide_rows || narrow_rows);
+     }
+     if (a->type == GGML_TYPE_Q2_0) {
+         return !context.indexed_split_weights && (sg == 16 || sg == 32) && a->ne[0] == 1152 &&

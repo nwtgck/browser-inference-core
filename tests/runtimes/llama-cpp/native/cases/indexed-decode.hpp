@@ -33,7 +33,7 @@ static void check_bounds(ggml_webgpu_shader_lib_context candidate) {
         return;
     invalid = candidate;
     copied = *candidate.src0;
-    copied.ne[2] = 128;
+    copied.ne[2] = copied.ne[0] == 2560 ? 512 : 128;
     const size_t full_weights = ggml_nbytes(&copied);
     invalid.src0 = &copied;
     invalid.indexed_binding_bytes[0] = full_weights;
@@ -45,7 +45,7 @@ static void check_bounds(ggml_webgpu_shader_lib_context candidate) {
 }
 
 static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint32_t sg_min, uint32_t sg_max,
-                           bool independent) {
+                           bool independent, int64_t rows = 2304, int64_t selected = 8) {
     transfer_cases::Backend gpu(transfer_cases::BackendKind::webgpu);
     constexpr auto max_buffer = 128u * 1024 * 1024;
     auto & caps = gpu.context->global_ctx->capabilities;
@@ -57,9 +57,7 @@ static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint3
     gpu.type.iface.get_max_size = [](ggml_backend_buffer_type_t) -> size_t { return max_buffer; };
     transfer_cases::Memory memory(ggml_init({256 * 1024, nullptr, true}), ggml_free);
     BICORE_CHECK(memory);
-    const int64_t rows = 2304;
     const int64_t experts = 16;
-    const int64_t selected = 8;
     auto * weights = ggml_new_tensor_3d(memory.get(), quant, k, rows, experts);
     auto * input = ggml_new_tensor_3d(memory.get(), GGML_TYPE_F32, k, input_rows, 1);
     auto * ids = ggml_new_tensor_2d(memory.get(), GGML_TYPE_I32, selected, 1);
@@ -101,7 +99,8 @@ static void check_provider(ggml_type quant, int64_t k, int64_t input_rows, uint3
     ggml_backend_synchronize(&gpu.backend);
     BICORE_CHECK(commands.dispatches.size() == 1);
     const auto & dispatch = commands.dispatches.front();
-    BICORE_CHECK(dispatch.x == (independent ? 4608 * sg_min / 128 : 4608) && dispatch.y == 1 && dispatch.z == 1);
+    const uint32_t rows_per_group = independent ? 4 * (128 / sg_min) : 4;
+    BICORE_CHECK(dispatch.x == CEIL_DIV(rows, rows_per_group) * selected && dispatch.y == 1 && dispatch.z == 1);
     const auto & cached = gpu.context->bind_group_cache.slots.front();
     const auto & pipeline = *cached.pipeline.Get();
     BICORE_CHECK((pipeline.name.find("_independent_sg" + std::to_string(sg_min)) != std::string::npos) == independent);
@@ -127,5 +126,13 @@ static void all() {
     }
     for (uint32_t sg : {16, 32, 64})
         check_provider(GGML_TYPE_IQ3_S, 2048, 1, sg, sg, true);
+    for (const auto quant : {GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S, GGML_TYPE_IQ3_XXS}) {
+        check_provider(quant, 2304, 1, 16, 16, true);
+        check_provider(quant, 2304, 1, 32, 32, true);
+        check_provider(quant, 2304, 1, 16, 32, false);
+        check_provider(quant, 2304, 1, 64, 64, false);
+        check_provider(quant, 2560, 1, 16, 16, true, 640, 10);
+        check_provider(quant, 2560, 1, 32, 32, true, 640, 10);
+    }
 }
 } // namespace indexed_decode_cases
